@@ -20,6 +20,11 @@
 
 #pragma once
 
+#include <algorithm>
+#include <limits>
+#include <new>
+#include <stdexcept>
+
 #include "ark/macros.hpp"
 #include "ark/platform.hpp"
 
@@ -71,7 +76,7 @@ public:
         else
         {
             capacity_ = src.capacity_;
-            data_ = (element_type*)allocator_.alloc(capacity_ * sizeof(element_type));
+            data_ = allocate(capacity_);
         }
 
         memcpy(data_, src.data_, size_ * sizeof(element_type));
@@ -144,22 +149,15 @@ public:
     }
 
     void push_back(const element_type& data) {
-        if (size_ == capacity_)
+        const size_t new_size = incremented_size();
+        const element_type value = data;
+        if (new_size > capacity_)
         {
-            size_t new_size = size_ * 2;
-            element_type* p = (element_type*)allocator_.alloc(new_size * sizeof(element_type));
-            memcpy(p, data_, size_ * sizeof(element_type));
-
-            if (capacity_ > inline_capacity)
-            {
-                allocator_.free(data_, capacity_ * sizeof(element_type));
-            }
-
-            data_ = p;
-            capacity_ = new_size;
+            reserve(grown_capacity(new_size));
         }
 
-        data_[size_++] = data;
+        data_[size_] = value;
+        size_ = new_size;
     }
 
     void pop_back() {
@@ -190,7 +188,7 @@ public:
     void reserve(size_t size) {
         if (size > capacity_)
         {
-            element_type* p = (element_type*)allocator_.alloc(size * sizeof(element_type));
+            element_type* p = allocate(size);
             memcpy(p, data_, size_ * sizeof(element_type));
 
             if (capacity_ > inline_capacity)
@@ -206,68 +204,36 @@ public:
     void resize(size_t size) {
         if (size > capacity_)
         {
-            size_t new_size = capacity_ * 2;
-
-            if (new_size < size)
-            {
-                new_size = size;
-            }
-
-            element_type* p = (element_type*)allocator_.alloc(new_size * sizeof(element_type));
-            memcpy(p, data_, size_ * sizeof(element_type));
-
-            if (capacity_ > inline_capacity)
-            {
-                allocator_.free(data_, capacity_ * sizeof(element_type));
-            }
-
-            data_ = p;
-            capacity_ = new_size;
+            reserve(grown_capacity(size));
         }
 
         size_ = size;
     }
 
     void resize(size_t size, const element_type& value) {
-        if (size > capacity_)
+        if (size <= size_)
         {
-            size_t new_size = capacity_ * 2;
-
-            if (new_size < size)
-            {
-                new_size = size;
-            }
-
-            element_type* p = (element_type*)allocator_.alloc(new_size * sizeof(element_type));
-            memcpy(p, data_, size_ * sizeof(element_type));
-
-            if (capacity_ > inline_capacity)
-            {
-                allocator_.free(data_, capacity_ * sizeof(element_type));
-            }
-
-            data_ = p;
-            capacity_ = new_size;
+            size_ = size;
+            return;
         }
-
-        if (size > size_)
+        const element_type saved_value = value;
+        const size_t old_size = size_;
+        resize(size);
+        for (size_t i = old_size; i < size; ++i)
         {
-            for (size_t i = size_; i < size; ++i)
-            {
-                data_[i] = value;
-            }
+            data_[i] = saved_value;
         }
-
-        size_ = size;
     }
 
     void insert(size_t index, const element_type& data) {
         assert(index <= size_);
 
-        resize(size_ + 1);
+        const size_t new_size = incremented_size();
+        const element_type value = data;
+        resize(new_size);
         element_type* p = data_ + index;
         memmove(p + 1, p, (size_ - index - 1) * sizeof(element_type));
-        *p = data;
+        *p = value;
     }
 
     void remove(size_t index) {
@@ -301,6 +267,41 @@ public:
     }
 
 private:
+    static constexpr size_t max_capacity() {
+        return std::numeric_limits<size_t>::max() / sizeof(element_type);
+    }
+
+    static void check_capacity(size_t size) {
+        if (size > max_capacity())
+        {
+            throw std::length_error("pod_array capacity exceeds addressable storage");
+        }
+    }
+
+    size_t incremented_size() const {
+        if (size_ == max_capacity())
+        {
+            throw std::length_error("pod_array size exceeds addressable storage");
+        }
+        return size_ + 1;
+    }
+
+    size_t grown_capacity(size_t size) const {
+        check_capacity(size);
+        const size_t doubled = capacity_ > max_capacity() / 2 ? max_capacity() : capacity_ * 2;
+        return std::max(size, doubled);
+    }
+
+    element_type* allocate(size_t size) {
+        check_capacity(size);
+        auto* result = static_cast<element_type*>(allocator_.alloc(size * sizeof(element_type)));
+        if (result == nullptr)
+        {
+            throw std::bad_alloc{};
+        }
+        return result;
+    }
+
     allocator_type allocator_;
     element_type inline_buffer_[inline_capacity];
     element_type* data_;

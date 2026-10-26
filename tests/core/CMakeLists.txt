@@ -6,7 +6,7 @@ target_link_libraries(ark_core_header_checks PRIVATE ark::core)
 
 add_subdirectory(hash_header)
 
-add_executable(ark_core_tests main.cpp strings.cpp containers.cpp templates.cpp callbacks.cpp
+add_executable(ark_core_tests main.cpp strings.cpp containers.cpp pod_arrays.cpp templates.cpp callbacks.cpp
     header_regressions.cpp cxx20_language.cpp concurrency.cpp plugin_manager_startup.cpp data_strings.cpp node_data_storage.cpp
     object_vectors.cpp plugin_construction.cpp module_factory.cpp random_generator.cpp xxtea.cpp murmur_hash.cpp)
 target_link_libraries(ark_core_tests PRIVATE ark::core ark::kernel ark::utility)
@@ -46,6 +46,14 @@ add_custom_target(check-buffer
     DEPENDS ark_buffer_tests ark_buffer_failure_tests ark_buffer_hook_tests
     USES_TERMINAL VERBATIM)
 add_dependencies(check-core check-buffer)
+
+# Isolate global new[] failure injection from the ordinary Core executables.
+add_executable(ark_pod_array_failure_tests main.cpp pod_array_failure.cpp)
+set_property(TARGET ark_pod_array_failure_tests PROPERTY LINK_LIBRARIES ark::core)
+add_custom_target(check-pod-array-failure
+    COMMAND $<TARGET_FILE:ark_pod_array_failure_tests>
+    DEPENDS ark_pod_array_failure_tests USES_TERMINAL VERBATIM)
+add_dependencies(check-core check-pod-array-failure)
 
 find_package(Threads REQUIRED)
 add_library(ark_task_header_checks OBJECT headers/task.cpp)

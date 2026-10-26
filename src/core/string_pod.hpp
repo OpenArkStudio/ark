@@ -20,6 +20,8 @@
 
 #pragma once
 
+#include <new>
+
 #include "ark/core_def.hpp"
 #include "ark/macros.hpp"
 
@@ -77,7 +79,12 @@ public:
     ~pod_string_allocator() = default;
 
     void* alloc(size_t size) {
-        ARK_NEW_ARRAY_RET(char, size);
+        void* result = allocate_bytes(size);
+        if (result == nullptr)
+        {
+            throw std::bad_alloc{};
+        }
+        return result;
     }
 
     void free(void* ptr, size_t size) {
@@ -86,6 +93,11 @@ public:
 
     void swap(pod_string_allocator& src) {
         // Do nothing
+    }
+
+private:
+    static void* allocate_bytes(size_t size) {
+        ARK_NEW_ARRAY_RET(char, size);
     }
 };
 

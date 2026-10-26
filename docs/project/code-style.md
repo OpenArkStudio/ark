@@ -168,6 +168,14 @@ network timeouts, remain unchanged.
 
 Check `it != values.end()` before incrementing or calling `get_key()` / `get_data()`. Empty ranges have `begin() == end()`; do not dereference or increment end. Advancing one iterator does not change a saved prior position, but removing its node, clearing or destroying its container ends that borrowed lifetime. The custom iterator and const-iteration APIs are otherwise unchanged. Core header checks instantiate scalar and pointer mappings; `check-core` covers saved postfix values, storage mutation, empty/end comparisons and the existing `array_map` lookup path.
 
+## POD array storage and failure contract
+
+`<ark/array_pod.hpp>` retains its `void` mutation APIs and inline/heap storage layout. Use it for trivial scalar or pointer elements with a positive inline capacity; it does not manage nontrivial element lifetimes. `push_back`, fill `resize` and `insert` snapshot an element argument before growing or shifting storage, so an argument such as `values[0]` keeps its original value. Growth can still invalidate borrowed element pointers and references.
+
+Impossible element/byte capacities throw `std::length_error` before allocation; a null allocation result throws `std::bad_alloc`. Allocator exceptions propagate. Failed array growth or copy assignment preserves the existing storage, size and values, and failed copy construction leaves the source unchanged. Callers that handle allocation failure must catch exceptions rather than expect a status return; rebuild affected header consumers and plugins to use the checks. Public signatures and class fields are unchanged.
+
+`array_map<std::string, T>` keeps borrowed `T*` values and never deletes pointees. `add_element` appends the pointer before inserting its name and rolls back the append if index allocation throws. Existing entries, lookup results and count remain consistent; spare pointer capacity or index bucket capacity may have grown. The default `pod_string_allocator` also converts null allocation results to `std::bad_alloc` so index failures can propagate. This insertion guarantee does not extend to custom string allocators or all other `pod_string` operations. Duplicate-name behavior is unchanged. Permanent Core tests cover scalar/pointer aliases, arithmetic limits, null/throwing allocators, copying and pointer/index failure recovery through `check-core`.
+
 ## Standard utility migration
 
 **Breaking source change:** `ARK_TO_STRING`, `ARRAY_LENTGH`, `ARK_SRATIC_ASSERT`,
