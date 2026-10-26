@@ -18,21 +18,34 @@
  *
  */
 
-#include "ark/osssdk/oss_sdk_module_impl.hpp"
+#include <stdexcept>
+
 #include "ark/osssdk/oss_sdk_plugin.hpp"
+#include "oss_sdk_factory.hpp"
 
 namespace ark {
 
-ARK_DECLARE_PLUGIN_DLL_FUNCTION(oss_sdk_plugin)
+ARK_EXPORT_FUNC void DllEntryPlugin(plugin_manager* manager, const std::string& name, logger* log) {
+    logger::init(log);
+    manager->register_plugin<oss_sdk_plugin>(name);
+}
+
+ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
+    manager->unregister_plugin<oss_sdk_plugin>();
+}
 
 void oss_sdk_plugin::install() {
-    // install module
-    ARK_REGISTER_MODULE(oss_sdk_module, oss_sdk_module_impl);
+    if (!register_module(detail::make_oss_sdk_module(), module_update::disabled))
+    {
+        throw std::runtime_error("OSS SDK module registration rejected");
+    }
 }
 
 void oss_sdk_plugin::uninstall() {
-    // uninstall module
-    ARK_DEREGISTER_MODULE(oss_sdk_module, oss_sdk_module_impl);
+    if (!unregister_module<oss_sdk_module>())
+    {
+        throw std::runtime_error("OSS SDK module unregistration rejected");
+    }
 }
 
 } // namespace ark

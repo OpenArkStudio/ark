@@ -28,4 +28,6 @@ Kernel 的原有 38 个头与 cpp 共置于 `src/plugins/kernel/`，通过 `ark:
 
 Consul 保留原有三个公开头及实现／插件类型，同时使用类型化构造、私有拥有型工厂和显式入口。公开类布局发生变化，Consul 与消费者必须一起重建。唯一接口注册键、禁用 update 与请求行为保持不变。构建条件及无需服务的构造检查见 [Consul 构造迁移](../../docs/reference/directory-structure_CN.md#consul-类型化构造)。
 
-其他四类旧插件保留原有 19 个头的全部字节。映射检查不代表 Consul、Kafka、OSS SDK 的运行时集成已经验证。Physic 保留未受支持的 PhysX 3 配置失败；参见[可选旧集成依赖](../../docs/dependencies_CN.md)。
+Kafka 与 Physic 保留原有公开头。映射检查不代表 Consul、Kafka、OSS SDK 的运行时集成已经验证。Physic 保留未受支持的 PhysX 3 配置失败；参见[可选旧集成依赖](../../docs/dependencies_CN.md)。
+
+OSS SDK 使用类型化构造、私有工厂与显式入口，保留全部三个公开头和类型。公开布局发生变化，插件与消费者必须一起重建。插件默认保持关闭，实现仍为 TODO 骨架；构造／导出检查不增加对象存储客户端能力。参见 [OSS SDK 构造迁移](../../docs/reference/directory-structure_CN.md#oss-sdk-类型化构造)。
