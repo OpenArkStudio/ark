@@ -37,6 +37,13 @@ void wait_for(predicate ready, pump update) {
     require(ready(), "Timed out waiting for owned loopback peer");
 }
 
+arknet::error_code listener_probe(asio::io_context& context, const asio::ip::tcp::endpoint& endpoint) {
+    asio::ip::tcp::socket probe(context);
+    arknet::error_code error;
+    probe.connect(endpoint, error);
+    return error;
+}
+
 struct receiver
 {
     void on_message(const ark::net_msg* message, ark::conv_id_t session) {
@@ -86,8 +93,17 @@ int main(int argc, char* argv[]) {
     receiver received;
     require(server->reg_msg_callback(45000, &received, &receiver::on_message), "Net message callback rejected");
     std::weak_ptr<ark::net> endpoint = server->get_net();
+    const asio::ip::tcp::endpoint listener_endpoint(asio::ip::make_address("127.0.0.1"), port);
+    const auto live_probe = listener_probe(context, listener_endpoint);
+    require(!live_probe, "Live Net listener negative control failed: " + live_probe.message());
+    std::atomic<bool> peer_closed{};
+    arknet::error_code peer_close_error;
     arknet::tcp_client client;
     client.set_auto_reconnect(false);
+    client.bind_disconnect([&] {
+        peer_close_error = arknet::get_last_error();
+        peer_closed.store(true);
+    });
     require(client.start("127.0.0.1", port), "Owned TCP peer failed to start");
     ark::s_msg_header header;
     header.set_message_id(45000);
@@ -143,16 +159,27 @@ int main(int argc, char* argv[]) {
     const auto cancelled = pending.get();
     require(!cancelled.first && cancelled.second == arknet::error_code(asio::error::operation_aborted).message(),
         "HTTP DSO shutdown changed pending-request cancellation");
-    client.stop();
     peer.stop();
+    require(client.is_started() && !peer_closed.load(), "Owned TCP peer must remain live across Net shutdown");
     server.reset();
     require(manager.stop(++tick), "Net DSO shutdown did not complete");
     require(endpoint.expired(), "Net listener survived normal module unregistration");
     require(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopped,
         "Net resources were retained instead of normally stopped");
+    // Keep the peer open until the server closes its accepted socket. Stopping
+    // the client first would hide a retained server-side connection.
+    wait_for([&] { return peer_closed.load(); }, [] {});
+    require(peer_close_error == asio::error::eof || peer_close_error == asio::error::connection_reset,
+        "Net shutdown did not remotely close the owned TCP peer: " + peer_close_error.message());
+    client.stop();
     require(manager.stop(++tick), "Repeated Net shutdown failed");
-    asio::ip::tcp::acceptor rebound(context, {asio::ip::make_address("127.0.0.1"), port});
-    require(rebound.is_open(), "Net shutdown did not release its listener");
-    std::cout << "Net actual DSOs: interface RTTI lookup, manager-owned TCP/HTTP callbacks, listener release and "
+    // Binding the same port also tests unrelated kernel port-reuse state. A
+    // refused new connection checks listener closure directly, with no retry.
+    // The successful probe above is the negative control for a live listener.
+    const auto closed_probe = listener_probe(context, listener_endpoint);
+    require(closed_probe == asio::error::connection_refused,
+        "Net listener closure probe must be refused: " + closed_probe.message());
+    std::cout << "Net actual DSOs: interface RTTI lookup, manager-owned TCP/HTTP callbacks, listener refusal, remote "
+                 "peer closure and "
                  "normal repeated shutdown passed\n";
 }
