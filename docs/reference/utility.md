@@ -76,6 +76,15 @@ tail mixing, result word order and the existing public signatures are unchanged;
 `murmur_hash3_x86_128` remains an instance method, and the other variants remain
 static. MurmurHash2 retains its fixed seed zero.
 
+The Murmur header itself uses only standard C++20 headers. It does not include
+`ark/macros.hpp` or `ark/platform.hpp`; callers using their declarations or macros
+must include those headers explicitly. Public macro definitions are unchanged.
+This header independence does not change `ark::core` or its CMake package's
+dependency requirements. `check-murmur-hash-header` compiles the logical public
+header with an isolated include directory and no SDK target dependencies; it is
+also included in `check-core`. See [core regressions](../../tests/core/README.md)
+for the standalone check commands.
+
 ### Digest compatibility and legacy access
 
 **Breaking change:** default MurmurHash3 now reads full blocks as little endian
