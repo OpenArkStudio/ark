@@ -158,6 +158,16 @@ unqualified type through `const T&`, while explicitly checking a const-qualified
 trait remains false. Constant types and values, including UID bit allocation and
 network timeouts, remain unchanged.
 
+## POD string iterator contract
+
+`<ark/string_pod.hpp>` is supplied by `ark::core`. `pod_string_iterator::operator++(int)` returns the prior iterator **by value**; prefix `++it` still returns the advanced iterator by reference. Store the old position with `auto previous = it++;`, rather than binding a non-const lvalue reference. A saved iterator borrows its node; it does not copy the mapped value.
+
+**Breaking source change; rebuild affected consumers and plugins:** update reference bindings or explicit function signatures that relied on the old postfix reference. Emitted template instantiations can use a different calling convention despite unchanged class fields; unchanged layout does not establish binary compatibility.
+
+`get_data()` retains its declared `mapped_type*` return type and returns the address of the stored mapped value: `std::size_t*` for a scalar, or `T**` for a pointer mapping. Assigning through that address changes the stored value/pointer slot without transferring pointee ownership. The named `pod_string::get_data(key, out)` lookup is unchanged.
+
+Check `it != values.end()` before incrementing or calling `get_key()` / `get_data()`. Empty ranges have `begin() == end()`; do not dereference or increment end. Advancing one iterator does not change a saved prior position, but removing its node, clearing or destroying its container ends that borrowed lifetime. The custom iterator and const-iteration APIs are otherwise unchanged. Core header checks instantiate scalar and pointer mappings; `check-core` covers saved postfix values, storage mutation, empty/end comparisons and the existing `array_map` lookup path.
+
 ## Standard utility migration
 
 **Breaking source change:** `ARK_TO_STRING`, `ARRAY_LENTGH`, `ARK_SRATIC_ASSERT`,

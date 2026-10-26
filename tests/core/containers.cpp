@@ -1,4 +1,5 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -6,8 +7,10 @@
 
 #include "../network/doctest.h"
 
+#include <ark/container/array_map.hpp>
 #include <ark/container/list.hpp>
 #include <ark/container/map.hpp>
+#include <ark/string_pod.hpp>
 
 namespace {
 
@@ -96,4 +99,121 @@ DOCTEST_TEST_CASE("Object maps release owned objects exactly once and shared map
     }
     owner.reset();
     DOCTEST_REQUIRE(destroyed == 3);
+}
+
+namespace {
+
+struct pod_iterator_buckets : ark::string_traits<char>
+{
+    static std::size_t hash(const char* key) {
+        return key[0] == 'z' ? 2 : 0;
+    }
+};
+
+} // namespace
+
+DOCTEST_TEST_CASE("POD string postfix values retain prior positions across chains and buckets") {
+    ark::pod_string<char, std::size_t, pod_iterator_buckets> values(4);
+    DOCTEST_REQUIRE(values.add("alpha", 11));
+    DOCTEST_REQUIRE(values.add("beta", 22));
+    DOCTEST_REQUIRE(values.add("zeta", 33));
+    auto current = values.begin();
+    DOCTEST_REQUIRE(current != values.end());
+    const auto first = current++;
+    DOCTEST_REQUIRE(current != values.end());
+    const auto second = current++;
+    DOCTEST_REQUIRE(current != values.end());
+    DOCTEST_CHECK(std::string(current.get_key()) == "zeta");
+    auto* prefix_result = &++current;
+    DOCTEST_CHECK(prefix_result == &current);
+    DOCTEST_CHECK(current == values.end());
+    // Saved iterator values still name live nodes after the source reaches end.
+    DOCTEST_CHECK(first == values.find("beta"));
+    DOCTEST_CHECK(second == values.find("alpha"));
+    DOCTEST_CHECK(std::string(first.get_key()) == "beta");
+    DOCTEST_CHECK(*first.get_data() == 22);
+    DOCTEST_CHECK(std::string(second.get_key()) == "alpha");
+    DOCTEST_CHECK(*second.get_data() == 11);
+}
+
+DOCTEST_TEST_CASE("POD string iterator data points to mutable scalar storage") {
+    ark::pod_string<char, std::size_t> values;
+    DOCTEST_REQUIRE(values.add("count", 4));
+    const auto found = values.find("count");
+    DOCTEST_REQUIRE(found != values.end());
+    auto* stored = found.get_data();
+    DOCTEST_REQUIRE(stored == &found.get_node()->data);
+    *stored = 19;
+    std::size_t copy{};
+    DOCTEST_REQUIRE(values.get_data("count", copy));
+    DOCTEST_CHECK(copy == 19);
+    DOCTEST_REQUIRE(values.set("count", 27));
+    DOCTEST_CHECK(values.get_count() == 1);
+    DOCTEST_CHECK(found.get_data() == stored);
+    DOCTEST_CHECK(*stored == 27);
+}
+
+DOCTEST_TEST_CASE("POD string pointer mappings expose the stored pointer slot without owning the pointee") {
+    int first = 5;
+    int second = 8;
+    {
+        ark::pod_string<char, int*> values(2);
+        DOCTEST_REQUIRE(values.add("slot", &first));
+        auto found = values.find("slot");
+        DOCTEST_REQUIRE(found != values.end());
+        int** slot = found.get_data();
+        DOCTEST_REQUIRE(slot == &found.get_node()->data);
+        DOCTEST_CHECK(*slot == &first);
+        *slot = &second;
+        int* copy{};
+        DOCTEST_REQUIRE(values.get_data("slot", copy));
+        DOCTEST_CHECK(copy == &second);
+        DOCTEST_REQUIRE(values.set("slot", nullptr));
+        DOCTEST_CHECK(found.get_data() == slot);
+        DOCTEST_CHECK(*slot == nullptr);
+        const auto prior = found++;
+        DOCTEST_CHECK(found == values.end());
+        DOCTEST_CHECK(prior.get_data() == slot);
+    }
+    DOCTEST_CHECK(first == 5);
+    DOCTEST_CHECK(second == 8);
+}
+
+DOCTEST_TEST_CASE("POD string empty and missing lookup paths reach end without dereferencing it") {
+    for (const std::size_t buckets : {std::size_t{0}, std::size_t{4}})
+    {
+        ark::pod_string<char, std::size_t> values(buckets);
+        DOCTEST_CHECK(values.begin() == values.end());
+        DOCTEST_CHECK(values.find("missing") == values.end());
+        DOCTEST_CHECK_FALSE(values.exists("missing"));
+        std::size_t unchanged = 91;
+        DOCTEST_CHECK_FALSE(values.get_data("missing", unchanged));
+        DOCTEST_CHECK(unchanged == 91);
+        DOCTEST_REQUIRE(values.add("only", 7));
+        auto current = values.begin();
+        DOCTEST_REQUIRE(current != values.end());
+        const auto prior = current++;
+        DOCTEST_CHECK(current == values.end());
+        DOCTEST_CHECK(*prior.get_data() == 7);
+    }
+}
+
+DOCTEST_TEST_CASE("Array map keeps its POD string index lookup and borrowed values") {
+    int first = 12;
+    int second = 24;
+    {
+        ark::array_map<std::string, int> values;
+        DOCTEST_REQUIRE(values.add_element("first", &first));
+        DOCTEST_REQUIRE(values.add_element("second", &second));
+        DOCTEST_CHECK(values.get_count() == 2);
+        DOCTEST_CHECK(values.get_element("first") == &first);
+        DOCTEST_CHECK(values.get_element("second") == &second);
+        DOCTEST_CHECK(values.get_element("missing") == nullptr);
+        std::size_t index = 9;
+        DOCTEST_REQUIRE(values.exist_element("second", index));
+        DOCTEST_CHECK(index == 1);
+        DOCTEST_CHECK(values[index] == &second);
+    }
+    DOCTEST_CHECK(first == 12);
+    DOCTEST_CHECK(second == 24);
 }
