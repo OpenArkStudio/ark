@@ -124,17 +124,3 @@ cmake --build etcd-client-headers --target check-etcd-client-headers --parallel 
 ```
 
 头文件映射检查不代表 Consul、Kafka、OSS SDK 的运行时兼容性已经验证。Physic 与 `physics_scene` 仍依赖未受支持的旧版 PhysX 3 集成，保留明确的配置失败；此处没有宣称 PhysX 构建通过。
-
-## Consul 类型化构造
-
-**ABI／布局不兼容变更：** `consul_module_impl` 现在继承 `module_base<consul_module>`，`consul_plugin` 继承 `plugin_base<consul_plugin>`。Consul 与消费者必须一起重建。原有三个公开头、`<ark/consul/...>` 路径、公开类型与请求方法继续通过 `ark::consul` 提供，接口本身不变。C++ 插件边界不承诺跨编译器的 ABI 兼容性。
-
-私有 `consul_factory.hpp` 返回 `std::unique_ptr<consul_module>`，不映射、不安装。显式 `DllEntryPlugin` 与 `DllExitPlugin` 保留原有平台导出和日志初始化。安装时按 `consul_module` 接口 RTTI 键注册唯一模块，显式使用 `module_update::disabled`；卸载时移除并销毁该模块。实现仍继承默认 update 方法。配置存储、HTTP 客户端查找、TOML 加载、请求序列化及端点保持不变。
-
-开启 `ARK_BUILD_CORE_TESTS=ON`、`ARK_BUILD_PROTO=ON` 与 `ARK_BUILD_CONFIG=ON` 后，`check-consul-construction` 运行真实工厂／装配的 doctest 用例，以及使用受控工厂与真实入口／出口源码的 DSO 测试。检查覆盖公开基类、工厂元数据、接口注册、重复注册拒绝、禁用 update、配置传递、所有权与重复 stop。依赖 Protobuf、toml++ 及通常的 core／arknet 依赖，无需运行时插件或 Consul 服务。对于已按上述选项配置的构建：
-
-```sh
-cmake --build build --target check-consul-construction --parallel 2
-```
-
-`ARK_BUILD_PLUGIN_CONSUL=ON` 还要求 `ARK_BUILD_APPLICATIONS=ON`，默认保持关闭。插件直接链接生成协议目标 `ark::proto`。开启核心测试后，`check-consul-plugin` 还在独立进程中检查真实 Consul DSO 的导出符号；`check-core` 包含当前条件下可用的 Consul 检查。受控工厂不执行生产 HTTP 客户端或访问 Consul 服务。这些构造检查不代表真实 Consul 互通、协议验收或任意热更新安全。
