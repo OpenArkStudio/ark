@@ -87,3 +87,20 @@ test('Applications CI enables Consul construction and production export checks w
   assert.match(checks, /add_dependencies\(check-core check-consul-plugin\)/);
   assert.match(checks, /add_dependencies\(check-core check-consul-construction\)/);
 });
+
+test('Applications CI explicitly enables Etcd Client ownership and production DSO checks', () => {
+  const applications = read('.github/workflows/ci.yml').split('  applications:\n')[1].split('\n  database:')[0];
+  assert.match(applications, /-DARK_BUILD_PLUGIN_ETCD_CLIENT=ON/);
+  assert.match(applications, /run: cmake --build ci-build --target check-core/);
+  const core = read('tests/core/CMakeLists.txt');
+  assert.match(core, /if\(TARGET ark_etcd_client_plugin\)[\s\S]*add_subdirectory\(\.\.\/etcd_client/);
+  const checks = read('tests/etcd_client/CMakeLists.txt');
+  assert.match(checks, /add_dependencies\(check-core check-etcd-client-plugin check-etcd-client-construction\)/);
+  assert.match(checks, /etcd_client_impl\.cpp/);
+  const mappings = read('src/plugins/CMakeLists.txt').split('set(ark_etcd_client_public_headers')[1].split('\n)')[0];
+  assert.doesNotMatch(mappings, /etcd_client_factory/);
+  const plugin = read('src/plugins/etcd_client/etcd_client_plugin.cpp');
+  assert.match(plugin, /DllEntryPlugin/);
+  assert.match(plugin, /DllExitPlugin/);
+  assert.doesNotMatch(plugin, /ARK_DECLARE_PLUGIN|ARK_REGISTER_MODULE|ARK_UNREGISTER_MODULE/);
+});

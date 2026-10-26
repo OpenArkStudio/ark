@@ -228,6 +228,11 @@ if(ARK_BUILD_PROTO AND ARK_BUILD_CONFIG)
     add_subdirectory(../consul "${CMAKE_CURRENT_BINARY_DIR}/consul")
 endif()
 
+# Keep JSON optional: construction checks follow the selected runtime plugin.
+if(TARGET ark_etcd_client_plugin)
+    add_subdirectory(../etcd_client "${CMAKE_CURRENT_BINARY_DIR}/etcd_client")
+endif()
+
 if(ARK_BUILD_PROTO AND TARGET ark_kernel_plugin AND TARGET ark_utility_plugin)
     add_executable(ark_kernel_plugin_tests ../app/kernel_plugin.cpp)
     set_property(TARGET ark_kernel_plugin_tests PROPERTY LINK_LIBRARIES ark::kernel)

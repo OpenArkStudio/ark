@@ -180,3 +180,19 @@ cmake --build build --target check-consul-construction --parallel 2
 ```
 
 `ARK_BUILD_PLUGIN_CONSUL=ON` also requires `ARK_BUILD_APPLICATIONS=ON` and remains off by default. It links the generated protocol target `ark::proto` directly. With the core tests enabled, `check-consul-plugin` additionally inspects the actual Consul DSO exports in a separate process; `check-core` includes the applicable Consul checks. The controlled factory does not exercise the production HTTP client or a Consul server. These construction checks do not establish live Consul interoperability, protocol acceptance or arbitrary hot-update safety.
+
+## Typed Etcd Client construction
+
+**Breaking ABI/layout change:** `etcd_client_module_impl` now inherits `module_base<etcd_client_module>` and `etcd_client_plugin` inherits `plugin_base<etcd_client_plugin>`. Rebuild Etcd Client and consumers together. All five public headers, their `<ark/etcd_client/...>` paths and public types remain available through `ark::etcd_client`; the `etcd_client_module` and `etcd_client` interfaces are unchanged. C++ plugin boundaries do not promise compiler-independent ABI compatibility.
+
+The private `etcd_client_factory.hpp` returns `std::unique_ptr<etcd_client_module>` and is excluded from public mappings and installation. Explicit `DllEntryPlugin` / `DllExitPlugin` retain the existing platform exports and logger setup. Registration uses the original interface RTTI key and `module_update::disabled`; unregistration destroys the owned module. HTTP-client lookup, endpoint handling, timeout argument order, lease requests and callbacks are unchanged. The existing `keepalive` stub remains incomplete; this construction change adds no protocol or Registry capability.
+
+Etcd Client remains selected by default for application builds, with `ARK_BUILD_PLUGIN_ETCD_CLIENT=OFF` available to disable it. Its existing `nlohmann_json` package is required only when building the plugin (`etcd-client` vcpkg feature). With `ARK_BUILD_APPLICATIONS=ON`, `ARK_BUILD_PLUGIN_ETCD_CLIENT=ON`, `ARK_BUILD_PROTO=ON` and `ARK_BUILD_CORE_TESTS=ON`, run:
+
+```sh
+cmake --build build --target check-etcd-client-plugin --parallel 1
+```
+
+This target includes `check-etcd-client-construction`: actual factory/assembly doctest cases, plus a controlled-factory DSO using the production entry/exit source to check configuration handoff, interface metadata, disabled updates, exactly-once ownership and repeated stop. A separate process loads the actual production plugin, checks its entry/exit exports and unloads it. `check-core` includes both checks when the runtime plugin is selected; disabled-plugin core builds do not acquire the JSON dependency. Applications CI explicitly enables the plugin and runs these checks through its existing `check-core` job.
+
+These tests do not run an Etcd service or exercise production HTTP/Etcd interoperability. They establish construction and DSO boundaries, not a completed Registry or arbitrary hot-update safety.
