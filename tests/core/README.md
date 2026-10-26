@@ -30,6 +30,19 @@ See [Murmur compatibility](../../docs/reference/utility.md#core-murmur-hashes)
 for canonical little-endian output and the explicit legacy MSVC migration path. AddressSanitizer and
 UndefinedBehaviorSanitizer builds exercise overread and alignment checks.
 
+The existing mapped public-header check remains. An additional compile-only check
+stages just `<ark/hash/murmur_hash.hpp>` and uses C++20 without project, platform,
+spdlog or Boost include paths or SDK target dependencies. It is part of
+`check-core` and can also run without configuring the full dependency graph:
+
+```sh
+cmake -S tests/core/hash_header -B hash-header-build -G Ninja
+cmake --build hash-header-build --target check-murmur-hash-header
+```
+
+Header independence does not remove the dependencies required by `ark::core` or
+its CMake package.
+
 With `ARK_BUILD_PROTO=ON`, additional cases verify Protobuf parse failures, actor
 identity, binary messages, legacy wire payloads and external JSON field names.
 They also exercise the new `ark::protobuf` descriptor and enum names.

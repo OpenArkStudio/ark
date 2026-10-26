@@ -27,6 +27,17 @@ Murmur 回归包含独立的上游 SMHasher 验证常量、旧版完整块交换
 [Murmur 兼容性说明](../../docs/reference/utility_CN.md#core-murmur-哈希)。
 AddressSanitizer 和 UndefinedBehaviorSanitizer 构建可检查越界读取和无效对齐。
 
+现有公开头映射检查继续保留。新增的纯编译检查仅映射 `<ark/hash/murmur_hash.hpp>`，
+使用 C++20，不引入项目、平台、spdlog 或 Boost 包含路径，也不依赖 SDK 目标。
+该检查纳入 `check-core`，也可独立运行，无需配置完整依赖图：
+
+```sh
+cmake -S tests/core/hash_header -B hash-header-build -G Ninja
+cmake --build hash-header-build --target check-murmur-hash-header
+```
+
+头文件独立性不改变 `ark::core` 或其 CMake 包所需的依赖。
+
 公共头检查将 `<ark/error_code.hpp>` 放在首个包含位置，并重复包含两次；编译期断言
 验证其无符号 32 位底层类型及所有已声明的错误值。
 
