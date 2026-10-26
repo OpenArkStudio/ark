@@ -1,16 +1,31 @@
-#include "ark/kafka/kafka_module_impl.hpp"
+#include <stdexcept>
+
 #include "ark/kafka/kafka_plugin.hpp"
+#include "kafka_factory.hpp"
 
 namespace ark {
 
-ARK_DECLARE_PLUGIN_DLL_FUNCTION(kafka_plugin)
+ARK_EXPORT_FUNC void DllEntryPlugin(plugin_manager* manager, const std::string& name, logger* log) {
+    logger::init(log);
+    manager->register_plugin<kafka_plugin>(name);
+}
+
+ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
+    manager->unregister_plugin<kafka_plugin>();
+}
 
 void kafka_plugin::install() {
-    ARK_REGISTER_MODULE(kafka_module, kafka_module_impl);
+    if (!register_module(detail::make_kafka_module(), module_update::enabled))
+    {
+        throw std::runtime_error("Kafka module registration rejected");
+    }
 }
 
 void kafka_plugin::uninstall() {
-    ARK_UNREGISTER_MODULE(kafka_module, kafka_module_impl);
+    if (!unregister_module<kafka_module>())
+    {
+        throw std::runtime_error("Kafka module unregistration rejected");
+    }
 }
 
 } // namespace ark

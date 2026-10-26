@@ -136,3 +136,11 @@ Net 注册的 HTTP 客户端现在由私有接口工厂创建。`check-net-plugi
 开启 Protobuf 且存在 Kernel／Utility 运行时 target 时，`check-kernel-plugin` 通过独立公开接口 runner 加载真实 DSO，检查原有四个接口键与管理器指针、元数据／静态记录加载、地图／实体注册和回调、管理器更新、停机销毁与重复 stop。它与现有直接初始化／实体默认值测试一起纳入 `check-core`；不在卸载后检查注册表，也不证明任意热更新安全。Kernel 公开头消费者检查全部保留类型的基类和 update 声明。
 
 XXTEA 用例覆盖精确长度分配的短密钥、16 字节与内嵌零字节密钥、二进制往返及输出追加，参见[密钥约定](../../docs/reference/xxtea_CN.md)。
+
+启用可选 Kafka 运行时（`ARK_BUILD_APPLICATIONS=ON`、`ARK_BUILD_PROTO=ON`、
+`ARK_BUILD_CORE_TESTS=ON`、`ARK_BUILD_PLUGIN_KAFKA=ON`）并准备原有驱动依赖后，
+`check-core` 包含 `check-kafka-plugin` 与 `check-kafka-construction`。专项检查编译真实
+工厂／装配，验证接口 RTTI 元数据与启用 update，通过受控工厂执行生产入口／出口，
+并加载真实生产动态库检查导出。测试不创建生产者、不连接 broker。Kafka 继续默认关闭；
+关闭插件的核心测试不发现其依赖。公开布局重建要求与服务验收边界见
+[构造迁移](../../docs/reference/directory-structure_CN.md#kafka-类型化构造)。

@@ -1,8 +1,13 @@
 #include "ark/kafka/kafka_module_impl.hpp"
 #include "ark/kafka/kafka_plugin.hpp"
 #include "ark/logger.hpp"
+#include "kafka_factory.hpp"
 
 namespace ark {
+
+std::unique_ptr<kafka_module> detail::make_kafka_module() {
+    return std::make_unique<kafka_module_impl>();
+}
 
 bool kafka_module_impl::init() {
     return true;
@@ -63,20 +68,23 @@ void kafka_module_impl::event_cb(RdKafka::Event& event) {
     switch (event.type())
     {
     case RdKafka::Event::EVENT_ERROR:
-        ARK_LOG_WARN("Kafka error! err=[{}]:{} msg={}", event.err(), RdKafka::err2str(event.err()), event.str());
+        ARK_LOG_WARN("Kafka error! err=[{}]:{} msg={}", static_cast<int>(event.err()), RdKafka::err2str(event.err()),
+            event.str());
         break;
     case RdKafka::Event::EVENT_STATS:
         ARK_LOG_INFO("Kafka stats: {}", event.str());
         break;
     case RdKafka::Event::EVENT_LOG:
-        ARK_LOG_INFO("Kafka event log! severity={} facility={} msg={}", event.severity(), event.fac(), event.str());
+        ARK_LOG_INFO("Kafka event log! severity={} facility={} msg={}", static_cast<int>(event.severity()), event.fac(),
+            event.str());
         break;
     case RdKafka::Event::EVENT_THROTTLE:
         ARK_LOG_INFO("Kafka throttled time={}ms by {} ! brokerID={}", event.throttle_time(), event.broker_name(),
             event.broker_id());
         break;
     default:
-        ARK_LOG_INFO("Kafka event. type={} err=[{}] msg={}", event.type(), RdKafka::err2str(event.err()), event.str());
+        ARK_LOG_INFO("Kafka event. type={} err=[{}] msg={}", static_cast<int>(event.type()),
+            RdKafka::err2str(event.err()), event.str());
         break;
     }
 }

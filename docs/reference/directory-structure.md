@@ -196,3 +196,21 @@ cmake --build build --target check-etcd-client-plugin --parallel 1
 This target includes `check-etcd-client-construction`: actual factory/assembly doctest cases, plus a controlled-factory DSO using the production entry/exit source to check configuration handoff, interface metadata, disabled updates, exactly-once ownership and repeated stop. A separate process loads the actual production plugin, checks its entry/exit exports and unloads it. `check-core` includes both checks when the runtime plugin is selected; disabled-plugin core builds do not acquire the JSON dependency. Applications CI explicitly enables the plugin and runs these checks through its existing `check-core` job.
 
 These tests do not run an Etcd service or exercise production HTTP/Etcd interoperability. They establish construction and DSO boundaries, not a completed Registry or arbitrary hot-update safety.
+
+## Typed Kafka construction
+
+**Breaking ABI/layout change:** `kafka_module_impl` now inherits `module_base<kafka_module>` and `kafka_plugin` inherits `plugin_base<kafka_plugin>`. Rebuild Kafka and consumers together. All four public headers, their `<ark/kafka/...>` paths and public types remain available through `ark::kafka`. The module interface, producer/consumer wrappers and both `RdKafka::DeliveryReportCb` / `RdKafka::EventCb` bases are retained. C++ plugin boundaries do not promise compiler-independent ABI compatibility.
+
+The private `kafka_factory.hpp` returns `std::unique_ptr<kafka_module>` and is excluded from public mappings and installation. Explicit `DllEntryPlugin` / `DllExitPlugin` retain platform exports and logger setup. Assembly retains the interface RTTI registration key and explicitly selects `module_update::enabled`, preserving periodic producer polling. Unregistration destroys the owned module. Producer storage and ownership, producer creation, delivery/event callbacks and message behavior are unchanged.
+
+Kafka remains optional and **off by default**. Its existing dependency discovery and linking are unchanged: enable `ARK_BUILD_APPLICATIONS=ON`, `ARK_BUILD_PROTO=ON`, `ARK_BUILD_CORE_TESTS=ON` and `ARK_BUILD_PLUGIN_KAFKA=ON`, with the platform's Kafka driver dependencies available. On Unix this includes librdkafka C/C++, OpenSSL, Zstandard, LZ4 and zlib. With that build configured, run:
+
+```sh
+cmake --build build --target check-kafka-plugin --parallel 1
+```
+
+`check-kafka-plugin` includes `check-kafka-construction`: actual factory/assembly doctest cases and a controlled-factory DSO using the production entry/exit source. They check typed bases, interface metadata, duplicate registration, enabled updates, configuration handoff, exactly-once ownership and repeated stop. A separate process loads the actual production DSO, checks its entry/exit exports and unloads it. `check-core` includes these checks only when the Kafka runtime target is selected; disabled-plugin core builds do not discover Kafka dependencies.
+
+Callback logs explicitly convert RdKafka error, severity and event-type enums to integers for current fmt compatibility, retaining their numeric log values. This does not change producer behavior, callback ordering or dependency discovery.
+
+These checks create no producer and require no broker connection. They establish construction and DSO boundaries, not Kafka delivery, flush behavior, service interoperability or arbitrary hot-update safety. The optional driver build still requires independent platform acceptance.

@@ -159,3 +159,13 @@ With Protobuf and the Kernel/Utility runtime targets enabled, `check-kernel-plug
 
 The XXTEA cases cover exact-size short-key allocations, 16-byte and embedded-zero
 keys, binary round trips and output appending. See the [key contract](../../docs/reference/xxtea.md).
+
+With the optional Kafka runtime enabled (`ARK_BUILD_APPLICATIONS=ON`, `ARK_BUILD_PROTO=ON`,
+`ARK_BUILD_CORE_TESTS=ON`, `ARK_BUILD_PLUGIN_KAFKA=ON`) and its existing driver dependencies,
+`check-core` includes `check-kafka-plugin` and `check-kafka-construction`. The focused checks
+compile the real factory/assembly, verify interface RTTI metadata and enabled updates, run
+production entry/exit code with a controlled factory, and load the actual production DSO to
+inspect exports. They create no producer or broker connection. Kafka stays off by default;
+disabled-plugin core builds do not discover its dependencies. See the
+[construction migration](../../docs/reference/directory-structure.md#typed-kafka-construction)
+for the public-layout rebuild requirement and service-validation limits.

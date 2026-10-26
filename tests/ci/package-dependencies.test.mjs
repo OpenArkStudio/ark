@@ -104,3 +104,18 @@ test('Applications CI explicitly enables Etcd Client ownership and production DS
   assert.match(plugin, /DllExitPlugin/);
   assert.doesNotMatch(plugin, /ARK_DECLARE_PLUGIN|ARK_REGISTER_MODULE|ARK_UNREGISTER_MODULE/);
 });
+
+test('Optional Kafka construction preserves update selection without public factories', () => {
+  const core = read('tests/core/CMakeLists.txt');
+  assert.match(core, /if\(TARGET ark_kafka_plugin\)[\s\S]*add_subdirectory\(\.\.\/kafka/);
+  const checks = read('tests/kafka/CMakeLists.txt');
+  assert.match(checks, /add_dependencies\(check-core check-kafka-plugin check-kafka-construction\)/);
+  assert.match(checks, /kafka_module_impl\.cpp/);
+  const mappings = read('src/plugins/CMakeLists.txt').split('set(ark_kafka_public_headers')[1].split('\n)')[0];
+  assert.doesNotMatch(mappings, /kafka_factory/);
+  const plugin = read('src/plugins/kafka/kafka_plugin.cpp');
+  assert.match(plugin, /module_update::enabled/);
+  assert.match(plugin, /DllEntryPlugin/);
+  assert.match(plugin, /DllExitPlugin/);
+  assert.doesNotMatch(plugin, /ARK_DECLARE_PLUGIN|ARK_REGISTER_MODULE|ARK_UNREGISTER_MODULE/);
+});
