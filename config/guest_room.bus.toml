@@ -1,0 +1,21 @@
+[bus]
+relations = []
+
+[[bus.applications]]
+name = "game"
+type = 31
+
+[[bus.processes]]
+bus_id = "1.1.31.1"
+server_endpoint = "tcp://127.0.0.1:19100"
+intranet_endpoint = ""
+max_connections = 32
+threads = 1
+
+# Required by the current Bus schema; no registration or external service is used.
+[bus.registry]
+host = "127.0.0.1"
+port = 0
+service_name = "unused"
+check_interval = "10s"
+check_timeout = "3s"

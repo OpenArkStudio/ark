@@ -7,6 +7,7 @@
 | `examples/timers`／`timers` | `timers_plugin` | Utility 定时器与模块生命周期；启用，参与 update |
 | `examples/module_lifecycle`／`module_lifecycle` | `module_lifecycle_plugin` | 生命周期与少量 data-list 演示；启用，无 update 覆写。回调演示代码仍被注释 |
 | `examples/entity_operations`／`entity_operations` | `entity_operations_plugin` | Kernel 实体、数据和表操作；启用，无 update 覆写。启动仅做有界功能演示；[旧计时负载](../../benchmarks/ENTITY_OPERATIONS_CN.md)只能通过显式基准命令运行 |
+| `examples/guest_room`／`guest_room` | `guest_room_plugin` | 可选二维访客大厅，使用 Kernel 实体与真实 Net 传输；通过 `ARK_BUILD_GUEST_ROOM_EXAMPLE` 启用。[构建、客户端协议与原生双客户端验证](../../examples/guest_room/README_CN.md) |
 | `examples/mysql_sample`／`mysql_sample` | `mysql_sample_plugin` | 原生 MySQL 协程示例；应用示例列表中仍关闭，开启 SSL 的数据库测试检查其装配 |
 | `examples/redis_sample`／`redis_sample` | `redis_sample_plugin` | 原生 Redis 协程示例；应用示例列表中仍关闭，数据库测试检查其装配 |
 | `examples/physics_scene`／`physics_scene` | `physics_scene_plugin` | 关闭，依赖不支持的旧 PhysX 3；保留源码与清单不代表集成可运行 |

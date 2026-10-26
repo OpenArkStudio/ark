@@ -47,6 +47,12 @@
         "tomlplusplus"
       ]
     },
+    "guest-room": {
+      "description": "Build the optional guest-room JSON client/server example",
+      "dependencies": [
+        "nlohmann-json"
+      ]
+    },
     "etcd-client": {
       "description": "Build the optional etcd client plugin",
       "dependencies": [

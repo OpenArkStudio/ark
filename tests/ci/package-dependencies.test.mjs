@@ -11,15 +11,16 @@ test('core packages are shared while application, configuration and JSON depende
   const core = dependencies(manifest.dependencies);
   assert.ok(core.includes('spdlog'));
   assert.ok(core.includes('readerwriterqueue'));
-  for (const [feature, name] of [['application', 'args'], ['config', 'tomlplusplus'], ['etcd-client', 'nlohmann-json']]) {
-    assert.ok(dependencies(manifest.features[feature].dependencies).includes(name));
+  for (const [owners, name] of [[['application'], 'args'], [['config'], 'tomlplusplus'], [['etcd-client', 'guest-room'], 'nlohmann-json']]) {
+    for (const feature of owners) assert.ok(dependencies(manifest.features[feature].dependencies).includes(name));
     assert.ok(!core.includes(name), `${name} must remain optional`);
     for (const [other, value] of Object.entries(manifest.features)) {
-      if (other !== feature) assert.ok(!dependencies(value.dependencies).includes(name), `${name} belongs to ${feature}`);
+      if (!owners.includes(other)) assert.ok(!dependencies(value.dependencies).includes(name), `${name} belongs to ${owners.join('/')}`);
     }
   }
   assert.ok(manifest['default-features'].includes('config'));
   assert.ok(!manifest['default-features'].includes('etcd-client'));
+  assert.ok(!manifest['default-features'].includes('guest-room'));
 });
 
 test('the public core target propagates package usage requirements without a bundled include root', () => {
