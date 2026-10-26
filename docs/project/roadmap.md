@@ -1,67 +1,26 @@
 # Roadmap
 
-## Current modernization
+This page distinguishes supported source behavior from remaining design and deployment acceptance. C++20 is the build baseline; it does not mean every modernization or optional integration is complete. The [historical roadmap](roadmap-history.md) preserves the previous planning list and its checkbox states.
 
-- [x] Complete the `include/ark/`, `src/` and `src/plugins/<name>/` layout and snake_case API migration, including Protobuf source naming.
-- [x] Release native single-node MySQL and Redis clients in arknet 0.2.0.
-- [ ] Replace ark database plugins' legacy drivers, with Asio coroutine entry points, native arknet owning results and module-thread completion.
-- [ ] Integrate the remaining independent official plugins with optional builds and tests.
-- [ ] Review Nimbus documentation locally while preserving existing articles and entry points.
+## Supported behavior
 
-Hot-update discussions and implementation are deferred. The original planning list below retains its historical checkbox state; it is not a current API or capability list. Use the current items above, source code and acceptance records to determine implementation status.
+- Core code lives in `src/core/`, the launcher in `src/application/`, shared manifest/configuration reading in `src/config/`, and official plugin headers and implementation together in `src/plugins/<name>/`. Explicit CMake public-header mappings preserve `<ark/...>` include paths. See [project layout and public interfaces](../reference/directory-structure.md) for targets, rebuild requirements and optional plugin boundaries.
+- Public [MySQL](../reference/mysql.md) and [Redis](../reference/redis.md) modules use arknet native clients through Asio coroutine entry points. Inputs and results own their storage; manager-owned task groups resume on the module owner thread. MySQL includes prepared statements and transactions; Redis includes commands and pipelines. Legacy database drivers are no longer the public plugin interface.
+- Startup callbacks propagate the first failure. The launcher reports the failed phase and exits with code `1` before the update loop. Shutdown stops managed task admission, drains accepted tasks and waits for module readiness. A configured cooperative wait timeout retains the process/resources and disables unloading. These behaviors do not provide partial-startup rollback or a hard process-stop deadline. See [application startup and shutdown](../guides/applications.md) and [managed tasks](../guides/tasks.md).
 
-## High priority
+The four public database service/failure modes passed against isolated Redis and MySQL servers on macOS. The [database service acceptance record](../guides/database-validation.md) identifies the tested revisions, environment and exact scope; those results do not cover every deployment or current source revision.
 
-- [ ] Put all schemas in one Excel workbook and keep other configuration tables separate, while remaining compatible with the existing format.
-- [x] Unify code style.
-- [ ] Connect to logserver before process startup and fail startup if the connection cannot be established, so logging is available from the beginning.
-- [x] Upgrade spdlog.
-- [ ] Add a dirty data layer that batches changed data after each client request, instead of sending every change separately in small packets with repeated protocol headers.
-- [ ] Complete documentation for concepts, design principles, server architecture and usage examples.
-- [x] Align all basic data structures with C++ containers.
-- [ ] Add service registry support, considering etcd or consul.
-- [ ] Use timers for periodic logs and heartbeats instead of update and HeartBeat.
-- [ ] Update configuration packaging: edit in Excel and generate `csv` files for the project to read. Use contributor-specific suffixes such as Item.A.xlsx and Item.B.xlsx to reduce collaboration conflicts.
-- [ ] ~~Control plugin loading order through configuration fields or configuration order.~~
-- [x] Use the AFXml wrapper instead of accessing rapidxml directly.
-- [x] Simplify interface class design.
-- [ ] Generate repetitive code (_plugin and module classes_).
+## Remaining acceptance and design
 
-## Low priority
+| Area | Remaining work and acceptance boundary |
+| --- | --- |
+| Database deployment | Run separate real-service acceptance for request cancellation, server termination and dynamic-library unloading. Add target-environment and cross-machine capacity evidence before making deployment or capacity claims. Local protocol endpoints and construction checks do not replace these runs. |
+| Startup and shutdown | Partial-startup rollback is not provided. A common dependency-aware shutdown protocol remains design work; managed task drain alone does not prove that arbitrary callbacks, native workers or background cleanup have ended. Define ownership and admission phases before extending unload guarantees. |
+| Optional plugins | Kafka construction/export checks do not test broker delivery, flush behavior or service interoperability; its driver build needs independent platform acceptance. OSS SDK remains a scaffold without client/request functionality. Physic retains the explicit unsupported legacy PhysX 3 configuration failure. See [optional plugin boundaries](../reference/directory-structure.md). |
+| C++20 modernization | Review each remaining module and optional integration against its own API, build and runtime requirements. The language baseline, header layout and focused construction checks do not establish completion of the whole modernization. |
 
-- [ ] Update protocol and client handling for Map and Layer (**the concepts have changed; client integration is pending**).
-- [ ] Use a different approach to sorting and swapping entries in inventory tables.
-- [ ] Reduce data synchronization traffic: remove repeated strings such as `NodeName` and `TableName`, send index-to-name mappings at login, then use indices for updates and names for persistence.
-- [ ] Extend DataTable to support more complex structures, such as items containing gems with experience and enchantments, or weapons with random attributes. The existing fixed two-dimensional structure is difficult to extend.
-- [ ] Add network library and performance benchmarks under benchmark/unittest.
-- [ ] Add kcp.
-- [ ] Use SWIG for the scripting module.
-- [ ] Evaluate ECS: represent all objects as entities and use GUIDs to identify their group and position for fast lookup. Research references include Overwatch, ET and [ECS-unity](https://github.com/sschmid/Entitas-CSharp).
-- [ ] Add coroutines, referring to libgo.
-- [ ] Introduce tcmalloc.
-- [ ] Add a monitoring web page using vue-admin.
-- [ ] Add a Deployment web tool.
-- [ ] Add message queue processing.
-- [ ] Add operations tools (tcm & deploy).
-- [ ] Use multiple threads for selected CPU-intensive work.
+## Deferred directions
 
-## Partially finished
+Registry design and business-plugin hot update remain paused. In-flight work, state ownership, dependency order and compatibility need an agreed design before implementation or broader unload claims. Business-configuration export changes are also deferred; the shared application-manifest reader does not replace business-resource formats or their export tools.
 
-- [x] Add spdlog sinks that organize files by directory and rotate by size or hour (*partially changed; further changes are needed for the tlog format, /data/binlog/1001/20180627/game1_hour.log*).
-- [x] Add consistent_hash_map (**added, not yet enabled**).
-
-## Finished
-
-- [x] Implement the new architecture.
-- [x] Configure connection relationships instead of setting them manually in code (bus_relation, server_settting). Detect IP addresses and generate ports dynamically instead of specifying them, and express network addresses as URLs such as tcp://0.0.0.0:9001 and wss://0.0.0.0:9001.
-- [x] Place Debug and Release binaries together under bin, with separate Debug and Release settings so they can share one configuration set.
-- [x] Change guid to an internal pointer type to reduce memory use for other non-guid types. ***Changed to int64_t; the memory concern no longer applies.***
-- [x] Add a network plugin to separate network modules from application logic (NetClient and NetServer are still too closely coupled to application logic).
-- [x] Add endpoint to the net plugin.
-- [x] Merge the kernel and config plugins because kernel depends heavily on config.
-
-## Bugs
-
-- [ ] ClearRow shifts subsequent row indices. Either preserve the indices and clear only the row contents, or have the client update subsequent indices when it receives DeleteRow.
-- [x] Fix ConfigPlugin data loading.
-- [x] Fix the return values of AFMapEx First and Next.
+Historical ideas in the archive are not automatically scheduled work. Future scope should name the affected API or deployment, its prerequisites and concrete acceptance evidence before it is promoted into this roadmap.

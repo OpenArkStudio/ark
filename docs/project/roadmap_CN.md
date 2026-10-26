@@ -1,84 +1,26 @@
 # 路线图
 
-## 当前改造
+本页区分源码支持的行为与尚缺的设计、部署验收。C++20 是构建基线，不代表全部现代化改造或可选集成都已完成。[历史路线图](roadmap-history_CN.md)保留原规划清单与勾选状态。
 
-- [x] 完成 `include/ark/`、`src/` 与 `src/plugins/<名称>/` 的目录整理和 snake_case 接口迁移，包含 Protobuf 源码命名。
-- [x] 随 arknet 0.2.0 发布原生 MySQL、Redis 单节点客户端。
-- [ ] 替换 ark 数据库插件的旧驱动，提供 Asio 协程入口，直接使用 arknet 拥有型结果，并在模块线程恢复。
-- [ ] 整合其余独立官方插件，按需构建并补齐测试。
-- [ ] 在本地审阅 Nimbus 文档，保留原有文章和入口。
+## 支持的行为
 
-业务热更新的讨论与实现暂缓。下方保留原有规划的历史勾选状态，不作为当前 API 或能力清单；当前实现以以上条目、源码和验收记录为准。
+- 核心代码位于 `src/core/`，启动器位于 `src/application/`，共享清单与配置读取位于 `src/config/`，官方插件的头文件与实现共置于 `src/plugins/<name>/`。CMake 显式公开头文件映射保留 `<ark/...>` 包含路径。目标、重建要求和可选插件边界见[项目布局与公开接口](../reference/directory-structure_CN.md)。
+- 公开 [MySQL](../reference/mysql_CN.md) 与 [Redis](../reference/redis_CN.md) 模块通过 Asio 协程入口使用 arknet 原生客户端。输入与结果拥有自身存储；管理器拥有的任务组在模块所属线程恢复。MySQL 提供预处理语句与事务，Redis 提供命令与流水线。旧数据库驱动已不再作为公开插件接口。
+- 启动回调的首个失败会向上传递。启动器报告失败阶段，在进入更新循环前以退出码 `1` 终止。停止时关闭托管任务接收，排空已接收任务并等待模块就绪。配置的协作式等待超时会保留进程和资源，并禁止卸载。这些行为不提供部分启动回滚，也不构成强制进程退出期限。见[应用启动与停止](../guides/applications_CN.md)和[托管任务](../guides/tasks_CN.md)。
 
-## High priority
+公开数据库接口的四种正常／故障模式已在 macOS 上通过隔离 Redis 与 MySQL 真实服务验收。[数据库服务验收记录](../guides/database-validation_CN.md)列明测试版本、环境与范围；这些结果不覆盖所有部署环境或当前源码版本。
 
-- [x] excel格式修改为一张excel里放所有的schema,其他配置表分开来写,兼容现在的格式
-- [x] 调整代码风格统一
-- [x] spdlog升级
-- [x] 增加dirty data layer, 当一个客户端请求处理完成后统一下发变化数据，不能有变有发，会导致小包太碎，并且浪费协议的head(改为非实时数据下一帧统一发送，实时数据有变有发)
-- [ ] 文档逐步补齐，概念介绍、设计理念、服务器架构、使用例子
-- [x] 所有的基础数据结构向C++容器看齐
-- [x] 服务中心注册(考虑etcd/consul来做), 已经使用consul来处理了
-- [x] 定时log和心跳改为timer方式，不要再是用update和HeartBeat了
-- [x] 修改配置打包工具(用Excel编辑，生成`xml`来给工程读取。为解决多人协作冲突, excel可以用名字后缀区分，类如Item.A.xlsx Item.B.xlsx)
-- [x] 修改xml不再直接用rapidxml，用封装后的AFXml
-- [x] 接口类重新设计纯粹化
-- [x] 增加生成器来生成重复代码(_插件类和模块类_)
-- [x] 使用`std::chrono`改造`AFDateTime`
-- [x] session id 使用GUID类型
-- [x] 增加murmur hash函数用来做consistent hash map
-- [x] 增加xoshiro/xoroshiro随机算法
-- [x] 增加xxtea, crc16, crc32, crc64加密算法
-- [ ] 增加codec类，用来剥离框架对特定协议的依赖，方便外部替换协议类型
-- [ ] 增加插件动态热更新
-- [ ] 增加工具获取插件动态链接库版本号
-- [x] Linux下强杀进程处理(kill -9 xxx)
-- [ ] 配置meta和entity meta的区分
-- [ ] 网络修改为asio系
-- [ ] web serever/client修改为asio/beast系
-- [ ] Redis 插件接入 arknet 自主实现的 Redis 客户端
+## 剩余验收与设计
 
-## Low priority
+| 领域 | 剩余工作与验收边界 |
+| --- | --- |
+| 数据库部署 | 为请求取消、服务端终止和动态库卸载分别执行真实服务验收。发布部署或容量结论前，补充目标环境与跨机器容量证据。本机协议端点与构造检查不能替代这些验收。 |
+| 启动与停机 | 框架不提供部分启动回滚。通用的依赖感知停机协议仍需设计；托管任务排空不代表任意回调、原生工作线程或后台清理均已结束。扩展卸载保证前，先明确所有权与接收阶段。 |
+| 可选插件 | Kafka 构造／导出检查不验证 broker 投递、flush 行为或服务互通；驱动构建仍需独立平台验收。OSS SDK 保持骨架状态，不提供客户端／请求功能。Physic 保留旧版 PhysX 3 不受支持的显式配置失败。见[可选插件边界](../reference/directory-structure_CN.md)。 |
+| C++20 改造 | 按各模块与可选集成的 API、构建和运行要求继续审查。语言基线、头文件布局和局部构造检查不足以证明全部改造完成。 |
 
-- [x] Map, Layer,对应修改协议和Client的处理(**概念已经修改, 还未对接客户端**)
-- [x] 关于背包类的table，整理或者交换，需要改成别的方式
-- [x] 优化数据同步的流量,减小属性同步的体积(去掉`NodeName`和`TableName`类似的string同步, 上线先同步index和name的映射，后续全部用index下发，入库用name)
-- [x] 拓展DataTable的组成，例如道具包含了宝石(带经验，附魔等)、武器(带随机属性)等东西，DataTable现有的二维结构是特定的，不方便做扩展
-- [ ] 增加网络库和性能的基准测试用例，放到目录benchmark/unittest
-- [ ] 增加kcp
-- [ ] 脚本模块使用SWIG
-- [x] 考虑使用ECS，全部对象Entity化，~~通过GUID来确定属于哪个分组的哪个位置，能快速定位和查找(通过守望先锋、ET、[ECS-unity](https://github.com/sschmid/Entitas-CSharp)，具体还要再调研)~~
-- [ ] 增加coroutine，参考libgo
-- [ ] 引入tcmalloc
-- [ ] 增加监控web页面(ant-design-for-vue)
-- [ ] 增加Deployment web工具
-- [ ] ~~增加消息队列处理~~
-- [ ] 增加运维工具(tcm & deploy)
-- [ ] 部分计算密集的地方使用多线程
-- [ ] 增加协议wrapper层，这样框架层包装后，可以甩出来给业务用，无需知道业务层用的协议类型
-- [ ] ~~升级至C++17~~
-- [ ] ~~`std::string_veiw`/`discard`/...~~
-- [ ] ~~插件加载顺序(通过配置中的字段, 或者通过配置的顺序)~~
-- [ ] ~~修改进程启动优先链接logserver，如果logserver连不上，则直接不能启动，这样就可以从一开始就能打log了~~
+## 暂缓方向
 
-## Part finished
+Registry 设计与业务插件热更新仍暂缓。扩展实现或卸载保证前，需要先确定在途任务、状态所有权、依赖顺序与兼容性设计。业务配置导出调整也暂缓；共享应用清单读取器不替换业务资源格式及其导出工具。
 
-- [x] spdlog增加按照文件夹/大小/小时滚动的sink(*已经修改了一部分，还需要进一步修改成tlog的格式，/data/binlog/1001/20180627/game1_hour.log*)
-- [x] 增加consistent_hash_map
-
-## Finished
-
-- [x] 新架构修改
-- [x] 增加连接关系的配置，不再通过程序中手动设置关系(bus_relation, server_settting, IP和port不用再指定了, 通过获取IP和动态生成port), 网络地址修改为tcp://0.0.0.0:9001 wss://0.0.0.0:9001这样的URL
-- [x] 修改bin文件夹debug和release在一起，debug和release分开配置(方便配置是一套)
-- [x] guid改为内部指针类型(降低其他非guid类型的内存占用)***修改为int64_t了,不需要再考虑内存占用了***
-- [x] 增加网络插件,这样可以将网络模块和业务逻辑模块拆分开(现在NetClient和NetServer还是跟业务关联太紧密了)
-- [x] net plugin增加endpoint
-- [x] kernel和config插件还是得合并为一个，因为kernel非常依赖config插件
-
-## Bugs
-
-- [x] ClearRow的时候后面的行号会变化，所以要考虑要么行号不变，只是置空，要么就得客户端来根据DeleteRow消息同步修改后续的row变化
-- [x] 现在的ConfigPlugin数据加载有问题
-- [x] AFMapEx的First Next返回值有问题
-- [ ] 单个进程开多个监听服务，busid会被覆盖和连接管理有问题
+归档中的历史设想不自动成为排期任务。将新范围纳入路线图前，应明确受影响的 API 或部署、前置条件与具体验收证据。

@@ -256,6 +256,11 @@ const tree: Entry[] = [
         "project/roadmap",
         "Roadmap",
         "路线图"
+      ],
+      [
+        "project/roadmap-history",
+        "Historical roadmap",
+        "历史路线图"
       ]
     ]
   },
