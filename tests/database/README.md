@@ -288,6 +288,8 @@ text. Building it and checking those failures do not establish successful
 real-service DSO acceptance; that requires explicitly running each selected mode
 against isolated services.
 
+The additional opt-in `redis-tls`, `redis-tls-untrusted-ca` and `redis-tls-wrong-host` modes use a real authenticated TLS service. See the [Redis TLS DSO guide](redis_tls.md) for trusted-IP/hostname controls, private service requirements and independent PING/ECHO counter observation. They are compiled but not run by `check-database`.
+
 ## Real plugin request cancellation
 
 `ark_database_public_plugin_cancellation_tests` is a separate opt-in runner for real Redis/MySQL plugin DSOs and owned services. It observes tagged server work before `task_group::cancel(id)`, retains native cancellation/unknown results, and checks owner-thread completion and natural retirement. The evidence covers the observed IDs, effects and bounded observation window; MySQL's final zero-or-one counter is not proof of rollback or every possible retry race. `check-database` compiles this runner without starting services. See the [cancellation guide](cancellation.md) for build commands, trusted TLS, exclusive write data and precise limits.
