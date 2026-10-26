@@ -241,6 +241,16 @@ endif()
 
 add_subdirectory(../osssdk "${CMAKE_CURRENT_BINARY_DIR}/osssdk")
 
+add_executable(ark_native_unload_tests main.cpp dynamic_library.cpp)
+set_property(TARGET ark_native_unload_tests PROPERTY LINK_LIBRARIES ark::core)
+target_compile_definitions(ark_native_unload_tests PRIVATE
+    ARK_UNLOAD_PROBE_DIR="$<TARGET_FILE_DIR:ark_oss_sdk_entry_probe>/")
+add_custom_target(check-native-unload
+    COMMAND $<TARGET_FILE:ark_native_unload_tests>
+    DEPENDS ark_native_unload_tests ark_oss_sdk_entry_probe
+    USES_TERMINAL VERBATIM)
+add_dependencies(check-core check-native-unload)
+
 if(ARK_BUILD_PROTO AND ARK_BUILD_CONFIG)
     add_subdirectory(../consul "${CMAKE_CURRENT_BINARY_DIR}/consul")
 endif()

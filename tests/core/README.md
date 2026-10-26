@@ -97,6 +97,14 @@ for the caller-owned output and dictionary-context synchronization requirements.
 cmake --build core-build --target check-compression --parallel 2
 ```
 
+## Native library close results
+
+`check-native-unload` is included in `check-core` and reuses the existing OSS SDK entry probe without an OSS service or runtime application build. Deterministic tests inject a failed native result using valid loaded handles through private per-call adapters; no production global hook or public virtual mock API is added. They verify the platform's success convention, retained failed handles/wrappers, stopping before later closes, exactly-once plugin exit and sticky manager failure. Successful close clears the handle, and repeated empty/successful unload does not call the OS again. A separate normal path runs the real plugin entry/exit and native close APIs. These checks do not establish OS image removal, real database acceptance or arbitrary hot-update safety.
+
+```sh
+cmake --build core-build --target check-native-unload --parallel 1
+```
+
 ## Public task interface
 
 `check-task-sdk` is included in `check-core`. It compiles `<ark/task.hpp>`

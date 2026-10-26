@@ -72,10 +72,12 @@ Private database bridges use `manager.get_task_runtime()` to share that exact ex
 | --- | --- |
 | `running` | Update normally and accept tasks |
 | `draining` | Continue module updates and the central poll; retain business state and services |
-| `failed` | A shutdown hook returned failure or threw; do not continue unloading, and retain process/resources |
-| `stopped` | Shutdown hooks completed; repeated `stop()` returns `true` |
+| `failed` | A shutdown hook failed/threw or a native library close failed; stop further unloading and retain remaining resources |
+| `stopped` | Shutdown hooks and native close calls succeeded; repeated `stop()` returns `true` |
 
 Use `get_shutdown_state()`, `get_shutdown_failure()` and `get_shutdown_exception()` to distinguish waiting from failure. The launcher keeps pumping while tasks remain, and reports a hook failure once while retaining the process. There is no implicit shutdown timeout, cancellation, detach or frame destruction as a drain substitute. The pending-task check does not wait for completion. The poll budget limits handler count, not execution time, and does not bound user-hook or total shutdown latency.
+
+`dynamic_library::unload()` returns `false` on a native close failure and keeps its handle. Success clears the handle; unloading an empty or already closed wrapper returns `true` without another native call. Manager failure records `unload: <plugin>` and latches the existing failed state, retaining the failed wrapper and remaining libraries. It does not retry plugin exits or closes on a later `stop()`, roll back previous teardown, or establish OS image removal.
 
 Use the manager and its groups on their constructing thread. Do not mutate module registries or recursively update from update/shutdown hooks or executor callbacks. While any managed task is pending, no module can unregister: another module’s task may still borrow that provider. Destroying a manager with tasks, on an active callback stack or from another thread terminates; destruction is not a drain entry point.
 
