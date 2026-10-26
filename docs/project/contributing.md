@@ -12,7 +12,7 @@ npm run dev --prefix docs/site -- --host 127.0.0.1
 npm run check --prefix docs/site
 ```
 
-The site provides language switching, search, code highlighting and plain Markdown endpoints for AI readers. Pull requests run the documentation checks without publishing. After a change is merged into `main`, the documentation workflow builds and publishes GitHub Pages; maintainers can also trigger it manually. Node.js 22.12+ is needed for the documentation build; it is not needed to compile ark or its C++ tests.
+The site provides language switching, search, code highlighting and plain Markdown endpoints for AI readers. Pull requests run the documentation checks without publishing. After a change is merged into `main`, the documentation workflow builds and publishes GitHub Pages; maintainers can also trigger it manually. Node.js 22.23.4+ is needed for the documentation build; it is not needed to compile ark or its C++ tests.
 
 
 ## CI documentation scope
