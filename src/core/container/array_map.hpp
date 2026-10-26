@@ -75,9 +75,21 @@ public:
     }
 
     bool add_element(const std::string& name, node_type* data) {
-        indices_.add(name.c_str(), nodes_.size());
         nodes_.push_back(data);
-        return true;
+        try
+        {
+            if (indices_.add(name.c_str(), nodes_.size() - 1))
+            {
+                return true;
+            }
+        }
+        catch (...)
+        {
+            nodes_.pop_back();
+            throw;
+        }
+        nodes_.pop_back();
+        return false;
     }
 
     node_type* get_element(const std::string& name) {
