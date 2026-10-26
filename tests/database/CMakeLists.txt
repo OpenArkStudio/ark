@@ -63,6 +63,13 @@ set_property(TARGET ark_database_public_plugin_service_tests PROPERTY LINK_LIBRA
 target_compile_definitions(ark_database_public_plugin_service_tests PRIVATE
     ARK_DATABASE_PLUGIN_DIR="$<TARGET_FILE_DIR:ark_database_redis_plugin>/")
 add_dependencies(ark_database_public_plugin_service_tests ark_database_redis_plugin)
+# Explicit real-service cancellation; compile in CI, execute only against owned services.
+ark_database_test(ark_database_public_plugin_cancellation_tests public_plugin_cancellation.cpp)
+set_property(TARGET ark_database_public_plugin_cancellation_tests PROPERTY INCLUDE_DIRECTORIES "")
+set_property(TARGET ark_database_public_plugin_cancellation_tests PROPERTY LINK_LIBRARIES ark::redis Threads::Threads)
+target_compile_definitions(ark_database_public_plugin_cancellation_tests PRIVATE
+    ARK_DATABASE_PLUGIN_DIR="$<TARGET_FILE_DIR:ark_database_redis_plugin>/")
+add_dependencies(ark_database_public_plugin_cancellation_tests ark_database_redis_plugin)
 # Compile and load each sample's real module and plugin assembly with a local
 # provider that rejects configuration before coroutine or network work.
 function(ark_database_sample_check database)
@@ -108,7 +115,8 @@ add_custom_target(check-database
 
 # Compile real-service acceptance in ordinary CI without running any server work.
 add_dependencies(check-database ark_database_redis_sample_check ark_database_public_service_tests
-    ark_database_public_failure_service_tests ark_database_public_plugin_service_tests check-database-samples)
+    ark_database_public_failure_service_tests ark_database_public_plugin_service_tests
+    ark_database_public_plugin_cancellation_tests check-database-samples)
 
 if(ARKNET_ENABLE_SSL)
     target_link_libraries(ark_database_public_failure_service_tests PRIVATE ark::mysql)
@@ -140,6 +148,8 @@ if(ARKNET_ENABLE_SSL)
     add_dependencies(ark_database_public_mysql_plugin_tests ark_database_mysql_plugin)
     add_dependencies(ark_database_public_plugin_service_tests ark_database_mysql_plugin)
     target_link_libraries(ark_database_public_plugin_service_tests PRIVATE ark::mysql)
+    target_link_libraries(ark_database_public_plugin_cancellation_tests PRIVATE ark::mysql)
+    add_dependencies(ark_database_public_plugin_cancellation_tests ark_database_mysql_plugin)
     ark_database_sample_check(mysql)
     add_custom_target(check-database-samples-mysql
         COMMAND $<TARGET_FILE:ark_database_mysql_sample_tests>
