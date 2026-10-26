@@ -1,6 +1,6 @@
 # 数据库服务验收
 
-本页分别记录公开模块的真实服务正常／故障检查、插件 DSO 正常流程、经服务端观察确认的请求取消，以及自有服务终止。每类检查保留各自的测试版本与环境；通过结果仅适用于对应范围。
+本页分别记录公开模块的真实服务正常／故障检查、插件 DSO 正常流程、经服务端观察确认的请求取消、自有服务终止，以及可信 Redis TLS。每类检查保留各自的测试版本与环境；通过结果仅适用于对应范围。
 
 ## 公开模块与真实服务
 
@@ -136,6 +136,32 @@ bash tests/database/owned_server_fault_actor_guards.sh
 
 `check-database` 仅编译该可选程序，不执行服务模式，也不向服务发送信号。仅编译通过的 CI 不代表另一次真实服务运行。
 
+## 真实插件 Redis TLS
+
+**2026-10-26**，`ark_database_public_plugin_service_tests` 的三个 Redis TLS 模式各执行一次，均通过。实际执行的 ark 为 `6cf58973c0aad587b6eb88cede768a9283eb2147`，CI arknet 固定版本为 `a0dfe09cd543e75cfb5996e537ce2fa49f2a758f`。机器为 Mac16,11／Apple M4 Pro／14 核／48 GiB，系统为 macOS 27.0.1（26A434）arm64，构建采用 Apple Clang 21.0.0、C++20 Debug、Boost.Asio 与 OpenSSL 3.6.4。隔离 Redis 7.4.2 运行时由已验证的官方源码归档单独构建，使用 `BUILD_TLS=yes` 及该 OpenSSL 工具链。
+
+私有回环实例要求密码认证，禁用明文端口与持久化，使用全新 CA／服务证书，证书仅包含 `127.0.0.1` 的 IP SAN。客户端证书认证已关闭，本次不验证双向 TLS。执行 DSO 模式前，OpenSSL 对照分别确认可信证书链／IP、不相关 CA 拒绝，以及 `localhost` 主机名不匹配。
+
+| 模式 | 观察结果 |
+| --- | --- |
+| `redis-tls` | 通过认证执行二进制 ECHO 命令，再验证二进制／空 ECHO 与 PING 流水线顺序；拥有型命令与流水线回复在后续操作及宿主销毁后仍可读取。独立服务计数增加三次 ECHO 与一次 PING。 |
+| `redis-tls-untrusted-ca` | 保留原生 `client_errc::connection_failed`、OpenSSL 证书校验传输错误、`command_may_have_run=false` 及空回复。该观察窗口内的 PING／ECHO 计数不变。 |
+| `redis-tls-wrong-host` | 使用可信 CA 与 `localhost` 访问同一仅含 IP 的服务证书，保留相同证书校验拒绝；该观察窗口内的 PING／ECHO 计数不变。 |
+
+三个 C++ 模式的退出码均为 `0`。调用方修改 host／password／CA 后，配置副本仍生效。每次继续执行及仅完成一次的根任务均位于所属线程／共享执行器。已接收工作通过普通 `manager.stop()/update()` 自然排空，再完成原生服务退出和可重复的 stop。模块／管理器／运行时销毁及原生 DSO 关闭后，拥有型回复／错误仍可读取。受控测试时限不增加强制或抢占式生产停机期限。
+
+独立 `INFO commandstats` 观察仅覆盖隔离窗口内的 PING／ECHO；客户端错误与这些计数均不证明真实服务未收到任何 RESP 命令。现有有界协议端点 TLS 回归另行统计接收的 RESP 命令。自有 Redis 已通过认证的 `SHUTDOWN NOSAVE` 正常关闭并以退出码 `0` 回收；精确进程已独立确认不存在，私有数据、凭据与密钥已删除。
+
+按[独立 C++ Redis TLS 指南](../../tests/database/redis_tls_CN.md)准备启用 SSL 的构建、私有端点／CA／主机名对照及计数观察。`check-database` 编译现有目标，但真实服务模式仍需显式执行：
+
+```sh
+./database-build/tests/database/ark_database_public_plugin_service_tests redis-tls
+./database-build/tests/database/ark_database_public_plugin_service_tests redis-tls-untrusted-ca
+./database-build/tests/database/ark_database_public_plugin_service_tests redis-tls-wrong-host
+```
+
+本记录不覆盖双向 TLS、证书轮换／撤销，以及 TLS 请求取消、服务故障与恢复。较早的认证明文 TCP 和其他数据库记录保留原有源码标识及验收范围。
+
 ## 验收边界
 
-DSO 流程覆盖正常插件销毁与原生关闭调用。`FreeLibrary` 或 `dlclose` 成功不证明操作系统已物理移除库映像。本机请求取消与服务端终止验收仅覆盖记录中的操作。重启恢复、持久化与写入效果、事务取消、Redis TLS、其他取消／故障竞争、操作系统库映像移除、其他平台／部署环境与跨机器容量仍未验收。这些记录均不证明任意热更新安全或生产容量。
+DSO 流程覆盖正常插件销毁与原生关闭调用。`FreeLibrary` 或 `dlclose` 成功不证明操作系统已物理移除库映像。本机请求取消与服务端终止验收仅覆盖记录中的操作。重启恢复、持久化与写入效果、事务取消、双向 TLS 与证书轮换／撤销、Redis TLS 取消／故障恢复、其他取消／故障竞争、操作系统库映像移除、其他平台／部署环境与跨机器容量仍未验收。这些记录均不证明任意热更新安全或生产容量。

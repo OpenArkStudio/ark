@@ -1,6 +1,6 @@
 # Database service acceptance
 
-This record separates public-module service/failure checks, positive plugin-DSO workflows, server-observed request cancellation and owned-server termination. Each scope has its own tested revisions and environment; a passing result applies only to that scope.
+This record separates public-module service/failure checks, positive plugin-DSO workflows, server-observed request cancellation, owned-server termination and verified Redis TLS. Each scope has its own tested revisions and environment; a passing result applies only to that scope.
 
 ## Public modules against real services
 
@@ -136,6 +136,32 @@ bash tests/database/owned_server_fault_actor_guards.sh
 
 `check-database` compiles the opt-in program without executing its service modes or signaling servers. Compile-only CI success is not another real-service run.
 
+## Real plugin Redis TLS
+
+The three Redis TLS modes of `ark_database_public_plugin_service_tests` passed once each on **2026-10-26** at ark `6cf58973c0aad587b6eb88cede768a9283eb2147` and CI arknet pin `a0dfe09cd543e75cfb5996e537ce2fa49f2a758f`. The host was Mac16,11 / Apple M4 Pro / 14 cores / 48 GiB, macOS 27.0.1 (26A434) arm64, Apple Clang 21.0.0, C++20 Debug with Boost.Asio and OpenSSL 3.6.4. The isolated Redis 7.4.2 runtime was built separately from the verified official source archive with `BUILD_TLS=yes`, using that OpenSSL toolchain.
+
+The private loopback instance required a password, disabled the plaintext port and persistence, and used a fresh CA/server certificate with only a `127.0.0.1` IP SAN. Client-certificate authentication was disabled; mutual TLS was not tested. OpenSSL controls confirmed the trusted chain/IP, the unrelated CA rejection and the `localhost` hostname mismatch before the DSO modes.
+
+| Mode | Observed result |
+| --- | --- |
+| `redis-tls` | Authenticated binary ECHO command, then an ordered binary/empty ECHO and PING pipeline; owning command and pipeline replies survive later operations and host destruction. Independent server counters increased by three ECHOs and one PING. |
+| `redis-tls-untrusted-ca` | Native `client_errc::connection_failed` with an OpenSSL certificate-verification transport error, `command_may_have_run=false` and no replies. PING/ECHO counters were unchanged across its observation window. |
+| `redis-tls-wrong-host` | Same certificate-verification rejection using the trusted CA and `localhost` against the same IP-only certificate; PING/ECHO counters were unchanged across its observation window. |
+
+Each C++ mode exited `0`. Configuration remains owned after the caller mutates its host/password/CA values. Every continuation and the once-only root completion use the owner thread/shared executor. Accepted work finishes under ordinary `manager.stop()/update()` natural drain, followed by native retirement and idempotent stop. Owning replies/errors remain readable after module/manager/runtime destruction and native DSO close. The controlled test bounds do not add a hard or preemptive production shutdown deadline.
+
+Independent `INFO commandstats` observations cover only PING/ECHO in these isolated windows; neither the client error nor those counters proves that no RESP command reached a real server. The existing bounded protocol-peer TLS regression separately counts received RESP commands. The owned Redis was shut down through authenticated `SHUTDOWN NOSAVE` and reaped with exit `0`; its exact process was independently confirmed absent, and private data, credentials and keys were removed.
+
+Use the [standalone C++ Redis TLS guide](../../tests/database/redis_tls.md) for the SSL-enabled build, private endpoints/CA/hostname controls and counter observations. The existing target is compiled by `check-database`; service execution remains opt-in:
+
+```sh
+./database-build/tests/database/ark_database_public_plugin_service_tests redis-tls
+./database-build/tests/database/ark_database_public_plugin_service_tests redis-tls-untrusted-ca
+./database-build/tests/database/ark_database_public_plugin_service_tests redis-tls-wrong-host
+```
+
+This record does not cover mutual TLS, certificate rotation/revocation or TLS cancellation, server faults and recovery. The earlier authenticated plain-TCP and other database records retain their original tested identities and scopes.
+
 ## Acceptance boundaries
 
-The DSO workflows exercise normal plugin teardown and native close calls. Successful `FreeLibrary` or `dlclose` does not prove that the operating system physically removed the library image. Request cancellation and server-termination acceptance are limited to the recorded operations on this host. Restart/recovery, persistence and write effects, transaction cancellation, Redis TLS, other cancellation/fault races, OS image removal, other platforms/deployment environments and cross-machine capacity remain unverified. These records do not establish arbitrary hot-update safety or production capacity.
+The DSO workflows exercise normal plugin teardown and native close calls. Successful `FreeLibrary` or `dlclose` does not prove that the operating system physically removed the library image. Request cancellation and server-termination acceptance are limited to the recorded operations on this host. Restart/recovery, persistence and write effects, transaction cancellation, mutual TLS and certificate rotation/revocation, Redis TLS cancellation/fault recovery, other cancellation/fault races, OS image removal, other platforms/deployment environments and cross-machine capacity remain unverified. These records do not establish arbitrary hot-update safety or production capacity.
