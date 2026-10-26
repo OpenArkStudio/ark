@@ -91,14 +91,9 @@ public:
         {
             return false;
         }
-        if (get_write_valid_count() < len)
+        if (get_write_valid_count() < len) [[unlikely]]
         {
-            const size_t left_len = data_size_ - get_length();
-            if (left_len >= len)
-            {
-                adjust_to_head();
-            }
-            else if (!grow(len - left_len))
+            if (!prepare_write(len))
             {
                 return false;
             }
@@ -131,6 +126,16 @@ public:
     }
 
 private:
+    bool prepare_write(size_t len) {
+        const size_t left_len = data_size_ - get_length();
+        if (left_len >= len)
+        {
+            adjust_to_head();
+            return true;
+        }
+        return grow(len - left_len);
+    }
+
     void adjust_to_head() {
         size_t len = 0;
 
