@@ -82,6 +82,14 @@ cmake --build core-build --target check-logging
 cmake --build core-build --target check-compression --parallel 2
 ```
 
+## 原生动态库关闭结果
+
+`check-native-unload` 纳入 `check-core`，复用现有 OSS SDK 入口探针，不需要 OSS 服务或运行时应用构建。确定性测试通过私有的单次调用适配器，对有效的已加载句柄注入原生失败结果，不增加生产全局钩子或公开虚拟模拟接口。检查覆盖平台成功约定、失败句柄／包装对象保留、停止后续关闭、插件出口仅执行一次与管理器失败状态保持。成功关闭后清空句柄；空对象或已成功关闭的对象重复卸载，不再调用操作系统。独立正常路径执行真实插件入口／出口和原生关闭 API。这些检查不证明操作系统已移除库映像、真实数据库验收或任意热更新安全。
+
+```sh
+cmake --build core-build --target check-native-unload --parallel 1
+```
+
 ## 公共任务接口
 
 `check-core` 包含 `check-task-sdk`：独立编译仅包含 `<ark/task.hpp>` 的文件，

@@ -38,6 +38,10 @@
 
 namespace ark {
 
+namespace detail {
+struct plugin_manager_test_access;
+}
+
 template<typename derived_type>
 class plugin_base;
 
@@ -137,48 +141,7 @@ public:
     }
 
     auto stop(const int64_t timestamp) -> bool {
-        check_owner();
-        timestamp_ = timestamp;
-        if (shutdown_state_ == shutdown_state::stopped)
-        {
-            return true;
-        }
-        if (shutdown_state_ == shutdown_state::failed)
-        {
-            return false;
-        }
-        shutdown_state_ = shutdown_state::draining;
-        for (const auto& [owner, tasks] : task_groups_)
-        {
-            tasks->stop_accepting();
-        }
-        // The last task is removed before its completion is called. Even zero
-        // pending tasks cannot permit teardown while that callback is active.
-        if (execution_active() || pending_tasks_unchecked())
-        {
-            return false;
-        }
-        phase_guard active(*this, call_phase::tearing_down);
-        try
-        {
-            if (!ready_to_shut())
-            {
-                return false;
-            }
-            if (!pre_shut() || !shut())
-            {
-                shutdown_state_ = shutdown_state::failed;
-                return false;
-            }
-        }
-        catch (...)
-        {
-            shutdown_exception_ = std::current_exception();
-            shutdown_state_ = shutdown_state::failed;
-            return false;
-        }
-        shutdown_state_ = shutdown_state::stopped;
-        return true;
+        return stop_with(timestamp, [](dynamic_library& library) { return library.unload(); });
     }
 
     auto update(const int64_t timestamp, std::size_t maximum_handlers = 64) -> bool {
@@ -564,40 +527,6 @@ protected:
         return true;
     }
 
-    auto shut() -> bool {
-        for (auto const& iter : module_instances_)
-        {
-            module* module_ptr = iter.second;
-            ARK_ASSERT_CONTINUE(module_ptr != nullptr);
-
-            shutdown_failure_ = "shut: " + iter.first;
-            if (!module_ptr->shut())
-            {
-                return false;
-            }
-        }
-
-        phase_guard uninstalling(*this, call_phase::uninstalling);
-        for (auto& it : plugins_)
-        {
-            shutdown_failure_ = "uninstall: " + it.first;
-            if (!unload_plugin_library(it.first))
-            {
-                return false;
-            }
-        }
-
-        for (auto& iter : plugin_libs_)
-        {
-            shutdown_failure_ = "unload: " + iter.first;
-            iter.second->unload();
-            ARK_DELETE(iter.second);
-        }
-
-        shutdown_failure_.clear();
-        return true;
-    }
-
     auto load_plugin_library(const std::string& plugin_name) -> bool {
         auto iter = plugin_libs_.find(plugin_name);
         ARK_ASSERT_RET_VAL(iter == plugin_libs_.end(), false);
@@ -650,6 +579,92 @@ protected:
     }
 
 private:
+    friend struct detail::plugin_manager_test_access;
+
+    template<typename unload_type>
+    auto stop_with(const int64_t timestamp, unload_type unload) -> bool {
+        check_owner();
+        timestamp_ = timestamp;
+        if (shutdown_state_ == shutdown_state::stopped)
+        {
+            return true;
+        }
+        if (shutdown_state_ == shutdown_state::failed)
+        {
+            return false;
+        }
+        shutdown_state_ = shutdown_state::draining;
+        for (const auto& [owner, tasks] : task_groups_)
+        {
+            tasks->stop_accepting();
+        }
+        // The last task is removed before its completion is called. Even zero
+        // pending tasks cannot permit teardown while that callback is active.
+        if (execution_active() || pending_tasks_unchecked())
+        {
+            return false;
+        }
+        phase_guard active(*this, call_phase::tearing_down);
+        try
+        {
+            if (!ready_to_shut())
+            {
+                return false;
+            }
+            if (!pre_shut() || !shut(unload))
+            {
+                shutdown_state_ = shutdown_state::failed;
+                return false;
+            }
+        }
+        catch (...)
+        {
+            shutdown_exception_ = std::current_exception();
+            shutdown_state_ = shutdown_state::failed;
+            return false;
+        }
+        shutdown_state_ = shutdown_state::stopped;
+        return true;
+    }
+
+    template<typename unload_type>
+    auto shut(unload_type unload) -> bool {
+        for (auto const& iter : module_instances_)
+        {
+            module* module_ptr = iter.second;
+            ARK_ASSERT_CONTINUE(module_ptr != nullptr);
+
+            shutdown_failure_ = "shut: " + iter.first;
+            if (!module_ptr->shut())
+            {
+                return false;
+            }
+        }
+
+        phase_guard uninstalling(*this, call_phase::uninstalling);
+        for (auto& it : plugins_)
+        {
+            shutdown_failure_ = "uninstall: " + it.first;
+            if (!unload_plugin_library(it.first))
+            {
+                return false;
+            }
+        }
+
+        for (auto& iter : plugin_libs_)
+        {
+            shutdown_failure_ = "unload: " + iter.first;
+            if (!unload(*iter.second))
+            {
+                return false;
+            }
+            ARK_DELETE(iter.second);
+        }
+
+        shutdown_failure_.clear();
+        return true;
+    }
+
     template<typename derived_type>
     friend class plugin_base;
 

@@ -25,6 +25,10 @@
 
 namespace ark {
 
+namespace detail {
+struct dynamic_library_test_access;
+}
+
 class dynamic_library
 {
 public:
@@ -53,8 +57,7 @@ public:
     }
 
     bool unload() {
-        DYNLIB_UNLOAD(lib_inst_);
-        return true;
+        return unload_with([](DYNLIB_HANDLE handle) { return DYNLIB_UNLOAD(handle); });
     }
 
     // Get the name of the library
@@ -67,6 +70,30 @@ public:
     }
 
 private:
+    friend struct detail::dynamic_library_test_access;
+
+    static bool native_unload_succeeded(int result) {
+#ifdef ARK_PLATFORM_WIN
+        return result != 0;
+#else
+        return result == 0;
+#endif
+    }
+
+    template<typename close_type>
+    bool unload_with(close_type close) {
+        if (!lib_inst_)
+        {
+            return true;
+        }
+        if (!native_unload_succeeded(close(lib_inst_)))
+        {
+            return false;
+        }
+        lib_inst_ = nullptr;
+        return true;
+    }
+
     std::string name_{};
     DYNLIB_HANDLE lib_inst_{nullptr};
 };
