@@ -53,7 +53,9 @@ Adding a public header or CMake API target only makes an interface available to 
 
 ## Ordering and ownership
 
-The manager installs plugins before running the module initialization stages. It does not topologically sort module dependencies or make manifest list order a lifecycle-order contract. Missing-module lookups can return null, and module callback return values are not currently aggregated into a transactional startup result. Verify required plugins/resources and application logs; a running process alone does not prove every service initialized successfully.
+The manager installs plugins before running `init()`, `post_init()`, `check_config()` and `pre_update()`. The first `false` return stops startup; a propagated startup exception also reaches the launcher. The launcher reports the failed phase and available module/plugin details, then terminates with exit code `1` before entering the update loop. It does not roll back partially started plugins or run normal shutdown hooks on this failure path. See [startup failure handling](../guides/applications.md#check-startup-and-stop-the-process).
+
+The manager does not topologically sort module dependencies or make manifest list order a lifecycle-order contract. Missing-module lookups can return null. Verify required plugins/resources, initialization logs and application-specific readiness before routing traffic; a running process alone does not prove every service initialized successfully.
 
 Pointers returned by `find_module()` belong to the loaded plugin. Stop asynchronous producers before teardown and do not retain those pointers after unload. Keeping connections and state through an in-flight business-plugin replacement is not an automatic consequence of this composition model.
 
