@@ -26,4 +26,6 @@ CMake target 和构建命令见[项目布局与公共插件接口](../../docs/pr
 
 Kernel 的原有 38 个头与 cpp 共置于 `src/plugins/kernel/`，通过 `ark::kernel` 保留全部 `<ark/kernel/...>` 路径，包括 `data_impl.hpp`、`data_list_impl.hpp` 和 `kernel_plugin.hpp`。保留的公开实现类型与插件类型使用类型化构造、私有拥有型工厂和显式入口。`kernel_factory.hpp` 不映射、不安装。公开类布局发生变化，Kernel 与消费者必须一起重建；注册键、update 选择和生命周期顺序保持不变。兼容边界、消费检查及 Protobuf 条件见 [Kernel 构造迁移](../../docs/reference/kernel_CN.md#kernel-类型化构造)。
 
-其余五类插件保留原有 22 个头的全部字节。映射检查不代表 Consul、Kafka、OSS SDK 的运行时集成已经验证。Physic 保留未受支持的 PhysX 3 配置失败；参见[可选旧集成依赖](../../docs/dependencies_CN.md)。
+Consul 保留原有三个公开头及实现／插件类型，同时使用类型化构造、私有拥有型工厂和显式入口。公开类布局发生变化，Consul 与消费者必须一起重建。唯一接口注册键、禁用 update 与请求行为保持不变。构建条件及无需服务的构造检查见 [Consul 构造迁移](../../docs/project-layout_CN.md#consul-类型化构造)。
+
+其他四类旧插件保留原有 19 个头的全部字节。映射检查不代表 Consul、Kafka、OSS SDK 的运行时集成已经验证。Physic 保留未受支持的 PhysX 3 配置失败；参见[可选旧集成依赖](../../docs/dependencies_CN.md)。
