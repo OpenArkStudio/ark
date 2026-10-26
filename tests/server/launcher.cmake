@@ -1,0 +1,15 @@
+# Copyright (c) 2026 OpenArkStudio. SPDX-License-Identifier: Apache-2.0
+cmake_minimum_required(VERSION 3.20)
+foreach(argument PROGRAM LAUNCHER PLUGIN_DIR SOURCE_ROOT RUNTIME_ROOT)
+    if(NOT DEFINED ${argument})
+        message(FATAL_ERROR "${argument} is required")
+    endif()
+endforeach()
+file(MAKE_DIRECTORY "${RUNTIME_ROOT}")
+string(RANDOM LENGTH 16 ALPHABET 0123456789abcdef suffix)
+execute_process(COMMAND "${PROGRAM}" "${LAUNCHER}" "${PLUGIN_DIR}" "${SOURCE_ROOT}" "${RUNTIME_ROOT}/${suffix}"
+    RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE errors TIMEOUT 20)
+if(NOT "${result}" STREQUAL "0")
+    message(FATAL_ERROR "Server launcher regression failed: ${result}\n${output}\n${errors}\nRuntime: ${RUNTIME_ROOT}/${suffix}")
+endif()
+message(STATUS "${output}")
