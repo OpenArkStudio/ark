@@ -95,6 +95,27 @@ TCP, WebSocket and RUDP endpoints use a 4 KiB initial application receive buffer
 
 This is the framing buffer for application messages, configured separately from kernel socket send/receive buffers. It is not a 4 KiB maximum message size. The [local receive-buffer report](../performance/receive-buffers.md) retains the allocation, fragmented-input and large-batch throughput tradeoff. It does not establish network RTT or connection capacity.
 
+## Receive-buffer ownership
+
+**Breaking source/layout change:** `<ark/buffer.hpp>` exposes a move-only `ark::buffer`. Copy construction and copy assignment are deleted to prevent two objects from deleting the same array. Rebuild the Core/Net consumers and their plugins together. The tracked Net sessions already prohibit copying and own their buffer in place; copying a `shared_ptr` session handle does not copy that buffer. This repository audit does not establish whether external consumers relied on the former implicit copy operations.
+
+Move construction and move assignment are `noexcept` and transfer the allocation, unread bytes, capacity and cursor state. Assignment releases the destination's previous allocation; self-move leaves it unchanged. A moved-from buffer has zero capacity, zero unread bytes and a null data pointer; it can be destroyed, assigned or written to again. Existing public method signatures remain available. Standalone construction still defaults to 512 KiB, while Net sessions retain their separately configured 4 KiB default.
+
+```cpp
+ark::buffer pending(4096);
+pending.write("abc", 3);
+ark::buffer processing(std::move(pending)); // transfers ownership
+pending.write("next", 4);                 // allocates fresh storage
+```
+
+Include `<utility>` for `std::move`. `get_data()` returns a borrowed pointer into the current allocation; keep its owner alive and reacquire the pointer after compaction, growth or ownership replacement. This change introduces no clone API. Applications that need independent data can explicitly write the readable bytes into another buffer while the source remains valid.
+
+The buffer keeps `ARK_NEW_ARRAY` / `ARK_DELETE_ARRAY` as its narrow allocation compatibility boundary, now using the same pair for construction, growth and release. This corrects the previous growth path that bypassed custom hooks with raw `new[]` / `delete[]`. Define a compatible, nonthrowing release hook consistently across translation units before including the header. Without overrides, allocation still uses throwing `new[]`: `std::bad_alloc` propagates and failed growth retains the old bytes, capacity and cursors. If a custom allocator returns null, construction retains an empty zero-capacity buffer and `write()` returns `false` without changing the existing state.
+
+A zero-length write succeeds without dereferencing its pointer; a null source with nonzero length returns `false`. Removing more than the unread length is a no-op, including an overflowing count. Unrepresentable growth throws `std::length_error` before allocation. Normal reads, writes, compaction and capacity growth retain their existing behavior.
+
+With `ARK_BUILD_CORE_TESTS=ON`, `check-buffer` runs the lifetime/move, compaction/growth, boundary, deterministic default-allocation failure and separate custom-hook regressions; it is also part of `check-core`. The allocation-failure test fails one small array request instead of requesting excessive memory. `check-network` retains the existing Net framing/fragmented-input coverage. These checks do not establish service or capacity acceptance.
+
 ## Member callbacks and borrowed arguments
 
 Endpoint constructors and client/server service registration bind the supplied

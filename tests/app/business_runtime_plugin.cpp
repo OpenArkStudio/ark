@@ -27,6 +27,8 @@ void trace(const std::string& event) {
 
 // A controlled protocol completion, not a real database client or public plugin.
 // No result is released until the real launcher enters managed-task drain.
+// The native-readiness deadline case has no task dependency: scheduling the
+// coroutine chain must not consume its separate 50 ms shutdown deadline.
 class probe_module final : public ark::module
 {
 public:
@@ -54,6 +56,11 @@ public:
             native_exited_.store(true, std::memory_order_release);
         });
         auto& tasks = manager_.create_task_group(*this, 2);
+        if (mode_ == "timeout_native")
+        {
+            trace("native-pending");
+            return true;
+        }
         return tasks.start(sequence(this), [this](std::exception_ptr error) {
             if (error)
             {
@@ -101,7 +108,7 @@ public:
         }
         const auto delayed =
             draining && std::chrono::steady_clock::now() - drain_started_ < std::chrono::milliseconds(200);
-        if (completion_returned_ && !owner_stopped_)
+        if ((completion_returned_ || (draining && mode_ == "timeout_native")) && !owner_stopped_)
         {
             owner_stopped_ = true;
             trace("owner-stop");
@@ -110,19 +117,19 @@ public:
         {
             native_release_.store(true, std::memory_order_release);
         }
+        if ((pending_ || mode_ == "timeout_native") && !stop_requested_ && !draining)
+        {
+            stop_requested_ = true;
+            trace("request-stop");
+#if !defined(_WIN32)
+            std::raise(SIGTERM);
+#endif
+        }
         if (pending_)
         {
             const auto state = manager_.get_shutdown_state();
-            if (state == ark::plugin_manager::shutdown_state::running && !stop_requested_)
-            {
-                stop_requested_ = true;
-                trace("request-stop");
-#if !defined(_WIN32)
-                std::raise(SIGTERM);
-#endif
-            }
-            else if (state == ark::plugin_manager::shutdown_state::draining && mode_ != "timeout_stalled" &&
-                     (mode_ != "timeout_task" || !delayed))
+            if (state == ark::plugin_manager::shutdown_state::draining && mode_ != "timeout_stalled" &&
+                (mode_ != "timeout_task" || !delayed))
             {
                 trace("reply-" + std::to_string(started_));
                 auto complete = std::move(pending_);

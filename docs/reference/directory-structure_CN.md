@@ -32,6 +32,8 @@ MySQL、Redis 的唯一公开接口源码分别是 `src/plugins/mysql/mysql_modu
 
 核心头文件只有 `src/core/` 中的一份源码。`ark::core` 将显式公开清单映射到选定构建目录，保留 `<ark/plugin_manager.hpp>` 等包含路径。修改源码头文件，不编辑生成副本。启动程序仍为 `app`／`app_d`，清单格式保持不变。
 
+`<ark/buffer.hpp>` 保留原有公开路径，所有权改为仅支持移动；源码／布局发生变化，需要重建受影响的 Core／Net 消费者。迁移、分配钩子兼容性与定向测试见[收包缓冲的所有权](network_CN.md#收包缓冲的所有权)。
+
 ## CMake 目标
 
 | 目标 | 用途 |

@@ -21,8 +21,11 @@
 #pragma once
 
 #include <algorithm>
+#include <cstring>
 #include <limits>
+#include <memory>
 #include <stdexcept>
+#include <utility>
 
 #include "ark/macros.hpp"
 
@@ -30,17 +33,49 @@ namespace ark {
 
 class buffer final
 {
+    struct data_deleter
+    {
+        void operator()(char* value) const noexcept {
+            ARK_DELETE_ARRAY(char, value);
+        }
+    };
+
+    using owned_data = std::unique_ptr<char[], data_deleter>;
+
+    static char* allocate_data(size_t size) {
+        return ARK_NEW_ARRAY(char, size);
+    }
+
 public:
     explicit buffer(size_t buffer_size = 1024 * 512) {
-        data_ = ARK_NEW_ARRAY(char, buffer_size);
+        data_.reset(allocate_data(buffer_size));
         if (data_ != nullptr)
         {
             data_size_ = buffer_size;
         }
     }
 
-    ~buffer() {
-        ARK_DELETE_ARRAY(char, data_);
+    ~buffer() = default;
+
+    buffer(const buffer&) = delete;
+    buffer& operator=(const buffer&) = delete;
+
+    buffer(buffer&& other) noexcept
+        : data_(std::move(other.data_))
+        , data_size_(std::exchange(other.data_size_, 0))
+        , write_pos_(std::exchange(other.write_pos_, 0))
+        , read_pos_(std::exchange(other.read_pos_, 0)) {
+    }
+
+    buffer& operator=(buffer&& other) noexcept {
+        if (this != &other)
+        {
+            data_ = std::move(other.data_);
+            data_size_ = std::exchange(other.data_size_, 0);
+            write_pos_ = std::exchange(other.write_pos_, 0);
+            read_pos_ = std::exchange(other.read_pos_, 0);
+        }
+        return *this;
     }
 
     size_t get_capacity() const noexcept {
@@ -48,39 +83,24 @@ public:
     }
 
     bool write(const char* data, size_t len) {
-        bool write_ret = true;
-
-        if (get_write_valid_count() >= len)
+        if (len == 0)
         {
-            memcpy(get_write_ptr(), data, len);
-            add_write_pos(len);
+            return true;
         }
-        else
+        if (data == nullptr)
         {
-            size_t left_len = data_size_ - get_length();
-
-            if (left_len >= len)
+            return false;
+        }
+        if (get_write_valid_count() < len) [[unlikely]]
+        {
+            if (!prepare_write(len))
             {
-                adjust_to_head();
-                write(data, len);
-            }
-            else
-            {
-                size_t need_len = len - left_len;
-
-                if (need_len > 0)
-                {
-                    grow(need_len);
-                    write(data, len);
-                }
-                else
-                {
-                    write_ret = false;
-                }
+                return false;
             }
         }
-
-        return write_ret;
+        std::memcpy(get_write_ptr(), data, len);
+        add_write_pos(len);
+        return true;
     }
 
     size_t get_length() {
@@ -90,7 +110,7 @@ public:
     char* get_data() {
         if (read_pos_ < data_size_)
         {
-            return data_ + read_pos_;
+            return data_.get() + read_pos_;
         }
         else
         {
@@ -99,15 +119,23 @@ public:
     }
 
     void remove_data(size_t value) {
-        size_t temp = read_pos_ + value;
-
-        if (temp <= data_size_)
+        if (value <= get_length())
         {
-            read_pos_ = temp;
+            read_pos_ += value;
         }
     }
 
 private:
+    bool prepare_write(size_t len) {
+        const size_t left_len = data_size_ - get_length();
+        if (left_len >= len)
+        {
+            adjust_to_head();
+            return true;
+        }
+        return grow(len - left_len);
+    }
+
     void adjust_to_head() {
         size_t len = 0;
 
@@ -120,7 +148,7 @@ private:
 
         if (len > 0)
         {
-            memmove(data_, data_ + read_pos_, len);
+            std::memmove(data_.get(), data_.get() + read_pos_, len);
         }
 
         read_pos_ = 0;
@@ -156,7 +184,7 @@ private:
     char* get_write_ptr() {
         if (write_pos_ < data_size_)
         {
-            return data_ + write_pos_;
+            return data_.get() + write_pos_;
         }
         else
         {
@@ -164,7 +192,7 @@ private:
         }
     }
 
-    void grow(size_t len) {
+    bool grow(size_t len) {
         if (len > std::numeric_limits<size_t>::max() - data_size_)
         {
             throw std::length_error("Receive buffer size exceeds the addressable range");
@@ -172,18 +200,24 @@ private:
         const size_t required = data_size_ + len;
         const size_t doubled = data_size_ <= std::numeric_limits<size_t>::max() / 2 ? data_size_ * 2 : required;
         const size_t n = std::max(required, doubled);
-        char* d = new char[n];
-
+        owned_data candidate(allocate_data(n));
+        if (!candidate)
+        {
+            return false;
+        }
         const size_t unread = get_length();
-        memcpy(d, data_ + read_pos_, unread);
+        if (unread > 0)
+        {
+            std::memcpy(candidate.get(), data_.get() + read_pos_, unread);
+        }
+        data_ = std::move(candidate);
         read_pos_ = 0;
         write_pos_ = unread;
         data_size_ = n;
-        delete[] data_;
-        data_ = d;
+        return true;
     }
 
-    char* data_{nullptr};
+    owned_data data_;
     size_t data_size_{0};
 
     size_t write_pos_{0};

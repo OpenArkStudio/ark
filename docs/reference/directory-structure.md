@@ -34,6 +34,8 @@ The MySQL/Redis interfaces have one source each: `src/plugins/mysql/mysql_module
 
 Core has one source copy under `src/core/`. `ark::core` maps its explicit public headers into the selected build tree, preserving `<ark/plugin_manager.hpp>` and nested include paths. Edit source headers rather than generated copies. The `app`/`app_d` executable and manifest format are unchanged.
 
+`<ark/buffer.hpp>` retains its public path with move-only ownership; rebuild affected Core/Net consumers for the source/layout change. See [receive-buffer ownership](network.md#receive-buffer-ownership) for migration, allocation-hook compatibility and focused tests.
+
 ## CMake targets
 
 | Target | Usage |
