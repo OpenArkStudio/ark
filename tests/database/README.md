@@ -288,6 +288,10 @@ text. Building it and checking those failures do not establish successful
 real-service DSO acceptance; that requires explicitly running each selected mode
 against isolated services.
 
+## Real plugin request cancellation
+
+`ark_database_public_plugin_cancellation_tests` is a separate opt-in runner for real Redis/MySQL plugin DSOs and owned services. It observes tagged server work before `task_group::cancel(id)`, retains native cancellation/unknown results, and checks owner-thread completion and natural retirement. The evidence covers the observed IDs, effects and bounded observation window; MySQL's final zero-or-one counter is not proof of rollback or every possible retry race. `check-database` compiles this runner without starting services. See the [cancellation guide](cancellation.md) for build commands, trusted TLS, exclusive write data and precise limits.
+
 ## Public real-service failure checks
 
 The separate `ark_database_public_failure_service_tests` executable checks wrong
