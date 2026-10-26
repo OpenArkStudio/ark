@@ -39,7 +39,7 @@ cmake -S . -B build -DARK_BUILD_APPLICATIONS=ON \
 cmake --build build --target ark_mysql_plugin ark_redis_plugin
 ```
 
-全部官方插件的公开头通过显式清单在配置阶段复制到各构建树生成的插件公开头映射。各 `ark::<name>` API target 传递该目录，插件关闭时仍可使用。MySQL、Redis、Utility、Net、Bus、HTTP 的私有装配头和工厂不进入映射；Kernel 保留包括 `kernel_plugin.hpp` 在内的原有 38 个头；Consul、Etcd Client、Kafka、OSS SDK、Physic 保留包括实现头与装配头在内的原有 22 个公开头。注册键、公开类型可见性和可选插件策略继续保留；[Kernel 类型化构造](kernel_CN.md#kernel-类型化构造)、[Consul 类型化构造](directory-structure_CN.md#consul-类型化构造)、[Etcd Client 类型化构造](directory-structure_CN.md#etcd-client-类型化构造)与 [OSS SDK 类型化构造](directory-structure_CN.md#oss-sdk-类型化构造)改变公开类布局，需要重建消费者。这些私有工厂头均不映射、不安装；头文件映射不代表可选驱动集成已经验证。每个公共头仅有一份共置源码；生成的头文件映射属于选定构建树，不构成第二棵源码目录。
+全部官方插件的公开头通过显式清单在配置阶段复制到各构建树生成的插件公开头映射。各 `ark::<name>` API target 传递该目录，插件关闭时仍可使用。MySQL、Redis、Utility、Net、Bus、HTTP 的私有装配头和工厂不进入映射；Kernel 保留包括 `kernel_plugin.hpp` 在内的原有 38 个头；Consul、Etcd Client、Kafka、OSS SDK、Physic 保留包括实现头与装配头在内的原有 22 个公开头。注册键、公开类型可见性和可选插件策略继续保留；[Kernel 类型化构造](kernel_CN.md#kernel-类型化构造)、[Consul 类型化构造](directory-structure_CN.md#consul-类型化构造)、[Etcd Client 类型化构造](directory-structure_CN.md#etcd-client-类型化构造)、[OSS SDK 类型化构造](directory-structure_CN.md#oss-sdk-类型化构造)与 [Kafka 类型化构造](directory-structure_CN.md#kafka-类型化构造)改变公开类布局，需要重建消费者。这些私有工厂头均不映射、不安装；头文件映射不代表可选驱动集成已经验证。每个公共头仅有一份共置源码；生成的头文件映射属于选定构建树，不构成第二棵源码目录。
 
 应用 CI 在 Linux、macOS、Windows 显式启用 Consul 与 Etcd Client，`check-core` 包含两者的构造、动态库生命周期与生产库导出检查。这些检查不需要 Consul 或 Etcd 服务，也不代表服务互通验收。Etcd Client 保留现有默认 `ON` 选择，可通过 `ARK_BUILD_PLUGIN_ETCD_CLIENT=OFF` 关闭。构建它需要现有 `nlohmann_json` 软件包（vcpkg 的 `etcd-client` feature）；关闭它不会向核心测试增加该 JSON 依赖。
 
@@ -70,3 +70,5 @@ config = ""
 `ARK_INSTALL` 在顶层项目中默认 `ON`，嵌入构建时默认 `OFF`；启用显式公开头安装、可迁移 CMake 导出、`check-install` 与 TGZ／ZIP CPack 归档。`ARK_USE_INSTALLED_ARKNET=ON` 发现单独安装的 arknet 包，优先于源码与版本覆盖；默认 `OFF`，保留源码依赖构建。具体操作见[安装与包消费](../get-started/installation_CN.md#安装并消费-cmake-包)。打包不会启用可选运行时插件，也不代表外部驱动已经验收。
 
 Net 的 18 个公开头不再包含 `http_client_module_impl.hpp`；使用 `<ark/net/http_client_module.hpp>` 并查找公开接口。此移除属于源码／ABI 兼容性变化，详见 [Net 迁移](network_CN.md#api-与私有创建)。私有工厂声明不安装。
+
+Kafka 继续默认关闭（`ARK_BUILD_PLUGIN_KAFKA=OFF`）。准备原有驱动依赖并启用应用、Protobuf 和核心测试后，`ARK_BUILD_PLUGIN_KAFKA=ON` 会将 `check-kafka-construction`、`check-kafka-plugin` 加入 `check-core`。前者验证真实工厂／装配、受控动态库生命周期及启用 update；后者另检查生产动态库导出。测试不连接 broker。关闭 Kafka 时，核心测试不发现 Kafka 依赖。重建要求与验收边界见 [Kafka 构造迁移](directory-structure_CN.md#kafka-类型化构造)。

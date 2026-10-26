@@ -208,3 +208,21 @@ cmake --build build --target check-oss-sdk-plugin --parallel 1
 ```
 
 应用构建仍需要现有 Protobuf、配置模块与 Boost.Asio。`check-core` 包含当前条件下可用的 OSS SDK 构造／导出检查，不增加外部 OSS SDK 依赖。这些测试只验证构造与 DSO 边界，不代表 OSS 客户端功能、服务互通或任意热更新安全已经通过验收。
+
+## Kafka 类型化构造
+
+**ABI／布局不兼容变更：**`kafka_module_impl` 改为继承 `module_base<kafka_module>`，`kafka_plugin` 改为继承 `plugin_base<kafka_plugin>`。Kafka 与消费者必须一起重建。原有四个公开头、`<ark/kafka/...>` 路径和公开类型继续通过 `ark::kafka` 提供。模块接口、生产者／消费者封装及 `RdKafka::DeliveryReportCb`、`RdKafka::EventCb` 两个基类均保留。C++ 插件边界不承诺跨编译器 ABI 兼容。
+
+私有 `kafka_factory.hpp` 返回 `std::unique_ptr<kafka_module>`，不进入公开映射或安装。显式 `DllEntryPlugin`／`DllExitPlugin` 保留平台导出与日志初始化。装配保留接口 RTTI 注册键，并显式选择 `module_update::enabled`，继续定期轮询生产者。注销会销毁所属模块。生产者存储与所有权、生产者创建、投递／事件回调及消息行为均不变。
+
+Kafka 继续作为可选插件，**默认关闭**。原有依赖发现与链接方式不变：启用 `ARK_BUILD_APPLICATIONS=ON`、`ARK_BUILD_PROTO=ON`、`ARK_BUILD_CORE_TESTS=ON`、`ARK_BUILD_PLUGIN_KAFKA=ON`，并准备对应平台的 Kafka 驱动依赖。Unix 平台包括 librdkafka C／C++、OpenSSL、Zstandard、LZ4 和 zlib。完成配置后运行：
+
+```sh
+cmake --build build --target check-kafka-plugin --parallel 1
+```
+
+`check-kafka-plugin` 包含 `check-kafka-construction`：真实工厂／装配 doctest，以及使用生产入口／出口源码、替换私有工厂的受控动态库。检查覆盖类型化基类、接口元数据、重复注册、启用 update、配置传递、仅销毁一次的所有权与重复停机。独立进程加载真实生产动态库，检查入口／出口导出后卸载。仅选择 Kafka 运行时目标时，`check-core` 才纳入这些检查；关闭插件的核心测试不发现 Kafka 依赖。
+
+回调日志将 RdKafka 错误码、严重等级和事件类型枚举显式转换为整数，以兼容当前 fmt，并保留原有数值信息。生产者行为、回调顺序与依赖发现方式均不变。
+
+这些检查不创建生产者，也不连接 broker。它们验证构造与动态库边界，不代表 Kafka 消息投递、flush 行为、服务互通或任意热更新安全性。可选驱动构建仍需单独进行各平台验收。

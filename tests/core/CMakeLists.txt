@@ -235,6 +235,11 @@ if(TARGET ark_etcd_client_plugin)
     add_subdirectory(../etcd_client "${CMAKE_CURRENT_BINARY_DIR}/etcd_client")
 endif()
 
+# Keep Kafka driver discovery optional: checks follow its selected runtime plugin.
+if(TARGET ark_kafka_plugin)
+    add_subdirectory(../kafka "${CMAKE_CURRENT_BINARY_DIR}/kafka")
+endif()
+
 if(ARK_BUILD_PROTO AND TARGET ark_kernel_plugin AND TARGET ark_utility_plugin)
     add_executable(ark_kernel_plugin_tests ../app/kernel_plugin.cpp)
     set_property(TARGET ark_kernel_plugin_tests PROPERTY LINK_LIBRARIES ark::kernel)
