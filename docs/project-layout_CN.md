@@ -123,4 +123,6 @@ cmake -S tests/consumer/etcd_client -B etcd-client-headers -G Ninja \
 cmake --build etcd-client-headers --target check-etcd-client-headers --parallel 2
 ```
 
+OSS SDK 使用类型化构造，保留全部三个公开头和类型；公开类布局发生变化，插件与消费者必须一起重建。可选构建条件及构造／导出检查见 [OSS SDK 构造迁移](reference/directory-structure_CN.md#oss-sdk-类型化构造)。实现仍为 TODO 骨架。
+
 头文件映射检查不代表 Consul、Kafka、OSS SDK 的运行时兼容性已经验证。Physic 与 `physics_scene` 仍依赖未受支持的旧版 PhysX 3 集成，保留明确的配置失败；此处没有宣称 PhysX 构建通过。

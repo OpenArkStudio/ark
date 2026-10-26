@@ -224,6 +224,8 @@ if(ARK_BUILD_PROTO)
     add_dependencies(check-core check-kernel-initialization)
 endif()
 
+add_subdirectory(../osssdk "${CMAKE_CURRENT_BINARY_DIR}/osssdk")
+
 if(ARK_BUILD_PROTO AND ARK_BUILD_CONFIG)
     add_subdirectory(../consul "${CMAKE_CURRENT_BINARY_DIR}/consul")
 endif()
