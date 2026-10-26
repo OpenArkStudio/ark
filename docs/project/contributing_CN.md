@@ -12,7 +12,7 @@ npm run dev --prefix docs/site -- --host 127.0.0.1
 npm run check --prefix docs/site
 ```
 
-站点提供语言切换、搜索、代码高亮，以及供 AI 阅读的纯 Markdown 接口。PR 只运行文档检查，不发布站点。变更合并到 `main` 后，文档工作流构建并发布 GitHub Pages；维护者也可手动触发。文档构建需要 Node.js 22.12+；编译 ark 与 C++ 测试不需要 Node.js。
+站点提供语言切换、搜索、代码高亮，以及供 AI 阅读的纯 Markdown 接口。PR 只运行文档检查，不发布站点。变更合并到 `main` 后，文档工作流构建并发布 GitHub Pages；维护者也可手动触发。文档构建需要 Node.js 22.23.4+；编译 ark 与 C++ 测试不需要 Node.js。
 
 
 ## CI 文档范围
