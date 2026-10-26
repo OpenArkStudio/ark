@@ -89,7 +89,7 @@ actor_pid=$!
 
 Run the C++ host concurrently with the actor. Supply the same endpoint variables
 as [public DSO service acceptance](README.md#real-plugin-dsos-against-real-services):
-Redis host/port/password and optional username; MySQL host/port/user/password/
+Redis host/port/password; MySQL host/port/user/password/
 database/CA. Keep credentials in private files or environment, never command
 arguments or committed logs. Set `mode` to the protocol being tested:
 

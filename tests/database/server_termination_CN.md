@@ -77,7 +77,7 @@ actor_pid=$!
 ```
 
 与故障脚本并行运行 C++ 程序，提供与[公开 DSO 服务验收](README_CN.md#真实插件动态库与真实服务)
-相同的端点变量：Redis host/port/password 和可选 username；
+相同的端点变量：Redis host/port/password；
 MySQL host/port/user/password/database/CA。凭据仅放入私有文件或环境变量，
 不进入命令行参数或提交的日志。`mode` 选择协议：
 
