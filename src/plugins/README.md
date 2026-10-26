@@ -20,10 +20,12 @@ All official plugins co-locate their headers, implementation and assembly under 
 
 Use `ARK_BUILD_PLUGIN_<NAME>` to select a plugin. Optional integrations require their own dependencies and verification. [MySQL](../../docs/reference/mysql.md) provides queries, prepared statements and transactions; [Redis](../../docs/reference/redis.md) provides commands and ordered pipelines. Both use named configuration and manager-owned coroutine tasks. See [database plugin activation](../../docs/reference/build-options.md#native-database-plugins) for build and runtime selection. Lua and Actor integrations remain planned work.
 
-See [project layout and public plugin interfaces](../../docs/project-layout.md) for targets and build commands.
+See [project layout and public plugin interfaces](../../docs/reference/directory-structure.md) for targets and build commands.
 
 [Utility](../../docs/reference/utility.md) documents the four module interfaces, owner-driven timers and the implementation-header migration.
 
 Kernel co-locates its 38 existing headers with its cpp files in `src/plugins/kernel/`. `ark::kernel` preserves every `<ark/kernel/...>` path, including `data_impl.hpp`, `data_list_impl.hpp` and `kernel_plugin.hpp`. The retained public implementation/plugin types use typed construction with private owning factories and explicit entry points. `kernel_factory.hpp` is neither mapped nor installed. The public class layouts change, so rebuild Kernel and consumers together; registration keys, update selection and lifecycle order are preserved. See [Kernel construction migration](../../docs/reference/kernel.md#typed-kernel-construction) for compatibility boundaries, consumption checks and Protobuf requirements.
 
-The five remaining plugin families retain 22 byte-identical headers. Mapping checks do not validate Consul, Kafka or OSS SDK runtime integrations. Physic retains the unsupported PhysX 3 configuration failure; see [optional legacy dependencies](../../docs/dependencies.md#optional-legacy-integrations).
+Consul retains its three public headers and implementation/plugin types while using typed construction, a private owning factory and explicit entry points. Rebuild Consul and consumers together because the public class layouts change. The single interface registration key, disabled updates and request behavior are preserved. See [Consul construction migration](../../docs/reference/directory-structure.md#typed-consul-construction) for build conditions and service-free construction checks.
+
+The other four legacy plugin families retain 19 byte-identical headers. Mapping checks do not validate Consul, Kafka or OSS SDK runtime integrations. Physic retains the unsupported PhysX 3 configuration failure; see [optional legacy dependencies](../../docs/dependencies.md#optional-legacy-integrations).
