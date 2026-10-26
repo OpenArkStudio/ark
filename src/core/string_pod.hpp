@@ -137,7 +137,7 @@ public:
         return *this;
     }
 
-    pod_string_iterator& operator++(int) {
+    pod_string_iterator operator++(int) {
         pod_string_iterator tmp(*this);
         ++(*this);
         return tmp;
@@ -156,7 +156,7 @@ public:
     }
 
     mapped_type* get_data() const {
-        return node_->data;
+        return &node_->data;
     }
 
     node_t* get_node() const {
