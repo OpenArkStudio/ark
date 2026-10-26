@@ -1,7 +1,7 @@
 add_library(ark_core_header_checks OBJECT headers/queue.cpp headers/guid128.cpp headers/rw_lock.cpp
     headers/array_map.cpp headers/bit_value.cpp headers/consistent_hash.cpp headers/list.cpp
     headers/lock_free_queue.cpp headers/lru_map.cpp headers/map.cpp headers/thread_safe_queue.cpp
-    headers/object_vector.cpp headers/error_code.cpp headers/logger.cpp)
+    headers/object_vector.cpp headers/error_code.cpp headers/logger.cpp headers/murmur_hash.cpp)
 target_link_libraries(ark_core_header_checks PRIVATE ark::core)
 
 add_executable(ark_core_tests main.cpp strings.cpp containers.cpp templates.cpp callbacks.cpp

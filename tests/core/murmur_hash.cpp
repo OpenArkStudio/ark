@@ -1,7 +1,4 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
-#include <ark/hash/murmur_hash.hpp>
-
-// Keep the first inclusion separate to check standalone inclusion and the include guard.
 #include <algorithm>
 #include <array>
 #include <cstddef>
