@@ -1,6 +1,6 @@
 # Database service acceptance
 
-This record separates public-module service/failure checks, positive workflows through actual plugin DSOs, and server-observed request cancellation through those DSOs. Each scope has its own tested revisions and environment; a passing result applies only to that scope.
+This record separates public-module service/failure checks, positive plugin-DSO workflows, server-observed request cancellation and owned-server termination. Each scope has its own tested revisions and environment; a passing result applies only to that scope.
 
 ## Public modules against real services
 
@@ -94,6 +94,48 @@ cmake --build database-build --target ark_database_public_plugin_cancellation_te
 
 `check-database` compiles the program without running the real-service modes. Both owned servers were shut down normally using authenticated commands; the exact processes were independently confirmed absent and private data, credentials and TLS keys were removed. Server termination was not a test action.
 
+## Real plugin server termination
+
+Both modes of `ark_database_public_plugin_server_termination_tests` passed on **2026-10-26**. Each C++ host and independent fault actor exited `0`; each owned server's intentional `SIGKILL` exit was `137`.
+
+| Environment | Value |
+| --- | --- |
+| Machine | Mac16,11 · Apple M4 Pro · 14 cores · 48 GiB |
+| System | macOS 27.0.1 (26A434) · arm64 |
+| Build | Apple Clang 21.0.0 · C++20 · Boost.Asio · Debug · SSL enabled · OpenSSL 3.6.4 |
+| Executed ark | `0722b8bdd2e2c240657a3ceea63428cbbff0f821` |
+| arknet | CI pin `a0dfe09cd543e75cfb5996e537ce2fa49f2a758f` |
+| Services | Redis 7.4.2 over authenticated TCP; MySQL Community Server 8.4.13 with required verified TLS |
+
+The host uses public interfaces and actual hidden-symbol plugin DSOs. An independent service connection must observe the exact active request before releasing a private fault barrier; a polling delay does not establish activity.
+
+| Mode | Observed read-only request before the fault | Original native result after server termination |
+| --- | --- | --- |
+| `redis` | `CLIENT LIST` identified the exact named client blocked in `XREAD` | `client_errc::disconnected`, `command_may_have_run=true`, and EOF transport status |
+| `mysql` | `PROCESSLIST` identified the tagged `SELECT SLEEP(60)` connection in `User sleep` | `connection_errc::transport`, `outcome_unknown=true`, and TLS stream truncation |
+
+Before signaling the single owned PID, the separate shell actor resolves private paths physically and rejects escapes or symlink coordination files. It rechecks ownership, PID/start time, executable, private data working directory, PID file and that PID's loopback listener; MySQL also checks its private defaults-file argument. These guards apply to the disposable instances prepared for this test, not shared or installed services.
+
+Both modes reject task cancellation, operation timeout, SQL server error and coroutine exceptions. Request and observer roots complete once on the owner thread/shared executor and retire before cooperative stop. The controlled tests complete natural shutdown within their observation and pumping bounds; repeated stop succeeds, and owning native results/errors remain readable after module/manager/runtime destruction and native DSO close. `manager.stop()` still cannot interrupt blocking hooks; no hard or preemptive production deadline is added. Native transport details are platform-specific.
+
+The parent reaped the owned server, actor and host children, independently confirmed the exact processes absent, and removed private data, credentials and TLS keys. There was no server restart/recovery, persistence or write-effect assertion.
+
+Use the [standalone C++ termination guide](../../tests/database/server_termination.md) for private service/actor coordination and endpoint variables. The actor requires `lsof`, `ps` and `rg`. Build the opt-in program with the SSL-enabled database configuration, then run a mode only with its owned fault actor prepared as described in that guide:
+
+```sh
+cmake --build database-build --target ark_database_public_plugin_server_termination_tests --parallel 1
+./database-build/tests/database/ark_database_public_plugin_server_termination_tests redis
+./database-build/tests/database/ark_database_public_plugin_server_termination_tests mysql
+```
+
+The independent actor guards passed twenty invalid-path/marker cases and one intercepted valid-path control. This separate entry starts no server and inspects or signals no real process:
+
+```sh
+bash tests/database/owned_server_fault_actor_guards.sh
+```
+
+`check-database` compiles the opt-in program without executing its service modes or signaling servers. Compile-only CI success is not another real-service run.
+
 ## Acceptance boundaries
 
-The DSO workflows exercise normal plugin teardown and native close calls. Successful `FreeLibrary` or `dlclose` does not prove that the operating system physically removed the library image. Request cancellation acceptance is limited to the selected server-observed operations on this host. Transaction cancellation, Redis TLS, other cancellation/retry races, server termination, OS image removal, other platforms/deployment environments and cross-machine capacity remain unverified. These records do not establish arbitrary hot-update safety or production capacity.
+The DSO workflows exercise normal plugin teardown and native close calls. Successful `FreeLibrary` or `dlclose` does not prove that the operating system physically removed the library image. Request cancellation and server-termination acceptance are limited to the recorded operations on this host. Restart/recovery, persistence and write effects, transaction cancellation, Redis TLS, other cancellation/fault races, OS image removal, other platforms/deployment environments and cross-machine capacity remain unverified. These records do not establish arbitrary hot-update safety or production capacity.

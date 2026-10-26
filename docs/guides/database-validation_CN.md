@@ -1,6 +1,6 @@
 # 数据库服务验收
 
-本页分别记录公开模块的真实服务正常／故障检查、真实插件 DSO 正常流程，以及经服务端观察确认的 DSO 请求取消。每类检查保留各自的测试版本与环境；通过结果仅适用于对应范围。
+本页分别记录公开模块的真实服务正常／故障检查、插件 DSO 正常流程、经服务端观察确认的请求取消，以及自有服务终止。每类检查保留各自的测试版本与环境；通过结果仅适用于对应范围。
 
 ## 公开模块与真实服务
 
@@ -94,6 +94,48 @@ cmake --build database-build --target ark_database_public_plugin_cancellation_te
 
 `check-database` 仅编译该程序，不运行真实服务模式。两个自有服务均通过认证命令正常关闭；精确进程已独立确认不存在，私有数据、凭据与 TLS 密钥已删除。服务端终止不是本次测试动作。
 
+## 真实插件服务端终止
+
+**2026-10-26**，`ark_database_public_plugin_server_termination_tests` 的两种模式均通过。C++ 宿主与独立故障脚本的退出码均为 `0`；两个自有服务的预期 `SIGKILL` 退出状态均为 `137`。
+
+| 环境 | 配置 |
+| --- | --- |
+| 机器 | Mac16,11 · Apple M4 Pro · 14 核 · 48 GiB |
+| 系统 | macOS 27.0.1（26A434）· arm64 |
+| 构建 | Apple Clang 21.0.0 · C++20 · Boost.Asio · Debug · 启用 SSL · OpenSSL 3.6.4 |
+| 实际执行的 ark | `0722b8bdd2e2c240657a3ceea63428cbbff0f821` |
+| arknet | CI 固定版本 `a0dfe09cd543e75cfb5996e537ce2fa49f2a758f` |
+| 服务 | Redis 7.4.2：TCP 与密码认证；MySQL Community Server 8.4.13：强制 TLS 与证书校验 |
+
+宿主使用公开接口和真实隐藏符号插件 DSO。独立服务连接必须先观察到精确匹配的活动请求，才释放私有故障屏障；轮询间隔不能证明请求正在执行。
+
+| 模式 | 故障前观察到的只读请求 | 服务终止后的原生结果 |
+| --- | --- | --- |
+| `redis` | `CLIENT LIST` 确认名称完全匹配的客户端正在 `XREAD` 中阻塞 | 保留 `client_errc::disconnected`、`command_may_have_run=true` 与 EOF 传输状态 |
+| `mysql` | `PROCESSLIST` 确认带标记的 `SELECT SLEEP(60)` 连接处于 `User sleep` | 保留 `connection_errc::transport`、`outcome_unknown=true` 与 TLS stream truncation |
+
+独立 shell 脚本在向单个自有 PID 发送信号前，先按物理路径解析私有文件，拒绝路径逃逸或符号链接协调文件；随后重新核对归属、PID／启动时间、可执行文件、私有数据工作目录、PID 文件及该 PID 的回环监听。MySQL 还核对私有 defaults-file 参数。这些防护仅用于按测试要求准备的一次性实例，不面向共享服务或已安装服务。
+
+两个模式均拒绝将任务取消、操作超时、SQL 服务错误或协程异常作为通过结果。请求和观察根任务在所属线程／共享执行器上各完成一次，并在协作式 stop 前退出。受控测试在各自的观察与驱动时限内完成自然停机；重复 stop 成功，模块／管理器／运行时销毁及原生 DSO 关闭后，拥有型结果／错误仍可读取。`manager.stop()` 仍不能中断阻塞钩子，本次不增加强制或抢占式生产期限。原生传输错误细节由平台决定。
+
+父进程已回收自有服务、故障脚本与宿主子进程，独立确认精确进程不存在，并删除私有数据、凭据与 TLS 密钥。本次未验证服务重启恢复、持久化或写入效果。
+
+按[独立 C++ 服务终止指南](../../tests/database/server_termination_CN.md)准备私有服务、故障脚本协调与端点变量。故障脚本需要 `lsof`、`ps` 和 `rg`。完成启用 SSL 的数据库构建配置后，先按指南准备对应的自有故障脚本，再运行所选模式：
+
+```sh
+cmake --build database-build --target ark_database_public_plugin_server_termination_tests --parallel 1
+./database-build/tests/database/ark_database_public_plugin_server_termination_tests redis
+./database-build/tests/database/ark_database_public_plugin_server_termination_tests mysql
+```
+
+独立脚本防护已通过 20 个无效路径／标记用例及一个有效路径拦截对照。下述独立入口不启动服务，也不检查真实进程或向其发送信号：
+
+```sh
+bash tests/database/owned_server_fault_actor_guards.sh
+```
+
+`check-database` 仅编译该可选程序，不执行服务模式，也不向服务发送信号。仅编译通过的 CI 不代表另一次真实服务运行。
+
 ## 验收边界
 
-DSO 流程覆盖正常插件销毁与原生关闭调用。`FreeLibrary` 或 `dlclose` 成功不证明操作系统已物理移除库映像。本机请求取消验收仅覆盖记录中经服务端观察确认的操作。事务取消、Redis TLS、其他取消／重试竞争、服务端终止、操作系统库映像移除、其他平台／部署环境与跨机器容量仍未验收。这些记录均不证明任意热更新安全或生产容量。
+DSO 流程覆盖正常插件销毁与原生关闭调用。`FreeLibrary` 或 `dlclose` 成功不证明操作系统已物理移除库映像。本机请求取消与服务端终止验收仅覆盖记录中的操作。重启恢复、持久化与写入效果、事务取消、Redis TLS、其他取消／故障竞争、操作系统库映像移除、其他平台／部署环境与跨机器容量仍未验收。这些记录均不证明任意热更新安全或生产容量。
