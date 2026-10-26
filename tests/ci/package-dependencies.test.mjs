@@ -77,3 +77,13 @@ test('unsupported PhysX and simulate integrations fail explicitly instead of sea
     assert.doesNotMatch(source, /3rdparty|find_package\(PhysX/);
   }
 });
+
+test('Applications CI enables Consul construction and production export checks without a service', () => {
+  const applications = read('.github/workflows/ci.yml').split('  applications:\n')[1].split('\n  database:')[0];
+  assert.match(applications, /-DARK_BUILD_PLUGIN_CONSUL=ON/);
+  assert.match(applications, /run: cmake --build ci-build --target check-core/);
+  const checks = read('tests/consul/CMakeLists.txt');
+  assert.match(checks, /if\(TARGET ark_consul_plugin\)/);
+  assert.match(checks, /add_dependencies\(check-core check-consul-plugin\)/);
+  assert.match(checks, /add_dependencies\(check-core check-consul-construction\)/);
+});

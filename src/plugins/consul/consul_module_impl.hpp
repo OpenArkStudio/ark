@@ -1,14 +1,13 @@
 #pragma once
 
 #include "ark/consul/consul_module.hpp"
+#include "ark/module_base.hpp"
 #include "ark/net/http_client_module.hpp"
-#include "ark/plugin_manager.hpp"
 
 namespace ark {
 
-class consul_module_impl final : public consul_module
+class consul_module_impl final : public module_base<consul_module>
 {
-    ARK_DECLARE_MODULE_FUNCTIONS
 public:
     bool init() override;
 
