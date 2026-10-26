@@ -37,11 +37,31 @@ void wait_for(predicate ready, pump update) {
     require(ready(), "Timed out waiting for owned loopback peer");
 }
 
-arknet::error_code listener_probe(asio::io_context& context, const asio::ip::tcp::endpoint& endpoint) {
+arknet::error_code listener_probe(asio::io_context&, const asio::ip::tcp::endpoint& endpoint) {
+    asio::io_context context;
     asio::ip::tcp::socket probe(context);
-    arknet::error_code error;
-    probe.connect(endpoint, error);
-    return error;
+    asio::steady_timer deadline(context, 5s);
+    arknet::error_code result = asio::error::operation_aborted;
+    bool completed = false;
+    bool timed_out = false;
+    deadline.async_wait([&](const arknet::error_code& error) {
+        if (!error && !completed)
+        {
+            timed_out = true;
+            arknet::error_code ignored;
+            probe.cancel(ignored);
+            probe.close(ignored);
+        }
+    });
+    probe.async_connect(endpoint, [&](const arknet::error_code& error) {
+        completed = true;
+        result = timed_out ? arknet::error_code(asio::error::timed_out) : error;
+        deadline.cancel();
+    });
+    // Drain both the connect completion and the cancelled timer before their
+    // stack captures go out of scope. A deadline is not a refused connection.
+    context.run();
+    return result;
 }
 
 struct receiver
