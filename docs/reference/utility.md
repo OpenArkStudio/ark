@@ -64,6 +64,82 @@ Public headers now have their single source in `src/plugins/utility/`. CMake cop
 
 Range selection retains the existing modulo mapping, seed sequence and draw count. Each call with different endpoints consumes one draw; reversing the endpoints produces the same sequence from the same seed. The unsigned overloads retain their existing behavior.
 
+## Core Murmur hashes
+
+`<ark/hash/murmur_hash.hpp>` provides MurmurHash2 and the x86-32, x86-128 and
+x64-128 MurmurHash3 variants through `ark::core`. Supply a nonnegative `int`
+length, a readable input buffer (also for an empty input), and writable output
+storage of 4 bytes for 32-bit variants or 16 bytes for 128-bit variants. Input
+and output may have any byte alignment; word loads and stores use `std::memcpy`.
+MurmurHash3 uses C++20 `std::rotl` with the original rotation counts. Seeds,
+tail mixing, result word order and the existing public signatures are unchanged;
+`murmur_hash3_x86_128` remains an instance method, and the other variants remain
+static. MurmurHash2 retains its fixed seed zero.
+
+### Digest compatibility and legacy access
+
+**Breaking change:** default MurmurHash3 now reads full blocks as little endian
+and writes canonical little-endian digest bytes on every supported platform.
+This retains existing little-endian GCC/Clang results and changes the former
+ordinary MSVC full-block policy. The former platform detection did not select
+MSVC's `_M_IX86`, `_M_X64` or `_M_ARM64` macros
+([Microsoft predefined macros](https://learn.microsoft.com/en-us/cpp/preprocessor/predefined-macros));
+it fell through to an unconditional byte swap on a little-endian host.
+The public `BYTESWAP32` and `BYTESWAP64` macros remain available, but no longer
+control these hash methods. Callers must rebuild to use the new header behavior.
+
+| Method family | Default result | Previous ordinary MSVC result |
+| --- | --- | --- |
+| MurmurHash3 x86-32 | `murmur_hash3_x86_32` | `murmur_hash3_x86_32_legacy_msvc` |
+| MurmurHash3 x86-128 | `murmur_hash3_x86_128` (instance method) | `murmur_hash3_x86_128_legacy_msvc` (instance method) |
+| MurmurHash3 x64-128 | `murmur_hash3_x64_128` | `murmur_hash3_x64_128_legacy_msvc` |
+| MurmurHash2 | `murmur_hash2`; unchanged on little-endian platforms | Same method; no separate legacy route is needed |
+
+The three `_legacy_msvc` methods reproduce the old MSVC result on any supported
+platform: full blocks are read as big endian, tails are assembled as little
+endian, and output words are serialized as little endian. Pass the original
+variant, exact input bytes, length and seed. The policies agree for inputs shorter
+than a full block (4 bytes for x86-32, 16 bytes for either 128-bit variant).
+For bytes `00 01 02 03` and seed zero, x86-32 produces numeric word `0xf4c0ec39`
+by default and `0x2cb313f3` through the legacy entry. A previous big-endian
+consumer must also account for the change from native-endian output to canonical
+little-endian bytes; `_legacy_msvc` specifically reproduces old MSVC behavior.
+
+### Migrate stored keys and routing
+
+Identify each dataset's hash variant, seed, input encoding and previous compiler
+policy before upgrading. Keep that policy with the data or in an explicit schema
+version. A digest alone cannot reconstruct the original key. IDs, shard mappings,
+cache keys and persisted indexes derived from old MSVC hashes require an explicit
+migration; replacing the function and silently recomputing routing is unsafe.
+
+For lookup keys, use a staged **dual-read / new-write** rollout: write new records
+with the standard policy and a version tag, read that key first, and fall back to
+the matching `_legacy_msvc` key for older records. Compare the original logical
+key when resolving a hash hit or collision. Backfill or move old entries using
+transactional/atomic application rules, define duplicate handling, and retain
+legacy reads until inventory and rollback requirements permit their removal.
+Old readers must understand new records before new-only writes begin. The library
+does not migrate application records automatically.
+
+For consistent hashing or shard ownership, keep all routers on one explicit ring
+version while planning the transition. Compute the new ring from authoritative
+node identities, compare placement, copy/rebalance affected data, and coordinate
+the routing epoch and ownership cutover across participants. Keep the legacy
+ring and legacy hash entry until that transfer is accepted. Mixed old/new rings
+during an ordinary rolling binary update can route the same key differently;
+a dual lookup alone does not migrate ownership.
+
+`check-core` includes the [upstream SMHasher verification values](https://github.com/aappleby/smhasher/blob/master/src/main.cpp#L67-L70)
+with its [prefix/seed procedure](https://github.com/aappleby/smhasher/blob/master/src/KeysetTest.cpp#L11-L38),
+plus separate scalar-reference fixtures for the legacy MSVC policy. Cases cover
+all seven public methods, every MurmurHash3 tail length, full-width seeds,
+high-bit input bytes and rotation paths, MurmurHash2 boundary vectors, and
+exact-size byte buffers at offsets 0 through 7. AddressSanitizer can detect
+allocation-end overreads; UndefinedBehaviorSanitizer can detect invalid alignment.
+The fixtures establish hash behavior; application data migration needs its own
+acceptance evidence.
+
 ## Verification
 
 `check-typed-examples` loads the actual Utility DSO with `timers`, `module_lifecycle` and `entity_operations`. It verifies all four interface RTTI keys and manager ownership, GUID generation/parsing, zlib/Zstandard binary round trips, a timer triggered by owner-thread time advancement, and normal/idempotent shutdown. `check-app-presets` exercises the shipped launcher preset; `check-core` includes both when applications, examples, Kernel and Utility are enabled. The independent `tests/consumer` project's `check-sdk` compiles public/helper paths with runtime plugins disabled and rejects visible implementation or assembly headers. These are correctness checks, not performance or arbitrary callback-lifetime acceptance.
