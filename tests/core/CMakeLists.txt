@@ -32,6 +32,21 @@ add_custom_target(check-logging
     USES_TERMINAL)
 add_dependencies(check-core check-logging)
 
+# Separate binaries keep custom allocation hooks and new[] replacement isolated.
+add_executable(ark_buffer_tests main.cpp buffers.cpp)
+set_property(TARGET ark_buffer_tests PROPERTY LINK_LIBRARIES ark::core)
+add_executable(ark_buffer_failure_tests main.cpp buffer_failure.cpp)
+set_property(TARGET ark_buffer_failure_tests PROPERTY LINK_LIBRARIES ark::core)
+add_executable(ark_buffer_hook_tests main.cpp buffer_hooks.cpp)
+set_property(TARGET ark_buffer_hook_tests PROPERTY LINK_LIBRARIES ark::core)
+add_custom_target(check-buffer
+    COMMAND $<TARGET_FILE:ark_buffer_tests>
+    COMMAND $<TARGET_FILE:ark_buffer_failure_tests>
+    COMMAND $<TARGET_FILE:ark_buffer_hook_tests>
+    DEPENDS ark_buffer_tests ark_buffer_failure_tests ark_buffer_hook_tests
+    USES_TERMINAL VERBATIM)
+add_dependencies(check-core check-buffer)
+
 find_package(Threads REQUIRED)
 add_library(ark_task_header_checks OBJECT headers/task.cpp)
 # This SDK consumer uses the public core target without aggregate plugin APIs.
