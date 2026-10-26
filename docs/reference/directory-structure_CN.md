@@ -170,3 +170,19 @@ cmake --build build --target check-consul-construction --parallel 2
 ```
 
 `ARK_BUILD_PLUGIN_CONSUL=ON` 还要求 `ARK_BUILD_APPLICATIONS=ON`，默认保持关闭。插件直接链接生成协议目标 `ark::proto`。开启核心测试后，`check-consul-plugin` 还在独立进程中检查真实 Consul DSO 的导出符号；`check-core` 包含当前条件下可用的 Consul 检查。受控工厂不执行生产 HTTP 客户端或访问 Consul 服务。这些构造检查不代表真实 Consul 互通、协议验收或任意热更新安全。
+
+## Etcd Client 类型化构造
+
+**ABI／布局不兼容变更：** `etcd_client_module_impl` 现在继承 `module_base<etcd_client_module>`，`etcd_client_plugin` 继承 `plugin_base<etcd_client_plugin>`。Etcd Client 与消费者必须一起重建。全部五个公开头、`<ark/etcd_client/...>` 路径和公开类型继续通过 `ark::etcd_client` 提供，`etcd_client_module` 与 `etcd_client` 接口不变。C++ 插件边界不承诺跨编译器的 ABI 兼容性。
+
+私有 `etcd_client_factory.hpp` 返回 `std::unique_ptr<etcd_client_module>`，不映射、不安装。显式 `DllEntryPlugin`／`DllExitPlugin` 保留原有平台导出和日志初始化。注册沿用原接口 RTTI 键，显式使用 `module_update::disabled`；注销时销毁拥有的模块。HTTP 客户端查找、端点处理、超时参数顺序、租约请求与回调保持不变。原有 `keepalive` 空实现仍未完成，本次构造调整不增加协议或 Registry 能力。
+
+Etcd Client 保留应用构建默认选中的策略，可通过 `ARK_BUILD_PLUGIN_ETCD_CLIENT=OFF` 关闭。仅构建该插件时需要现有 `nlohmann_json` 软件包（vcpkg 的 `etcd-client` feature）。开启 `ARK_BUILD_APPLICATIONS=ON`、`ARK_BUILD_PLUGIN_ETCD_CLIENT=ON`、`ARK_BUILD_PROTO=ON` 与 `ARK_BUILD_CORE_TESTS=ON` 后，运行：
+
+```sh
+cmake --build build --target check-etcd-client-plugin --parallel 1
+```
+
+该目标包含 `check-etcd-client-construction`：真实工厂／装配的 doctest 用例，以及使用生产入口／出口源码与受控工厂的 DSO 测试，覆盖配置传递、接口元数据、禁用 update、所有权恰好销毁一次和重复 stop。另一个独立进程加载真实生产插件，检查入口／出口导出后卸载。选中运行时插件时，`check-core` 包含这两项检查；关闭插件的核心构建不增加 JSON 依赖。应用 CI 显式启用该插件，通过现有 `check-core` 任务执行检查。
+
+这些测试不启动 Etcd 服务，不执行生产 HTTP／Etcd 互通验收，只验证构造与 DSO 边界，不代表 Registry 已完成，也不证明任意热更新安全。

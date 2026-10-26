@@ -200,3 +200,5 @@ Net 通过私有工厂返回 `std::unique_ptr<http_client_module>`，并启用�
 Kernel 同样使用类型化构造，并保留公开 `*_impl`、`kernel_plugin` 类型与头路径；私有工厂头不安装。公开类布局发生变化，Kernel 与消费者需要一起重建。[Kernel 迁移表](../reference/kernel_CN.md#kernel-类型化构造)记录保持不变的接口键、update 选择与注册顺序。
 
 Consul 使用相同构造方式，保留全部三个公开头与类型。私有工厂不安装；模块保留接口 RTTI 键和禁用 update 的选择。公开实现／插件布局发生变化，Consul 与消费者必须一起重建。测试入口与依赖条件见 [Consul 构造迁移](../reference/directory-structure_CN.md#consul-类型化构造)。
+
+Etcd Client 使用类型化基类、返回接口的私有工厂与显式入口／出口，保留全部五个公开头与类型。接口 RTTI 键和禁用 update 的选择不变。公开实现／插件布局发生变化，插件与消费者必须一起重建。可选 JSON 依赖与无需 Etcd 服务的测试见 [Etcd Client 构造迁移](../reference/directory-structure_CN.md#etcd-client-类型化构造)。

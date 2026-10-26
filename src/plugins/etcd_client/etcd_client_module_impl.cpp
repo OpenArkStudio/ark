@@ -1,7 +1,12 @@
 #include "ark/etcd_client/etcd_client_impl.hpp"
 #include "ark/etcd_client/etcd_client_module_impl.hpp"
+#include "etcd_client_factory.hpp"
 
 namespace ark {
+
+std::unique_ptr<etcd_client_module> detail::make_etcd_client_module() {
+    return std::make_unique<etcd_client_module_impl>();
+}
 
 bool etcd_client_module_impl::init() {
     http_client_module_ = find_module<http_client_module>();

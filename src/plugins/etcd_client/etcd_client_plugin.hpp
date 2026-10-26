@@ -1,8 +1,14 @@
-#include "ark/plugin.hpp"
-#include "ark/plugin_manager.hpp"
+#pragma once
+
+#include "ark/plugin_base.hpp"
 
 namespace ark {
 
-ARK_DECLARE_PLUGIN(etcd_client_plugin)
+class etcd_client_plugin final : public plugin_base<etcd_client_plugin>
+{
+public:
+    void install() override;
+    void uninstall() override;
+};
 
 } // namespace ark
