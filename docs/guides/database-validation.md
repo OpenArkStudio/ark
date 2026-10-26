@@ -1,6 +1,6 @@
 # Database service acceptance
 
-This record separates public-module service/failure checks from positive workflows through actual plugin DSOs. Each scope has its own tested revisions and environment; a passing result applies only to that scope.
+This record separates public-module service/failure checks, positive workflows through actual plugin DSOs, and server-observed request cancellation through those DSOs. Each scope has its own tested revisions and environment; a passing result applies only to that scope.
 
 ## Public modules against real services
 
@@ -60,6 +60,40 @@ cmake --build database-build --target ark_database_public_plugin_service_tests -
 
 These are standalone C++ test modes. They do not create or stop services; missing configuration or an unavailable protocol fails rather than becoming a successful skip. `check-database` builds this program and its DSOs without running the real-service modes.
 
+## Real plugin request cancellation
+
+Both modes of `ark_database_public_plugin_cancellation_tests` passed on **2026-10-26**, each with exit code `0`. The host uses only public interfaces and loads the actual hidden-symbol database plugin DSOs.
+
+| Environment | Value |
+| --- | --- |
+| Machine | Mac16,11 · Apple M4 Pro · 14 cores · 48 GiB |
+| System | macOS 27.0.1 (26A434) · arm64 |
+| Build | Apple Clang 21.0.0 · C++20 · Boost.Asio · Debug · SSL enabled · OpenSSL 3.6.4 |
+| Executed ark | `dba34762dd58348784e46a2518f7505e52063d55` |
+| arknet | CI pin `a0dfe09cd543e75cfb5996e537ce2fa49f2a758f` |
+| Services | Redis 7.4.2 over authenticated TCP; MySQL Community Server 8.4.13 with required verified TLS |
+
+Cancellation is requested through the existing `task_group::cancel(id)` only after an independent pool observes the uniquely identified operation on the server. Polling timers only throttle observations; elapsed time is not the active-operation barrier.
+
+| Mode | Server observation before cancellation | Original native result and observed effect |
+| --- | --- | --- |
+| `redis` | `CLIENT LIST` identified the named pipeline blocked in BLPOP after its preceding INCR counter became `1` | `client_errc::cancelled`, `command_may_have_run=true`, no transport error and retained integer partial reply `1`. Explicit PING recovered; the observed block retired and the exclusive counter remained `1`. |
+| `mysql` | `PROCESSLIST` identified the tagged UPDATE in `User sleep` | `connection_errc::cancelled`, `outcome_unknown=true` and `operation_aborted` transport status. An explicit query recovered; the observer waited for the tagged statement to disappear across all states and a bounded quiet window before reading the final counter, which was `1`. |
+
+The cancelled values remain service results, not coroutine exceptions. Request and observer roots each complete once on the owner thread/shared executor. Repeated cancellation of a pending task is accepted; its retired ID rejects cancellation. Both controlled tests complete natural managed/native shutdown within their observation and pumping bounds; repeated stop succeeds, and owning cancelled results remain readable after plugin/module/manager/runtime destruction. These are test guards, not a hard or preemptive production deadline: `manager.stop()` remains cooperative and cannot interrupt blocking hooks. No production timeout or cancellation policy is added, and `cancel_all` or forced frame destruction is not used for teardown.
+
+The final counters describe only the observed operations and finite observation window. The MySQL case permits `0` or `1` while the outcome is unknown; this run observed `1`. Cancellation does not establish rollback, global exactly-once execution or every possible retry race.
+
+Use the [standalone C++ cancellation guide](../../tests/database/cancellation.md) to prepare exclusively owned services, private authentication and the required database privileges. These modes write exclusive Redis keys or a private MySQL counter table; do not use shared services. With the SSL-enabled database build configured:
+
+```sh
+cmake --build database-build --target ark_database_public_plugin_cancellation_tests --parallel 1
+./database-build/tests/database/ark_database_public_plugin_cancellation_tests redis
+./database-build/tests/database/ark_database_public_plugin_cancellation_tests mysql
+```
+
+`check-database` compiles the program without running the real-service modes. Both owned servers were shut down normally using authenticated commands; the exact processes were independently confirmed absent and private data, credentials and TLS keys were removed. Server termination was not a test action.
+
 ## Acceptance boundaries
 
-The DSO workflows exercise normal plugin teardown and native close calls. Successful `FreeLibrary` or `dlclose` does not prove that the operating system physically removed the library image. Request cancellation, server termination, OS image removal, other deployment environments and cross-machine capacity still require separate acceptance. Neither test scope establishes arbitrary hot-update safety or production capacity.
+The DSO workflows exercise normal plugin teardown and native close calls. Successful `FreeLibrary` or `dlclose` does not prove that the operating system physically removed the library image. Request cancellation acceptance is limited to the selected server-observed operations on this host. Transaction cancellation, Redis TLS, other cancellation/retry races, server termination, OS image removal, other platforms/deployment environments and cross-machine capacity remain unverified. These records do not establish arbitrary hot-update safety or production capacity.

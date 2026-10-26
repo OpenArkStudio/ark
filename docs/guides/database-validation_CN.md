@@ -1,6 +1,6 @@
 # 数据库服务验收
 
-本页分别记录公开模块的真实服务正常／故障检查，以及通过真实插件 DSO 执行的正常流程。每类检查保留各自的测试版本与环境；通过结果仅适用于对应范围。
+本页分别记录公开模块的真实服务正常／故障检查、真实插件 DSO 正常流程，以及经服务端观察确认的 DSO 请求取消。每类检查保留各自的测试版本与环境；通过结果仅适用于对应范围。
 
 ## 公开模块与真实服务
 
@@ -60,6 +60,40 @@ cmake --build database-build --target ark_database_public_plugin_service_tests -
 
 这些模式由独立 C++ 程序执行，不创建或停止服务。缺少配置、构建中没有所选协议时，程序返回失败，不会跳过并报告成功。`check-database` 仅构建该程序及其 DSO，不运行真实服务模式。
 
+## 真实插件请求取消
+
+**2026-10-26**，`ark_database_public_plugin_cancellation_tests` 的两种模式均通过，退出码均为 `0`。宿主仅使用公开接口，加载真实的隐藏符号数据库插件 DSO。
+
+| 环境 | 配置 |
+| --- | --- |
+| 机器 | Mac16,11 · Apple M4 Pro · 14 核 · 48 GiB |
+| 系统 | macOS 27.0.1（26A434）· arm64 |
+| 构建 | Apple Clang 21.0.0 · C++20 · Boost.Asio · Debug · 启用 SSL · OpenSSL 3.6.4 |
+| 实际执行的 ark | `dba34762dd58348784e46a2518f7505e52063d55` |
+| arknet | CI 固定版本 `a0dfe09cd543e75cfb5996e537ce2fa49f2a758f` |
+| 服务 | Redis 7.4.2：TCP 与密码认证；MySQL Community Server 8.4.13：强制 TLS 与证书校验 |
+
+独立连接池先在服务端观察到唯一标识的操作，再通过现有 `task_group::cancel(id)` 请求取消。定时器仅降低轮询频率，等待时间不能替代操作已在服务端运行的证据。
+
+| 模式 | 取消前的服务端观察 | 原生结果与实际影响 |
+| --- | --- | --- |
+| `redis` | `CLIENT LIST` 确认具名流水线在 BLPOP 中阻塞，此前的 INCR 已使计数变为 `1` | 保留 `client_errc::cancelled`、`command_may_have_run=true`、无传输错误与整数部分回复 `1`。显式 PING 恢复成功；观察到的阻塞命令退出后，独占计数仍为 `1`。 |
+| `mysql` | `PROCESSLIST` 确认带标记的 UPDATE 处于 `User sleep` | 保留 `connection_errc::cancelled`、`outcome_unknown=true` 与 `operation_aborted` 传输状态。显式新查询恢复成功；观察者确认该语句在所有状态下均已消失，并经过有限静默观察期后，读取最终计数，本次为 `1`。 |
+
+取消值仍作为服务结果返回，不转换为协程异常。请求与观察根任务分别在所属线程／共享执行器完成一次。重复取消尚未退出的任务会被接收，取消已退出 ID 则失败。两个受控测试均在各自的观察与驱动时限内完成托管任务和原生资源的自然停机，重复 stop 成功；插件／模块／管理器／运行时销毁后，拥有型取消结果仍可读取。这些时限仅用于测试，不构成强制或抢占式生产期限：`manager.stop()` 仍为协作式调用，不能中断阻塞中的钩子。本次不增加生产超时或取消策略，停机不使用 `cancel_all` 或强制销毁协程帧。
+
+最终计数仅描述本次观察到的操作及有限观察窗口。MySQL 用例在结果未知时允许 `0` 或 `1`，本次观察到 `1`。取消不证明回滚、全局恰好执行一次，也不覆盖全部重试竞争。
+
+按[独立 C++ 取消验收指南](../../tests/database/cancellation_CN.md)准备独占服务、私有认证配置与数据库权限。这些模式会写入独占 Redis 键或私有 MySQL 计数表，不应对共享服务运行。完成启用 SSL 的数据库构建配置后，执行：
+
+```sh
+cmake --build database-build --target ark_database_public_plugin_cancellation_tests --parallel 1
+./database-build/tests/database/ark_database_public_plugin_cancellation_tests redis
+./database-build/tests/database/ark_database_public_plugin_cancellation_tests mysql
+```
+
+`check-database` 仅编译该程序，不运行真实服务模式。两个自有服务均通过认证命令正常关闭；精确进程已独立确认不存在，私有数据、凭据与 TLS 密钥已删除。服务端终止不是本次测试动作。
+
 ## 验收边界
 
-DSO 流程覆盖正常插件销毁与原生关闭调用。`FreeLibrary` 或 `dlclose` 成功不证明操作系统已物理移除库映像。请求取消、服务端终止、操作系统库映像移除、其他部署环境与跨机器容量仍需单独验收。这两类检查均不证明任意热更新安全或生产容量。
+DSO 流程覆盖正常插件销毁与原生关闭调用。`FreeLibrary` 或 `dlclose` 成功不证明操作系统已物理移除库映像。本机请求取消验收仅覆盖记录中经服务端观察确认的操作。事务取消、Redis TLS、其他取消／重试竞争、服务端终止、操作系统库映像移除、其他平台／部署环境与跨机器容量仍未验收。这些记录均不证明任意热更新安全或生产容量。
