@@ -31,7 +31,11 @@ Observer polling delays are throttling, never proof of active server work.
 The separate shell actor rechecks the ownership token, captured PID/start time,
 canonical executable text mapping, private data directory working directory,
 PID file and PID-specific IPv4 loopback listener before sending `SIGKILL` to that
-single PID. MySQL's defaults-file argument and the private configuration/data
+single PID. Before any process inspection, the actor resolves the private root
+and config/data/PID-file paths physically, including `..` and parent symlinks,
+and rejects paths outside the canonical root. It rejects symlink ownership,
+identity and coordination files, rechecks path identities before signaling,
+and refuses stale output markers. MySQL's defaults-file argument and the private configuration/data
 mapping are checked too. The parent must collect that child's intentional
 signal exit, the actor's successful receipt and the host exit; a marker alone
 does not prove process termination.
@@ -114,3 +118,15 @@ establish restart/recovery, persistence, automatic replay behavior, all fault
 races, deployed-service acceptance, cross-host behavior or capacity. The precise
 native transport error depends on the platform; no exact EOF/reset numeric value
 is required. Preserve local identities/results/cleanup evidence outside Git.
+
+The path guards have a separate non-signaling regression entry point:
+
+```sh
+bash tests/database/owned_server_fault_actor_guards.sh
+```
+
+It starts no server. A fake PID and intercepted process/signal/wait commands
+make unexpected inspection or waiting fail immediately. Twenty invalid path or
+marker cases cover traversal, symlink-parent escapes (including symlink plus
+`..`), leaf/coordination symlinks and stale receipts; a valid-path control must
+reach the intercepted process check. No actual process is inspected or signaled.
