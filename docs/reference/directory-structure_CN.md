@@ -12,7 +12,7 @@ ark 使用 C++20。核心与官方插件放在本仓库，业务插件放在应�
 | `src/core/` | 核心头文件、实现与 CMake 使用要求 |
 | `src/application/` | 应用入口与停服请求 |
 | `src/config/` | 应用清单声明、共享的文件／TOML 读取实现与私有诊断 |
-| `src/proto/` | 协议定义与编解码实现 |
+| `src/proto/` | 协议定义与 Protobuf 消息生成的 CMake 规则 |
 | `src/server/` | 内置服务端应用 |
 | `src/plugins/<name>/` | 全部官方插件头文件、实现与装配 |
 | `tests/` | 核心、网络与私有数据库回归测试 |

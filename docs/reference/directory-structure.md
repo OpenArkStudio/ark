@@ -13,7 +13,7 @@ Build artifacts belong to each CMake build directory: `cmake -S . -B out/release
 | `src/core/` | Core headers, implementation and CMake usage requirements |
 | `src/application/` | Application entry point and shutdown request |
 | `src/config/` | Application manifest declarations, shared compiled file/TOML reader and private diagnostics |
-| `src/proto/` | Protocol schemas and codec implementation |
+| `src/proto/` | Protocol schemas and CMake rules for generated Protobuf messages |
 | `src/server/` | Built-in server applications |
 | `src/plugins/<name>/` | All official plugin headers, implementation and assembly |
 | `tests/` | Core, network and private database regressions |
