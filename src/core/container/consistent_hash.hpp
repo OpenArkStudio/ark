@@ -23,6 +23,7 @@
 #include "ark/dep.hpp"
 #include "ark/hash/crc.hpp"
 #include "ark/hash/murmur_hash.hpp"
+#include "ark/macros.hpp"
 
 namespace ark {
 

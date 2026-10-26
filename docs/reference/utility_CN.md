@@ -68,6 +68,12 @@ MurmurHash3 使用 C++20 `std::rotl`，旋转次数保持不变。种子、尾�
 原有公开签名不变；`murmur_hash3_x86_128` 仍为实例方法，其余变体仍为静态方法。
 MurmurHash2 保留固定种子零。
 
+Murmur 头文件自身仅使用标准 C++20 头文件，不再包含 `ark/macros.hpp` 或
+`ark/platform.hpp`。调用方若使用其中的声明或宏，须显式包含对应头文件；公开宏定义
+保持不变。头文件独立性不改变 `ark::core` 或其 CMake 包的依赖要求。
+`check-murmur-hash-header` 仅通过隔离的包含目录编译逻辑公开头文件，不依赖 SDK
+目标，并纳入 `check-core`。独立检查命令见[核心回归](../../tests/core/README_CN.md)。
+
 ### 摘要兼容性与旧结果入口
 
 **不兼容变更：** 默认 MurmurHash3 现在在所有支持的平台上按小端方式读取完整块，
