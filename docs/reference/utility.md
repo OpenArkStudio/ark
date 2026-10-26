@@ -107,6 +107,8 @@ little-endian bytes; `_legacy_msvc` specifically reproduces old MSVC behavior.
 
 ### Migrate stored keys and routing
 
+The built-in `ark::consistent_hash` currently uses MurmurHash2, whose results remain unchanged on little-endian platforms. The routing guidance below applies to consumers that derive their ring or shard keys from the affected MurmurHash3 policy.
+
 Identify each dataset's hash variant, seed, input encoding and previous compiler
 policy before upgrading. Keep that policy with the data or in an explicit schema
 version. A digest alone cannot reconstruct the original key. IDs, shard mappings,
