@@ -203,4 +203,6 @@ Consul 使用相同构造方式，保留全部三个公开头与类型。私有�
 
 Etcd Client 使用类型化基类、返回接口的私有工厂与显式入口／出口，保留全部五个公开头与类型。接口 RTTI 键和禁用 update 的选择不变。公开实现／插件布局发生变化，插件与消费者必须一起重建。可选 JSON 依赖与无需 Etcd 服务的测试见 [Etcd Client 构造迁移](../reference/directory-structure_CN.md#etcd-client-类型化构造)。
 
+OSS SDK 使用相同的类型化基类和返回接口的私有工厂，保留全部三个公开头／类型、接口 RTTI 键和禁用 update 的选择。公开布局发生变化，插件与消费者必须一起重建。类型化注销替代未定义的旧注销调用；实现仍为 TODO 骨架。构建与测试边界见 [OSS SDK 构造迁移](../reference/directory-structure_CN.md#oss-sdk-类型化构造)。
+
 Kafka 使用类型化构造与显式入口，保留原有四个公开头和两个 RdKafka 回调基类。接口键与启用逐帧 update 的选择不变，运行时插件继续默认关闭。公开布局发生变化，Kafka 与消费者必须一起重建。驱动要求及无需连接 broker 的测试见 [Kafka 构造迁移](../reference/directory-structure_CN.md#kafka-类型化构造)。

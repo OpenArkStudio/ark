@@ -20,14 +20,13 @@
 
 #pragma once
 
+#include "ark/module_base.hpp"
 #include "ark/osssdk/oss_sdk_module.hpp"
-#include "ark/plugin_manager.hpp"
 
 namespace ark {
 
-class oss_sdk_module_impl final : public oss_sdk_module
+class oss_sdk_module_impl final : public module_base<oss_sdk_module>
 {
-    ARK_DECLARE_MODULE_FUNCTIONS
 public:
     // TODO
 

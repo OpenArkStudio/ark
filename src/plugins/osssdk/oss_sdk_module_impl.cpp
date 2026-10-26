@@ -19,9 +19,12 @@
  */
 
 #include "ark/osssdk/oss_sdk_module_impl.hpp"
+#include "oss_sdk_factory.hpp"
 
 namespace ark {
 
-//method realization
+std::unique_ptr<oss_sdk_module> detail::make_oss_sdk_module() {
+    return std::make_unique<oss_sdk_module_impl>();
+}
 
 } // namespace ark

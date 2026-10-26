@@ -152,6 +152,8 @@ cmake -S tests/consumer/etcd_client -B etcd-client-headers -G Ninja \
 cmake --build etcd-client-headers --target check-etcd-client-headers --parallel 2
 ```
 
+OSS SDK retains its three public headers and types through typed construction; rebuild the plugin and consumers together because public class layouts change. See [OSS SDK construction migration](directory-structure.md#typed-oss-sdk-construction) for optional build conditions and construction/export checks. The implementation remains a TODO scaffold.
+
 Header mapping does not establish Consul, Kafka or OSS SDK runtime compatibility. Physic and `physics_scene` still require the unsupported legacy PhysX 3 integration and retain their explicit configuration failure; no passing PhysX build is claimed.
 
 
@@ -196,6 +198,26 @@ cmake --build build --target check-etcd-client-plugin --parallel 1
 This target includes `check-etcd-client-construction`: actual factory/assembly doctest cases, plus a controlled-factory DSO using the production entry/exit source to check configuration handoff, interface metadata, disabled updates, exactly-once ownership and repeated stop. A separate process loads the actual production plugin, checks its entry/exit exports and unloads it. `check-core` includes both checks when the runtime plugin is selected; disabled-plugin core builds do not acquire the JSON dependency. Applications CI explicitly enables the plugin and runs these checks through its existing `check-core` job.
 
 These tests do not run an Etcd service or exercise production HTTP/Etcd interoperability. They establish construction and DSO boundaries, not a completed Registry or arbitrary hot-update safety.
+
+## Typed OSS SDK construction
+
+**Breaking ABI/layout change:** `oss_sdk_module_impl` now inherits `module_base<oss_sdk_module>` and `oss_sdk_plugin` inherits `plugin_base<oss_sdk_plugin>`. Rebuild OSS SDK and consumers together. All three public headers, their `<ark/osssdk/...>` paths and public types remain available through `ark::osssdk`; the `oss_sdk_module` interface is unchanged. The C++ plugin boundary does not promise compiler-independent ABI compatibility.
+
+The private `oss_sdk_factory.hpp` returns `std::unique_ptr<oss_sdk_module>` and is excluded from public mappings and installation. Explicit `DllEntryPlugin` / `DllExitPlugin` retain platform exports and logger initialization. Installation retains the original `oss_sdk_module` interface RTTI key and disabled updates. Typed unregistration replaces the undefined `ARK_DEREGISTER_MODULE` invocation and destroys the owned module. Configuration storage and the inherited default update method are preserved. The implementation remains a TODO scaffold: no OSS client, request API or object-storage protocol is added.
+
+With `ARK_BUILD_CORE_TESTS=ON`, `check-oss-sdk-construction` compiles the real factory and assembly into doctest cases and uses the production entry/exit source with a counted controlled factory in a DSO. Checks cover retained public bases/types, factory metadata, interface registration, duplicate rejection, disabled updates, configuration handoff, exactly-once destruction and repeated stop. This target requires only the normal core/arknet dependencies; it needs no runtime plugin, Protobuf, JSON package or object-storage service:
+
+```sh
+cmake --build build --target check-oss-sdk-construction --parallel 1
+```
+
+The runtime plugin remains off by default. Enable `ARK_BUILD_APPLICATIONS=ON`, `ARK_BUILD_PLUGIN_OSSSDK=ON`, `ARK_BUILD_PROTO=ON` and `ARK_BUILD_CORE_TESTS=ON` to additionally build the actual `ark_oss_sdk_plugin` DSO and inspect its entry/exit exports in a separate process:
+
+```sh
+cmake --build build --target check-oss-sdk-plugin --parallel 1
+```
+
+Application builds retain their existing Protobuf, configuration and Boost.Asio requirements. `check-core` includes the applicable OSS SDK construction/export checks. No external OSS SDK dependency is introduced. These tests establish construction and DSO boundaries only; they do not establish OSS client functionality, service interoperability or arbitrary hot-update safety.
 
 ## Typed Kafka construction
 

@@ -133,4 +133,6 @@ cmake -S tests/consumer/etcd_client -B etcd-client-headers -G Ninja \
 cmake --build etcd-client-headers --target check-etcd-client-headers --parallel 2
 ```
 
+OSS SDK retains its three public headers and types through typed construction; rebuild the plugin and consumers together because public class layouts change. See [OSS SDK construction migration](reference/directory-structure.md#typed-oss-sdk-construction) for optional build conditions and construction/export checks. The implementation remains a TODO scaffold.
+
 Header mapping does not establish Consul, Kafka or OSS SDK runtime compatibility. Physic and `physics_scene` still require the unsupported legacy PhysX 3 integration and retain their explicit configuration failure; no passing PhysX build is claimed.

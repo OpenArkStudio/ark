@@ -20,11 +20,15 @@
 
 #pragma once
 
-#include "ark/plugin.hpp"
-#include "ark/plugin_manager.hpp"
+#include "ark/plugin_base.hpp"
 
 namespace ark {
 
-ARK_DECLARE_PLUGIN(oss_sdk_plugin)
+class oss_sdk_plugin final : public plugin_base<oss_sdk_plugin>
+{
+public:
+    void install() override;
+    void uninstall() override;
+};
 
 } // namespace ark

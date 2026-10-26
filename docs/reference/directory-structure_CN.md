@@ -142,6 +142,8 @@ cmake -S tests/consumer/etcd_client -B etcd-client-headers -G Ninja \
 cmake --build etcd-client-headers --target check-etcd-client-headers --parallel 2
 ```
 
+OSS SDK 使用类型化构造，保留全部三个公开头和类型；公开类布局发生变化，插件与消费者必须一起重建。可选构建条件及构造／导出检查见 [OSS SDK 构造迁移](directory-structure_CN.md#oss-sdk-类型化构造)。实现仍为 TODO 骨架。
+
 头文件映射检查不代表 Consul、Kafka、OSS SDK 的运行时兼容性已经验证。Physic 与 `physics_scene` 仍依赖未受支持的旧版 PhysX 3 集成，保留明确的配置失败；此处没有宣称 PhysX 构建通过。
 
 ## 安装目录
@@ -186,6 +188,26 @@ cmake --build build --target check-etcd-client-plugin --parallel 1
 该目标包含 `check-etcd-client-construction`：真实工厂／装配的 doctest 用例，以及使用生产入口／出口源码与受控工厂的 DSO 测试，覆盖配置传递、接口元数据、禁用 update、所有权恰好销毁一次和重复 stop。另一个独立进程加载真实生产插件，检查入口／出口导出后卸载。选中运行时插件时，`check-core` 包含这两项检查；关闭插件的核心构建不增加 JSON 依赖。应用 CI 显式启用该插件，通过现有 `check-core` 任务执行检查。
 
 这些测试不启动 Etcd 服务，不执行生产 HTTP／Etcd 互通验收，只验证构造与 DSO 边界，不代表 Registry 已完成，也不证明任意热更新安全。
+
+## OSS SDK 类型化构造
+
+**ABI／布局不兼容变更：** `oss_sdk_module_impl` 现在继承 `module_base<oss_sdk_module>`，`oss_sdk_plugin` 继承 `plugin_base<oss_sdk_plugin>`。OSS SDK 与消费者必须一起重建。全部三个公开头、`<ark/osssdk/...>` 路径和公开类型继续通过 `ark::osssdk` 提供，`oss_sdk_module` 接口不变。C++ 插件边界不承诺跨编译器的 ABI 兼容性。
+
+私有 `oss_sdk_factory.hpp` 返回 `std::unique_ptr<oss_sdk_module>`，不映射、不安装。显式 `DllEntryPlugin`／`DllExitPlugin` 保留平台导出和日志初始化。安装时沿用 `oss_sdk_module` 接口 RTTI 键，继续禁用 update。类型化注销替代未定义的 `ARK_DEREGISTER_MODULE` 调用，销毁拥有的模块。配置存储和继承的默认 update 方法保持不变。实现仍为 TODO 骨架，不增加 OSS 客户端、请求 API 或对象存储协议。
+
+开启 `ARK_BUILD_CORE_TESTS=ON` 后，`check-oss-sdk-construction` 将真实工厂与装配编入 doctest 用例，并使用生产入口／出口源码与带计数的受控工厂构建 DSO。检查覆盖保留的公开基类／类型、工厂元数据、接口注册、重复注册拒绝、禁用 update、配置传递、恰好销毁一次和重复 stop。该目标仅需要通常的 core／arknet 依赖，无需运行时插件、Protobuf、JSON 软件包或对象存储服务：
+
+```sh
+cmake --build build --target check-oss-sdk-construction --parallel 1
+```
+
+运行时插件默认保持关闭。开启 `ARK_BUILD_APPLICATIONS=ON`、`ARK_BUILD_PLUGIN_OSSSDK=ON`、`ARK_BUILD_PROTO=ON` 与 `ARK_BUILD_CORE_TESTS=ON` 后，还可构建真实 `ark_oss_sdk_plugin` DSO，并在独立进程中检查入口／出口导出：
+
+```sh
+cmake --build build --target check-oss-sdk-plugin --parallel 1
+```
+
+应用构建仍需要现有 Protobuf、配置模块与 Boost.Asio。`check-core` 包含当前条件下可用的 OSS SDK 构造／导出检查，不增加外部 OSS SDK 依赖。这些测试只验证构造与 DSO 边界，不代表 OSS 客户端功能、服务互通或任意热更新安全已经通过验收。
 
 ## Kafka 类型化构造
 
