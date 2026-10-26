@@ -166,3 +166,17 @@ With `ARK_BUILD_APPLICATIONS=ON`, CMake builds seven server libraries: Game, Log
 ## Installed layout
 
 [Installation](../get-started/installation.md#install-and-consume-the-cmake-package) preserves logical `<ark/...>` headers under `<prefix>/include/ark/`. CMake package files use the GNUInstallDirs library directory under `cmake/ark/`; selected launcher and runtime plugins install under `bin/`. Configuration samples and licensing are under `share/ark/`. Consumers use `find_package(ark CONFIG REQUIRED)` and `ark::core` / `ark::<plugin>` targets; source consumers use `add_subdirectory` with the same target names. Neither requires a generated mapping path. Source/build directories are absent from installed exports; arknet and other dependencies remain external. `tests/install/` contains independent installed consumers and the disposable-producer relocation test.
+
+## Typed Consul construction
+
+**Breaking ABI/layout change:** `consul_module_impl` now inherits `module_base<consul_module>` and `consul_plugin` inherits `plugin_base<consul_plugin>`. Rebuild Consul and consumers together. All three public headers, their `<ark/consul/...>` paths, public types and request methods remain available through `ark::consul`; the interface itself is unchanged. The C++ plugin boundary does not promise compiler-independent ABI compatibility.
+
+The private `consul_factory.hpp` returns `std::unique_ptr<consul_module>` and is excluded from public mappings and installation. Explicit `DllEntryPlugin` and `DllExitPlugin` retain the existing platform exports and logger setup. Installation registers the single `consul_module` interface RTTI key with `module_update::disabled`; uninstallation removes and destroys that module. The implementation still inherits the default update method. Configuration storage, HTTP-client lookup, TOML loading, request serialization and endpoints are unchanged.
+
+With `ARK_BUILD_CORE_TESTS=ON`, `ARK_BUILD_PROTO=ON` and `ARK_BUILD_CONFIG=ON`, `check-consul-construction` runs the actual factory/assembly doctest cases and a controlled-factory DSO test of the actual entry/exit source. These cover public bases, factory metadata, interface registration, duplicate rejection, disabled updates, configuration handoff, ownership and repeated stop. They require Protobuf, toml++ and the normal core/arknet dependencies, but no runtime plugin or Consul service. For an existing build configured with those options:
+
+```sh
+cmake --build build --target check-consul-construction --parallel 2
+```
+
+`ARK_BUILD_PLUGIN_CONSUL=ON` also requires `ARK_BUILD_APPLICATIONS=ON` and remains off by default. It links the generated protocol target `ark::proto` directly. With the core tests enabled, `check-consul-plugin` additionally inspects the actual Consul DSO exports in a separate process; `check-core` includes the applicable Consul checks. The controlled factory does not exercise the production HTTP client or a Consul server. These construction checks do not establish live Consul interoperability, protocol acceptance or arbitrary hot-update safety.

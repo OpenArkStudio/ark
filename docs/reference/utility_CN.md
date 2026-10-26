@@ -58,6 +58,65 @@ zlib、LZ4 和 Zstandard 普通调用不再共享可写输出缓冲区。Zstanda
 
 范围选择保留现有的取模映射、种子序列和生成次数。端点不同的每次调用消耗一个随机数；使用相同种子并交换端点，得到相同序列。无符号重载的行为保持不变。
 
+## Core Murmur 哈希
+
+`<ark/hash/murmur_hash.hpp>` 通过 `ark::core` 提供 MurmurHash2，以及 MurmurHash3
+的 x86-32、x86-128 和 x64-128 变体。调用方须提供非负 `int` 长度、可读输入缓冲区
+（空输入也需要有效缓冲区），以及可写输出存储：32 位变体需要 4 字节，128 位变体需要
+16 字节。输入和输出允许任意字节对齐，字读取和写入使用 `std::memcpy`。
+MurmurHash3 使用 C++20 `std::rotl`，旋转次数保持不变。种子、尾部混合、结果字顺序和
+原有公开签名不变；`murmur_hash3_x86_128` 仍为实例方法，其余变体仍为静态方法。
+MurmurHash2 保留固定种子零。
+
+### 摘要兼容性与旧结果入口
+
+**不兼容变更：** 默认 MurmurHash3 现在在所有支持的平台上按小端方式读取完整块，
+并输出规范的小端摘要字节。这保留原有小端 GCC/Clang 结果，改变普通 MSVC 的旧版完整块策略。
+旧版平台检测未选择 MSVC 的 `_M_IX86`、`_M_X64` 或 `_M_ARM64` 宏
+（见 [Microsoft 预定义宏](https://learn.microsoft.com/en-us/cpp/preprocessor/predefined-macros)），
+导致小端主机进入无条件字节交换回退分支。公开宏 `BYTESWAP32` 和 `BYTESWAP64`
+仍然保留，但不再控制这些哈希方法。调用方须重新编译，才能使用新的头文件行为。
+
+| 方法族 | 默认结果 | 普通 MSVC 的旧结果 |
+| --- | --- | --- |
+| MurmurHash3 x86-32 | `murmur_hash3_x86_32` | `murmur_hash3_x86_32_legacy_msvc` |
+| MurmurHash3 x86-128 | `murmur_hash3_x86_128`（实例方法） | `murmur_hash3_x86_128_legacy_msvc`（实例方法） |
+| MurmurHash3 x64-128 | `murmur_hash3_x64_128` | `murmur_hash3_x64_128_legacy_msvc` |
+| MurmurHash2 | `murmur_hash2`；在小端平台上保持不变 | 使用同一方法，无需独立旧版入口 |
+
+三个 `_legacy_msvc` 方法在所有支持的平台上复现旧 MSVC 结果：完整块按大端方式读取，
+尾部按小端方式组装，输出字按小端方式序列化。调用时须使用原有变体、准确输入字节、
+长度和种子。输入短于完整块时，两种策略结果相同：x86-32 为不足 4 字节，
+两个 128 位变体为不足 16 字节。对于字节 `00 01 02 03` 和种子零，x86-32 默认产生
+数值字 `0xf4c0ec39`，旧版入口产生 `0x2cb313f3`。旧版大端使用方还须处理输出从
+原生字节序变为规范小端字节序的变化；`_legacy_msvc` 专用于复现旧 MSVC 行为。
+
+### 迁移已存储键与路由
+
+框架内置 `ark::consistent_hash` 当前使用 MurmurHash2，在小端平台上的结果保持不变。以下路由迁移说明适用于使用受影响 MurmurHash3 策略构建环或分片键的调用方。
+
+升级前，先确认每个数据集的哈希变体、种子、输入编码和旧编译器策略，并在数据中或
+显式 schema 版本中记录该策略。单独的摘要无法还原原始键。由旧 MSVC 哈希派生的 ID、
+分片映射、缓存键和持久化索引需要显式迁移，不能替换函数后直接重算路由。
+
+对于查找键，分阶段采用**双读、新写**：新记录使用标准策略并携带版本标记；读取时
+先查新键，未命中再查匹配的 `_legacy_msvc` 旧键。解析命中或哈希冲突时，核对原始逻辑键。
+按应用的事务或原子操作规则回填或移动旧记录，明确重复记录的处理方式；确认存量清理和
+回滚要求后，再移除旧读路径。开始只写新格式前，旧读程序须能理解新记录。
+库本身不会自动迁移应用记录。
+
+对于一致性哈希或分片归属，规划迁移时保持所有路由器使用同一个显式环版本。
+从权威节点标识构建新环，比较分配结果，复制或重平衡受影响数据，再协调各参与方的
+路由 epoch 与归属切换。数据转移验收前，保留旧环和旧哈希入口。普通二进制滚动升级中
+混用新旧环，可能把同一键路由到不同位置；仅增加双查不会完成归属迁移。
+
+`check-core` 纳入[上游 SMHasher 验证值](https://github.com/aappleby/smhasher/blob/master/src/main.cpp#L67-L70)
+及其[前缀和种子验证过程](https://github.com/aappleby/smhasher/blob/master/src/KeysetTest.cpp#L11-L38)，
+并为旧 MSVC 策略保留独立的标量参考固定值。用例覆盖全部七个公开方法、MurmurHash3 的
+全部尾部长度、完整宽度种子、高位字节和旋转路径、MurmurHash2 块边界固定值，以及
+偏移 0 到 7 的精确分配字节缓冲区。AddressSanitizer 可检查分配末端越界读取，
+UndefinedBehaviorSanitizer 可检查无效对齐。固定值验证哈希行为；应用数据迁移仍须独立验收。
+
 ## 验证
 
 `check-typed-examples` 与 timers、module_lifecycle、entity_operations 一起加载真实 Utility DSO，验证四个接口的 RTTI 注册键与管理器归属、GUID 生成与解析、zlib/Zstandard 二进制往返、由所属线程时间推进触发的定时器，以及正常和重复停机。`check-app-presets` 使用仓库启动器预设；应用、示例、Kernel、Utility 开启时，`check-core` 包含这两组检查。独立 `tests/consumer` 项目的 `check-sdk` 在关闭运行时插件时编译公开接口与辅助头路径，并拒绝可见的实现或装配头。这些检查验证正确性，不代表性能或任意回调生命周期验收。

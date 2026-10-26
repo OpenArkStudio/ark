@@ -1,8 +1,14 @@
-#include "ark/plugin.hpp"
-#include "ark/plugin_manager.hpp"
+#pragma once
+
+#include "ark/plugin_base.hpp"
 
 namespace ark {
 
-ARK_DECLARE_PLUGIN(consul_plugin)
+class consul_plugin final : public plugin_base<consul_plugin>
+{
+public:
+    void install() override;
+    void uninstall() override;
+};
 
 } // namespace ark

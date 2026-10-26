@@ -39,7 +39,9 @@ cmake -S . -B build -DARK_BUILD_APPLICATIONS=ON \
 cmake --build build --target ark_mysql_plugin ark_redis_plugin
 ```
 
-全部官方插件的公开头通过显式清单在配置阶段复制到各构建树生成的插件公开头映射。各 `ark::<name>` API target 传递该目录，插件关闭时仍可使用。MySQL、Redis、Utility、Net、Bus、HTTP 的私有装配头和工厂不进入映射；Kernel 保留包括 `kernel_plugin.hpp` 在内的原有 38 个头；Consul、Etcd Client、Kafka、OSS SDK、Physic 保留包括实现头与装配头在内的原有 22 个公开头。注册键、公开类型可见性和可选插件策略继续保留；[Kernel 类型化构造](kernel_CN.md#kernel-类型化构造)改变公开类布局，需要重建消费者。其私有工厂头不映射、不安装；头文件映射不代表可选驱动集成已经验证。每个公共头仅有一份共置源码；生成的头文件映射属于选定构建树，不构成第二棵源码目录。
+全部官方插件的公开头通过显式清单在配置阶段复制到各构建树生成的插件公开头映射。各 `ark::<name>` API target 传递该目录，插件关闭时仍可使用。MySQL、Redis、Utility、Net、Bus、HTTP 的私有装配头和工厂不进入映射；Kernel 保留包括 `kernel_plugin.hpp` 在内的原有 38 个头；Consul、Etcd Client、Kafka、OSS SDK、Physic 保留包括实现头与装配头在内的原有 22 个公开头。注册键、公开类型可见性和可选插件策略继续保留；[Kernel 类型化构造](kernel_CN.md#kernel-类型化构造)与 [Consul 类型化构造](directory-structure_CN.md#consul-类型化构造)改变公开类布局，需要重建消费者。两者的私有工厂头均不映射、不安装；头文件映射不代表可选驱动集成已经验证。每个公共头仅有一份共置源码；生成的头文件映射属于选定构建树，不构成第二棵源码目录。
+
+应用 CI 在 Linux、macOS、Windows 启用可选 Consul 插件，`check-core` 包含构造、动态库生命周期与生产库导出检查。这些检查不需要 Consul 服务，也不代表服务互通验收。
 
 业务插件链接 `ark::mysql` 和/或 `ark::redis`，以获取公开头文件和编译要求；公共接口目标不会加载运行时动态库。将所需动态库与启动器一起部署，并在应用清单中填写库名称：
 
