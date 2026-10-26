@@ -31,7 +31,7 @@ public:
         return true;
     }
 
-    std::future<std::pair<bool, std::string>> register_service(const ark::consul::service_data&) override {
+    std::future<std::pair<bool, std::string>> register_service(const ::consul::service_data&) override {
         return {};
     }
 
