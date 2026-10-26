@@ -1,8 +1,10 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
 #include <concepts>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <typeinfo>
@@ -111,6 +113,15 @@ int main(int argc, char* argv[]) {
                 require(gender == 1 || gender == 11, "Unexpected player gender");
                 edited += gender == 11;
                 require(player->get_custom_int32("test") == 111, "Custom data initialization changed");
+                require(player->add_custom_u_int32("unsigned_sequence", 0), "Custom uint32 creation failed");
+                for (const auto value : {std::numeric_limits<std::uint32_t>::max(), std::uint32_t{0}})
+                {
+                    require(player->set_custom_u_int32("unsigned_sequence", value) &&
+                                player->get_custom_u_int32("unsigned_sequence") == value,
+                        "Public entity custom uint32 update failed through the real Kernel DSO");
+                }
+                require(!player->set_custom_u_int32("test", 7) && player->get_custom_int32("test") == 111,
+                    "Custom uint32 update changed a signed field");
                 auto* items = player->find_table(ark::entity_meta_player::items());
                 require(items && items->first() &&
                             items->first()->get_int64(ark::entity_meta_item_bag::guid_index()) == 1111,

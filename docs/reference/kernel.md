@@ -116,6 +116,12 @@ bool set_int32_field(ark::kernel_module& kernel, const ark::guid_t& id, const st
 
 `table*` and `row*` are borrowed pointers, with no independent ownership of entity data. Do not retain them after removing the row, clearing the table or destroying the owning entity.
 
+### Custom unsigned values
+
+`entity::add_custom_u_int32(name, value)` creates a named runtime `uint32_t` value separate from schema fields. After creation, `set_custom_u_int32(name, value)` updates that value across the full range from `0` to `UINT32_MAX`; read it with `get_custom_u_int32(name)`. Setting a missing name or a name containing another scalar type returns `false` without creating data, converting its type or changing the existing value, in both Debug and Release builds. Use `find_custom_data()` to check existence; a stored zero is a valid value.
+
+`check-kernel-initialization` exercises these operations through the public `entity` interface, including other custom scalar controls. With applications, Kernel/Utility and examples enabled, `check-typed-examples` also verifies unsigned updates on entities created by the real Kernel/EntityOperations libraries.
+
 ## Register events
 
 Class callbacks cover creation / destruction, field changes, table changes and container operations. Individual entities can also have application event handlers. Register common class callbacks with `add_common_class_event()`.
