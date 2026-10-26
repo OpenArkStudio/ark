@@ -355,3 +355,10 @@ cmake --build database-build --target check-database-samples --parallel 2
 Each runner loads the actual DSO through the manager's normal entry and exit symbols. A fixture registers the public database interface and rejects its first configuration request. The sample must resolve that interface, preserve its `primary` (MySQL) or `sample` (Redis) connection name, and report a controlled init failure whose diagnostic names the concrete sample module. The real plugin exit must return successfully, the manager must reach its stopped state, and repeated stop must succeed. The runner uses public manager APIs; it does not inspect the module registry after shutdown or independently prove its erased state. Compile-time checks preserve typed bases and inherited default update behavior; assembly explicitly selects `module_update::disabled`.
 
 These tests replace module-only compilation: plugin entry/exit sources are required dependencies even when application/examples are disabled. They preserve original source licenses and do not enable other examples. The rejecting provider does not run sample coroutines or contact services; live MySQL/Redis workflow and deployment acceptance remain separate.
+
+## Owned-server termination acceptance
+
+The opt-in [public-plugin server-termination guide](server_termination.md) covers
+server-observed blocking read-only work, a separately verified owned-PID fault
+actor, native transport failure and exactly-once local retirement. Ordinary
+checks compile the program without executing a server fault.

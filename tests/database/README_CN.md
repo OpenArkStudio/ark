@@ -283,3 +283,9 @@ cmake --build database-build --target check-database-samples --parallel 2
 每个 runner 都通过管理器的标准入口与退出符号加载真实 DSO。fixture 注册公开数据库接口，并拒绝第一次配置请求。示例必须查找到该接口，保留 `primary`（MySQL）或 `sample`（Redis）连接名，并报告受控的 init 失败，诊断中包含具体示例模块名。真实插件退出必须成功返回，管理器必须进入 stopped 状态，重复 stop 必须成功。runner 仅使用管理器公开 API，不在停机后检查模块注册表，也不独立证明注册表条目已被移除。编译期检查保留类型基类与继承的默认 update 行为；装配显式使用 `module_update::disabled`。
 
 这些测试替代仅编译 module.cpp 的检查：即使应用与示例关闭，插件入口／退出源文件仍是必需依赖。保留源码原有许可证，不启用其他示例。拒绝配置的 provider 不运行示例协程，也不连接服务；真实 MySQL／Redis 业务流程与部署仍需单独验收。
+
+## 自有服务异常退出验收
+
+可选的[公开插件服务异常退出指南](server_termination_CN.md)覆盖真实服务观察到的只读阻塞请求、
+独立核验自有 PID 后的故障注入、原生传输失败及本地仅完成一次的退出。
+常规检查只编译程序，不执行服务故障。
