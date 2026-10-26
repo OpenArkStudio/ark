@@ -19,6 +19,14 @@ C++20 语言回归验证六种精确整数类型分类、限定符与引用处�
 
 随机数回归将公开头文件放在首个包含位置，并重复包含两次。测试保留固定的原始、有符号及无符号随机序列、最终种子和生成次数，并验证 `INT_MIN`／`INT_MAX` 极值、异号、相邻、逆序及相等端点的有符号半开区间。端点相同时直接返回该值，不消耗随机数。这些用例属于 `ark_core_tests` 和 `check-core`；使用 `-fsanitize=undefined -fno-sanitize-recover=all` 构建时，还会通过 UndefinedBehaviorSanitizer 检查范围运算。参见[随机数工具行为](../../docs/reference/utility_CN.md#core-随机数工具)。
 
+
+Murmur 回归包含独立的上游 SMHasher 验证常量、旧版完整块交换策略固定值、全部尾部长度、
+完整宽度种子和原有旋转路径。用例还验证 MurmurHash2 固定值、精确分配的输入缓冲区、
+输入和输出偏移 0 到 7，以及输出保护字节。运行核心测试程序时，通过
+`--test-case="*Murmur*"` 选择这些用例。规范小端输出和显式旧 MSVC 迁移入口见
+[Murmur 兼容性说明](../../docs/reference/utility_CN.md#core-murmur-哈希)。
+AddressSanitizer 和 UndefinedBehaviorSanitizer 构建可检查越界读取和无效对齐。
+
 公共头检查将 `<ark/error_code.hpp>` 放在首个包含位置，并重复包含两次；编译期断言
 验证其无符号 32 位底层类型及所有已声明的错误值。
 

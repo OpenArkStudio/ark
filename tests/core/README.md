@@ -20,6 +20,16 @@ The public header checks include `<ark/error_code.hpp>` as the first include and
 include it twice. Compile-time checks preserve its unsigned 32-bit underlying type
 and every declared error value.
 
+
+Murmur regressions include independent upstream SMHasher verification constants,
+legacy swapped-block fixtures, all tail lengths, full-width seeds and the original
+rotation paths. They also check MurmurHash2 golden words, exact-size input
+allocations and input/output offsets 0 through 7 with output guard bytes.
+Run the core executable with `--test-case="*Murmur*"` to select these cases.
+See [Murmur compatibility](../../docs/reference/utility.md#core-murmur-hashes)
+for canonical little-endian output and the explicit legacy MSVC migration path. AddressSanitizer and
+UndefinedBehaviorSanitizer builds exercise overread and alignment checks.
+
 With `ARK_BUILD_PROTO=ON`, additional cases verify Protobuf parse failures, actor
 identity, binary messages, legacy wire payloads and external JSON field names.
 They also exercise the new `ark::protobuf` descriptor and enum names.

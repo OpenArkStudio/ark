@@ -3,8 +3,13 @@
 #include "../detail/plugin_configuration.hpp"
 #include "ark/consul/consul_module_impl.hpp"
 #include "ark/consul/consul_plugin.hpp"
+#include "consul_factory.hpp"
 
 namespace ark {
+
+std::unique_ptr<consul_module> detail::make_consul_module() {
+    return std::make_unique<consul_module_impl>();
+}
 
 namespace {
 

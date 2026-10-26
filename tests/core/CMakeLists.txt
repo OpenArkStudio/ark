@@ -1,12 +1,12 @@
 add_library(ark_core_header_checks OBJECT headers/queue.cpp headers/guid128.cpp headers/rw_lock.cpp
     headers/array_map.cpp headers/bit_value.cpp headers/consistent_hash.cpp headers/list.cpp
     headers/lock_free_queue.cpp headers/lru_map.cpp headers/map.cpp headers/thread_safe_queue.cpp
-    headers/object_vector.cpp headers/error_code.cpp headers/logger.cpp)
+    headers/object_vector.cpp headers/error_code.cpp headers/logger.cpp headers/murmur_hash.cpp)
 target_link_libraries(ark_core_header_checks PRIVATE ark::core)
 
 add_executable(ark_core_tests main.cpp strings.cpp containers.cpp templates.cpp callbacks.cpp
     header_regressions.cpp cxx20_language.cpp concurrency.cpp plugin_manager_startup.cpp data_strings.cpp node_data_storage.cpp
-    object_vectors.cpp plugin_construction.cpp module_factory.cpp random_generator.cpp xxtea.cpp)
+    object_vectors.cpp plugin_construction.cpp module_factory.cpp random_generator.cpp xxtea.cpp murmur_hash.cpp)
 target_link_libraries(ark_core_tests PRIVATE ark::core ark::kernel ark::utility)
 add_dependencies(ark_core_tests ark_core_header_checks)
 add_library(ark_construction_header_checks OBJECT headers/module_base.cpp headers/plugin_base.cpp)
@@ -220,6 +220,10 @@ if(ARK_BUILD_PROTO)
         DEPENDS ark_kernel_initialization_tests
         USES_TERMINAL)
     add_dependencies(check-core check-kernel-initialization)
+endif()
+
+if(ARK_BUILD_PROTO AND ARK_BUILD_CONFIG)
+    add_subdirectory(../consul "${CMAKE_CURRENT_BINARY_DIR}/consul")
 endif()
 
 if(ARK_BUILD_PROTO AND TARGET ark_kernel_plugin AND TARGET ark_utility_plugin)
