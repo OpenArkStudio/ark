@@ -11,7 +11,7 @@ test('core packages are shared while application, configuration and JSON depende
   const core = dependencies(manifest.dependencies);
   assert.ok(core.includes('spdlog'));
   assert.ok(core.includes('readerwriterqueue'));
-  for (const [owners, name] of [[['application'], 'args'], [['config'], 'tomlplusplus'], [['application', 'etcd-client', 'guest-room'], 'nlohmann-json']]) {
+  for (const [owners, name] of [[['application'], 'args'], [['config'], 'tomlplusplus'], [['application', 'config-tool', 'etcd-client', 'guest-room'], 'nlohmann-json'], [['config-tool'], 'openxlsx']]) {
     for (const feature of owners) assert.ok(dependencies(manifest.features[feature].dependencies).includes(name));
     assert.ok(!core.includes(name), `${name} must remain optional`);
     for (const [other, value] of Object.entries(manifest.features)) {
@@ -21,6 +21,7 @@ test('core packages are shared while application, configuration and JSON depende
   assert.ok(manifest['default-features'].includes('config'));
   assert.ok(!manifest['default-features'].includes('etcd-client'));
   assert.ok(!manifest['default-features'].includes('guest-room'));
+  assert.ok(!manifest['default-features'].includes('config-tool'));
 });
 
 test('the public core target propagates package usage requirements without a bundled include root', () => {
@@ -41,17 +42,29 @@ function applicationFeatures(workflow) {
   assert.deepEqual(configure, cache, 'cache metadata must describe the actual package features');
   assert.ok(configure.includes('etcd-client'), 'default etcd plugin requires its package feature');
   assert.ok(configure.includes('guest-room'), 'guest-room example requires its package feature');
+  assert.ok(configure.includes('config-tool'), 'native exporter requires its package feature');
 }
 
-test('CI configures the etcd and guest-room package features and caches exactly those features', () => {
+test('CI caches exactly the configured application and offline-tool package features', () => {
   const workflow = read('.github/workflows/ci.yml');
   applicationFeatures(workflow);
-  assert.throws(() => applicationFeatures(workflow.replace('VCPKG_CACHE_FEATURES: \'application;boost;compression-tests;etcd-client;guest-room\'',
+  assert.throws(() => applicationFeatures(workflow.replace('VCPKG_CACHE_FEATURES: \'application;boost;compression-tests;etcd-client;guest-room;config-tool\'',
     'VCPKG_CACHE_FEATURES: \'application;boost\'')), /cache metadata/);
-  assert.throws(() => applicationFeatures(workflow.replaceAll('application;boost;compression-tests;etcd-client;guest-room', 'application;boost')), /requires its package feature/);
+  assert.throws(() => applicationFeatures(workflow.replaceAll('application;boost;compression-tests;etcd-client;guest-room;config-tool', 'application;boost')), /requires its package feature/);
   assert.throws(() => applicationFeatures(workflow.replaceAll(';guest-room', '')), /guest-room example requires its package feature/);
+  assert.throws(() => applicationFeatures(workflow.replaceAll(';config-tool', '')), /native exporter requires its package feature/);
   assert.doesNotMatch(workflow, /git submodule|Initialize pinned dependencies/);
   assert.equal(existsSync(new URL('../../.gitmodules', import.meta.url)), false);
+});
+
+test('Applications builds and executes the native configuration tool within existing jobs', () => {
+  const application = read('.github/workflows/ci.yml').split('  applications:\n')[1].split('\n  database:')[0];
+  assert.match(application, /-DARK_BUILD_CONFIG_TOOL=ON/);
+  assert.match(application, /-DARK_BUILD_CONFIG_TOOL_TESTS=ON/);
+  const tools = read('tools/entity_config/CMakeLists.txt');
+  assert.match(tools, /if\(TARGET check-core\)\s+add_dependencies\(check-core check-config-tool\)/);
+  assert.match(tools, /find_package\(OpenXLSX 0\.5\.1 CONFIG REQUIRED\)/);
+  assert.doesNotMatch(tools, /python|ruby|add_test\(/i);
 });
 
 function guestRoomApplications(workflow) {

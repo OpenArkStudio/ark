@@ -10,7 +10,7 @@ const docs = fileURLToPath(new URL("../../", import.meta.url));
 async function pages(directory, prefix = "") {
   const result = [];
   for (const item of await readdir(directory, { withFileTypes: true })) {
-    if (item.name.startsWith(".") || item.name === "site") continue;
+    if (item.name.startsWith(".") || item.name === "site" || item.name === "licenses") continue;
     const relative = posix.join(prefix, item.name);
     if (item.isDirectory()) result.push(...await pages(join(directory, item.name), relative));
     else if (item.name.endsWith(".md") && item.name !== "_sidebar.md") result.push(relative);

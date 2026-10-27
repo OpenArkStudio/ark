@@ -74,6 +74,8 @@ endif()
 
 option(ARK_BUILD_TESTS "Enable build tests" ON)
 option(ARK_BUILD_CORE_TESTS "Build core C++20 regressions" ${ARK_BUILD_TESTS})
+option(ARK_BUILD_CONFIG_TOOL "Build the offline Entity JSON/CSV/XLSX exporter" OFF)
+option(ARK_BUILD_CONFIG_TOOL_TESTS "Build native configuration exporter regressions" ${ARK_BUILD_TESTS})
 option(ARK_BUILD_COMPRESSION_TESTS "Build bounded compression regressions (zlib, Zstandard and LZ4)" OFF)
 option(ARK_BUILD_EXAMPLES "Enable build examples" ON)
 set(ark_config_default OFF)
@@ -158,6 +160,19 @@ else (UNIX)
     endif (XCODE)
 
 endif ()
+
+# A tool-only build does not configure the framework's networking or plugins.
+if(ARK_BUILD_CONFIG_TOOL AND NOT ARK_BUILD_APPLICATIONS AND NOT ARK_BUILD_PROTO
+    AND NOT ARK_BUILD_CORE_TESTS AND NOT ARK_BUILD_NETWORK_TESTS AND NOT ARK_BUILD_CONFIG
+    AND NOT ARK_BUILD_DATABASE_TESTS AND NOT ARK_BUILD_DATABASE_BENCHMARKS
+    AND NOT ARK_BUILD_BENCHMARKS AND NOT ARK_BUILD_COMPRESSION_TESTS)
+    set(ark_tool_install "${ARK_INSTALL}")
+    set(ARK_INSTALL OFF)
+    include(src/plugins/kernel/entity_json.cmake)
+    set(ARK_INSTALL "${ark_tool_install}")
+    add_subdirectory(tools/entity_config)
+    return()
+endif()
 
 # protobuf
 if(ARK_BUILD_PROTO)
@@ -315,6 +330,10 @@ endif()
 
 if(ARK_BUILD_DATABASE_TESTS)
     add_subdirectory(tests/database)
+endif()
+
+if(ARK_BUILD_CONFIG_TOOL)
+    add_subdirectory(tools/entity_config)
 endif()
 
 if(ARK_INSTALL)

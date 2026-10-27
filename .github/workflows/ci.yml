@@ -208,7 +208,9 @@ jobs:
     needs: scope
     if: ${{ !cancelled() && !(github.event_name == 'pull_request' && toJSON(github.event.pull_request.draft) == 'true') && (needs.scope.result != 'success' || needs.scope.outputs.applications_check != 'false') }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    # Cold Windows dependency configuration and the full C++ build share this
+    # budget. Individual regression timeouts and required checks are unchanged.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(github.event_name == 'pull_request' && needs.scope.result == 'success' && needs.scope.outputs.validation_stage == 'modules' && '{"include":[{"os":"ubuntu-latest"}]}' || '{"include":[{"os":"ubuntu-latest"},{"os":"macos-latest"},{"os":"windows-latest"}]}') }}
@@ -223,7 +225,7 @@ jobs:
         id: vcpkg-cache
         env:
           VCPKG_CACHE_REVISION: 0699a19d0c6386247ce50d4dedbb8217d484d536
-          VCPKG_CACHE_FEATURES: 'application;boost;compression-tests;etcd-client;guest-room'
+          VCPKG_CACHE_FEATURES: 'application;boost;compression-tests;etcd-client;guest-room;config-tool'
           VCPKG_CACHE_DEFAULT_FEATURES: 'true'
           VCPKG_CACHE_PROFILE: applications
         run: node .github/scripts/vcpkg-cache.mjs
@@ -277,7 +279,7 @@ jobs:
         run: >-
           cmake -S . -B ci-build -G Ninja
           "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
-          "-DVCPKG_MANIFEST_FEATURES=application;boost;compression-tests;etcd-client;guest-room"
+          "-DVCPKG_MANIFEST_FEATURES=application;boost;compression-tests;etcd-client;guest-room;config-tool"
           -DCMAKE_BUILD_TYPE=Debug
           "-DCMAKE_C_COMPILER_LAUNCHER=$env:ARK_COMPILER_LAUNCHER"
           "-DCMAKE_CXX_COMPILER_LAUNCHER=$env:ARK_COMPILER_LAUNCHER"
@@ -293,6 +295,8 @@ jobs:
           -DARK_BUILD_COMPRESSION_TESTS=ON
           -DARK_BUILD_EXAMPLES=ON
           -DARK_BUILD_GUEST_ROOM_EXAMPLE=ON
+          -DARK_BUILD_CONFIG_TOOL=ON
+          -DARK_BUILD_CONFIG_TOOL_TESTS=ON
           -DASIO_STANDALONE=OFF
       - name: Save vcpkg package archives
         if: ${{ success() && steps.vcpkg-cache.outputs.enabled == 'true' && steps.vcpkg-restore.outputs.cache-hit != 'true' }}

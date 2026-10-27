@@ -8,6 +8,8 @@
 | `ARK_BUILD_NETWORK_TESTS` | `OFF` | Build focused C++ network/logging regressions |
 | `ARK_BUILD_TESTS` | `ON` | Build legacy test programs |
 | `ARK_BUILD_CORE_TESTS` | Value of `ARK_BUILD_TESTS` | Build C++20 core and optional Protobuf regressions |
+| `ARK_BUILD_CONFIG_TOOL` | `OFF` | Build the native offline Entity JSON/CSV/XLSX exporter; requires the vcpkg `config-tool` feature or equivalent OpenXLSX/nlohmann packages |
+| `ARK_BUILD_CONFIG_TOOL_TESTS` | Value of `ARK_BUILD_TESTS` | Build native exporter and generated C++ header regressions when the exporter is enabled |
 | `ARK_BUILD_EXAMPLES` | `ON` | Build enabled examples |
 | `ARK_BUILD_HTTP_EXAMPLE_TESTS` | `ON` for core tests with Boost and HTTP/Net/Etcd Client API targets, otherwise `OFF` | Compile and run actual HTTP example DSOs with isolated service doubles; explicit `OFF` is respected |
 | `ARK_BUILD_PLUGIN_MYSQL` | `OFF` | Build the native MySQL coroutine plugin; requires `ARKNET_ENABLE_SSL=ON` |
@@ -28,6 +30,8 @@ Official plugin options use `ARK_BUILD_PLUGIN_<NAME>`. The default runtime selec
 With `ARK_BUILD_EXAMPLES` enabled, the [coroutine task example](../guides/tasks.md) also builds with applications disabled. Enabled application plugin examples still require application builds. HTTP example construction tests can run separately with core tests; see [HTTP examples](http.md#legacy-http-example-construction).
 
 See [MySQL](mysql.md) and [Redis](redis.md) for plugin configuration and coroutine APIs.
+
+The optional [configuration exporter](../guides/tools.md#build-the-native-exporter) has an exporter-only build path with applications, Protobuf, core tests and the runtime configuration reader disabled. It does not configure framework networking or runtime plugins. XLSX uses OpenXLSX 0.5.1; JSON validation reuses `ark::kernel_json`. `check-config-tool` runs its native regressions and CLI checks. Selecting the vcpkg feature supplies packages but does not enable the CMake target.
 
 ## Native database plugins
 

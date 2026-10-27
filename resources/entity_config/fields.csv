@@ -1,0 +1,13 @@
+class,index,name,type,reference,mask,description
+Player,,,class,,,Built-in class retained by legacy applications
+GuestPlayer,,,class,,,Guest room entity and initial configuration
+GuestPlayer,99,id,uint32,,,Configuration row ID
+GuestPlayer,100,name,string,,sync_self|sync_view,Display name
+GuestPlayer,101,x,double,,sync_self|sync_view,Horizontal position
+GuestPlayer,102,y,double,,sync_self|sync_view,Vertical position
+GuestPlayer,103,move_seq,uint32,,,Confirmed movement sequence
+GuestPlayer,104,hp,uint32,,sync_self|sync_view,Current health
+GuestPlayer,105,mp,uint32,,sync_self|sync_view,Current mana
+GuestPlayer,106,hp_max,uint32,,sync_self|sync_view,Maximum health
+GuestPlayer,107,mp_max,uint32,,sync_self|sync_view,Maximum mana
+GuestPlayer,108,action_seq,uint32,,,Confirmed business action sequence

@@ -11,6 +11,13 @@
     "readerwriterqueue"
   ],
   "features": {
+    "config-tool": {
+      "description": "Build the offline native Entity JSON/CSV/XLSX exporter",
+      "dependencies": [
+        "nlohmann-json",
+        "openxlsx"
+      ]
+    },
     "compression-tests": {
       "description": "Build focused compression regression tests",
       "dependencies": [

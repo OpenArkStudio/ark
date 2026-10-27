@@ -28,6 +28,12 @@ unavailable ranges or an unavailable site retain native checks. Manual runs keep
 the full native matrix. Changes to the CI policy itself still require native
 acceptance; this documentation exception does not change that requirement.
 
+The Applications job has a 60-minute aggregate budget for dependency setup,
+compilation and regressions. Cold Windows dependency configuration alone can
+take about 26 minutes. Individual test timeouts and all required checks remain
+unchanged; a cancelled job does not establish acceptance and needs a fresh
+successful merge candidate.
+
 ## CI dependency archive cache
 
 CI restores vcpkg package archives from the runner temporary directory with
