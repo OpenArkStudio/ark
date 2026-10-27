@@ -20,7 +20,8 @@ inline constexpr msg_id_t error = 60004;
 inline constexpr msg_id_t ping = 60005;
 inline constexpr msg_id_t pong = 60006;
 inline constexpr msg_id_t unsupported = 60007; // Internal dispatch key, never emitted.
-inline constexpr std::uint32_t max_body = 4096;
+inline constexpr msg_id_t action = 60008;
+inline constexpr std::uint32_t max_body = 8192;
 using json = nlohmann::json;
 
 class header final : public msg_header
@@ -39,12 +40,12 @@ public:
         id_ = (std::uint16_t(bytes[4]) << 8) | bytes[5];
         length_ = (std::uint32_t(bytes[8]) << 24) | (std::uint32_t(bytes[9]) << 16) | (std::uint32_t(bytes[10]) << 8) |
                   bytes[11];
-        if (std::memcmp(bytes, "ARK1", 4) != 0 || bytes[6] != 0 || bytes[7] != 0 || length_ > max_body)
+        if (std::memcmp(bytes, "ARK2", 4) != 0 || bytes[6] != 0 || bytes[7] != 0 || length_ > max_body)
         {
             // Net rejects this size before allocating a message or invoking callbacks.
             length_ = max_body + 1;
         }
-        if (client_requests_only_ && id_ != join && id_ != move && id_ != ping)
+        if (client_requests_only_ && id_ != join && id_ != move && id_ != ping && id_ != action)
         {
             // Keep unsupported/reserved IDs out of Net's own registration/heartbeat dispatch.
             id_ = unsupported;
@@ -52,7 +53,7 @@ public:
     }
 
     void serialize_to_string(std::string& output) override {
-        output.assign("ARK1", 4);
+        output.assign("ARK2", 4);
         output.push_back(static_cast<char>(id_ >> 8));
         output.push_back(static_cast<char>(id_));
         output.append(2, '\0');
@@ -68,6 +69,10 @@ public:
 
     std::uint32_t message_length() const override {
         return length_;
+    }
+
+    std::uint32_t max_body_size() const override {
+        return max_body;
     }
 
     void set_message_id(msg_id_t value) override {

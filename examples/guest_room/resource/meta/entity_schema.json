@@ -1,0 +1,32 @@
+{
+  "format": "ark.entity-schema",
+  "version": 1,
+  "classes": [
+    {"name": "Player", "fields": [], "tables": [], "containers": []},
+    {
+      "name": "GuestPlayer",
+      "fields": [
+        {"name": "id", "index": 99, "type": "uint32"},
+        {"name": "name", "index": 100, "type": "string", "mask": ["sync_view", "sync_self"]},
+        {"name": "x", "index": 101, "type": "double", "mask": ["sync_view", "sync_self"]},
+        {"name": "y", "index": 102, "type": "double", "mask": ["sync_view", "sync_self"]},
+        {"name": "move_seq", "index": 103, "type": "uint32", "mask": ["sync_view", "sync_self"]},
+        {"name": "hp", "index": 104, "type": "uint32", "mask": ["sync_view", "sync_self"]},
+        {"name": "mp", "index": 105, "type": "uint32", "mask": ["sync_view", "sync_self"]},
+        {"name": "hp_max", "index": 106, "type": "uint32", "mask": ["sync_view", "sync_self"]},
+        {"name": "mp_max", "index": 107, "type": "uint32", "mask": ["sync_view", "sync_self"]},
+        {"name": "action_seq", "index": 108, "type": "uint32", "mask": ["sync_view", "sync_self"]}
+      ],
+      "tables": [],
+      "containers": []
+    }
+  ],
+  "configs": [
+    {
+      "class": "GuestPlayer",
+      "rows": [
+        {"id": 1, "name": "Guest", "x": 80.0, "y": 100.0, "move_seq": 0, "hp": 100, "mp": 100, "hp_max": 100, "mp_max": 100, "action_seq": 0}
+      ]
+    }
+  ]
+}
