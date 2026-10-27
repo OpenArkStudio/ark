@@ -1,5 +1,7 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
 #include <algorithm>
+#include <chrono>
+#include <filesystem>
 #include <fstream>
 #include <limits>
 #include <string>
@@ -128,4 +130,46 @@ TEST_CASE("Entity JSON plain-model validation shares the canonical parser and ca
     CHECK_THROWS_AS(serialize(document), error);
     CHECK_THROWS_AS(parse("{", "bad.json"), error);
     CHECK_THROWS_AS(load("missing-entity-schema.json"), error);
+}
+
+TEST_CASE("Entity JSON loads UTF-8 input paths and retains them in diagnostics") {
+    struct temporary_directory
+    {
+        std::filesystem::path path =
+            std::filesystem::temp_directory_path() /
+            ("ark-json-path-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+
+        ~temporary_directory() {
+            std::error_code ignored;
+            std::filesystem::remove_all(path, ignored);
+        }
+    } directory;
+
+    REQUIRE(std::filesystem::create_directory(directory.path));
+    const auto filename = directory.path / std::filesystem::path(u8"\u5c5e\u6027.json");
+    {
+        std::ofstream output(filename, std::ios::binary);
+        REQUIRE(output.good());
+        output << sample();
+    }
+    const auto encoded = filename.u8string();
+    const std::string utf8(encoded.begin(), encoded.end());
+    const auto document = load(utf8);
+    REQUIRE(document.classes.size() == 3);
+    CHECK(document.classes[1].name == "GuestPlayer");
+    {
+        std::ofstream output(filename, std::ios::binary | std::ios::trunc);
+        REQUIRE(output.good());
+        output << "{";
+    }
+    try
+    {
+        static_cast<void>(load(utf8));
+        FAIL("invalid JSON at the UTF-8 path was accepted");
+    }
+    catch (const error& error)
+    {
+        CHECK(error.source() == utf8);
+        CHECK(std::string(error.what()).find(utf8) != std::string::npos);
+    }
 }
