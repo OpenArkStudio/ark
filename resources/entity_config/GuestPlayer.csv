@@ -1,0 +1,2 @@
+id,name,x,y,move_seq,hp,mp,hp_max,mp_max,action_seq
+1,Guest,80,100,0,100,100,100,100,0

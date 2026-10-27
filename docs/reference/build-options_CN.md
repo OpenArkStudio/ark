@@ -8,6 +8,8 @@
 | `ARK_BUILD_NETWORK_TESTS` | `OFF` | 构建独立 C++ 网络与日志回归测试 |
 | `ARK_BUILD_TESTS` | `ON` | 构建原有测试程序 |
 | `ARK_BUILD_CORE_TESTS` | 与 `ARK_BUILD_TESTS` 一致 | 构建 C++20 核心与可选的 Protobuf 回归测试 |
+| `ARK_BUILD_CONFIG_TOOL` | `OFF` | 构建原生 Entity JSON/CSV/XLSX 离线导出器；需要 vcpkg `config-tool` feature 或对应的 OpenXLSX/nlohmann 软件包 |
+| `ARK_BUILD_CONFIG_TOOL_TESTS` | 与 `ARK_BUILD_TESTS` 一致 | 导出器启用时构建原生导出与生成 C++ 头文件回归 |
 | `ARK_BUILD_EXAMPLES` | `ON` | 构建选中的示例 |
 | `ARK_BUILD_HTTP_EXAMPLE_TESTS` | 核心测试使用 Boost 且具备 HTTP／Net／Etcd Client API target 时为 `ON`，否则为 `OFF` | 通过独立服务替身编译并运行真实 HTTP 示例动态库；保留显式 `OFF` |
 | `ARK_BUILD_PLUGIN_MYSQL` | `OFF` | 构建原生 MySQL 协程插件，要求 `ARKNET_ENABLE_SSL=ON` |
@@ -28,6 +30,8 @@
 开启 `ARK_BUILD_EXAMPLES` 时，[协程任务示例](../guides/tasks_CN.md)可以在关闭应用的情况下独立构建；默认启用的应用插件示例仍要求开启应用构建。HTTP 示例创建测试可以随核心测试单独运行，详见 [HTTP 示例](http_CN.md#旧-http-示例的类型化创建)。
 
 数据库插件的配置与接口见 [MySQL](mysql_CN.md) 和 [Redis](redis_CN.md)。
+
+可选的[配置导出器](../guides/tools_CN.md#构建原生导出器)支持关闭应用、Protobuf、核心测试与运行时配置读取器后单独构建，不配置框架网络或运行时插件。XLSX 使用 OpenXLSX 0.5.1，JSON 校验复用 `ark::kernel_json`。`check-config-tool` 执行原生回归与 CLI 检查。选择 vcpkg feature 只提供软件包，不会启用 CMake 目标。
 
 ## 原生数据库插件
 
