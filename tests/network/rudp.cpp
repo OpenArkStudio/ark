@@ -14,6 +14,7 @@
 
 #include "ark/net/rudp_client.hpp"
 #include "ark/net/rudp_server.hpp"
+#include "body_limit_header.hpp"
 
 namespace {
 
@@ -156,8 +157,9 @@ public:
 };
 } // namespace
 
-TEST_CASE_TEMPLATE(
-    "RUDP preserves ARK framing and dispatches on Update", header_type, ark::s_msg_header, ark::ss_msg_header) {
+TEST_CASE_TEMPLATE("RUDP preserves ARK framing and dispatches on Update", header_type, ark::s_msg_header,
+    ark::ss_msg_header, ark::test::large_body_header<ark::s_msg_header>,
+    ark::test::large_body_header<ark::ss_msg_header>) {
     rudp_receiver client_receiver;
     rudp_receiver server_receiver;
     auto client = rudp_client(client_receiver);
@@ -191,7 +193,7 @@ TEST_CASE_TEMPLATE(
             ++rejected_echoes;
         }
     };
-    const std::vector<std::size_t> sizes{0, 1, 23, 511, 1024, 4096};
+    const std::vector<std::size_t> sizes{0, 1, 23, 511, 1024, header->max_body_size()};
     for (std::size_t index = 0; index < sizes.size(); ++index)
     {
         header_type request(*header);
@@ -227,12 +229,15 @@ TEST_CASE_TEMPLATE(
 
     header_type broadcast(*header);
     broadcast.set_message_id(99);
-    const auto body = rudp_payload(4096);
+    const auto body = rudp_payload(header->max_body_size());
     broadcast.set_message_length(static_cast<std::uint32_t>(body.size()));
     server->broadcast_msg(&broadcast, body.data());
     REQUIRE(await_rudp([&] { return client_receiver.messages().size() == sizes.size() + 1; }, update));
     CHECK(client_receiver.messages().back().id == 99);
     CHECK(client_receiver.messages().back().body == body);
+    broadcast.set_message_length(header->max_body_size() + 1);
+    CHECK_FALSE(client->send_msg(&broadcast, body.data(), client_session));
+    CHECK_FALSE(server->send_msg(&broadcast, body.data(), server_session));
     server->close_session(server_session);
     CHECK(server_receiver.event_count(ark::net_event_type::disconnect) == 0);
     REQUIRE(await_rudp(

@@ -20,6 +20,9 @@
 
 #pragma once
 
+#include <cstddef>
+#include <limits>
+
 #include "ark/net/net_define.hpp"
 #include "ark/noncopyable.hpp"
 #include "ark/platform.hpp"
@@ -47,6 +50,15 @@ public:
 
     virtual msg_id_t message_id() const = 0;
     virtual uint32_t message_length() const = 0;
+
+    // Local protocol policy; never negotiated by a peer's wire header.
+    virtual uint32_t max_body_size() const {
+        return ark_msg_max_length;
+    }
+
+    bool accepts_body_size(std::size_t length) const {
+        return length <= max_body_size() && length <= std::numeric_limits<std::size_t>::max() - header_length();
+    }
 
     virtual void set_message_id(msg_id_t) = 0;
     virtual void set_message_length(uint32_t) = 0;

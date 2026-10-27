@@ -245,19 +245,20 @@ void rudp_server::close_session(udp_session_ptr& session) {
 }
 
 bool rudp_server::send_msg(msg_header* head, const char* msg_data, conv_id_t session_id) {
-    if (!head || !msg_data || head->message_length() > ark_msg_max_length)
+    if (!head || !msg_data || !head->accepts_body_size(head->message_length()))
     {
         return false;
     }
 
     std::string buffer;
     head->serialize_to_string(buffer);
-    if (buffer.empty())
+    const auto message_length = head->message_length();
+    if (buffer.empty() || !head->accepts_body_size(message_length))
     {
         return false;
     }
 
-    buffer.append(msg_data, head->message_length());
+    buffer.append(msg_data, message_length);
     return send_msg(buffer.data(), buffer.length(), session_id);
 }
 
@@ -285,19 +286,20 @@ bool rudp_server::send_msg(const char* msg, size_t msg_len, conv_id_t session_id
 }
 
 void rudp_server::broadcast_msg(msg_header* head, const char* msg_data) {
-    if (!head || !msg_data || head->message_length() > ark_msg_max_length)
+    if (!head || !msg_data || !head->accepts_body_size(head->message_length()))
     {
         return;
     }
 
     std::string buffer;
     head->serialize_to_string(buffer);
-    if (buffer.empty())
+    const auto message_length = head->message_length();
+    if (buffer.empty() || !head->accepts_body_size(message_length))
     {
         return;
     }
 
-    buffer.append(msg_data, head->message_length());
+    buffer.append(msg_data, message_length);
     send_msg_to_all(buffer.data(), buffer.length());
 }
 
