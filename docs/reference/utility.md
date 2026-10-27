@@ -64,6 +64,13 @@ Public headers now have their single source in `src/plugins/utility/`. CMake cop
 
 Nonempty patterns retain their existing behavior: split appends to the output vector, preserves leading/interior empty elements, drops a trailing empty element and leaves the remaining suffix once the split limit is reached. The limit is compared with the total output size, so use an empty output vector to count only newly produced elements. Replacement applies nonoverlapping matches from left to right; limit `0` means unlimited. C-string arguments must be valid, null-terminated strings; string-delimiter overloads retain C-string matching semantics. This change does not add general binary substring matching.
 
+
+## Core UID bit allocation
+
+`<ark/uid_generator.hpp>` retains the default signed 64-bit UID layout: one reserved sign bit, 29 timestamp bits, 24 worker bits and 10 sequence bits. Valid field values produce the same IDs. `bits_allocator` construction and `alloc()` support C++20 constant evaluation.
+
+Widths must be nonnegative and total 63 payload bits; invalid layouts throw `std::invalid_argument` before any shift, in both Debug and Release. Each allocation field must fit its own width and be nonnegative; otherwise `alloc()` throws `std::out_of_range`, preventing worker or sequence bits from spilling into an adjacent field. Zero-width fields accept only zero. Runtime generation still uses the existing epoch, clock checks and sequence rollover; this does not change the UID format or provide cross-process worker-ID coordination.
+
 ## Core random helper
 
 `<ark/random/random_generator.hpp>` provides `ark::random_generator` through `ark::core`; it does not require loading the Utility plugin. The signed `random(int, int)` overload accepts any pair of `int` endpoints, including `INT_MIN` and `INT_MAX`, without overflowing the range calculation. Different endpoints produce a value in `[lower, upper)` after ordering the endpoints. Equal endpoints return that value without advancing the generator.

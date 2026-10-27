@@ -19,6 +19,8 @@ cmake --build core-build --target check-core
 
 C++20 语言回归验证六种精确整数类型分类、限定符与引用处理、常量值、异常契约和固定 UID 位分配结果。独立 array-map 头文件检查还会拒绝重新引入旧语言兼容宏。
 
+UID 回归另行验证编译期分配、非法及极端位宽、字段溢出和 63/0/0 的三种位宽排列。执行 `ark_core_tests --test-case="UID*"` 可单独运行。非法布局抛出 `std::invalid_argument`，非法字段值抛出 `std::out_of_range`，不受断言开关影响。参见 [UID 位分配](../../docs/reference/utility_CN.md#core-uid-位分配)。
+
 随机数回归将公开头文件放在首个包含位置，并重复包含两次。测试保留固定的原始、有符号及无符号随机序列、最终种子和生成次数，并验证 `INT_MIN`／`INT_MAX` 极值、异号、相邻、逆序及相等端点的有符号半开区间。端点相同时直接返回该值，不消耗随机数。这些用例属于 `ark_core_tests` 和 `check-core`；使用 `-fsanitize=undefined -fno-sanitize-recover=all` 构建时，还会通过 UndefinedBehaviorSanitizer 检查范围运算。参见[随机数工具行为](../../docs/reference/utility_CN.md#core-随机数工具)。
 
 
