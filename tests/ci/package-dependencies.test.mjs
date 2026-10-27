@@ -40,16 +40,46 @@ function applicationFeatures(workflow) {
   const configure = applications.match(/-DVCPKG_MANIFEST_FEATURES=([^"\s]+)/)[1].split(';').sort();
   assert.deepEqual(configure, cache, 'cache metadata must describe the actual package features');
   assert.ok(configure.includes('etcd-client'), 'default etcd plugin requires its package feature');
+  assert.ok(configure.includes('guest-room'), 'guest-room example requires its package feature');
 }
 
-test('CI configures the default etcd package feature and caches exactly those features', () => {
+test('CI configures the etcd and guest-room package features and caches exactly those features', () => {
   const workflow = read('.github/workflows/ci.yml');
   applicationFeatures(workflow);
-  assert.throws(() => applicationFeatures(workflow.replace('VCPKG_CACHE_FEATURES: \'application;boost;compression-tests;etcd-client\'',
+  assert.throws(() => applicationFeatures(workflow.replace('VCPKG_CACHE_FEATURES: \'application;boost;compression-tests;etcd-client;guest-room\'',
     'VCPKG_CACHE_FEATURES: \'application;boost\'')), /cache metadata/);
-  assert.throws(() => applicationFeatures(workflow.replaceAll('application;boost;compression-tests;etcd-client', 'application;boost')), /requires its package feature/);
+  assert.throws(() => applicationFeatures(workflow.replaceAll('application;boost;compression-tests;etcd-client;guest-room', 'application;boost')), /requires its package feature/);
+  assert.throws(() => applicationFeatures(workflow.replaceAll(';guest-room', '')), /guest-room example requires its package feature/);
   assert.doesNotMatch(workflow, /git submodule|Initialize pinned dependencies/);
   assert.equal(existsSync(new URL('../../.gitmodules', import.meta.url)), false);
+});
+
+function guestRoomApplications(workflow) {
+  const applications = workflow.split('  applications:\n')[1].split('\n  database:')[0];
+  assert.match(applications, /^          -DARK_BUILD_GUEST_ROOM_EXAMPLE=ON$/m,
+    'the shared Applications configure must enable guest-room on every selected platform');
+  const build = applications.indexOf('run: cmake --build ci-build --parallel 2');
+  const check = applications.indexOf('run: cmake --build ci-build --target check-core');
+  assert.ok(build >= 0 && check > build, 'build all runtime plugins before running check-core');
+}
+
+test('Applications builds guest-room on every platform and runs platform-appropriate checks through check-core', () => {
+  const workflow = read('.github/workflows/ci.yml');
+  guestRoomApplications(workflow);
+  assert.throws(() => guestRoomApplications(workflow.replace('-DARK_BUILD_GUEST_ROOM_EXAMPLE=ON',
+    '-DARK_BUILD_GUEST_ROOM_EXAMPLE=OFF')), /must enable guest-room/);
+  const examples = read('examples/CMakeLists.txt');
+  assert.match(examples, /option\(ARK_BUILD_GUEST_ROOM_EXAMPLE[^\n]* OFF\)/);
+  assert.match(examples, /if\(ARK_BUILD_GUEST_ROOM_EXAMPLE\)\s+add_subdirectory\(guest_room\)/);
+  assert.match(examples, /add_library\(\$\{project_name\} SHARED \$\{PLUGIN_SRC\}\)/);
+  const checks = read('examples/guest_room/CMakeLists.txt');
+  const common = checks.split('if(UNIX)')[0];
+  assert.match(common, /BUILD_PLUGIN_MACRO\("guest_room_plugin"\)/);
+  assert.match(common, /add_executable\(ark_guest_room_codec_tests/);
+  assert.doesNotMatch(common, /EXCLUDE_FROM_ALL|if\(WIN32\)/);
+  assert.match(checks, /if\(UNIX\)[\s\S]*add_executable\(ark_guest_room_server_tests[\s\S]*add_custom_target\(check-guest-room DEPENDS check-guest-room-codec check-guest-room-server\)\s+else\(\)\s+add_custom_target\(check-guest-room DEPENDS check-guest-room-codec\)/);
+  assert.match(read('tests/core/CMakeLists.txt'),
+    /if\(TARGET check-guest-room\)\s+add_dependencies\(check-core check-guest-room\)/);
 });
 
 test('compression checks are opt-in and Applications CI runs all three codecs through check-core', () => {

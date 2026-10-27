@@ -24,7 +24,7 @@ cd /absolute/run/guest_room
 ./bin/app --busid=1.1.31.1 --name=guest_room --app_conf=conf/guest_room.app.toml --log_conf=conf/log.conf --shutdown_timeout_ms=5000
 ```
 
-Use `app.exe` / `app_d.exe` on Windows. Connect the C# Godot demo to the same host/port; send movement at about 10 Hz. The client must join again after reconnecting, clear old frame/state buffers and accept a new player ID. Detailed wire fields and errors are in the [protocol](protocol.md); [wire-vectors.json](wire-vectors.json) mirrors the C# test fixture.
+Use `app.exe` / `app_d.exe` on Windows. Connect the official [C# Godot client](https://github.com/OpenArkStudio/ark-client-godot) to the same host/port; send movement at about 10 Hz. The client must join again after reconnecting, clear old frame/state buffers and accept a new player ID. Detailed wire fields and errors are in the [protocol](protocol.md); [wire-vectors.json](wire-vectors.json) mirrors the C# test fixture.
 
 ## Native verification
 
@@ -33,5 +33,7 @@ cmake --build app-build --target check-guest-room --parallel 1
 ```
 
 `check-guest-room-codec` checks the shared golden frames, every single split point, coalesced frames, the 4096/4097-byte boundary, invalid magic/flags, fresh parser state and numeric/name bounds using the real Net session parser. On POSIX systems, `check-guest-room-server` launches the real `app`, loads the actual plugin DSOs and exercises two native TCP peers: join, both directions of authoritative movement, stale and malformed requests, bounded errors, disconnect, reduced roster, fresh rejoin, invalid-frame close and normal process shutdown. It stages an isolated runtime and uses local port 19191; run one instance at a time. The process test uses POSIX child-process control and is not a Windows runtime acceptance check.
+
+The Applications workflow enables this optional example on its existing platform matrix. Its default build includes the plugin on Linux, macOS and Windows; `check-core` includes the codec checks everywhere and the real launcher/two-peer process checks on POSIX systems. Workflow configuration is separate from the result of an individual hosted run.
 
 The application bounds frames to 4096 bytes, connections to 32, joined players to 16, business callbacks to 64 per tick, per-peer messages to 32 per second and its own pending output to eight frames per peer. Exceeding work/output limits closes the affected peer. JSON nesting is limited to eight levels. The sample retains the underlying transport's send-queue limit and closes peers whose sends are rejected. These are demonstration limits; no comprehensive hostile-client hardening, production-capacity, public deployment or Godot visual acceptance is implied by native tests.
