@@ -6,7 +6,7 @@
 
 ## 现有基础与缺口
 
-以下源码核对基于 `4e815386259d0576aec6bca53ad056c5863cdf84`，属于源码事实，不代表传输验收结果。
+以下源码核对基于 `c1c407a14eae428f7646e10aa2ae205802a75ead`，属于源码事实，不代表传输验收结果。
 
 | 范围 | 现有行为 | 本提案的边界 |
 | --- | --- | --- |
@@ -18,9 +18,9 @@
 | 旧交付路径 | `sync_view` 遍历同一地图实例的 `Player`；`sync_self` 进入 `send_to_self()` | `send_to_self()` 当前直接返回成功，没有发送消息；队伍、公会、地图掩码不构成交付策略 |
 | 示例 | `guest_room::broadcast()` 读取 Entity 字段，显式构造完整房间 JSON 快照并入队 | 示例快照属于应用代码，不是通用脏字段复制 |
 
-对应实现：[节点管理器](https://github.com/OpenArkStudio/ark/blob/4e815386259d0576aec6bca53ad056c5863cdf84/src/plugins/kernel/node_manager.cpp)、[表变更](https://github.com/OpenArkStudio/ark/blob/4e815386259d0576aec6bca53ad056c5863cdf84/src/plugins/kernel/table_impl.cpp)、[容器变更](https://github.com/OpenArkStudio/ark/blob/4e815386259d0576aec6bca53ad056c5863cdf84/src/plugins/kernel/container_impl.cpp)、[回调收集](https://github.com/OpenArkStudio/ark/blob/4e815386259d0576aec6bca53ad056c5863cdf84/src/plugins/kernel/class_call_back_manager.cpp)、[Kernel 生命周期、转换与交付](https://github.com/OpenArkStudio/ark/blob/4e815386259d0576aec6bca53ad056c5863cdf84/src/plugins/kernel/kernel_module_impl.cpp)、[访客房间](https://github.com/OpenArkStudio/ark/blob/4e815386259d0576aec6bca53ad056c5863cdf84/examples/guest_room/guest_room_module.cpp)。
+对应实现：[节点管理器](https://github.com/OpenArkStudio/ark/blob/c1c407a14eae428f7646e10aa2ae205802a75ead/src/plugins/kernel/node_manager.cpp)、[表变更](https://github.com/OpenArkStudio/ark/blob/c1c407a14eae428f7646e10aa2ae205802a75ead/src/plugins/kernel/table_impl.cpp)、[容器变更](https://github.com/OpenArkStudio/ark/blob/c1c407a14eae428f7646e10aa2ae205802a75ead/src/plugins/kernel/container_impl.cpp)、[回调收集](https://github.com/OpenArkStudio/ark/blob/c1c407a14eae428f7646e10aa2ae205802a75ead/src/plugins/kernel/class_call_back_manager.cpp)、[Kernel 生命周期、转换与交付](https://github.com/OpenArkStudio/ark/blob/c1c407a14eae428f7646e10aa2ae205802a75ead/src/plugins/kernel/kernel_module_impl.cpp)、[访客房间](https://github.com/OpenArkStudio/ark/blob/c1c407a14eae428f7646e10aa2ae205802a75ead/examples/guest_room/guest_room_module.cpp)。
 
-复用现有路径前需要补齐正确性：仅含容器变更的延迟批次会提前返回；延迟表交换、即时表清空没有完整处理。回调注册也缺少通用的公开注销接口。可复用收集器必须明确所有权、关闭流程与回调重入规则，不能将现有借用指针集合直接作为客户端契约。
+仅含容器变更的延迟批次会进入序列化与掩码分发回调，这不代表网络投递已完成。复用其余路径前仍需补齐正确性：延迟表交换、即时表清空没有完整处理。回调注册也缺少通用的公开注销接口。可复用收集器必须明确所有权、关闭流程与回调重入规则，不能将现有借用指针集合直接作为客户端契约。
 
 ## 建议的首版范围
 
