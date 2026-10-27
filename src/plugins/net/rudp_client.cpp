@@ -204,19 +204,20 @@ void rudp_client::shutdown() {
 }
 
 bool rudp_client::send_msg(msg_header* head, const char* msg_data, conv_id_t session_id) {
-    if (!head || !msg_data || head->message_length() > ark_msg_max_length || !client_)
+    if (!head || !msg_data || !head->accepts_body_size(head->message_length()) || !client_)
     {
         return false;
     }
 
     std::string buffer;
     head->serialize_to_string(buffer);
-    if (buffer.empty())
+    const auto message_length = head->message_length();
+    if (buffer.empty() || !head->accepts_body_size(message_length))
     {
         return false;
     }
 
-    buffer.append(msg_data, head->message_length());
+    buffer.append(msg_data, message_length);
     scope_r_lock guard(rw_lock_);
     const auto session = session_;
     if (!session || session->need_remove() || (session_id != 0 && session_id != session->get_session_id()))

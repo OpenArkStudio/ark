@@ -54,6 +54,20 @@ future results, owner-update callback dispatch and shutdown behavior are unchang
 
 ## Server and client service examples
 
+`msg_header::max_body_size() const` defines the locally configured protocol's
+maximum body length. The default remains 4096 bytes for native CS/SS headers.
+Custom headers can override it and must preserve that policy in `create()` and
+`clone()`. Receive parsing checks the configured prototype before message
+allocation; a decoded wire header cannot negotiate a larger limit. TCP,
+WebSocket and RUDP sends and broadcasts check the supplied header's limit and
+guard total-size arithmetic. Receive-buffer initial capacity remains independent
+of this message limit.
+
+**Upgrade:** the additional virtual method changes the `msg_header` vtable ABI.
+Rebuild Net, protocol-header implementations and every consumer/plugin together;
+do not mix old and new binaries. Native CS/SS wire layouts and their 4096-byte
+default are unchanged. Matching custom protocol limits remain application-owned.
+
 The process must load Bus, Utility and Net and provide its Bus configuration.
 Start listeners explicitly after startup; loading the plugin does not create
 them. These functions use the public manager interface for both roles:
