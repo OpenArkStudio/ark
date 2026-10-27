@@ -63,6 +63,12 @@ const tree: Entry[] = [
         "数据驱动"
       ],
       [
+        "concepts/entity-sync",
+        "Entity synchronization proposal",
+        "Entity 同步提案",
+        { "en": "Draft", "zh": "草案", "variant": "warning" }
+      ],
+      [
         "concepts/server-architecture",
         "Server architecture",
         "服务器架构"
