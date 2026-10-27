@@ -1,11 +1,14 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
 
+#include <limits>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "doctest.h"
 
 #include "ark/net/net_session.hpp"
+#include "body_limit_header.hpp"
 
 namespace {
 
@@ -135,4 +138,74 @@ TEST_CASE("Receive buffer capacity is configurable independently of the message 
         ark::net_msg::release(message);
         CHECK(session.get_buffer_capacity() >= capacity);
     }
+}
+
+TEST_CASE("Framing uses local header body limits and retains native CS and SS bounds") {
+    for (const auto header :
+        std::vector<std::shared_ptr<ark::msg_header>>{std::make_shared<ark::s_msg_header>(),
+            std::make_shared<ark::ss_msg_header>(), std::make_shared<ark::test::large_body_header<ark::s_msg_header>>(),
+            std::make_shared<ark::test::large_body_header<ark::ss_msg_header>>()})
+    {
+        const auto limit = header->max_body_size();
+        CHECK((limit == 4096 || limit == 8192));
+        std::unique_ptr<ark::msg_header> created(header->create());
+        std::unique_ptr<ark::msg_header> cloned(header->clone());
+        CHECK(created->max_body_size() == limit);
+        CHECK(cloned->max_body_size() == limit);
+        for (const auto size : {limit, limit + 1})
+        {
+            INFO("limit=", limit, ", length=", size);
+            header->set_message_id(7);
+            header->set_message_length(size);
+            std::string bytes;
+            header->serialize_to_string(bytes);
+            if (size == limit)
+            {
+                bytes.append(size, 'x');
+            }
+            ark::tcp_client_session session(header, 1, nullptr, 16);
+            session.add_buffer(bytes);
+            CHECK(session.parse_buffer_to_msg() == (size == limit));
+            ark::net_msg* message = nullptr;
+            if (size == limit)
+            {
+                REQUIRE(session.pop_net_msg(message));
+                CHECK(message->get_msg_length() == size);
+                ark::net_msg::release(message);
+            }
+            CHECK_FALSE(session.pop_net_msg(message));
+        }
+        CHECK_FALSE(header->accepts_body_size(std::numeric_limits<std::size_t>::max()));
+    }
+}
+
+TEST_CASE("A decoded wire header cannot raise the configured receive limit") {
+    class wire_limit_header final : public ark::s_msg_header
+    {
+    public:
+        std::uint32_t max_body_size() const override {
+            return limit;
+        }
+
+        void parse_from_array(const void* source) override {
+            ark::s_msg_header::parse_from_array(source);
+            limit = std::numeric_limits<std::uint32_t>::max();
+        }
+
+        ark::msg_header* create() const override {
+            return new wire_limit_header;
+        }
+
+        std::uint32_t limit{4096};
+    };
+
+    ark::s_msg_header source;
+    source.set_message_length(4097);
+    std::string bytes;
+    source.serialize_to_string(bytes);
+    ark::tcp_client_session session(std::make_shared<wire_limit_header>(), 1);
+    session.add_buffer(bytes);
+    CHECK_FALSE(session.parse_buffer_to_msg());
+    ark::net_msg* message = nullptr;
+    CHECK_FALSE(session.pop_net_msg(message));
 }
