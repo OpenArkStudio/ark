@@ -2,14 +2,17 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
 
 #include "../network/doctest.h"
 
 #include "ark/kernel/class_meta_module_impl.hpp"
 #include "ark/kernel/config_module_impl.hpp"
+#include "ark/kernel/data_impl.hpp"
 #include "ark/kernel/kernel_module_impl.hpp"
 #include "ark/kernel/map_module_impl.hpp"
+#include "ark/kernel/node_impl.hpp"
 
 namespace {
 
@@ -148,4 +151,67 @@ TEST_CASE("kernel and config initialize before schema regardless of consumer ord
     SUBCASE("metadata paths with a legacy leading separator") {
         verify_initialization_orders(true);
     }
+}
+
+TEST_CASE("sync callback registration replaces the prior owner for every singleton mask handler") {
+    struct observations
+    {
+        unsigned nodes{}, tables{}, containers{}, delayed{};
+    };
+
+    const auto register_owner = [](std::shared_ptr<observations> owner) {
+        using callbacks = ark::class_call_back_manager;
+        const auto mask = ark::data_mask::pf_sync_view;
+        callbacks::add_node_sync_call_back(
+            mask, [owner](const ark::guid_t&, std::uint32_t, ark::data_mask, const ark::data&) {
+                ++owner->nodes;
+                return 0;
+            });
+        callbacks::add_table_sync_call_back(
+            mask, [owner](const ark::guid_t&, const ark::table_event_data&, ark::data_mask, const ark::data&) {
+                ++owner->tables;
+                return 0;
+            });
+        callbacks::add_container_sync_call_back(mask, [owner](const ark::guid_t&, std::uint32_t, ark::data_mask,
+                                                          ark::container_op_type, std::uint32_t, std::uint32_t) {
+            ++owner->containers;
+            return 0;
+        });
+        callbacks::add_delay_sync_call_back(
+            mask, [owner](const ark::guid_t&, ark::data_mask, const ark::delay_sync_data&) {
+                ++owner->delayed;
+                return 0;
+            });
+    };
+    auto first = std::make_shared<observations>();
+    const std::weak_ptr<observations> retired = first;
+    register_owner(first);
+    first.reset();
+    const auto current = std::make_shared<observations>();
+    register_owner(current);
+    CHECK(retired.expired());
+
+    ark::class_call_back_manager callbacks;
+    auto metadata = std::make_shared<ark::node_meta>("level", 1);
+    metadata->set_type(ark::data_type::dt_int32);
+    ark::mask_type immediate;
+    immediate.set(static_cast<std::size_t>(ark::data_mask::pf_sync_view));
+    immediate.set(static_cast<std::size_t>(ark::data_mask::pf_real_time));
+    metadata->set_mask(immediate);
+    ark::node_int32 node(metadata);
+    ark::data_impl before(ark::data_type::dt_int32, 0);
+    ark::data_impl after(ark::data_type::dt_int32, 1);
+    CHECK(callbacks.on_node_call_back(1, &node, before, after));
+    ark::table_event_data event;
+    event.table_index = 2;
+    CHECK(callbacks.on_table_call_back(1, immediate, &node, event, before, after));
+    CHECK(callbacks.on_container_call_back(1, 3, immediate, ark::container_op_type::op_place, 1, 0));
+    immediate.reset(static_cast<std::size_t>(ark::data_mask::pf_real_time));
+    metadata->set_mask(immediate);
+    CHECK(callbacks.on_node_call_back(1, &node, before, after));
+    CHECK(ark::class_call_back_manager::on_delay_sync());
+    CHECK(current->nodes == 1);
+    CHECK(current->tables == 1);
+    CHECK(current->containers == 1);
+    CHECK(current->delayed == 1);
 }
