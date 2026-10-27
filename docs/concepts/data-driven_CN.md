@@ -54,3 +54,5 @@ std::shared_ptr<ark::entity> spawn_player(
 在创建相关实体前注册回调，并保持回调所属对象存活。当前回调注册接口没有通用的公开注销方法。实体或行销毁后不再使用原指针，也不要从无关 IO 工作线程直接修改共享实体状态。
 
 标记描述持久化或同步意图，但声明 `save`、`sync_self`、`sync_view` 不会自动配置数据库、选择接收者或保证交付。何时序列化、持久化、同步与恢复，仍由应用决定。[Kernel 参考](../reference/kernel_CN.md)说明回调与数据转换 API，[应用架构](application-architecture_CN.md)说明模块所有权。
+
+[Entity 增量同步提案](entity-sync_CN.md)说明现有收集机制，以及授权基线、脏字段增量与恢复的分阶段契约。它是设计提案，不是现有自动复制 API。

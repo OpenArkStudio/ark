@@ -54,3 +54,5 @@ Defaults and arguments are established before the first creation event, `entity_
 Register handlers before creating the relevant entities, and keep callback owners alive. Callback registration does not currently provide a general public unregister counterpart. Avoid holding pointers across entity/row destruction or modifying shared entity state directly from unrelated IO workers.
 
 Masks describe persistence/synchronization intent, but declaring `save`, `sync_self` or `sync_view` does not configure a database, select recipients or guarantee delivery. The application still decides when to serialize, persist, synchronize and recover state. The [Kernel reference](../reference/kernel.md) documents callbacks and conversion APIs; [application architecture](application-architecture.md) explains module ownership.
+
+The [Entity incremental synchronization proposal](entity-sync.md) describes the existing collection machinery and a staged contract for authorized baselines, dirty-field deltas and recovery. It is a design proposal, not an available automatic replication API.
