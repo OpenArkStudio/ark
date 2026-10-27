@@ -30,9 +30,15 @@ std::unique_ptr<simulate_net_module> detail::make_simulate_net_module() {
 //method realization
 
 bool simulate_net_module_impl::init() {
-    simulate_module_ = find_module<simulate_module>();
-    bus_module_ = find_module<bus_module>();
-    net_service_manager_module_ = find_module<net_service_manager_module>();
+    simulate_module_ = get_plugin_manager()->try_find_module<simulate_module>();
+    bus_module_ = get_plugin_manager()->try_find_module<bus_module>();
+    net_service_manager_module_ = get_plugin_manager()->try_find_module<net_service_manager_module>();
+
+    if (bus_module_ == nullptr || net_service_manager_module_ == nullptr || simulate_module_ == nullptr)
+    {
+        ARK_LOG_ERROR("simulate network startup requires Bus, Net and Simulate modules");
+        return false;
+    }
 
     simulate_module_->register_trigger_call_back(this, &simulate_net_module_impl::trigger_call_back);
 
@@ -40,36 +46,22 @@ bool simulate_net_module_impl::init() {
 }
 
 bool simulate_net_module_impl::post_init() {
-    start_server();
-
-    return true;
+    return start_server();
 }
 
-int simulate_net_module_impl::start_server() {
+bool simulate_net_module_impl::start_server() {
     auto ret = net_service_manager_module_->create_server();
-    //ret.Then([=](const std::pair<bool, std::string>& resp) {
-    //    if (!resp.first)
-    //    {
-    //        ARK_LOG_ERROR(
-    //            "Cannot start server net, busid = {}, error = {}", m_pBusModule->GetSelfBusName(), resp.second);
-    //        ARK_ASSERT_NO_EFFECT(0);
-    //        exit(0);
-    //    }
+    if (!ret)
+    {
+        ARK_LOG_ERROR("Cannot start server net, busid = {}", bus_module_->get_self_bus_name());
+        return false;
+    }
 
-    //    m_pNetServerService = m_pNetServiceManagerModule->GetSelfNetServer();
-    //    if (m_pNetServerService == nullptr)
-    //    {
-    //        ARK_LOG_ERROR("Cannot find server net, busid = {}", m_pBusModule->GetSelfBusName());
-    //        exit(0);
-    //    }
-
-    //    m_pNetServerService->RegMsgCallback(0, this, &AFCSimulateNetModule::OnRecvMsg);
-    //});
     net_server_service_ = net_service_manager_module_->get_inter_net_server();
     if (net_server_service_ == nullptr)
     {
         ARK_LOG_ERROR("Cannot find server net, busid = {}", bus_module_->get_self_bus_name());
-        exit(0);
+        return false;
     }
 
     using namespace simulate;
@@ -96,7 +88,7 @@ int simulate_net_module_impl::start_server() {
     net_server_service_->reg_msg_callback(
         (int)simulate_msg_type::simulate_msg_req_ray_cast, this, &simulate_net_module_impl::on_recv_msg);
 
-    return 0;
+    return true;
 }
 
 void simulate_net_module_impl::on_recv_msg(const net_msg* msg, conv_id_t session_id) {

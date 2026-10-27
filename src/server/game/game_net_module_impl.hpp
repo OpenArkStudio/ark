@@ -84,7 +84,7 @@ public:
     bool process_enter_group(const guid_t& self, int scene_id, int new_group_id);
 
 protected:
-    int start_server();
+    bool start_server();
     //int StartClient();
 
     int common_class_destory_event(const guid_t& self);

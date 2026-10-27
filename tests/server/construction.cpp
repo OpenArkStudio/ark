@@ -9,6 +9,7 @@
 #include <ark/module_base.hpp>
 #include <ark/plugin_base.hpp>
 #include "server_test_types.hpp"
+#include "startup_checks.hpp"
 
 static_assert(std::derived_from<server_plugin, ark::plugin_base<server_plugin>>);
 static_assert(std::derived_from<server_implementation, ark::module_base<server_module>>);
@@ -67,5 +68,8 @@ int main(int argc, char* argv[]) {
     owner.install();
     owner.uninstall();
     require(manager.update(1), "Uninstall left invalid update bookkeeping");
-    std::cout << argv[1] << ": actual factory, interface key, disabled update, duplicate rejection, reinstall passed\n";
+    check_role_startup(std::string(argv[1]) == "ark_game_plugin");
+    std::cout << argv[1]
+              << ": actual factory, interface key, disabled update, duplicate rejection, reinstall and startup failure "
+                 "propagation passed\n";
 }

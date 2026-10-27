@@ -97,7 +97,14 @@ std::string read_log(const std::filesystem::path& path) {
 int main(int argc, char** argv) {
     try
     {
-        require(argc == 5, "Expected launcher, plugin directory, source root and fresh runtime directory");
+        require(argc == 5 || argc == 7,
+            "Expected launcher, plugin directory, source root, fresh runtime directory and optional role/scenario");
+        const std::string role = argc == 7 ? argv[5] : "login";
+        const std::string scenario = argc == 7 ? argv[6] : "healthy";
+        require(role == "login" || role == "proxy" || role == "router" || role == "master" || role == "world" ||
+                    role == "dir",
+            "Unsupported listener-only role");
+        require(scenario == "healthy" || scenario == "occupied", "Unknown startup scenario");
         const auto program = std::filesystem::absolute(argv[1]).string();
         const auto plugins = std::filesystem::absolute(argv[2]).string();
         const auto source = std::filesystem::absolute(argv[3]);
@@ -106,8 +113,8 @@ int main(int argc, char** argv) {
         std::filesystem::permissions(runtime, std::filesystem::perms::owner_all);
         const auto log_path = runtime / "output.log";
         unsigned short port = 0;
+        socket_owner reservation;
         {
-            socket_owner reservation;
             const auto endpoint = address(0);
             require(reservation.value >= 0 &&
                         ::bind(reservation.value, reinterpret_cast<const sockaddr*>(&endpoint), sizeof(endpoint)) == 0,
@@ -118,14 +125,23 @@ int main(int argc, char** argv) {
                 "Ephemeral loopback port lookup failed");
             port = ntohs(allocated.sin_port);
         }
-        // The launcher owns the bind. A collision after releasing the reservation
-        // is a test failure, never permission to stop an unrelated listener.
+        if (scenario == "occupied")
+        {
+            require(::listen(reservation.value, 1) == 0, "Owned collision listener could not start");
+        }
+        else
+        {
+            ::close(reservation.value);
+            reservation.value = -1;
+        }
+        // Healthy startup releases the ephemeral reservation before the launcher
+        // binds. The collision scenario retains only this helper's own listener.
         std::ofstream manifest(runtime / "application.toml");
         manifest << "[application]\nplugin_library_dir = '" << plugins << "/'\nplugin_config_dir = './'\n"
                  << "[[plugins]]\nname = 'ark_utility_plugin'\nconfig = ''\n"
                  << "[[plugins]]\nname = 'ark_bus_plugin'\nconfig = 'bus.toml'\n"
                  << "[[plugins]]\nname = 'ark_net_plugin'\nconfig = ''\n"
-                 << "[[plugins]]\nname = 'ark_login_plugin'\nconfig = ''\n";
+                 << "[[plugins]]\nname = 'ark_" << role << "_plugin'\nconfig = ''\n";
         manifest.close();
         std::ofstream bus(runtime / "bus.toml");
         bus << "[bus]\nrelations = []\n[[bus.applications]]\nname = 'login'\ntype = 32\n"
@@ -158,22 +174,38 @@ int main(int argc, char** argv) {
         const auto startup_deadline = std::chrono::steady_clock::now() + 10s;
         for (;;)
         {
-            const auto waited = ::waitpid(child.pid, nullptr, WNOHANG);
+            int status = 0;
+            const auto waited = ::waitpid(child.pid, &status, WNOHANG);
             if (waited == child.pid)
             {
                 child.pid = -1;
-                throw std::runtime_error("Launcher exited before readiness");
+                require(scenario == "occupied", "Launcher exited before readiness");
+                require(WIFEXITED(status) && WEXITSTATUS(status) == 1,
+                    "Listener startup failure did not produce launcher exit 1");
+                const auto output = read_log(log_path);
+                const auto failure_begin = output.find("Application startup failed at post_init: ");
+                require(failure_begin != std::string::npos, "Launcher did not emit a complete startup failure line");
+                const auto failure_end = output.find('\n', failure_begin);
+                const auto failure_line = output.substr(failure_begin, failure_end - failure_begin);
+                require(failure_line.find(role + "_net_module") != std::string::npos &&
+                            failure_line.find(": returned false") != std::string::npos,
+                    "Launcher lost the failing role and lifecycle phase");
+                require(output.find("Start net server successful") == std::string::npos,
+                    "Occupied endpoint was reported as a healthy listener");
+                std::cout << role << ": actual DSOs rejected an owned occupied endpoint with role/phase and exit 1\n";
+                return 0;
             }
             require(waited == 0, "Launcher startup wait failed");
             if (read_log(log_path).find("Start net server successful") != std::string::npos)
             {
+                require(scenario == "healthy", "Role accepted an occupied endpoint");
                 break;
             }
             require(std::chrono::steady_clock::now() < startup_deadline, "Launcher startup timed out");
             std::this_thread::sleep_for(10ms);
         }
         socket_owner peer;
-        require(connect_to(peer.value, port) == 0, "Real Login loopback listener did not accept a connection");
+        require(connect_to(peer.value, port) == 0, "Real role loopback listener did not accept a connection");
         require(::kill(child.pid, SIGTERM) == 0, "Owned launcher signal failed");
         const auto stop_deadline = std::chrono::steady_clock::now() + 5s;
         pollfd closing{peer.value, POLLIN, 0};
@@ -205,8 +237,9 @@ int main(int argc, char** argv) {
         require(output.find("Application startup failed") == std::string::npos &&
                     output.find("Shutdown failed") == std::string::npos,
             "Launcher reported a lifecycle failure");
-        std::cout << "Actual Utility/Bus/Net/Login DSOs: loopback connection, signal shutdown, peer closure, "
-                     "listener refusal and exit 0 passed; no login business handler claimed\n";
+        std::cout << role
+                  << ": actual Utility/Bus/Net/role DSOs: loopback connection, signal shutdown, peer closure, "
+                     "listener refusal and exit 0 passed; no business handler claimed\n";
     }
     catch (const std::exception& error)
     {

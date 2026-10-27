@@ -99,6 +99,8 @@ Manifest loading or validation failures return exit code `1` before plugin start
 
 </Aside>
 
+The launcher composes startup failure context before writing it to stderr, keeping the phase and module together instead of issuing separate stream insertions.
+
 ## Run one application
 
 The shell and Windows helpers share one interface:
@@ -163,6 +165,8 @@ their original `bin/rund.*` commands. Use the current commands above instead.
 | Logger configuration cannot be read | Check the working directory and `--log_conf` path |
 | `Load shared library[...] failed` | Check TOML `plugin_library_dir` or XML `plugin_lib_dir`, platform suffix, Debug suffix and the library's dependent shared libraries |
 | Plugin loads but the expected module is unavailable | Check registration, enabled targets and required plugins; see [Create a plugin](plugins.md) |
+| Built-in server role fails at `init:` | Load Bus and Net; Game also requires Kernel before callback registration. See [role startup errors](../concepts/server-architecture.md#role-startup-errors) for the checked scope |
+| Built-in server role fails at `post_init:` | Check the configured listener endpoint and whether its port is occupied; failed listener creation or a missing service now reaches launcher exit code `1` |
 | Kernel metadata or configuration is missing | Stage the generated `resource/meta/` and `resource/server/` files in the process working directory |
 
 The launcher implementation is in [main.cpp](https://github.com/OpenArkStudio/ark/blob/main/src/application/main.cpp).

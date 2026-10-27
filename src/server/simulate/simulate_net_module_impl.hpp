@@ -36,7 +36,7 @@ public:
     bool post_init() override;
 
 private:
-    int start_server();
+    bool start_server();
     void on_recv_msg(const net_msg* msg, conv_id_t session_id);
 
     physic3_d from_simulation_vector(const simulate::simulate_vec3& vec3);

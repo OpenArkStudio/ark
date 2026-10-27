@@ -38,7 +38,7 @@ public:
     bool post_init() override;
 
 protected:
-    int start_server();
+    bool start_server();
     // void OnSocketEvent(const NetEventType event, const guid_t& conn_id, const std::string& ip, bus_id_t bus_id);
 
     // void OnClientConnected(const guid_t& xClientID);

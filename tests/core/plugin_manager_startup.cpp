@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <stdexcept>
 #include <string>
+#include <thread>
 
 #include "../network/doctest.h"
 
@@ -230,5 +231,48 @@ TEST_CASE("Startup exceptions preserve the first module and phase without cleanu
                 CHECK(module.calls[phase] == (phase <= failed ? 1u : 0u));
             }
         }
+    }
+}
+
+TEST_CASE("Nullable module lookup preserves RTTI keys without asserting or mutating registrations") {
+    ark::plugin_manager manager;
+    counted_module expected;
+    ark::module other;
+    const auto key = std::string(typeid(counted_module).name());
+
+    CHECK(manager.try_find_module<counted_module>() == nullptr);
+    REQUIRE(manager.add_module(key, &expected));
+    CHECK(manager.try_find_module<counted_module>() == &expected);
+    CHECK(manager.find_module<counted_module>() == &expected);
+    manager.remove_module(key);
+    CHECK(manager.try_find_module<counted_module>() == nullptr);
+
+    REQUIRE(manager.add_module(key, &other));
+    CHECK(manager.try_find_module<counted_module>() == nullptr);
+    manager.remove_module(key);
+    REQUIRE(manager.add_module(key, &expected));
+    CHECK(manager.try_find_module<counted_module>() == &expected);
+}
+
+TEST_CASE("Nullable module lookup rejects a foreign thread and preserves owner access") {
+    for (const bool registered : {false, true})
+    {
+        CAPTURE(registered);
+        ark::plugin_manager manager;
+        counted_module expected;
+        if (registered)
+        {
+            REQUIRE(manager.add_module(typeid(counted_module).name(), &expected));
+        }
+        bool rejected = false;
+        std::thread foreign([&] {
+            try
+            { (void)manager.try_find_module<counted_module>(); }
+            catch (const std::logic_error&)
+            { rejected = true; }
+        });
+        foreign.join();
+        CHECK(rejected);
+        CHECK(manager.try_find_module<counted_module>() == (registered ? &expected : nullptr));
     }
 }

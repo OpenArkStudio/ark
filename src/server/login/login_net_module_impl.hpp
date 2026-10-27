@@ -37,7 +37,7 @@ public:
     //bool PreUpdate() override;
 
 protected:
-    int start_server();
+    bool start_server();
 
     // void OnSocketClientEvent(const NetEventType event, const guid_t& conn_id, const std::string& ip,  bus_id_t bus_id);
 

@@ -19,7 +19,8 @@ foreach(server game login proxy world master dir router)
     add_dependencies(${test_target} ark_${server}_plugin)
     add_custom_target(check-server-${server}
         COMMAND $<TARGET_FILE:ark_server_exports_tests> "$<TARGET_FILE_DIR:ark_${server}_plugin>/" "ark_${server}_plugin"
-        COMMAND $<TARGET_FILE:${test_target}> "ark_${server}_plugin"
+        COMMAND ${CMAKE_COMMAND} "-DPROGRAM=$<TARGET_FILE:${test_target}>" "-DROLE=ark_${server}_plugin"
+            -P "${PROJECT_SOURCE_DIR}/tests/server/construction.cmake"
         DEPENDS ark_server_exports_tests ${test_target} ark_${server}_plugin USES_TERMINAL VERBATIM)
     add_dependencies(check-server-plugins check-server-${server})
 endforeach()
@@ -65,4 +66,23 @@ if(UNIX AND TARGET app AND TARGET ark_utility_plugin AND TARGET ark_bus_plugin A
         DEPENDS ark_server_launcher_tests app ark_utility_plugin ark_bus_plugin ark_net_plugin ark_login_plugin
         USES_TERMINAL VERBATIM)
     add_dependencies(check-server-plugins check-server-launcher)
+    add_custom_target(check-server-startup)
+    foreach(role login proxy router master world dir)
+        foreach(scenario healthy occupied)
+            set(startup_target check-server-startup-${role}-${scenario})
+            add_custom_target(${startup_target}
+                COMMAND ${CMAKE_COMMAND}
+                    "-DPROGRAM=$<TARGET_FILE:ark_server_launcher_tests>"
+                    "-DLAUNCHER=$<TARGET_FILE:app>"
+                    "-DPLUGIN_DIR=$<TARGET_FILE_DIR:ark_${role}_plugin>"
+                    "-DSOURCE_ROOT=${PROJECT_SOURCE_DIR}"
+                    "-DRUNTIME_ROOT=${CMAKE_CURRENT_BINARY_DIR}/startup runtime"
+                    "-DROLE=${role}" "-DSCENARIO=${scenario}"
+                    -P "${PROJECT_SOURCE_DIR}/tests/server/launcher.cmake"
+                DEPENDS ark_server_launcher_tests app ark_utility_plugin ark_bus_plugin ark_net_plugin ark_${role}_plugin
+                USES_TERMINAL VERBATIM)
+            add_dependencies(check-server-startup ${startup_target})
+        endforeach()
+    endforeach()
+    add_dependencies(check-server-plugins check-server-startup)
 endif()
