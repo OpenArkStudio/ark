@@ -58,6 +58,12 @@ Public headers now have their single source in `src/plugins/utility/`. CMake cop
 
 **Breaking source change:** `ark/utility/{guid,timer,schedule,compress}_module_impl.hpp` and `ark/utility/utility_plugin.hpp` are removed from the SDK. Implementations are defined in their cpp files; the plugin type and interface-returning factories are private. Replace direct implementation construction with public interface lookup or an application-owned implementation. Handwritten `-I <ark-source>/include` consumers must use target-provided include roots. Rebuild the plugin and consumers together; unchanged public virtual functions and exported entry signatures do not establish compatibility with old implementation-class binaries.
 
+## Core string patterns
+
+`<ark/string_utils.hpp>` provides `string_utils::split()` and `replace()` through `ark::core`. An empty string delimiter appends the unchanged, nonempty input as one element; empty input appends nothing. An empty replacement pattern returns the original input unchanged, including embedded null bytes in a `std::string`. This rule applies with both unlimited and explicit operation limits, so an empty pattern cannot cause an endless loop.
+
+Nonempty patterns retain their existing behavior: split appends to the output vector, preserves leading/interior empty elements, drops a trailing empty element and leaves the remaining suffix once the split limit is reached. The limit is compared with the total output size, so use an empty output vector to count only newly produced elements. Replacement applies nonoverlapping matches from left to right; limit `0` means unlimited. C-string arguments must be valid, null-terminated strings; string-delimiter overloads retain C-string matching semantics. This change does not add general binary substring matching.
+
 ## Core random helper
 
 `<ark/random/random_generator.hpp>` provides `ark::random_generator` through `ark::core`; it does not require loading the Utility plugin. The signed `random(int, int)` overload accepts any pair of `int` endpoints, including `INT_MIN` and `INT_MAX`, without overflowing the range calculation. Different endpoints produce a value in `[lower, upper)` after ordering the endpoints. Equal endpoints return that value without advancing the generator.

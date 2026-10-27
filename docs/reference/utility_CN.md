@@ -52,6 +52,12 @@ zlib、LZ4 和 Zstandard 普通调用不再共享可写输出缓冲区。Zstanda
 
 **源码不兼容变更：** SDK 移除 `ark/utility/{guid,timer,schedule,compress}_module_impl.hpp` 和 `ark/utility/utility_plugin.hpp`。实现类定义在各自 cpp 文件中，插件类型及返回接口的工厂属于私有装配。将直接构造实现类的代码改为公开接口查找，或应用自行维护实现。仅手写 `-I <ark-source>/include` 的调用需改用目标传递的包含目录。插件和使用方应一起重新编译；公开虚函数及动态入口签名保持不变，不代表兼容旧实现类二进制。
 
+## Core 字符串匹配
+
+`ark::core` 通过 `<ark/string_utils.hpp>` 提供 `string_utils::split()` 和 `replace()`。字符串分隔符为空时，将非空输入原样追加为一个元素；空输入不追加元素。替换模式为空时，原样返回输入，包括 `std::string` 中的空字符。无论操作次数是否设上限，都遵循此规则，避免空模式导致无限循环。
+
+非空模式保持现有行为：拆分结果追加到输出容器，保留开头及中间的空元素，忽略末尾空元素，到达拆分上限后保留剩余后缀。上限按输出容器的总元素数比较；若只需统计本次结果，请使用空容器。替换按从左到右、不重叠的顺序执行，次数为 `0` 表示不限。C 字符串参数必须有效并以空字符结尾；字符串分隔符重载仍沿用 C 字符串匹配语义，此项修改不增加通用二进制子串匹配能力。
+
 ## Core 随机数工具
 
 `<ark/random/random_generator.hpp>` 通过 `ark::core` 提供 `ark::random_generator`，无需加载 Utility 插件。有符号 `random(int, int)` 重载接受任意两个 `int` 端点，包括 `INT_MIN` 和 `INT_MAX`，范围计算不会溢出。端点不同时，先按大小排序，再返回 `[lower, upper)` 内的值。端点相同时，直接返回该值，不推进生成器状态。
