@@ -1,6 +1,8 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
 #include <array>
 #include <cstdint>
+#include <limits>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -72,6 +74,10 @@ static_assert(ark::time_bits == 29 && ark::worker_bit == 24 && ark::seq_bits == 
 static_assert(std::is_same_v<decltype(ark::uid_epoch), const int64_t>);
 static_assert(!noexcept(std::declval<ark::bits_allocator&>().alloc(0, 0, 0)));
 static_assert(!noexcept(std::declval<ark::uid_generator&>().get_uid(0)));
+static_assert([] {
+    ark::bits_allocator allocator(29, 24, 10);
+    return allocator.alloc(536870911, 16777215, 1023) == std::numeric_limits<int64_t>::max();
+}());
 #endif
 
 } // namespace
@@ -93,6 +99,18 @@ TEST_CASE("Built-in type checks retain const-reference deduction and exact expli
 }
 
 #if !defined(ARK_USE_GUID_32) && !defined(ARK_USE_GUID_128)
+TEST_CASE("UID bit layouts reject invalid widths before shifting") {
+    const std::array<std::array<int, 3>, 9> invalid{{{-1, 64, 0}, {64, -1, 0}, {0, 0, 64}, {29, 24, 9}, {29, 24, 11},
+        {63, 1, -1}, {std::numeric_limits<int>::max(), 0, 0},
+        {0, std::numeric_limits<int>::max(), std::numeric_limits<int>::max()},
+        {0, 0, std::numeric_limits<int>::min()}}};
+    for (const auto& widths : invalid)
+    {
+        CAPTURE(widths);
+        CHECK_THROWS_AS(ark::bits_allocator(widths[0], widths[1], widths[2]), std::invalid_argument);
+    }
+}
+
 TEST_CASE("UID bit allocation retains fixed values and maximum unsigned fields") {
     ark::bits_allocator allocator(ark::time_bits, ark::worker_bit, ark::seq_bits);
     CHECK(allocator.get_total_bits() == 64);
@@ -119,6 +137,35 @@ TEST_CASE("UID bit allocation retains fixed values and maximum unsigned fields")
         CAPTURE(input.worker);
         CAPTURE(input.sequence);
         CHECK(allocator.alloc(input.delta, input.worker, input.sequence) == input.expected);
+    }
+}
+
+TEST_CASE("UID fields cannot spill into adjacent fields") {
+    ark::bits_allocator allocator(29, 24, 10);
+    for (const auto& value : std::array<std::array<int64_t, 3>, 7>{{{-1, 0, 0}, {536870912, 0, 0}, {0, -1, 0},
+             {0, 16777216, 0}, {0, 0, -1}, {0, 0, 1024}, {std::numeric_limits<int64_t>::max(), 0, 0}}})
+    {
+        CAPTURE(value);
+        CHECK_THROWS_AS(allocator.alloc(value[0], value[1], value[2]), std::out_of_range);
+    }
+    CHECK(allocator.alloc(1, 0, 0) == 17179869184);
+
+    for (const auto& widths : std::array<std::array<int, 3>, 3>{{{63, 0, 0}, {0, 63, 0}, {0, 0, 63}}})
+    {
+        ark::bits_allocator edge(widths[0], widths[1], widths[2]);
+        for (int field = 0; field < 3; ++field)
+        {
+            std::array<int64_t, 3> value{};
+            value[field] = std::numeric_limits<int64_t>::max();
+            if (widths[field] == 63)
+            {
+                CHECK(edge.alloc(value[0], value[1], value[2]) == value[field]);
+            }
+            else
+            {
+                CHECK_THROWS_AS(edge.alloc(value[0], value[1], value[2]), std::out_of_range);
+            }
+        }
     }
 }
 #endif

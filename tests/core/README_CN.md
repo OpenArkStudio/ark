@@ -15,7 +15,11 @@ cmake --build core-build --target check-core
 启用 `ARK_BUILD_CORE_TESTS=ON` 时，`check-network` 也会运行这些用例，现有 CI
 矩阵会执行该入口。测试不需要数据库服务。
 
+字符串匹配回归覆盖空分隔符、空替换模式、有限与无限次数、空输入、已有输出元素和内嵌空字符，并保留非空分隔符、剩余后缀、替换次数与删除语义。执行 `ark_core_tests --test-case="*String utilit*"` 可单独运行。参见[字符串匹配规则](../../docs/reference/utility_CN.md#core-字符串匹配)。
+
 C++20 语言回归验证六种精确整数类型分类、限定符与引用处理、常量值、异常契约和固定 UID 位分配结果。独立 array-map 头文件检查还会拒绝重新引入旧语言兼容宏。
+
+UID 回归另行验证编译期分配、非法及极端位宽、字段溢出和 63/0/0 的三种位宽排列。执行 `ark_core_tests --test-case="UID*"` 可单独运行。非法布局抛出 `std::invalid_argument`，非法字段值抛出 `std::out_of_range`，不受断言开关影响。参见 [UID 位分配](../../docs/reference/utility_CN.md#core-uid-位分配)。
 
 随机数回归将公开头文件放在首个包含位置，并重复包含两次。测试保留固定的原始、有符号及无符号随机序列、最终种子和生成次数，并验证 `INT_MIN`／`INT_MAX` 极值、异号、相邻、逆序及相等端点的有符号半开区间。端点相同时直接返回该值，不消耗随机数。这些用例属于 `ark_core_tests` 和 `check-core`；使用 `-fsanitize=undefined -fno-sanitize-recover=all` 构建时，还会通过 UndefinedBehaviorSanitizer 检查范围运算。参见[随机数工具行为](../../docs/reference/utility_CN.md#core-随机数工具)。
 
@@ -57,6 +61,8 @@ cmake --build hash-header-build --target check-murmur-hash-header
 
 `check-kernel-initialization` 从 `resource/meta/` 加载真实元数据和静态数据，
 分别使用资源相对路径及以 `/` 开头的旧路径，验证内核与配置模块的四种初始化顺序，共八种组合。
+
+同一 target 运行 `kernel_delayed_sync.cpp`：真实容器创建、移除和销毁经过延迟收集、Kernel 更新、Protobuf 序列化和既有掩码交付回调。用例覆盖完整载荷、实体引用、空槽／销毁标记、仅自身同步掩码，以及空批次、标量、表格和混合对照。范围受限的测试友元仅观察该回调，不提供传输层或客户端。
 
 `check-logging` 运行独立的 C++ 日志路径回归测试，并由 `check-core` 一并执行。
 用例覆盖相对路径、嵌套路径、扩展名、隐藏文件、含点的目录名、两个按小时轮转的日志创建函数，

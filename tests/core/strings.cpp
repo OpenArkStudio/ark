@@ -1,10 +1,62 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "../network/doctest.h"
 
 #include <ark/string.hpp>
+#include <ark/string_utils.hpp>
+
+DOCTEST_TEST_CASE("String utilities treat empty patterns as no change") {
+    for (const uint32_t limit : {0U, 1U, 2U})
+    {
+        std::vector<std::string> parts{"existing"};
+        ark::string_utils::split(parts, "abc", "", limit);
+        DOCTEST_CHECK(parts == std::vector<std::string>{"existing", "abc"});
+        ark::string_utils::split(parts, "", "", limit);
+        DOCTEST_CHECK(parts.size() == 2);
+        parts.clear();
+        ark::string_utils::split(parts, std::string("abc"), "", limit);
+        DOCTEST_CHECK(parts == std::vector<std::string>{"abc"});
+        ark::string_utils::split(parts, std::string{}, "", limit);
+        DOCTEST_CHECK(parts.size() == 1);
+
+        for (const auto replacement : {"", "x"})
+        {
+            DOCTEST_CHECK(ark::string_utils::replace("abc", "", replacement, limit) == "abc");
+            DOCTEST_CHECK(ark::string_utils::replace(std::string("abc"), "", replacement, limit) == "abc");
+            DOCTEST_CHECK(ark::string_utils::replace("", "", replacement, limit).empty());
+            DOCTEST_CHECK(ark::string_utils::replace(std::string{}, "", replacement, limit).empty());
+        }
+        const std::string binary("a\0b", 3);
+        DOCTEST_CHECK(ark::string_utils::replace(binary, "", "x", limit) == binary);
+    }
+}
+
+DOCTEST_TEST_CASE("String utility patterns retain split and replacement limits") {
+    std::vector<std::string> parts;
+    ark::string_utils::split(parts, "::a::::b::", "::");
+    DOCTEST_CHECK(parts == std::vector<std::string>{"", "a", "", "b"});
+    parts.clear();
+    ark::string_utils::split(parts, std::string("a::b::c"), "::", 1);
+    DOCTEST_CHECK(parts == std::vector<std::string>{"a", "b::c"});
+    parts = {"existing"};
+    ark::string_utils::split(parts, "a::b::c", "::", 2);
+    DOCTEST_CHECK(parts == std::vector<std::string>{"existing", "a", "b::c"});
+    parts.clear();
+    ark::string_utils::split(parts, std::string("a\0b:c", 5), ':');
+    DOCTEST_CHECK(parts == std::vector<std::string>{std::string("a\0b", 3), "c"});
+
+    for (const auto text : {"xooxoox", "plain", ""})
+    {
+        const std::string input(text);
+        DOCTEST_CHECK(ark::string_utils::replace(text, "oo", "ee") == ark::string_utils::replace(input, "oo", "ee"));
+    }
+    DOCTEST_CHECK(ark::string_utils::replace("xooxoox", "oo", "ee") == "xeexeex");
+    DOCTEST_CHECK(ark::string_utils::replace(std::string("xooxoox"), "oo", "ee", 1) == "xeexoox");
+    DOCTEST_CHECK(ark::string_utils::replace("aaaa", "aa", "") == "");
+}
 
 DOCTEST_TEST_CASE("Small strings preserve content through growth, copies and inline/heap swaps") {
     ark::small_string<char, 8> short_text("abc");

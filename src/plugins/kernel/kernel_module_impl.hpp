@@ -191,6 +191,8 @@ protected:
     std::shared_ptr<event_manager> get_event_manager(std::shared_ptr<entity> entity_ptr) const;
 
 private:
+    friend class kernel_delayed_sync_test_access;
+
     std::list<guid_t> delete_list_;
 
     guid_t cur_exec_object_{null_guid};

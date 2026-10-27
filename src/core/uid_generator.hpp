@@ -20,6 +20,9 @@
 
 #pragma once
 
+#include <cstdint>
+#include <stdexcept>
+
 #include "ark/dep.hpp"
 #include "ark/macros.hpp"
 #include "ark/time/date_time.hpp"
@@ -77,24 +80,35 @@ class bits_allocator
 public:
     static const int total_bits = 1 << 6;
 
-    bits_allocator(int ts_bits, int worker_bits, int seq_bits)
+    constexpr bits_allocator(int ts_bits, int worker_bits, int seq_bits)
         : sign_bits_(1)
         , timestamp_bits_(ts_bits)
         , worker_id_bits_(worker_bits)
         , sequence_bits_{seq_bits} {
-        int alloc_total_bit = sign_bits_ + ts_bits + worker_bits + seq_bits;
-        ARK_ASSERT_NO_EFFECT(alloc_total_bit == total_bits); // allocate not enough 64 bits
+        constexpr int payload_bits = total_bits - 1;
+        if (ts_bits < 0 || ts_bits > payload_bits || worker_bits < 0 || worker_bits > payload_bits - ts_bits ||
+            seq_bits < 0 || seq_bits != payload_bits - ts_bits - worker_bits)
+        {
+            throw std::invalid_argument("UID field widths must be nonnegative and total 63 bits");
+        }
 
-        max_delta_seconds_ = ~(uint64_t(-1L) << timestamp_bits_);
-        max_worker_id_ = ~(uint64_t(-1L) << worker_id_bits_);
-        max_sequence_ = ~(uint64_t(-1L) << sequence_bits_);
+        max_delta_seconds_ = (uint64_t{1} << timestamp_bits_) - 1;
+        max_worker_id_ = (uint64_t{1} << worker_id_bits_) - 1;
+        max_sequence_ = (uint64_t{1} << sequence_bits_) - 1;
 
         timestamp_shift_ = worker_id_bits_ + sequence_bits_;
         worker_id_shift_ = sequence_bits_;
     }
 
-    int64_t alloc(int64_t delta_seconds, int64_t worker_id, int64_t seq) {
-        return (delta_seconds << timestamp_shift_) | (worker_id << worker_id_shift_) | seq;
+    constexpr int64_t alloc(int64_t delta_seconds, int64_t worker_id, int64_t seq) {
+        if (delta_seconds < 0 || delta_seconds > max_delta_seconds_ || worker_id < 0 || worker_id > max_worker_id_ ||
+            seq < 0 || seq > max_sequence_)
+        {
+            throw std::out_of_range("UID field value exceeds its allocated width");
+        }
+        return static_cast<int64_t>((static_cast<uint64_t>(delta_seconds) << timestamp_shift_) |
+                                    (static_cast<uint64_t>(worker_id) << worker_id_shift_) |
+                                    static_cast<uint64_t>(seq));
     }
 
     int get_total_bits() {

@@ -224,7 +224,7 @@ if(ARK_BUILD_CONFIG)
 endif()
 
 if(ARK_BUILD_PROTO)
-    add_executable(ark_kernel_initialization_tests main.cpp module_initialization.cpp entity_config_copy.cpp entity_json_loading.cpp
+    add_executable(ark_kernel_initialization_tests main.cpp module_initialization.cpp entity_config_copy.cpp entity_json_loading.cpp kernel_delayed_sync.cpp
         ../../src/plugins/kernel/class_call_back_manager.cpp
         ../../src/plugins/kernel/class_meta.cpp
         ../../src/plugins/kernel/class_meta_module_impl.cpp

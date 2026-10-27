@@ -16,6 +16,8 @@ Run `core-build/tests/core/ark_core_tests --help` for doctest filters. `check-ne
 also runs these tests when `ARK_BUILD_CORE_TESTS=ON`, including in the existing CI
 matrix. No database service is required.
 
+String-pattern regressions exercise empty delimiters and replacement patterns with unlimited and explicit limits, empty input, existing output elements and embedded nulls. They also preserve nonempty delimiter, suffix, replacement-count and deletion behavior. Run `ark_core_tests --test-case="*String utilit*"` to select them. See [string-pattern semantics](../../docs/reference/utility.md#core-string-patterns).
+
 The public header checks include `<ark/error_code.hpp>` as the first include and
 include it twice. Compile-time checks preserve its unsigned 32-bit underlying type
 and every declared error value.
@@ -50,6 +52,8 @@ Initialize Protobuf as described for application builds.
 
 The C++20 language regressions check the exact six built-in integer classifications, qualifier and reference handling, constant values, exception contracts and fixed UID allocation outputs. The standalone array-map header check also rejects reintroduced legacy language macros.
 
+UID regressions also check compile-time allocation, invalid/extreme widths, field overflow and the three 63/0/0 width permutations. `ark_core_tests --test-case="UID*"` selects them. Invalid layouts throw `std::invalid_argument`; invalid field values throw `std::out_of_range`, independently of assertion settings. See [UID bit allocation](../../docs/reference/utility.md#core-uid-bit-allocation).
+
 The random-generator regressions include the public header first and twice. They preserve fixed raw/signed/unsigned sequences, final seeds and draw counts, and check half-open signed ranges at `INT_MIN`/`INT_MAX`, mixed-sign and adjacent endpoints, reversed endpoints and equal endpoints. Equal endpoints return their value without consuming a draw. These cases are part of `ark_core_tests` and `check-core`; a build with `-fsanitize=undefined -fno-sanitize-recover=all` also checks the range arithmetic with UndefinedBehaviorSanitizer. See [random-helper behavior](../../docs/reference/utility.md#core-random-helper).
 
 With `ARK_BUILD_CONFIG=ON` (the default for core tests),
@@ -67,6 +71,12 @@ exit code 1 with a manifest diagnostic, including on Windows, and is included in
 `check-kernel-initialization` loads real metadata and static data from
 `resource/meta/`. It checks four kernel/config initialization orders with both
 resource-relative paths and legacy paths beginning with `/`, for eight combinations.
+
+The same target runs `kernel_delayed_sync.cpp`: real container creation, removal
+and destruction pass through delayed collection, Kernel update, Protobuf serialization
+and the existing mask delivery callback. It covers full payloads, entity references,
+empty-slot/destruction markers, self-only masks and empty/scalar/table/mixed controls.
+A narrow test-only friend observes that callback; no transport or client is supplied.
 
 `check-logging` runs the independent C++ logging path regressions and is included
 in `check-core`. It checks relative and nested filenames, extensions and hidden
