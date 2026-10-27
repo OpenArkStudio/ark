@@ -67,7 +67,7 @@ int64_t static_entity_impl::get_int64(const std::string& name) const {
     return node_manager_->get_int64(name);
 }
 
-int64_t static_entity_impl::get_u_int64(const std::string& name) const {
+uint64_t static_entity_impl::get_u_int64(const std::string& name) const {
     ARK_ASSERT_RET_VAL(node_manager_ != nullptr, null_int64);
 
     return node_manager_->get_u_int64(name);
@@ -121,7 +121,7 @@ int64_t static_entity_impl::get_int64(const uint32_t index) const {
     return node_manager_->get_int64(index);
 }
 
-int64_t static_entity_impl::get_u_int64(const uint32_t index) const {
+uint64_t static_entity_impl::get_u_int64(const uint32_t index) const {
     ARK_ASSERT_RET_VAL(node_manager_ != nullptr, null_int64);
 
     return node_manager_->get_u_int64(index);

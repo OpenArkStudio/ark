@@ -246,19 +246,19 @@ bool class_call_back_manager::on_move_event(const guid_t& self, const vector3d& 
 
 // sync call back
 void class_call_back_manager::add_node_sync_call_back(const data_mask mask_value, node_sync_functor&& cb) {
-    node_sync_call_back_list_.insert(std::make_pair(mask_value, std::move(cb)));
+    node_sync_call_back_list_.insert_or_assign(mask_value, std::move(cb));
 }
 
 void class_call_back_manager::add_table_sync_call_back(const data_mask mask_value, table_sync_functor&& cb) {
-    table_sync_call_back_list_.insert(std::make_pair(mask_value, std::move(cb)));
+    table_sync_call_back_list_.insert_or_assign(mask_value, std::move(cb));
 }
 
 void class_call_back_manager::add_container_sync_call_back(const data_mask mask_value, container_sync_functor&& cb) {
-    container_sync_call_backs_list_.insert(std::make_pair(mask_value, std::move(cb)));
+    container_sync_call_backs_list_.insert_or_assign(mask_value, std::move(cb));
 }
 
 void class_call_back_manager::add_delay_sync_call_back(const data_mask mask_value, delay_sync_functor&& cb) {
-    delay_sync_call_back_list_.insert(std::make_pair(mask_value, cb));
+    delay_sync_call_back_list_.insert_or_assign(mask_value, std::move(cb));
 }
 
 bool class_call_back_manager::on_delay_sync() {

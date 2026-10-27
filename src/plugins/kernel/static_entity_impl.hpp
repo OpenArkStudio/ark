@@ -56,7 +56,7 @@ public:
     int32_t get_int32(const std::string& name) const override;
     uint32_t get_u_int32(const std::string& name) const override;
     int64_t get_int64(const std::string& name) const override;
-    int64_t get_u_int64(const std::string& name) const override;
+    uint64_t get_u_int64(const std::string& name) const override;
     float get_float(const std::string& name) const override;
     double get_double(const std::string& name) const override;
     const std::string& get_string(const std::string& name) const override;
@@ -66,7 +66,7 @@ public:
     int32_t get_int32(const uint32_t index) const override;
     uint32_t get_u_int32(const uint32_t index) const override;
     int64_t get_int64(const uint32_t index) const override;
-    int64_t get_u_int64(const uint32_t index) const override;
+    uint64_t get_u_int64(const uint32_t index) const override;
     float get_float(const uint32_t index) const override;
     double get_double(const uint32_t index) const override;
     const std::string& get_string(const uint32_t index) const override;

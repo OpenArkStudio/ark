@@ -219,7 +219,7 @@ uint64_t node_manager::get_u_int64(const std::string& name) const {
     auto index = get_index(name);
     ARK_ASSERT_RET_VAL(index > 0, null_int64);
 
-    return get_int64(index);
+    return get_u_int64(index);
 }
 
 float node_manager::get_float(const std::string& name) const {
