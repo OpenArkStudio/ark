@@ -127,6 +127,16 @@ public:
         const char* from = s;
         size_t n = strlen(c);
 
+        // An empty delimiter cannot advance the input cursor.
+        if (n == 0)
+        {
+            if (*s != '\0')
+            {
+                v.emplace_back(s);
+            }
+            return;
+        }
+
         while ((p = strstr(from, c)))
         {
             v.emplace_back(std::string(from, p - from));
@@ -154,6 +164,10 @@ public:
         const char* p;
         const char* from = s;
         size_t n = strlen(sub);
+        if (n == 0)
+        {
+            return s;
+        }
         size_t m = strlen(to);
 
         std::string x;
@@ -179,6 +193,10 @@ public:
 
     static inline auto replace(
         const std::string& s, const char* sub, const char* to, uint32_t max_replace = 0) -> std::string {
+        if (*sub == '\0')
+        {
+            return s;
+        }
         const char* from = s.c_str();
         const char* p = strstr(from, sub);
         if (p == nullptr)
