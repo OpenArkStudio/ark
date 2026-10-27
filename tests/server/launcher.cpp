@@ -102,9 +102,15 @@ int main(int argc, char** argv) {
         const std::string role = argc == 7 ? argv[5] : "login";
         const std::string scenario = argc == 7 ? argv[6] : "healthy";
         require(role == "login" || role == "proxy" || role == "router" || role == "master" || role == "world" ||
-                    role == "dir",
-            "Unsupported listener-only role");
+                    role == "dir" || role == "game",
+            "Unsupported server startup role");
         require(scenario == "healthy" || scenario == "occupied", "Unknown startup scenario");
+        const bool with_kernel = role == "game";
+        const auto application_name = with_kernel ? "game" : "login";
+        const auto application_type = with_kernel ? 31 : 32;
+        const auto bus_id = "1.1." + std::to_string(application_type) + ".1";
+        const auto bus_argument = "--busid=" + bus_id;
+        const auto name_argument = std::string("--name=") + application_name;
         const auto program = std::filesystem::absolute(argv[1]).string();
         const auto plugins = std::filesystem::absolute(argv[2]).string();
         const auto source = std::filesystem::absolute(argv[3]);
@@ -136,16 +142,32 @@ int main(int argc, char** argv) {
         }
         // Healthy startup releases the ephemeral reservation before the launcher
         // binds. The collision scenario retains only this helper's own listener.
+        if (with_kernel)
+        {
+            std::filesystem::create_directories(runtime / "resource/meta");
+            std::ofstream schema(runtime / "resource/meta/entity_schema.json");
+            schema.exceptions(std::ios::failbit | std::ios::badbit);
+            // Game registers callbacks for Player during startup; no entities or
+            // business operations are created by this listener lifecycle test.
+            schema << R"({"format":"ark.entity-schema","version":1,"classes":[
+{"name":"Player","fields":[],"tables":[],"containers":[]}],"configs":[]})";
+            schema.close();
+        }
         std::ofstream manifest(runtime / "application.toml");
         manifest << "[application]\nplugin_library_dir = '" << plugins << "/'\nplugin_config_dir = './'\n"
                  << "[[plugins]]\nname = 'ark_utility_plugin'\nconfig = ''\n"
                  << "[[plugins]]\nname = 'ark_bus_plugin'\nconfig = 'bus.toml'\n"
-                 << "[[plugins]]\nname = 'ark_net_plugin'\nconfig = ''\n"
-                 << "[[plugins]]\nname = 'ark_" << role << "_plugin'\nconfig = ''\n";
+                 << "[[plugins]]\nname = 'ark_net_plugin'\nconfig = ''\n";
+        if (with_kernel)
+        {
+            manifest << "[[plugins]]\nname = 'ark_kernel_plugin'\nconfig = ''\n";
+        }
+        manifest << "[[plugins]]\nname = 'ark_" << role << "_plugin'\nconfig = ''\n";
         manifest.close();
         std::ofstream bus(runtime / "bus.toml");
-        bus << "[bus]\nrelations = []\n[[bus.applications]]\nname = 'login'\ntype = 32\n"
-            << "[[bus.processes]]\nbus_id = '1.1.32.1'\nserver_endpoint = 'tcp://127.0.0.1:" << port
+        bus << "[bus]\nrelations = []\n[[bus.applications]]\nname = '" << application_name
+            << "'\ntype = " << application_type << "\n[[bus.processes]]\nbus_id = '" << bus_id
+            << "'\nserver_endpoint = 'tcp://127.0.0.1:" << port
             << "'\nintranet_endpoint = ''\nmax_connections = 8\nthreads = 1\n"
             << "[bus.registry]\nhost = '127.0.0.1'\nport = 0\nservice_name = 'unused'\n"
             << "check_interval = '10s'\ncheck_timeout = '3s'\n";
@@ -167,7 +189,7 @@ int main(int argc, char** argv) {
                 std::_Exit(125);
             }
             ::close(output);
-            ::execl(program.c_str(), program.c_str(), "--busid=1.1.32.1", "--name=login", app_conf.c_str(),
+            ::execl(program.c_str(), program.c_str(), bus_argument.c_str(), name_argument.c_str(), app_conf.c_str(),
                 log_conf.c_str(), static_cast<char*>(nullptr));
             std::_Exit(126);
         }
@@ -238,7 +260,9 @@ int main(int argc, char** argv) {
                     output.find("Shutdown failed") == std::string::npos,
             "Launcher reported a lifecycle failure");
         std::cout << role
-                  << ": actual Utility/Bus/Net/role DSOs: loopback connection, signal shutdown, peer closure, "
+                  << (with_kernel ? ": actual Utility/Bus/Net/Kernel/Game DSOs: "
+                                  : ": actual Utility/Bus/Net/role DSOs: ")
+                  << "loopback connection, signal shutdown, peer closure, "
                      "listener refusal and exit 0 passed; no business handler claimed\n";
     }
     catch (const std::exception& error)

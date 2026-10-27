@@ -67,7 +67,16 @@ if(UNIX AND TARGET app AND TARGET ark_utility_plugin AND TARGET ark_bus_plugin A
         USES_TERMINAL VERBATIM)
     add_dependencies(check-server-plugins check-server-launcher)
     add_custom_target(check-server-startup)
-    foreach(role login proxy router master world dir)
+    set(startup_roles login proxy router master world dir)
+    if(TARGET ark_kernel_plugin)
+        list(APPEND startup_roles game)
+        add_custom_target(check-server-startup-game)
+    endif()
+    foreach(role IN LISTS startup_roles)
+        set(startup_dependencies ark_server_launcher_tests app ark_utility_plugin ark_bus_plugin ark_net_plugin ark_${role}_plugin)
+        if(role STREQUAL "game")
+            list(APPEND startup_dependencies ark_kernel_plugin)
+        endif()
         foreach(scenario healthy occupied)
             set(startup_target check-server-startup-${role}-${scenario})
             add_custom_target(${startup_target}
@@ -79,9 +88,12 @@ if(UNIX AND TARGET app AND TARGET ark_utility_plugin AND TARGET ark_bus_plugin A
                     "-DRUNTIME_ROOT=${CMAKE_CURRENT_BINARY_DIR}/startup runtime"
                     "-DROLE=${role}" "-DSCENARIO=${scenario}"
                     -P "${PROJECT_SOURCE_DIR}/tests/server/launcher.cmake"
-                DEPENDS ark_server_launcher_tests app ark_utility_plugin ark_bus_plugin ark_net_plugin ark_${role}_plugin
+                DEPENDS ${startup_dependencies}
                 USES_TERMINAL VERBATIM)
             add_dependencies(check-server-startup ${startup_target})
+            if(role STREQUAL "game")
+                add_dependencies(check-server-startup-game ${startup_target})
+            endif()
         endforeach()
     endforeach()
     add_dependencies(check-server-plugins check-server-startup)
