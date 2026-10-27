@@ -22,6 +22,7 @@
 #include <chrono>
 #include <csignal>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <exception>
 
@@ -306,13 +307,20 @@ bool main_loop(std::exception_ptr* error = nullptr) {
 }
 
 [[noreturn]] void exit_startup_failure(const char* detail) {
-    std::cerr << "Application startup failed";
+    std::string diagnostic{"Application startup failed"};
     const auto& failure = plugin_manager::instance()->get_startup_failure();
     if (!failure.empty())
     {
-        std::cerr << " at " << failure;
+        diagnostic += " at ";
+        diagnostic += failure;
     }
-    std::cerr << ": " << detail << std::endl;
+    diagnostic += ": ";
+    diagnostic += detail;
+    diagnostic += '\n';
+    // Build the line before writing: separate stream insertions let concurrent
+    // console logs split the lifecycle phase from its module context.
+    std::fwrite(diagnostic.data(), 1, diagnostic.size(), stderr);
+    std::fflush(stderr);
 
     // The diagnostic is flushed before exiting. Partially started plugins may
     // retain live IO pools; normal static cleanup can wait for them forever.

@@ -82,6 +82,8 @@ Register `counter_module_impl` under `counter_module`, then retrieve it with `fi
 
 The returned pointer is borrowed. Do not delete it or retain it after the owning plugin unregisters the module. While any managed business task is pending, the manager refuses to unregister any module: another module's task may still borrow that provider. A missing interface or failed dynamic cast triggers an assertion when assertions are enabled; with assertions disabled, `find_module<T>()` returns `nullptr`. Check the result before use, and do not use a failed lookup as an optional-service probe in Debug. Build consumers and plugins with compatible headers, compiler/ABI settings and RTTI enabled.
 
+`plugin_manager::try_find_module<T>()` provides a nullable dependency lookup. It returns `nullptr` when the interface RTTI key is absent or its registered object has a different runtime type, without logging, asserting or changing registration. Call it only on the manager's owner thread; a foreign-thread call throws `std::logic_error`. Existing `find_module<T>()` keeps its assertion-based contract. Server startup uses the nullable lookup to report missing required modules through the normal startup failure path.
+
 The two example modules share the application update thread. The counter is deliberately not atomic; it does not support calls from arbitrary worker threads. Queue worker completions for the owning module thread or use a service's documented asynchronous API. See the [network reference](../reference/network.md) for network callback dispatch.
 
 ## Choose lifecycle stages

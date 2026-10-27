@@ -7,7 +7,11 @@ foreach(argument PROGRAM LAUNCHER PLUGIN_DIR SOURCE_ROOT RUNTIME_ROOT)
 endforeach()
 file(MAKE_DIRECTORY "${RUNTIME_ROOT}")
 string(RANDOM LENGTH 16 ALPHABET 0123456789abcdef suffix)
-execute_process(COMMAND "${PROGRAM}" "${LAUNCHER}" "${PLUGIN_DIR}" "${SOURCE_ROOT}" "${RUNTIME_ROOT}/${suffix}"
+set(scenario_args)
+if(DEFINED ROLE AND DEFINED SCENARIO)
+    list(APPEND scenario_args "${ROLE}" "${SCENARIO}")
+endif()
+execute_process(COMMAND "${PROGRAM}" "${LAUNCHER}" "${PLUGIN_DIR}" "${SOURCE_ROOT}" "${RUNTIME_ROOT}/${suffix}" ${scenario_args}
     RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE errors TIMEOUT 20)
 if(NOT "${result}" STREQUAL "0")
     message(FATAL_ERROR "Server launcher regression failed: ${result}\n${output}\n${errors}\nRuntime: ${RUNTIME_ROOT}/${suffix}")

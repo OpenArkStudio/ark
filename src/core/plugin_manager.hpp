@@ -228,6 +228,15 @@ public:
         return shutdown_failure_;
     }
 
+    // Nullable dependency lookup for owner-thread lifecycle code. Unlike
+    // find_module(), absence and a mismatched runtime type are ordinary results.
+    template<typename module_type>
+        requires std::is_base_of_v<module, module_type>
+    auto try_find_module() -> module_type* {
+        check_owner();
+        return dynamic_cast<module_type*>(find_module(GET_CLASS_NAME(module_type)));
+    }
+
     template<typename module_type>
         requires std::is_base_of_v<module, module_type>
     auto find_module() -> module_type* {

@@ -28,34 +28,38 @@ std::unique_ptr<login_net_module> detail::make_login_net_module() {
 }
 
 bool login_net_module_impl::init() {
-    bus_module_ = find_module<bus_module>();
-    net_service_manager_module_ = find_module<net_service_manager_module>();
+    bus_module_ = get_plugin_manager()->try_find_module<bus_module>();
+    net_service_manager_module_ = get_plugin_manager()->try_find_module<net_service_manager_module>();
+
+    if (bus_module_ == nullptr || net_service_manager_module_ == nullptr)
+    {
+        ARK_LOG_ERROR("login network startup requires Bus and Net modules");
+        return false;
+    }
 
     return true;
 }
 
 bool login_net_module_impl::post_init() {
-    start_server();
-    return true;
+    return start_server();
 }
 
-int login_net_module_impl::start_server() {
+bool login_net_module_impl::start_server() {
     auto ret = net_service_manager_module_->create_server();
     if (!ret)
     {
         ARK_LOG_ERROR("Cannot start server net, busid = {}", bus_module_->get_self_bus_name());
-        ARK_ASSERT_NO_EFFECT(0);
-        exit(0);
+        return false;
     }
 
     net_server_ = net_service_manager_module_->get_inter_net_server();
     if (net_server_ == nullptr)
     {
         ARK_LOG_ERROR("Cannot find server net, busid = {}", bus_module_->get_self_bus_name());
-        exit(0);
+        return false;
     }
 
-    return 0;
+    return true;
 }
 
 //bool AFCLoginNetModule::PreUpdate()

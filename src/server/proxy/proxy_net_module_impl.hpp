@@ -40,7 +40,7 @@ public:
     bool verify_connect_data(const std::string& account, const std::string& key) override;
 
 protected:
-    int start_server();
+    bool start_server();
 
     void on_select_server_result_process(const net_msg* msg, conv_id_t session_id);
     void on_server_info_process(const net_msg* msg, conv_id_t session_id);

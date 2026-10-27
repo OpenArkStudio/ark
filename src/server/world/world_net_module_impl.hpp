@@ -48,7 +48,7 @@ public:
     std::shared_ptr<net_server_service> get_net_server() override;
 
 protected:
-    int start_server();
+    bool start_server();
     //int StartClient();
 
     bool send_msg_to_player(

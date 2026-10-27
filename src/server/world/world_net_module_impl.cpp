@@ -30,41 +30,40 @@ std::unique_ptr<world_net_module> detail::make_world_net_module() {
 bool world_net_module_impl::init() {
     last_check_time_ = get_plugin_manager()->get_now_time();
 
-    kernel_module_ = find_module<kernel_module>();
-    bus_module_ = find_module<bus_module>();
-    msg_module_ = find_module<msg_module>();
-    net_service_manager_module_ = find_module<net_service_manager_module>();
+    kernel_module_ = get_plugin_manager()->try_find_module<kernel_module>();
+    bus_module_ = get_plugin_manager()->try_find_module<bus_module>();
+    msg_module_ = get_plugin_manager()->try_find_module<msg_module>();
+    net_service_manager_module_ = get_plugin_manager()->try_find_module<net_service_manager_module>();
 
-    return true;
-}
-
-bool world_net_module_impl::post_init() {
-    int ret = start_server();
-    if (ret != 0)
+    if (bus_module_ == nullptr || net_service_manager_module_ == nullptr)
     {
-        exit(0);
+        ARK_LOG_ERROR("world network startup requires Bus and Net modules");
+        return false;
     }
 
     return true;
 }
 
-int world_net_module_impl::start_server() {
+bool world_net_module_impl::post_init() {
+    return start_server();
+}
+
+bool world_net_module_impl::start_server() {
     auto ret = net_service_manager_module_->create_server();
     if (!ret)
     {
         ARK_LOG_ERROR("Cannot start server net, busid = {}", bus_module_->get_self_bus_name());
-        ARK_ASSERT_NO_EFFECT(0);
-        exit(0);
+        return false;
     }
 
     net_server_ = net_service_manager_module_->get_inter_net_server();
     if (net_server_ == nullptr)
     {
         ARK_LOG_ERROR("Cannot find server net, busid = {}", bus_module_->get_self_bus_name());
-        exit(0);
+        return false;
     }
 
-    return 0;
+    return true;
 }
 
 //bool AFCWorldNetModule::PreUpdate()

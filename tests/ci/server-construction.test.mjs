@@ -93,7 +93,7 @@ test('DSO export inspection stays in a core-only process separate from the real-
   // Replace inherited aggregate linkage rather than appending core to ark::ark:
   // the export host must not register static generated Protobuf descriptors.
   assert.match(cmake, /set_property\(TARGET ark_server_exports_tests PROPERTY LINK_LIBRARIES ark::core\)/);
-  assert.match(cmake, /COMMAND \$<TARGET_FILE:ark_server_exports_tests> "\$<TARGET_FILE_DIR:ark_\$\{server\}_plugin>\/" "ark_\$\{server\}_plugin"\s+COMMAND \$<TARGET_FILE:\$\{test_target\}> "ark_\$\{server\}_plugin"/);
+  assert.match(cmake, /COMMAND \$<TARGET_FILE:ark_server_exports_tests> "\$<TARGET_FILE_DIR:ark_\$\{server\}_plugin>\/" "ark_\$\{server\}_plugin"\s+COMMAND \$\{CMAKE_COMMAND\} "-DPROGRAM=\$<TARGET_FILE:\$\{test_target\}>" "-DROLE=ark_\$\{server\}_plugin"\s+-P "\$\{PROJECT_SOURCE_DIR\}\/tests\/server\/construction\.cmake"/);
   assert.doesNotMatch(construction, /dynamic_library|\.load\(|get_symbol\(/);
   assert.doesNotMatch(exports, /server_test_types|ark\/proto|_module_factory|_module_impl/);
   for (const entry of ['DllEntryPlugin', 'DllExitPlugin']) {

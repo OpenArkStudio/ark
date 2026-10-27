@@ -30,12 +30,18 @@ std::unique_ptr<game_net_module> detail::make_game_net_module() {
 }
 
 bool game_net_module_impl::init() {
-    kernel_module_ = find_module<kernel_module>();
-    uuid_module_ = find_module<guid_module>();
-    bus_module_ = find_module<bus_module>();
-    msg_module_ = find_module<msg_module>();
-    net_service_manager_module_ = find_module<net_service_manager_module>();
-    map_module_ = find_module<map_module>();
+    kernel_module_ = get_plugin_manager()->try_find_module<kernel_module>();
+    uuid_module_ = get_plugin_manager()->try_find_module<guid_module>();
+    bus_module_ = get_plugin_manager()->try_find_module<bus_module>();
+    msg_module_ = get_plugin_manager()->try_find_module<msg_module>();
+    net_service_manager_module_ = get_plugin_manager()->try_find_module<net_service_manager_module>();
+    map_module_ = get_plugin_manager()->try_find_module<map_module>();
+
+    if (bus_module_ == nullptr || net_service_manager_module_ == nullptr || kernel_module_ == nullptr)
+    {
+        ARK_LOG_ERROR("game network startup requires Bus, Net and Kernel modules");
+        return false;
+    }
 
     kernel_module_->add_common_class_event(this, &game_net_module_impl::on_common_class_event);
 
@@ -53,27 +59,25 @@ bool game_net_module_impl::init() {
 }
 
 bool game_net_module_impl::post_init() {
-    start_server();
-    return true;
+    return start_server();
 }
 
-int game_net_module_impl::start_server() {
+bool game_net_module_impl::start_server() {
     auto ret = net_service_manager_module_->create_server();
     if (!ret)
     {
         ARK_LOG_ERROR("Cannot start server net, busid = {}", bus_module_->get_self_bus_name());
-        ARK_ASSERT_NO_EFFECT(0);
-        exit(0);
+        return false;
     }
 
     net_server_service_ = net_service_manager_module_->get_inter_net_server();
     if (net_server_service_ == nullptr)
     {
         ARK_LOG_ERROR("Cannot find server net, busid = {}", bus_module_->get_self_bus_name());
-        exit(0);
+        return false;
     }
 
-    return 0;
+    return true;
 }
 
 //bool AFCGameNetModule::PreUpdate()
