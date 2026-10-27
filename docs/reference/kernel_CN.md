@@ -116,6 +116,12 @@ bool set_int32_field(ark::kernel_module& kernel, const ark::guid_t& id, const st
 
 `table*` 和 `row*` 是借用指针，不独立拥有实体数据。表格删除行、清空表格或销毁所属实体后，不要继续使用相关指针。
 
+### 自定义无符号值
+
+`entity::add_custom_u_int32(name, value)` 创建按名称访问的运行时 `uint32_t` 值，与元数据字段分开。创建后，`set_custom_u_int32(name, value)` 可在 `0` 到 `UINT32_MAX` 的完整范围内更新值，使用 `get_custom_u_int32(name)` 读取。名称不存在或对应其他标量类型时，设置操作在 Debug 和 Release 构建中均返回 `false`，不会创建数据、转换类型或修改已有值。使用 `find_custom_data()` 检查是否存在；已存储的零是有效值。
+
+`check-kernel-initialization` 通过公开的 `entity` 接口验证这些操作，并检查其他自定义标量。启用应用、Kernel、Utility 和示例后，`check-typed-examples` 还会在真实 Kernel、EntityOperations 动态库创建的实体上验证无符号值更新。
+
 ## 注册事件
 
 可以按类注册创建 / 销毁事件、字段变化、表格变化和容器操作，也可以为单个实体注册业务事件。公共类事件通过 `add_common_class_event()` 注册。

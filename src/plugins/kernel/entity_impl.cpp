@@ -761,7 +761,14 @@ bool entity_impl::set_custom_int32(const std::string& name, const int32_t value)
 }
 
 bool entity_impl::set_custom_u_int32(const std::string& name, const uint32_t value) {
-    return false;
+    auto* data_ptr = custom_data_list_.find_value(name);
+    if (data_ptr == nullptr || data_ptr->get_type() != data_type::dt_uint32)
+    {
+        return false;
+    }
+
+    data_ptr->set_u_int(value);
+    return true;
 }
 
 bool entity_impl::set_custom_int64(const std::string& name, const int64_t value) {

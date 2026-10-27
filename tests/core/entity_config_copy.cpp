@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -411,4 +412,69 @@ TEST_CASE("container configuration zero and rejected configurations preserve cre
     CHECK(empty->get_parent_container() == container);
     CHECK(container->exist(empty->get_id()));
     CHECK(world.kernel.get_static_entity(99)->get_int32("level") == 13);
+}
+
+TEST_CASE("public entity custom uint32 updates preserve the full unsigned range") {
+    configured_world world;
+    const std::shared_ptr<ark::entity> object = world.create(10, 0);
+    REQUIRE(object != nullptr);
+    REQUIRE(object->add_custom_u_int32("sequence", 0));
+    CHECK(object->get_custom_u_int32("sequence") == 0);
+    for (const auto value :
+        {std::numeric_limits<std::uint32_t>::max(), std::uint32_t{0x80000000}, std::uint32_t{1}, std::uint32_t{0}})
+    {
+        REQUIRE(object->set_custom_u_int32("sequence", value));
+        CHECK(object->get_custom_u_int32("sequence") == value);
+        CHECK(object->find_custom_data("sequence"));
+    }
+}
+
+TEST_CASE("public entity custom uint32 rejects missing names without creating data") {
+    configured_world world;
+    const std::shared_ptr<ark::entity> object = world.create(10, 0);
+    REQUIRE(object != nullptr);
+    CHECK_FALSE(object->find_custom_data("missing"));
+    CHECK_FALSE(object->set_custom_u_int32("missing", std::numeric_limits<std::uint32_t>::max()));
+    CHECK_FALSE(object->find_custom_data("missing"));
+    REQUIRE(object->add_custom_u_int32("missing", 7));
+    CHECK(object->get_custom_u_int32("missing") == 7);
+    REQUIRE(object->remove_custom_data("missing"));
+    CHECK_FALSE(object->set_custom_u_int32("missing", 0));
+    CHECK_FALSE(object->find_custom_data("missing"));
+}
+
+TEST_CASE("public entity custom uint32 rejects other scalar types without changing their values") {
+    configured_world world;
+    const std::shared_ptr<ark::entity> object = world.create(10, 0);
+    REQUIRE(object != nullptr);
+    REQUIRE(object->add_custom_bool("boolean", true));
+    REQUIRE(object->add_custom_int32("signed32", -17));
+    REQUIRE(object->add_custom_int64("signed64", 4567890123LL));
+    REQUIRE(object->add_custom_float("float", 1.25F));
+    REQUIRE(object->add_custom_double("double", 2.5));
+    REQUIRE(object->add_custom_string("string", "preserved"));
+    for (const auto* name : {"boolean", "signed32", "signed64", "float", "double", "string"})
+    {
+        CHECK_FALSE(object->set_custom_u_int32(name, 0));
+        CHECK_FALSE(object->set_custom_u_int32(name, std::numeric_limits<std::uint32_t>::max()));
+    }
+    CHECK(object->get_custom_bool("boolean"));
+    CHECK(object->get_custom_int32("signed32") == -17);
+    CHECK(object->get_custom_int64("signed64") == 4567890123LL);
+    CHECK(object->get_custom_float("float") == 1.25F);
+    CHECK(object->get_custom_double("double") == 2.5);
+    CHECK(std::string(object->get_custom_string("string")) == "preserved");
+
+    REQUIRE(object->set_custom_bool("boolean", false));
+    REQUIRE(object->set_custom_int32("signed32", 23));
+    REQUIRE(object->set_custom_int64("signed64", -4567890123LL));
+    REQUIRE(object->set_custom_float("float", 3.5F));
+    REQUIRE(object->set_custom_double("double", 4.25));
+    REQUIRE(object->set_custom_string("string", "updated"));
+    CHECK_FALSE(object->get_custom_bool("boolean"));
+    CHECK(object->get_custom_int32("signed32") == 23);
+    CHECK(object->get_custom_int64("signed64") == -4567890123LL);
+    CHECK(object->get_custom_float("float") == 3.5F);
+    CHECK(object->get_custom_double("double") == 4.25);
+    CHECK(std::string(object->get_custom_string("string")) == "updated");
 }
