@@ -368,3 +368,7 @@ if(ARK_BUILD_HTTP_EXAMPLE_TESTS)
         DEPENDS ark_http_examples_tests http_client_sample_plugin http_server_plugin USES_TERMINAL)
     add_dependencies(check-core check-http-examples)
 endif()
+
+if(TARGET check-guest-room)
+    add_dependencies(check-core check-guest-room)
+endif()

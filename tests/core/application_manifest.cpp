@@ -4,6 +4,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <set>
 #include <string>
 #include <string_view>
 
@@ -12,6 +13,14 @@
 #include <ark/application_manifest.hpp>
 
 namespace {
+
+constexpr std::array<std::string_view, 24> migrated_application_presets = {"db.app.toml", "dir.app.toml",
+    "entity_operations.app.toml", "game.app.toml", "http_client_sample.app.toml", "http_server.app.toml",
+    "login.app.toml", "master.app.toml", "module_lifecycle.app.toml", "mysql_sample.app.toml", "oss.app.toml",
+    "physic.app.toml", "physics_scene.app.toml", "proxy.app.toml", "realm.example.app.toml", "realm.game.app.toml",
+    "realm.master.app.toml", "redis_sample.app.toml", "remote_log.app.toml", "router.app.toml", "simulate.app.toml",
+    "terraria.game.app.toml", "timers.app.toml", "world.app.toml"};
+constexpr std::array<std::string_view, 1> native_application_presets = {"guest_room.app.toml"};
 
 std::string utf8_path(const std::filesystem::path& path) {
     const auto encoded = path.u8string();
@@ -102,24 +111,64 @@ void check_equivalent_manifest(const ark::application_manifest& actual, const ar
 
 } // namespace
 
-DOCTEST_TEST_CASE("built-in TOML presets retain their legacy XML application schema") {
+DOCTEST_TEST_CASE("migrated built-in TOML presets retain their legacy XML application schema") {
     const auto root = std::filesystem::path(ARK_TEST_SOURCE_DIR);
     size_t count = 0;
-    for (const auto& entry : std::filesystem::directory_iterator(root / "config"))
+    for (const auto name : migrated_application_presets)
     {
-        const auto name = entry.path().filename().string();
-        if (!name.ends_with(".app.toml"))
-        {
-            continue;
-        }
         DOCTEST_CAPTURE(name);
-        auto legacy = entry.path().filename();
+        auto legacy = std::filesystem::path(name);
         legacy.replace_extension(".conf");
-        check_equivalent_manifest(ark::load_application_manifest(utf8_path(entry.path())),
+        check_equivalent_manifest(ark::load_application_manifest(utf8_path(root / "config" / name)),
             ark::load_application_manifest(utf8_path(root / "tests/core/fixtures/application_presets" / legacy)));
         ++count;
     }
     DOCTEST_CHECK(count == 24);
+}
+
+DOCTEST_TEST_CASE("native guest-room TOML declares its complete plugin configuration without legacy XML") {
+    const auto root = std::filesystem::path(ARK_TEST_SOURCE_DIR);
+    const auto manifest = ark::load_application_manifest(utf8_path(root / "config/guest_room.app.toml"));
+    DOCTEST_CHECK(manifest.plugin_library_dir == "bin/");
+    DOCTEST_CHECK(manifest.plugin_config_dir == "conf/");
+    DOCTEST_REQUIRE(manifest.plugins.size() == 5);
+    DOCTEST_CHECK(manifest.plugins.at("ark_utility_plugin").empty());
+    DOCTEST_CHECK(manifest.plugins.at("ark_kernel_plugin") == "kernel.plugin.conf");
+    DOCTEST_CHECK(manifest.plugins.at("ark_bus_plugin") == "guest_room.bus.toml");
+    DOCTEST_CHECK(manifest.plugins.at("ark_net_plugin").empty());
+    DOCTEST_CHECK(manifest.plugins.at("guest_room_plugin").empty());
+}
+
+DOCTEST_TEST_CASE("every built-in TOML application preset has an explicit migrated or native classification") {
+    const auto root = std::filesystem::path(ARK_TEST_SOURCE_DIR);
+    std::set<std::string> expected;
+    for (const auto name : migrated_application_presets)
+    {
+        DOCTEST_CAPTURE(name);
+        DOCTEST_CHECK(expected.emplace(name).second);
+    }
+    for (const auto name : native_application_presets)
+    {
+        DOCTEST_CAPTURE(name);
+        DOCTEST_CHECK(expected.emplace(name).second);
+    }
+    std::set<std::string> actual;
+    for (const auto& entry : std::filesystem::directory_iterator(root / "config"))
+    {
+        const auto name = entry.path().filename().string();
+        if (name.ends_with(".app.toml"))
+        {
+            DOCTEST_CAPTURE(name);
+            DOCTEST_CHECK(expected.contains(name));
+            actual.insert(name);
+        }
+    }
+    for (const auto& name : expected)
+    {
+        DOCTEST_CAPTURE(name);
+        DOCTEST_CHECK(actual.contains(name));
+    }
+    DOCTEST_CHECK(actual == expected);
 }
 
 DOCTEST_TEST_CASE("deployment TOML application payloads retain their legacy XML schema") {

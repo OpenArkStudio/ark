@@ -1,0 +1,8 @@
+{
+  "format": "ARK1",
+  "vectors": [
+    {"message_id": 60000, "body": "{\"name\":\"Alice\",\"room\":\"lobby\"}", "frame_hex": "41524b31ea6000000000001f7b226e616d65223a22416c696365222c22726f6f6d223a226c6f626279227d"},
+    {"message_id": 60005, "body": "{\"nonce\":1}", "frame_hex": "41524b31ea6500000000000b7b226e6f6e6365223a317d"},
+    {"message_id": 60006, "body": "", "frame_hex": "41524b31ea66000000000000"}
+  ]
+}
