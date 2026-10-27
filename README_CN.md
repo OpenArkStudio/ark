@@ -45,7 +45,7 @@ cmake --build app-build --config Release --parallel 2
   --app_conf=conf/timers.app.toml --log_conf=conf/log.conf
 ```
 
-[原 Unity 客户端](https://github.com/OpenArkStudio/ArkClient-Unity3D)尚未与当前 ark 服务端完成兼容性验证。
+[Godot C# 演示客户端](https://github.com/OpenArkStudio/ark-client-godot)与 [`guest_room`](examples/guest_room/) 配套，展示移动同步、HP/MP 属性与断线重连。[原 Unity 客户端](https://github.com/OpenArkStudio/ArkClient-Unity3D)尚未与当前 ark 服务端完成兼容性验证。
 
 [模块指南](docs/guides/modules_CN.md) · [架构](docs/concepts/architecture_CN.md) · [测试](docs/networking_CN.md) · [参与贡献](.github/CONTRIBUTING.md) · [Discord](https://discord.gg/GmyBbcv)
 

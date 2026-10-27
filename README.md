@@ -45,7 +45,7 @@ Follow the [quick start](docs/get-started/quick-start.md) to prepare the runtime
   --app_conf=conf/timers.app.toml --log_conf=conf/log.conf
 ```
 
-The [legacy Unity client](https://github.com/OpenArkStudio/ArkClient-Unity3D) has not been verified against the current ark server.
+The [Godot C# demo](https://github.com/OpenArkStudio/ark-client-godot) pairs with [`guest_room`](examples/guest_room/) to demonstrate shared movement, HP/MP attributes and reconnecting. The [legacy Unity client](https://github.com/OpenArkStudio/ArkClient-Unity3D) has not been verified against the current ark server.
 
 [Module guide](docs/guides/modules.md) · [Architecture](docs/concepts/architecture.md) · [Tests](docs/networking.md) · [Contribute](.github/CONTRIBUTING.md) · [Discord](https://discord.gg/GmyBbcv)
 
