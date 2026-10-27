@@ -25,6 +25,7 @@
 #include "ark/enum.hpp"
 #include "ark/kernel/class_call_back_manager.hpp"
 #include "ark/kernel/container_meta.hpp"
+#include "ark/kernel/entity_json.hpp"
 #include "ark/kernel/node_meta.hpp"
 #include "ark/kernel/table_meta.hpp"
 #include "ark/macros.hpp"
@@ -47,6 +48,10 @@ private:
 
     // res path
     std::string res_path_{null_str};
+
+    // Validated JSON rows are retained for one coherent startup snapshot.
+    std::shared_ptr<const entity_json::config_definition> json_config_;
+    std::string json_config_pointer_;
 
     // name index
     name_index_list name_index_list_;
@@ -74,6 +79,10 @@ public:
 
     void set_res_path(const std::string& value);
     const std::string& get_res_path() const;
+
+    void set_json_config(std::shared_ptr<const entity_json::config_definition> config, std::string pointer);
+    const std::shared_ptr<const entity_json::config_definition>& get_json_config() const;
+    const std::string& get_json_config_pointer() const;
 
     // create data meta
     std::shared_ptr<node_meta> create_data_meta(const std::string& name, const uint32_t index);

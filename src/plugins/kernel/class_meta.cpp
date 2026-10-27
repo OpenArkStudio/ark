@@ -43,6 +43,19 @@ const std::string& class_meta::get_res_path() const {
     return res_path_;
 }
 
+void class_meta::set_json_config(std::shared_ptr<const entity_json::config_definition> config, std::string pointer) {
+    json_config_ = std::move(config);
+    json_config_pointer_ = std::move(pointer);
+}
+
+const std::shared_ptr<const entity_json::config_definition>& class_meta::get_json_config() const {
+    return json_config_;
+}
+
+const std::string& class_meta::get_json_config_pointer() const {
+    return json_config_pointer_;
+}
+
 // create data meta
 std::shared_ptr<node_meta> class_meta::create_data_meta(const std::string& name, const uint32_t index) {
     // check arg

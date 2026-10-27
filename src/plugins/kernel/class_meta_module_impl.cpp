@@ -21,6 +21,7 @@
 #include "ark/kernel/class_meta_module_impl.hpp"
 #include "ark/plugin_manager.hpp"
 #include "ark/xml.hpp"
+#include "detail/entity_json_runtime.hpp"
 #include "detail/resource_path.hpp"
 
 namespace ark {
@@ -28,7 +29,19 @@ namespace ark {
 bool class_meta_module_impl::init() {
     class_meta_manager_ = ARK_NEW class_meta_manager;
 
-    ARK_ASSERT_RET_VAL(load(), false);
+    try
+    {
+        if (!load())
+        {
+            ARK_DELETE(class_meta_manager_);
+            return false;
+        }
+    }
+    catch (...)
+    {
+        ARK_DELETE(class_meta_manager_);
+        throw;
+    }
 
     return true;
 }
@@ -40,6 +53,12 @@ bool class_meta_module_impl::shut() {
 }
 
 bool class_meta_module_impl::load() {
+    if (detail::has_entity_json())
+    {
+        const auto document = entity_json::load(detail::entity_json_file());
+        detail::load_entity_json_metadata(*class_meta_manager_, document);
+        return true;
+    }
     if (!load_config())
     {
         return false;

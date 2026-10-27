@@ -17,9 +17,92 @@ Schemas and configuration values are separate data: a schema defines field names
 
 ### Resource loading
 
-The metadata module loads `resource/meta/config_class.config` and `resource/meta/entity_class.config` during `init()`. These files reference individual schema files; configuration schemas may also specify data resources. During `post_init()`, `config_module` loads static records using this metadata.
+When no JSON schema is selected, the metadata module loads `resource/meta/config_class.config` and `resource/meta/entity_class.config` during `init()`. These files reference individual schema files; configuration schemas may also specify data resources. During `post_init()`, `config_module` loads static records using this metadata.
 
 Query configuration after the framework has completed the relevant initialization. Creating a runtime entity requires its class schema, map and map instance to exist. Register class event callbacks before creating entities of that class. See [Create a module](../guides/modules.md) for module integration.
+
+## JSON Entity schema and business data
+
+Kernel selects `resource/meta/entity_schema.json` when that file exists. It validates the complete versioned document during metadata `init()` and retains static rows as an owning startup snapshot. Configuration `post_init()` consumes that same snapshot; replacing the file between phases does not mix schemas and rows. Invalid selected JSON reports its source path and JSON pointer and fails startup, with no XML fallback. When the JSON file is absent, the existing XML resource paths and readers remain available.
+
+The file defines classes, scalar fields, tables, containers and configuration profiles. Indices are explicit and stable: array order does not assign indices, and JSON loading does not depend on generated `meta_name_index`. Inheritance must be flattened by the authoring/export step. The following example keeps application fields above the legacy BaseEntity indices `1..4`:
+
+```json
+{
+  "format": "ark.entity-schema",
+  "version": 1,
+  "classes": [
+    {
+      "name": "GuestPlayer",
+      "description": "Guest attributes",
+      "fields": [
+        {"name": "id", "index": 99, "type": "uint32"},
+        {"name": "name", "index": 100, "type": "string", "mask": ["sync_view", "sync_self"]},
+        {"name": "x", "index": 101, "type": "double"},
+        {"name": "y", "index": 102, "type": "double"},
+        {"name": "move_seq", "index": 103, "type": "uint32"},
+        {"name": "hp", "index": 104, "type": "uint32", "mask": ["save", "real_time"]},
+        {"name": "mp", "index": 105, "type": "uint32"},
+        {"name": "hp_max", "index": 106, "type": "uint32"},
+        {"name": "mp_max", "index": 107, "type": "uint32"},
+        {"name": "action_seq", "index": 108, "type": "uint32"}
+      ],
+      "tables": [{"name": "inventory", "index": 200, "class": "Item", "mask": ["save"]}],
+      "containers": [{"name": "bag", "index": 201, "class": "Item", "mask": ["save"]}]
+    },
+    {
+      "name": "Item",
+      "fields": [{"name": "count", "index": 1, "type": "uint32"}],
+      "tables": [],
+      "containers": []
+    }
+  ],
+  "configs": [{"class": "GuestPlayer", "rows": [
+    {"id": 1, "name": "Guest", "x": 80.0, "y": 100.0, "move_seq": 0,
+     "hp": 100, "mp": 100, "hp_max": 100, "mp_max": 100, "action_seq": 0}
+  ]}]
+}
+```
+
+A class requires `name`, `fields`, `tables` and `containers`; the arrays may be empty. Scalar fields require `name`, `index` and `type`; relations require `name`, `index` and referenced `class`. Optional `description` strings on classes, fields and relations round-trip through export and have no runtime effect. Optional `mask` defaults to an empty array. Supported mask names, in bit order, are `sync_view`, `sync_self`, `real_time`, `save`, `sync_team`, `sync_guild`, `sync_map` and `log`.
+
+| Scalar type | JSON value and validation |
+| --- | --- |
+| `bool` | A JSON boolean |
+| `int32`, `uint32`, `int64`, `uint64` | A JSON integer within the declared signed/unsigned range; no string or floating-point coercion |
+| `float`, `double` | A finite JSON number within the declared range; `float` normalizes to its native precision |
+| `string` | A UTF-8 JSON string without NUL bytes |
+| `guid` | A canonical signed 64-bit decimal string; runtime loading also enforces the configured GUID width |
+
+Version 1 rejects enum-only or unsupported field primitives such as `vector3d`, `wstring`, `array`, pointers and userdata. Table columns reference a scalar-only class. Containers reference an existing class; their existing entity ownership and explicit destruction APIs remain in use. The common container-destruction callback is registered for every declared class and container, including classes other than `Player`; this does not add automatic cascade destruction of arbitrary entity graphs.
+
+Class names and member names/indices must be unique; member indices are `1..4294967295`. Unknown keys, duplicate JSON object keys, duplicate masks, invalid references, wrong scalar types and out-of-range values fail validation. Each configuration class reuses its class's scalar schema and must declare `id` as `uint32`. Every row supplies every scalar field; IDs are positive and globally unique across configuration classes. Version 1 provides no implicit per-field `default` property or nested table/container row defaults.
+
+Create a configured entity using profile `1`, then access ordinary typed fields and table columns:
+
+```cpp
+const auto player = kernel.create_entity(ark::null_guid, map_id, 0, "GuestPlayer", 1, args);
+if (player)
+{
+    const auto hp = player->get_u_int32("hp");
+    player->set_u_int32("hp", hp > 0 ? hp - 1 : 0);
+    if (auto* inventory = player->find_table("inventory"))
+    {
+        if (auto* row = inventory->add_row(0))
+        {
+            row->set_u_int32("count", 3);
+        }
+    }
+}
+```
+
+Schema/lazy-zero construction, selected static profile and per-field arguments retain the precedence described below. A profile's class must match the entity class. Profile values are copied into independent nodes; arguments override only the supplied fields, including explicit zero. Without a profile, retain the existing lazy-node initialization rules before reading a field. The `id` field at index `99` is configuration data, separate from the runtime entity GUID and the `config_id` constructor parameter.
+
+Offline tools and Kernel share `<ark/kernel/entity_json.hpp>` and compiled target `ark::kernel_json`. Its plain C++ model exposes `document`, `class_definition`, `field`, `relation`, `config_definition` and typed scalar `value`; `parse()`, `load()`, `validate()` and `serialize()` use one validator. The header exposes no nlohmann types and the target has no Net, Boost or Protobuf dependency. Installed consumers can request component `kernel_json` separately. See [Configuration tools](../guides/tools.md) for authoring/export workflows.
+
+**Build and ABI change:** Kernel application builds now require `nlohmann_json`; the `application` vcpkg feature includes it. `class_meta` retains a plain C++ configuration snapshot, changing its layout. Rebuild Kernel and its C++ consumers together. Existing XML resources do not need to be converted merely to keep running.
+
+`check-entity-json` validates typed models, scalar/range errors, exact duplicate-key pointers, masks, references and deterministic export. `check-kernel-initialization` covers XML/JSON loading, profile/argument precedence, independent fields, table columns, container ownership, coherent startup snapshots and selected-JSON failures. `check-kernel-plugin` loads real Kernel/Utility DSOs in separate XML and JSON process runs. These checks establish the exercised native behavior, not arbitrary live reload or production deployment acceptance.
 
 ## Create and find entities
 
@@ -225,7 +308,7 @@ The plugin uses private owning factories and explicit `DllEntryPlugin`/`DllExitP
 | `kernel_module` | `kernel_module_impl` | `module_update::enabled`; existing override |
 | `map_module` | `map_module_impl` | `module_update::disabled`; inherited default update |
 
-Installation retains the table order; uninstallation uses its reverse. Registration still completes before lifecycle initialization, whose container traversal does not guarantee dependency order. Entity defaults, configuration/schema loading phases, Protobuf messages and business data formats are unchanged.
+Installation retains the table order; uninstallation uses its reverse. Registration still completes before lifecycle initialization, whose container traversal does not guarantee dependency order. The typed construction retains entity-default and loading-phase semantics and Protobuf messages; JSON resources are described above.
 
 `check-kernel-plugin` is a `check-core` dependency when Protobuf and the Kernel/Utility runtime targets are available. The independent runner links only the public `ark::kernel` target and loads both actual DSOs. It checks all four interface keys and manager ownership, metadata/static record loading, map/entity registration, public lifecycle callbacks, manager updates, normal plugin exit and repeated stop. It does not inspect the registry after unloading or certify arbitrary hot update. The public-header consumer also checks the typed bases and retained update overrides; existing initialization/entity-default regressions remain required.
 

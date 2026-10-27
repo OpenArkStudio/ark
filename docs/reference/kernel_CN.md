@@ -17,9 +17,92 @@ Kernel 管理运行时实体、实体结构、静态配置和地图实例。业�
 
 ### 资源加载
 
-元数据模块在 `init()` 中加载 `resource/meta/config_class.config` 和 `resource/meta/entity_class.config`。这两个文件引用具体的结构文件；配置结构还可指定数据资源文件。`config_module` 在 `post_init()` 中按元数据加载静态记录。
+没有选择 JSON 结构时，元数据模块在 `init()` 中加载 `resource/meta/config_class.config` 和 `resource/meta/entity_class.config`。这两个文件引用具体的结构文件；配置结构还可指定数据资源文件。`config_module` 在 `post_init()` 中按元数据加载静态记录。
 
 业务代码应在框架完成相应初始化后查询配置。创建运行时实体前，需要存在对应类结构、地图和地图实例。类事件回调应在目标实体创建前注册。模块接入方式见[创建模块](../guides/modules_CN.md)。
+
+## JSON 实体定义与业务配置
+
+存在 `resource/meta/entity_schema.json` 时，Kernel 选择该文件。元数据模块在 `init()` 中校验完整的版本化文档，并持有静态配置行的启动快照；配置模块在 `post_init()` 中读取同一份快照。两个阶段之间替换文件不会混用结构与数据。所选 JSON 非法时，启动错误包含源路径和 JSON Pointer，不回退到 XML。没有 JSON 文件时，仍使用原有 XML 资源路径和读取器。
+
+文件定义类、标量字段、表、容器和配置预设。索引显式指定且保持稳定，不由数组顺序决定，也不依赖生成头文件中的 `meta_name_index`。继承字段须由编写或导出步骤展平。以下示例将应用字段放在旧 BaseEntity 索引 `1..4` 之后：
+
+```json
+{
+  "format": "ark.entity-schema",
+  "version": 1,
+  "classes": [
+    {
+      "name": "GuestPlayer",
+      "description": "Guest attributes",
+      "fields": [
+        {"name": "id", "index": 99, "type": "uint32"},
+        {"name": "name", "index": 100, "type": "string", "mask": ["sync_view", "sync_self"]},
+        {"name": "x", "index": 101, "type": "double"},
+        {"name": "y", "index": 102, "type": "double"},
+        {"name": "move_seq", "index": 103, "type": "uint32"},
+        {"name": "hp", "index": 104, "type": "uint32", "mask": ["save", "real_time"]},
+        {"name": "mp", "index": 105, "type": "uint32"},
+        {"name": "hp_max", "index": 106, "type": "uint32"},
+        {"name": "mp_max", "index": 107, "type": "uint32"},
+        {"name": "action_seq", "index": 108, "type": "uint32"}
+      ],
+      "tables": [{"name": "inventory", "index": 200, "class": "Item", "mask": ["save"]}],
+      "containers": [{"name": "bag", "index": 201, "class": "Item", "mask": ["save"]}]
+    },
+    {
+      "name": "Item",
+      "fields": [{"name": "count", "index": 1, "type": "uint32"}],
+      "tables": [],
+      "containers": []
+    }
+  ],
+  "configs": [{"class": "GuestPlayer", "rows": [
+    {"id": 1, "name": "Guest", "x": 80.0, "y": 100.0, "move_seq": 0,
+     "hp": 100, "mp": 100, "hp_max": 100, "mp_max": 100, "action_seq": 0}
+  ]}]
+}
+```
+
+类必须包含 `name`、`fields`、`tables` 和 `containers`，数组允许为空。标量字段必须包含 `name`、`index` 和 `type`；表或容器必须包含 `name`、`index` 和引用的 `class`。类、字段、表和容器可带 `description` 字符串，导出时保留，运行时不参与业务逻辑。可选 `mask` 默认是空数组。按位顺序支持 `sync_view`、`sync_self`、`real_time`、`save`、`sync_team`、`sync_guild`、`sync_map` 和 `log`。
+
+| 标量类型 | JSON 值与校验 |
+| --- | --- |
+| `bool` | JSON 布尔值 |
+| `int32`、`uint32`、`int64`、`uint64` | 位于对应有符号或无符号范围内的 JSON 整数，不从字符串或浮点数强制转换 |
+| `float`、`double` | 位于对应范围内的有限 JSON 数值；`float` 按原生精度规范化 |
+| `string` | 不含 NUL 字节的 UTF-8 JSON 字符串 |
+| `guid` | 规范的有符号 64 位十进制字符串；运行时还检查当前配置的 GUID 位宽 |
+
+版本 1 拒绝只有枚举声明、尚未实现的字段类型，包括 `vector3d`、`wstring`、`array`、指针和 userdata。表的列结构引用只含标量字段的类；容器引用已声明的类，并沿用既有实体所有权和显式销毁 API。公共容器销毁回调会注册到每个类的每个容器，包含 `Player` 之外的类；这不增加任意实体图的自动级联销毁保证。
+
+类名以及类内成员名称、索引必须唯一，成员索引范围为 `1..4294967295`。未知键、重复 JSON 对象键、重复 mask、非法引用、类型错误和越界数值均导致校验失败。配置类复用对应类的标量结构，并须声明 `uint32` 类型的 `id`。每行必须提供全部标量字段；ID 为正数，并在所有配置类之间全局唯一。版本 1 不提供隐式字段 `default` 属性，也不提供表或容器的嵌套行默认值。
+
+使用预设 `1` 创建实体后，通过普通类型字段和表列 API 操作：
+
+```cpp
+const auto player = kernel.create_entity(ark::null_guid, map_id, 0, "GuestPlayer", 1, args);
+if (player)
+{
+    const auto hp = player->get_u_int32("hp");
+    player->set_u_int32("hp", hp > 0 ? hp - 1 : 0);
+    if (auto* inventory = player->find_table("inventory"))
+    {
+        if (auto* row = inventory->add_row(0))
+        {
+            row->set_u_int32("count", 3);
+        }
+    }
+}
+```
+
+结构或惰性零值、所选静态预设以及逐字段参数的优先级沿用下文约定。预设类名须与实体类名一致。预设值复制到独立节点，参数仅覆盖明确提供的字段，包含显式零值。不使用预设时，读取字段前仍须遵循既有惰性节点初始化规则。索引 `99` 的 `id` 属于配置数据，与运行时实体 GUID、构造参数 `config_id` 分开。
+
+离线工具和 Kernel 共用 `<ark/kernel/entity_json.hpp>` 及编译目标 `ark::kernel_json`。公开的普通 C++ 模型包括 `document`、`class_definition`、`field`、`relation`、`config_definition` 和有类型的标量 `value`；`parse()`、`load()`、`validate()`、`serialize()` 复用同一校验器。头文件不暴露 nlohmann 类型，目标不依赖 Net、Boost 或 Protobuf。已安装的消费者可单独请求 `kernel_json` 组件。编写和导出流程见[配置工具](../guides/tools_CN.md)。
+
+**构建与 ABI 变更：**Kernel 应用构建现在需要 `nlohmann_json`，`application` vcpkg 特性已包含该依赖。`class_meta` 新增普通 C++ 配置快照，改变了类布局。Kernel 和 C++ 消费者须一起重新构建。继续使用原有 XML 资源不要求立即转换格式。
+
+`check-entity-json` 检查有类型模型、数值范围、重复键精确位置、mask、引用和确定性导出。`check-kernel-initialization` 覆盖 XML／JSON 加载、预设与参数优先级、字段独立性、表列、容器所有权、启动快照一致性和所选 JSON 失败。`check-kernel-plugin` 分别在 XML、JSON 子进程中加载真实 Kernel／Utility 动态库。这些检查只证明覆盖的原生行为，不代表任意热加载或生产部署验收。
 
 ## 创建和查找实体
 
@@ -222,7 +305,7 @@ cmake --build kernel-headers-build --target check-kernel-headers --parallel 2
 | `kernel_module` | `kernel_module_impl` | `module_update::enabled`，保留原有覆写 |
 | `map_module` | `map_module_impl` | `module_update::disabled`，继承默认 update |
 
-安装按表格顺序执行，卸载按相反顺序执行。所有注册仍在生命周期初始化前完成，初始化阶段的容器遍历不保证依赖顺序。实体默认值、配置／结构加载阶段、Protobuf 消息及业务数据格式不变。
+安装按表格顺序执行，卸载按相反顺序执行。所有注册仍在生命周期初始化前完成，初始化阶段的容器遍历不保证依赖顺序。类型化创建保留实体默认值、加载阶段和 Protobuf 消息语义；JSON 资源见上文。
 
 开启 Protobuf 且存在 Kernel／Utility 运行时 target 时，`check-kernel-plugin` 成为 `check-core` 的依赖。独立 runner 仅链接公开 `ark::kernel`，加载两个真实 DSO，检查四个接口注册键与管理器归属、元数据／静态记录加载、地图／实体注册、公开生命周期回调、管理器更新、正常插件退出和重复 stop。不在卸载后检查注册表，也不证明任意热更新安全。公开头消费者还检查类型基类及原有 update 覆写；现有初始化和实体默认值回归继续保留。
 

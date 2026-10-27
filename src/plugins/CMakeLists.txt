@@ -74,6 +74,7 @@ set(ark_bus_public_headers
 )
 set(ark_http_public_headers "${CMAKE_CURRENT_SOURCE_DIR}/http/http_server_module.hpp")
 set(ark_kernel_public_headers
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernel/entity_json.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernel/class_call_back_manager.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernel/class_meta.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernel/class_meta_manager.hpp"
@@ -213,6 +214,11 @@ foreach(plugin_name IN LISTS ark_plugin_names)
     endif()
     option(ARK_BUILD_PLUGIN_${plugin_option} "Build the ${plugin_name} plugin" ${plugin_default})
 endforeach()
+
+if((ARK_BUILD_APPLICATIONS AND ARK_BUILD_PLUGIN_KERNEL) OR ARK_BUILD_CONFIG_TOOL OR
+        (ARK_BUILD_CORE_TESTS AND ARK_BUILD_PROTO))
+    include("${CMAKE_CURRENT_SOURCE_DIR}/kernel/entity_json.cmake")
+endif()
 
 if(ARK_BUILD_APPLICATIONS)
     foreach(plugin_name IN LISTS ark_plugin_names)
