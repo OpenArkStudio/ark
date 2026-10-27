@@ -14,3 +14,4 @@ else(UNIX)
         optimized :AFProto.a
         ${PROTOBUF_LIBRARIES})
 endif()
+set_property(TARGET ark_kernel_plugin APPEND PROPERTY LINK_LIBRARIES nlohmann_json::nlohmann_json)

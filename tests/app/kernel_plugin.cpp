@@ -50,7 +50,8 @@ interface_type* find_owned(ark::plugin_manager& manager) {
 } // namespace
 
 int main(int argc, char* argv[]) {
-    require(argc == 2, "Expected actual plugin directory");
+    require(argc == 2 || argc == 3, "Expected actual plugin directory and optional JSON mode");
+    const bool json = argc == 3 && std::string(argv[2]) == "json";
     ark::logger log;
     ark::logger::init(&log);
     log.set_log_func([](spdlog::level::level_enum, const std::string&) {});
@@ -63,11 +64,13 @@ int main(int argc, char* argv[]) {
     auto* config = find_owned<ark::config_module>(manager);
     auto* kernel = find_owned<ark::kernel_module>(manager);
     auto* maps = find_owned<ark::map_module>(manager);
-    require(metadata->find_meta("Player") != nullptr && metadata->find_static_meta("attribute") != nullptr,
+    require(metadata->find_meta("Player") != nullptr &&
+                metadata->find_static_meta(json ? "Player" : "attribute") != nullptr,
         "Kernel metadata initialization changed");
     {
         auto record = config->find_static_entity(42);
-        require(record && record->get_int32("level") == 7 && kernel->get_static_entity(42) == record,
+        require(record && (json ? record->get_u_int32("hp") == 100 : record->get_int32("level") == 7) &&
+                    kernel->get_static_entity(42) == record,
             "Kernel configuration record loading changed");
     }
     require(maps->create_map(7) && maps->exist_map(7), "Kernel map module did not create a map");
@@ -75,9 +78,18 @@ int main(int argc, char* argv[]) {
         "Kernel entity observer registration failed");
     {
         ark::data_list_impl args;
-        auto entity = kernel->create_entity(1001, 7, 0, "Player", 0, args);
+        if (json)
+        {
+            require(args.add_u_int(77) && args.add_u_int(104), "JSON argument construction failed");
+        }
+        auto entity = kernel->create_entity(1001, 7, 0, "Player", json ? 42 : 0, args);
         require(entity && entity->get_id() == 1001 && kernel->get_entity(1001) == entity && events.created == 1,
             "Kernel DSO entity creation or lifecycle callback changed");
+        if (json)
+        {
+            require(entity->get_u_int32("hp") == 77 && entity->get_string("name") == "Configured",
+                "JSON profile and per-field argument precedence changed");
+        }
         ark::data_list_impl ids;
         require(maps->get_inst_entity_list(7, 0, ids) && ids.get_count() == 1 && ids.int64(0) == 1001,
             "Kernel entity did not retain its map registration");

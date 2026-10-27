@@ -483,19 +483,21 @@ bool kernel_module_impl::add_container_call_back(
 }
 
 bool kernel_module_impl::add_common_container_call_back(container_event_functor&& cb, const int32_t prio) {
-    auto class_meta_ptr = class_meta_module_->find_meta(entity_meta_player::self_name());
-    ARK_ASSERT_RET_VAL(class_meta_ptr != nullptr, false);
-
-    auto& meta_list = class_meta_ptr->get_container_meta_list();
-    for (auto& iter : meta_list)
+    for (const auto& entry : class_meta_module_->get_meta_list())
     {
-        auto meta_ptr = iter.second;
-        if (!meta_ptr)
+        const auto& meta = entry.second;
+        if (!meta)
         {
             continue;
         }
-
-        add_container_call_back(entity_meta_player::self_name(), meta_ptr->get_index(), std::move(cb), prio);
+        for (const auto& container : meta->get_container_meta_list())
+        {
+            auto callback = cb;
+            if (!add_container_call_back(meta->get_name(), container.first, std::move(callback), prio))
+            {
+                return false;
+            }
+        }
     }
 
     return true;

@@ -224,7 +224,7 @@ if(ARK_BUILD_CONFIG)
 endif()
 
 if(ARK_BUILD_PROTO)
-    add_executable(ark_kernel_initialization_tests main.cpp module_initialization.cpp entity_config_copy.cpp
+    add_executable(ark_kernel_initialization_tests main.cpp module_initialization.cpp entity_config_copy.cpp entity_json_loading.cpp
         ../../src/plugins/kernel/class_call_back_manager.cpp
         ../../src/plugins/kernel/class_meta.cpp
         ../../src/plugins/kernel/class_meta_module_impl.cpp
@@ -239,7 +239,7 @@ if(ARK_BUILD_PROTO)
         ../../src/plugins/kernel/static_entity_impl.cpp
         ../../src/plugins/kernel/table_impl.cpp
         ../../src/plugins/kernel/table_meta.cpp)
-    target_link_libraries(ark_kernel_initialization_tests PRIVATE ark::kernel ark::utility ark::proto)
+    target_link_libraries(ark_kernel_initialization_tests PRIVATE ark::kernel ark::utility ark::proto ark::kernel_json)
     add_custom_target(check-kernel-initialization
         COMMAND $<TARGET_FILE:ark_kernel_initialization_tests>
         DEPENDS ark_kernel_initialization_tests
@@ -381,4 +381,8 @@ endif()
 
 if(TARGET check-guest-room)
     add_dependencies(check-core check-guest-room)
+endif()
+
+if(TARGET check-entity-json)
+    add_dependencies(check-core check-entity-json)
 endif()

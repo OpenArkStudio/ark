@@ -35,6 +35,7 @@
     "application": {
       "description": "Build ARK applications and plugins",
       "dependencies": [
+        "nlohmann-json",
         "protobuf",
         "zlib",
         "zstd",

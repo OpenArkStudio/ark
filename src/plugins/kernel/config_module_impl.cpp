@@ -27,6 +27,7 @@
 #include "ark/module.hpp"
 #include "ark/plugin_manager.hpp"
 #include "ark/xml.hpp"
+#include "detail/entity_json_runtime.hpp"
 #include "detail/resource_path.hpp"
 
 namespace ark {
@@ -77,6 +78,12 @@ bool config_module_impl::clear() {
 
 bool config_module_impl::load_config(std::shared_ptr<class_meta> class_meta_ptr) {
     ARK_ASSERT_RET_VAL(class_meta_ptr != nullptr, true);
+
+    if (const auto& config = class_meta_ptr->get_json_config())
+    {
+        detail::load_entity_json_config(*static_entity_manager_, class_meta_ptr, *config);
+        return true;
+    }
 
     const std::string& res_path = class_meta_ptr->get_res_path();
     if (res_path.empty())

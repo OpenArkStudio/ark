@@ -11,7 +11,7 @@ test('core packages are shared while application, configuration and JSON depende
   const core = dependencies(manifest.dependencies);
   assert.ok(core.includes('spdlog'));
   assert.ok(core.includes('readerwriterqueue'));
-  for (const [owners, name] of [[['application'], 'args'], [['config'], 'tomlplusplus'], [['etcd-client', 'guest-room'], 'nlohmann-json']]) {
+  for (const [owners, name] of [[['application'], 'args'], [['config'], 'tomlplusplus'], [['application', 'etcd-client', 'guest-room'], 'nlohmann-json']]) {
     for (const feature of owners) assert.ok(dependencies(manifest.features[feature].dependencies).includes(name));
     assert.ok(!core.includes(name), `${name} must remain optional`);
     for (const [other, value] of Object.entries(manifest.features)) {
