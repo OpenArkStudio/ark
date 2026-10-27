@@ -28,6 +28,8 @@ Deliver stages 1–2 below as the minimum synchronization loop over an ordered, 
 
 Bound pending bytes, batches, age and baseline size. Disconnect on overflow or revision/schema mismatch, then establish a new baseline on reconnect; an explicit in-place reset can be added if useful. Do not add replay history, an application ACK protocol, baseline fragmentation or AOI to this first delivery. Reject a baseline that exceeds the configured limit. The transport queue must own admitted payloads and preserve order; batches and removal markers need no separate retained ACK history. These are recommended design choices, not finalized wire fields or APIs.
 
+![Proposed data flow](../assets/entity-sync-flow.svg)
+
 ## Proposed state contract
 
 The following rules are proposed defaults for review. Names in this section are concepts, not approved C++ methods or message fields.
