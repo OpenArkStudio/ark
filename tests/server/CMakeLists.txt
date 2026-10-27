@@ -48,3 +48,21 @@ add_custom_target(check-server-entry
     COMMAND $<TARGET_FILE:ark_server_entry_tests> "$<TARGET_FILE_DIR:ark_server_entry_probe>/" "ark_server_entry_probe"
     DEPENDS ark_server_entry_tests ark_server_entry_probe USES_TERMINAL VERBATIM)
 add_dependencies(check-server-plugins check-server-entry)
+
+# Exercise the actual launcher and supported local composition, without a
+# registry service or business protocol doubles. This controller owns its child.
+if(UNIX AND TARGET app AND TARGET ark_utility_plugin AND TARGET ark_bus_plugin AND TARGET ark_net_plugin)
+    add_executable(ark_server_launcher_tests launcher.cpp)
+    set_property(TARGET ark_server_launcher_tests PROPERTY LINK_LIBRARIES "")
+    add_custom_target(check-server-launcher
+        COMMAND ${CMAKE_COMMAND}
+            "-DPROGRAM=$<TARGET_FILE:ark_server_launcher_tests>"
+            "-DLAUNCHER=$<TARGET_FILE:app>"
+            "-DPLUGIN_DIR=$<TARGET_FILE_DIR:ark_login_plugin>"
+            "-DSOURCE_ROOT=${PROJECT_SOURCE_DIR}"
+            "-DRUNTIME_ROOT=${CMAKE_CURRENT_BINARY_DIR}/launcher runtime"
+            -P "${PROJECT_SOURCE_DIR}/tests/server/launcher.cmake"
+        DEPENDS ark_server_launcher_tests app ark_utility_plugin ark_bus_plugin ark_net_plugin ark_login_plugin
+        USES_TERMINAL VERBATIM)
+    add_dependencies(check-server-plugins check-server-launcher)
+endif()
