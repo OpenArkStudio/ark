@@ -12,6 +12,20 @@ This page distinguishes supported source behavior from remaining design and depl
 
 Public database service/failure checks, [real-plugin DSO positive workflows](../guides/database-validation.md#real-plugin-dsos-against-real-services), [bounded request cancellation](../guides/database-validation.md#real-plugin-request-cancellation), [observed read-only server termination](../guides/database-validation.md#real-plugin-server-termination) and [Redis TLS command/pipeline and certificate rejection](../guides/database-validation.md#real-plugin-redis-tls) passed against isolated Redis and MySQL servers on macOS. The [database service acceptance record](../guides/database-validation.md) keeps their distinct tested revisions, environments and scope; those results do not cover every deployment or source revision.
 
+## Priority design: Entity incremental synchronization
+
+General-purpose Entity incremental synchronization is a core ark capability to design, with the same discussion priority as startup/shutdown lifecycle work. The current guest-room example explicitly broadcasts full snapshots from business code; it is a functional baseline, not an implementation of automatic framework replication.
+
+The design agenda covers:
+
+- **Change collection:** scalar fields, table/container changes, entity creation/destruction and mutation ownership; define how ordinary Entity APIs record changes without business code constructing each synchronization message.
+- **Snapshots and deltas:** initial state, changed fields, batching, repeated updates, stable field IDs and synchronization versions. Distinguish replicated state from business events so coalescing state cannot silently discard events.
+- **Recipients and authority:** server-owned state, owner/public/server-only fields, subscriptions and the boundary with interest-management or AOI systems.
+- **Recovery and limits:** reconnect baselines, stale/duplicate updates, slow consumers, bounded queues and full-state recovery. Select delivery and acknowledgement rules before fixing a wire format.
+- **Client integration and evidence:** shared schema/codec requirements for C++ and C#, with the two-client Godot room as the first end-to-end consumer. Acceptance should show full state on initial visibility and deltas for later movement/HP/MP changes, including ordering, visibility and recovery checks; measure encoded bytes against the full-snapshot baseline.
+
+These are design topics and acceptance goals, not finalized APIs, protocols or completed capabilities. Agree on the model and compatibility boundaries before implementation.
+
 ## Remaining acceptance and design
 
 | Area | Remaining work and acceptance boundary |
