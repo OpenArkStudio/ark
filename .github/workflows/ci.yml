@@ -208,7 +208,9 @@ jobs:
     needs: scope
     if: ${{ !cancelled() && !(github.event_name == 'pull_request' && toJSON(github.event.pull_request.draft) == 'true') && (needs.scope.result != 'success' || needs.scope.outputs.applications_check != 'false') }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    # Cold Windows dependency configuration and the full C++ build share this
+    # budget. Individual regression timeouts and required checks are unchanged.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(github.event_name == 'pull_request' && needs.scope.result == 'success' && needs.scope.outputs.validation_stage == 'modules' && '{"include":[{"os":"ubuntu-latest"}]}' || '{"include":[{"os":"ubuntu-latest"},{"os":"macos-latest"},{"os":"windows-latest"}]}') }}
