@@ -324,6 +324,16 @@ if(ARK_BUILD_PROTO AND TARGET ark_bus_plugin AND TARGET ark_net_plugin AND TARGE
         DEPENDS ark_bus_plugin_tests ark_bus_plugin ark_net_plugin ark_utility_plugin
         USES_TERMINAL VERBATIM)
     add_dependencies(check-core check-bus-plugin)
+    if(UNIX)
+        add_executable(ark_static_services_tests ../app/static_services.cpp)
+        set_property(TARGET ark_static_services_tests PROPERTY LINK_LIBRARIES ark::bus)
+        add_custom_target(check-static-services
+            COMMAND $<TARGET_FILE:ark_static_services_tests> "$<TARGET_FILE_DIR:ark_bus_plugin>"
+                "${CMAKE_CURRENT_BINARY_DIR}/static services runtime"
+            DEPENDS ark_static_services_tests ark_bus_plugin ark_net_plugin ark_utility_plugin
+            USES_TERMINAL VERBATIM)
+        add_dependencies(check-core check-static-services)
+    endif()
 endif()
 
 if(TARGET ark_http_plugin)

@@ -1,10 +1,12 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
 #pragma once
 
+#include <algorithm>
 #include <bit>
 #include <charconv>
 #include <limits>
 #include <regex>
+#include <set>
 
 #include <arknet/external/asio.hpp>
 
@@ -115,8 +117,14 @@ inline app_config load(const std::string& path, bus_id_t self_bus_id) {
         check_keys(app, location, "application", {"name", "type"});
         const auto name = string(app, location, "name");
         const auto type = static_cast<app_type>(integer(app, location, "type", 1, 254));
-        config.name2types.insert({name, type});
-        config.type2names.insert({type, name});
+        if (!config.name2types.insert({name, type}).second)
+        {
+            fail(location, "name", "duplicate application name: " + name);
+        }
+        if (!config.type2names.insert({type, name}).second)
+        {
+            fail(location, "type", "duplicate application type");
+        }
     }
     index = 0;
     for (const auto& node : array(table, path, "relations"))
@@ -130,7 +138,12 @@ inline app_config load(const std::string& path, bus_id_t self_bus_id) {
         {
             fail(location, "source/target", "expected configured application names");
         }
-        config.connection_relations[source->second].push_back(target->second);
+        auto& targets = config.connection_relations[source->second];
+        if (std::find(targets.begin(), targets.end(), target->second) != targets.end())
+        {
+            fail(location, "source/target", "duplicate directed relation");
+        }
+        targets.push_back(target->second);
     }
     const auto* registry = table["registry"].as_table();
     if (!registry)
@@ -146,6 +159,7 @@ inline app_config load(const std::string& path, bus_id_t self_bus_id) {
     config.reg_center.check_interval = string(*registry, registry_path, "check_interval");
     config.reg_center.check_timeout = string(*registry, registry_path, "check_timeout");
     index = 0;
+    std::set<bus_id_t> process_ids;
     for (const auto& node : array(table, path, "processes"))
     {
         const auto location = path + ": bus.processes[" + std::to_string(index++) + "]";
@@ -154,6 +168,10 @@ inline app_config load(const std::string& path, bus_id_t self_bus_id) {
             {"bus_id", "server_endpoint", "intranet_endpoint", "max_connections", "threads"});
         proc_config proc;
         proc.bus_id = bus_id(string(process, location, "bus_id"), location);
+        if (!process_ids.insert(proc.bus_id).second)
+        {
+            fail(location, "bus_id", "duplicate process Bus ID");
+        }
         proc.max_connection =
             integer(process, location, "max_connections", 0, std::numeric_limits<std::uint32_t>::max());
         proc.thread_num = static_cast<std::uint8_t>(integer(process, location, "threads", 0, 255));

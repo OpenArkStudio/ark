@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <tuple>
 
 #include "../network/doctest.h"
 
@@ -230,40 +231,31 @@ TEST_CASE("Shipped Bus TOML retains the original configuration queries") {
     CHECK(config.reg_center.ip == "127.0.0.1");
 }
 
-TEST_CASE("Bus duplicate keys retain existing insertion and self selection order") {
+TEST_CASE("Bus rejects duplicate application names types relations and process IDs with field diagnostics") {
     configuration_file file;
-    auto text = replace(configuration, "[[bus.relations]]", R"([[bus.applications]]
-name = 'world'
-type = 32
-[[bus.applications]]
-name = 'alias'
-type = 30
-[[bus.relations]])");
-    text = replace(text, "[bus.registry]", R"([[bus.relations]]
-source = 'game'
-target = 'world'
-[[bus.processes]]
-bus_id = '1.1.30.1'
-server_endpoint = ''
-intranet_endpoint = ''
-max_connections = 7
-threads = 7
-[[bus.processes]]
-bus_id = '1.1.31.1'
-server_endpoint = ''
-intranet_endpoint = ''
-max_connections = 8
-threads = 8
-[bus.registry])");
-    const auto config = ark::bus_config_detail::load(file.write(text), ark::bus_addr(1, 1, 31, 1).bus_id);
-    CHECK(config.name2types.at("world") == ark::app_type::ark_app_world);
-    CHECK(config.type2names.at(ark::app_type::ark_app_world) == "world");
-    REQUIRE(config.connection_relations.at(ark::app_type::ark_app_game).size() == 2);
-    CHECK(config.connection_relations.at(ark::app_type::ark_app_game)[0] == ark::app_type::ark_app_world);
-    CHECK(config.connection_relations.at(ark::app_type::ark_app_game)[1] == ark::app_type::ark_app_world);
-    CHECK(config.other_proc_list.at(ark::bus_addr(1, 1, 30, 1).bus_id).max_connection == 5000);
-    CHECK(config.self_proc.max_connection == 8);
-    CHECK(config.self_proc.thread_num == 8);
+    for (const auto& [from, to, field] :
+        std::vector<std::tuple<std::string, std::string, std::string>>{{"name = 'game'", "name = 'world'", "name"},
+            {"type = 31", "type = 30", "type"},
+            {"[bus.registry]", "[[bus.relations]]\nsource = 'game'\ntarget = 'world'\n[bus.registry]", "source/target"},
+            {"'1.1.31.1'", "'1.1.30.1'", "bus_id"}})
+    {
+        for (const auto self : {ark::bus_addr(1, 1, 30, 1).bus_id, ark::bus_addr(1, 1, 31, 1).bus_id})
+        {
+            const auto path = file.write(replace(configuration, from, to));
+            try
+            {
+                static_cast<void>(ark::bus_config_detail::load(path, self));
+                FAIL("duplicate configuration accepted");
+            }
+            catch (const std::runtime_error& error)
+            {
+                const std::string message = error.what();
+                CHECK(message.find(path) != std::string::npos);
+                CHECK(message.find("duplicate") != std::string::npos);
+                CHECK(message.find(field) != std::string::npos);
+            }
+        }
+    }
 }
 
 TEST_CASE("Bus module retains bracketed IPv6 endpoint hosts without brackets for arknet") {

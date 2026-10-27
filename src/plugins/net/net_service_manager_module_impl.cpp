@@ -18,6 +18,9 @@
  *
  */
 
+#include <set>
+#include <stdexcept>
+
 #include "ark/bus/bus_module.hpp"
 #include "ark/container/map.hpp"
 #include "ark/module_base.hpp"
@@ -69,6 +72,7 @@ protected:
     //int DeregisterFromConsul(bus_id_t bus_id);
 
     void health_check(uint64_t timer_id, const guid_t& entity_id);
+    void start_configured_clients();
 
     bool check_connected_target_server(const bus_addr& bus_addr);
     std::shared_ptr<connection_data> get_target_client_connection(const bus_addr& bus_addr);
@@ -105,10 +109,48 @@ bool net_service_manager_module_impl::init() {
 }
 
 bool net_service_manager_module_impl::post_init() {
+    start_configured_clients();
     // start health check timer
     timer_module_->add_forever_timer(0, std::chrono::seconds(20), this, &net_service_manager_module_impl::health_check);
 
     return true;
+}
+
+void net_service_manager_module_impl::start_configured_clients() {
+    const bus_addr self(bus_module_->get_self_bus_id());
+    std::vector<app_type> types;
+    bus_module_->get_target_bus_relations(types);
+    std::set<bus_id_t> queued;
+    for (const auto type : types)
+    {
+        std::vector<const proc_config*> processes;
+        bus_module_->get_other_proc(type, processes);
+        for (const auto* process : processes)
+        {
+            bus_addr target(process->bus_id);
+            if (target.bus_id == self.bus_id || target.channel_id != self.channel_id ||
+                target.zone_id != self.zone_id || !queued.insert(target.bus_id).second)
+            {
+                continue;
+            }
+            const auto& ep = process->intranet_ep;
+            arknet::error_code address_error;
+            const auto address = asio::ip::make_address(ep.get_ip(), address_error);
+            if ((ep.proto() != proto_type::tcp && ep.proto() != proto_type::udp) || ep.get_ip().empty() ||
+                ep.get_ip() == "*" || (!address_error && address.is_unspecified()) || ep.get_port() == 0 ||
+                !ep.get_path().empty())
+            {
+                throw std::runtime_error(
+                    "static Bus target " + target.to_string() +
+                    ": intranet_endpoint requires a dialable TCP/UDP host and nonzero port without a path; "
+                    "wildcard bind addresses cannot be advertised");
+            }
+            if (!create_client_service(target, ep.proto(), ep.get_ip(), ep.get_port()))
+            {
+                throw std::runtime_error("could not queue static Bus target " + target.to_string());
+            }
+        }
+    }
 }
 
 void net_service_manager_module_impl::health_check(uint64_t timer_id, const guid_t& entity_id) {

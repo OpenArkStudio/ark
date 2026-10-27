@@ -75,7 +75,10 @@ bool connect_tcp(ark::plugin_manager& manager, const ark::bus_addr& target,
 
 Connection requests retain their existing asynchronous behavior. Continue calling
 `manager.update(timestamp)` on the owner thread; keep callback receivers alive
-until delivery stops. See [Bus](bus.md) for identity and endpoint configuration.
+until delivery stops. Net also queues outgoing SS connections from Bus relations
+at startup, restricted to configured target types in the same channel and zone.
+Applications still start listeners explicitly. See [Bus](bus.md) for endpoint
+validation, migration requirements and the bounded two-process restart test.
 
 `check-net-plugin`, included in application-enabled `check-core`, loads actual
 Bus/Utility/Net DSOs, checks both interface keys, TCP message and HTTP callbacks

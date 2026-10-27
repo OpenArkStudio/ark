@@ -63,7 +63,9 @@ bool connect_tcp(ark::plugin_manager& manager, const ark::bus_addr& target,
 ```
 
 连接请求保持既有异步语义。继续在所属线程调用 `manager.update(timestamp)`，
-并在回调停止前保持接收者有效。进程身份与端点配置见 [Bus](bus_CN.md)。
+并在回调停止前保持接收者有效。Net 也会在启动时根据 Bus 关系加入 SS 出站连接，
+仅选择同渠道、同区域的指定目标类型。应用仍须显式启动监听。
+端点校验、迁移要求和有界双进程重启测试见 [Bus](bus_CN.md)。
 
 启用应用构建时，`check-core` 包含的 `check-net-plugin` 加载真实 Bus／Utility／Net 动态库，
 验证两个接口键、管理器线程上的 TCP 消息与 HTTP 回调、无需管理器更新即可完成的 future、
