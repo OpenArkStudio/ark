@@ -69,6 +69,7 @@ if(ARK_INSTALL)
         "${PROJECT_SOURCE_DIR}/docs/licenses/config-tool/OpenXLSX-LICENSE.md"
         "${PROJECT_SOURCE_DIR}/docs/licenses/config-tool/miniz-LICENSE.txt"
         "${PROJECT_SOURCE_DIR}/docs/licenses/config-tool/pugixml-LICENSE.md"
+        "${PROJECT_SOURCE_DIR}/docs/licenses/config-tool/pugixml-vcpkg-LICENSE.md"
         "${PROJECT_SOURCE_DIR}/docs/licenses/config-tool/nlohmann-json-LICENSE.txt"
         "${PROJECT_SOURCE_DIR}/docs/licenses/config-tool/Boost-LICENSE.txt"
         DESTINATION "${CMAKE_INSTALL_DATADIR}/ark/config-tool/licenses")

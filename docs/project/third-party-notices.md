@@ -13,12 +13,21 @@ the executable. The framework runtime loads the generated JSON without OpenXLSX.
 | Dependency | Purpose | License text |
 | --- | --- | --- |
 | OpenXLSX 0.5.1 | XLSX reading | [BSD-3-Clause](https://github.com/OpenArkStudio/ark/blob/main/docs/licenses/config-tool/OpenXLSX-LICENSE.md) |
-| miniz 3.0.2 | OpenXLSX ZIP dependency | [MIT](https://github.com/OpenArkStudio/ark/blob/main/docs/licenses/config-tool/miniz-LICENSE.txt) |
-| pugixml 1.15 | OpenXLSX XML dependency | [MIT](https://github.com/OpenArkStudio/ark/blob/main/docs/licenses/config-tool/pugixml-LICENSE.md) |
+| miniz 3.0.2 / 3.1.2 | ZIP dependency: direct-source / pinned vcpkg builds | [MIT, identical text for both versions](https://github.com/OpenArkStudio/ark/blob/main/docs/licenses/config-tool/miniz-LICENSE.txt) |
+| pugixml 1.15 | XML dependency: direct-source OpenXLSX build | [MIT, copyright 2006–2025](https://github.com/OpenArkStudio/ark/blob/main/docs/licenses/config-tool/pugixml-LICENSE.md) |
+| pugixml 1.16 | XML dependency: pinned vcpkg build | [MIT, copyright 2006–2026](https://github.com/OpenArkStudio/ark/blob/main/docs/licenses/config-tool/pugixml-vcpkg-LICENSE.md) |
 | nlohmann/json 3.12.0 | Shared Entity JSON parser/serializer | [MIT](https://github.com/OpenArkStudio/ark/blob/main/docs/licenses/config-tool/nlohmann-json-LICENSE.txt) |
 | Boost.Nowide | UTF-8 paths/arguments on Windows | [Boost Software License 1.0](https://github.com/OpenArkStudio/ark/blob/main/docs/licenses/config-tool/Boost-LICENSE.txt) |
 
-OpenXLSX and its dependency texts come from the 0.5.1 source dependency set;
+OpenXLSX 0.5.1 specifies miniz 3.0.2 and pugixml 1.15 for dependencies fetched from source.
+The repository's pinned [vcpkg baseline](https://github.com/microsoft/vcpkg/tree/0699a19d0c6386247ce50d4dedbb8217d484d536)
+selects miniz 3.1.2 and pugixml 1.16 instead. Both combinations are covered here;
+use the notices matching the libraries actually distributed. The official
+[miniz 3.1.2 license](https://github.com/richgel999/miniz/blob/3.1.2/LICENSE) is
+byte-identical to the 3.0.2 text. The official
+[pugixml 1.16 license](https://github.com/zeux/pugixml/blob/v1.16/LICENSE.md)
+has a newer copyright year, so both pugixml texts are retained.
+
 nlohmann/json's text comes from its 3.12.0 source package. The Boost text is the
 [official license](https://www.boost.org/LICENSE_1_0.txt). Dependency packages may
 provide additional notices for their exact build; retain those when distributing
