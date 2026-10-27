@@ -54,3 +54,17 @@ cmake --build out/server-construction --target check-server-plugins --parallel 2
 `check-server-plugins` 对七个启用的服务动态库分别检查真实工厂与装配、原有源码包含路径和关闭更新的注册方式，并加载实际动态库检查两个导出入口符号。每个角色先在仅链接核心的最小进程中检查导出，再在独立进程中检查真实工厂，避免宿主与动态库在同一进程内重复注册静态链接的 AFProto 描述符。真实 Login 装配另以计数替身检查被拒绝候选对象的析构、原有注册的保留以及重试成功。应用构建中的 `check-core` 包含这些定向检查。另一个动态库夹具通过管理器加载器运行真实 Login 入口与退出函数，并使用受控模块。七个业务动态库只检查导出与直接创建，不调用业务生命周期。这些检查不启动网络服务，也不代表部署就绪。
 
 `node --test tests/ci/server-construction.test.mjs` 在不编译原生代码的情况下检查兼容转发映射与创建约束。Simulate 只参与源码策略检查，其未受支持的 PhysX 3／MessagePack 集成不在这些原生目标中。
+
+## 验证本地启动器组合
+
+在 macOS 和 Linux 上，`check-server-launcher` 使用真实 `app` 可执行文件以及 Utility、Bus、Net 和 Login 动态库。测试创建独立运行目录，为 Bus 身份 `1.1.32.1` 配置临时回环端口，等待 Login 监听器就绪后建立一个 TCP 连接，再向测试创建的进程发送 `SIGTERM`。测试检查服务器 EOF、新连接被拒绝，以及进程以退出码 0 结束。客户端收到服务器的 FIN 后，先关闭自身发送侧，再等待进程退出。原始 TCP 客户端若一直保持连接，传输层可能等待现有的优雅断开超时；此等待与辅助程序五秒的配合退出上限不同。启动和退出等待均有上限，辅助程序只回收自己创建的子进程。配置和日志保留在构建目录中，每次运行使用新目录。
+
+```sh
+cmake --build out/server-construction --target check-server-launcher --parallel 1
+```
+
+配置应用构建时需启用 `ARK_BUILD_PLUGIN_UTILITY`、`ARK_BUILD_PLUGIN_BUS` 和 `ARK_BUILD_PLUGIN_NET`。测试生成最小清单，不修改随仓库提供的角色预设。Bus 配置格式仍要求 `registry` 表；此本地组合不加载 Consul，也不注册服务或执行发现。Windows 保留前述构造测试；进程和信号控制测试仅在 Unix 上启用。
+
+此测试验收启动器和传输边界。Login 当前只创建监听器，没有注册账号登录处理器。Proxy 的服务器选择和消息转发回调尚不完整。Router 清单未选择 Router 角色动态库，World 预设的插件路径和配置为空；将这些预设用于部署前，需要应用提供经过审阅的清单。连接成功不能证明认证、访客或会话流程、集群路由、重连恢复或持久化已经可用。
+
+验证现有的有限业务操作时，可启用示例及 Kernel、Utility 后运行 `check-typed-examples`。其中真实 EntityOperations 动态库使用仓库内的清单和元数据，创建并检查玩家数据、表格和自定义值，再于退出时销毁实体。此进程内业务示例与独立的 Login 传输组合分别验证不同边界，两者尚未组成网络游戏登录流程。

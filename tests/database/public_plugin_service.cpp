@@ -15,6 +15,11 @@
 #include <variant>
 #include <vector>
 
+#if defined(ARKNET_ENABLE_SSL)
+#include <openssl/err.h>
+#include <openssl/sslerr.h>
+#endif
+
 #include "ark/plugin_manager.hpp"
 #include "ark/redis/redis_module.hpp"
 #include "ark/task.hpp"
@@ -189,6 +194,89 @@ void check_redis() {
 }
 
 #if defined(ARKNET_ENABLE_SSL)
+ark::task<> redis_tls_workflow(plugin_host& host, ark::redis_module& database, std::string binary,
+    std::optional<arknet::redis::result>& command, std::optional<arknet::redis::result>& pipeline) {
+    arknet::redis::command echo{"ECHO", binary};
+    command = co_await database.command("service", std::move(echo), 5s);
+    host.check_executor();
+    require(bool(*command) && command->replies.size() == 1 && command->replies[0].text == binary,
+        "Redis TLS DSO command lost its owning binary result");
+    std::vector<arknet::redis::command> commands{{"ECHO", binary}, {"ECHO", ""}, {"PING"}};
+    pipeline = co_await database.pipeline("service", std::move(commands), 5s);
+    host.check_executor();
+    require(bool(*pipeline) && pipeline->replies.size() == 3 && pipeline->replies[0].text == binary &&
+                pipeline->replies[1].text.empty() && pipeline->replies[2].text == "PONG" &&
+                command->replies[0].text == binary,
+        "Redis TLS DSO pipeline lost ordered owning results or invalidated the command result");
+}
+
+bool certificate_verification_failed(const arknet::redis::result& result) {
+    return result.error == arknet::redis::client_errc::connection_failed &&
+           result.transport_error.category() == asio::error::get_ssl_category() &&
+           ERR_GET_REASON(static_cast<unsigned long>(result.transport_error.value())) ==
+               SSL_R_CERTIFICATE_VERIFY_FAILED &&
+           !result.command_may_have_run && result.replies.empty();
+}
+
+ark::task<> redis_tls_rejection_workflow(
+    plugin_host& host, ark::redis_module& database, std::optional<arknet::redis::result>& retained) {
+    arknet::redis::command ping{"PING"};
+    retained = co_await database.command("service", std::move(ping), 5s);
+    host.check_executor();
+    require(certificate_verification_failed(*retained),
+        "Redis TLS DSO did not preserve certificate verification rejection before command submission");
+}
+
+void check_redis_tls(std::string_view mode) {
+    ark::redis_options options;
+    options.tls = true;
+    options.pool.connection.host =
+        environment(mode == "redis-tls-wrong-host" ? "ARK_DATABASE_REDIS_WRONG_HOST" : "ARK_DATABASE_REDIS_HOST");
+    options.pool.connection.port = std::to_string(port("ARK_DATABASE_REDIS_PORT"));
+    options.pool.connection.password = environment("ARK_DATABASE_REDIS_PASSWORD");
+    if (const auto* user = std::getenv("ARK_DATABASE_REDIS_USER"))
+    {
+        options.pool.connection.username = user;
+    }
+    options.pool.certificate_authority =
+        environment(mode == "redis-tls-untrusted-ca" ? "ARK_DATABASE_REDIS_UNTRUSTED_CA" : "ARK_DATABASE_REDIS_CA");
+    options.pool.max_connections = 1;
+    options.pool.client_configuration.connect_timeout = 3s;
+    const std::string binary("tls\0redis\r\nvalue", 16);
+    std::optional<arknet::redis::result> command, pipeline, rejected;
+    {
+        plugin_host host("ark_database_redis_plugin");
+        auto* database = host.manager.find_module<ark::redis_module>();
+        require(database != nullptr, "Real Redis TLS DSO did not register its public module");
+        require(database->configure("service", options), "Redis TLS DSO configuration failed");
+        options.pool.connection.host = "invalid.invalid";
+        options.pool.connection.password = "changed";
+        options.pool.certificate_authority = "missing-certificate.pem";
+        if (mode == "redis-tls")
+        {
+            host.run(redis_tls_workflow(host, *database, binary, command, pipeline));
+        }
+        else
+        {
+            host.run(redis_tls_rejection_workflow(host, *database, rejected));
+        }
+    }
+    if (mode == "redis-tls")
+    {
+        require(command && pipeline && bool(*command) && bool(*pipeline) && command->replies[0].text == binary &&
+                    pipeline->replies[0].text == binary && pipeline->replies[1].text.empty() &&
+                    pipeline->replies[2].text == "PONG",
+            "Redis TLS owning command/pipeline results did not survive host destruction");
+    }
+    else
+    {
+        require(rejected && certificate_verification_failed(*rejected),
+            "Redis TLS owning verification error did not survive host destruction");
+        std::cout << "Native connection_failed / TLS certificate verification failed; command_may_have_run=false; "
+                     "replies=0\n";
+    }
+}
+
 ark::task<> mysql_workflow(plugin_host& host, ark::mysql_module& database, std::string binary,
     std::optional<ark::mysql_reply>& text, std::optional<ark::mysql_reply>& prepared) {
     text = co_await database.query("service", "SELECT -7, 'owned text', NULL", 5s);
@@ -262,13 +350,18 @@ void check_mysql() {
 int main(int argc, char** argv) {
     try
     {
-        require(argc == 2, "Usage: ark_database_public_plugin_service_tests redis|mysql");
+        require(argc == 2, "Usage: ark_database_public_plugin_service_tests "
+                           "redis|mysql|redis-tls|redis-tls-untrusted-ca|redis-tls-wrong-host");
         const std::string_view protocol(argv[1]);
         if (protocol == "redis")
         {
             check_redis();
         }
 #if defined(ARKNET_ENABLE_SSL)
+        else if (protocol == "redis-tls" || protocol == "redis-tls-untrusted-ca" || protocol == "redis-tls-wrong-host")
+        {
+            check_redis_tls(protocol);
+        }
         else if (protocol == "mysql")
         {
             check_mysql();

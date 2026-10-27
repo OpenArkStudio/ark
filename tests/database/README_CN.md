@@ -227,6 +227,8 @@ MySQL 检查有符号整数、文本、NULL 查询字段，二进制预处理结
 程序不启动服务，也不打印凭据或原生服务端文本。编译与这些失败检查不能证明真实服务 DSO
 正向验收通过；需要显式选择模式，在隔离服务上实际运行。
 
+新增可选 `redis-tls`、`redis-tls-untrusted-ca` 与 `redis-tls-wrong-host` 模式使用真实认证 TLS 服务。[Redis TLS DSO 指南](redis_tls_CN.md)说明可信 IP／主机名对照、私有服务要求及独立 PING／ECHO 计数观察。`check-database` 编译但不执行这些模式。
+
 ## 真实插件请求取消
 
 独立的 `ark_database_public_plugin_cancellation_tests` 手动启用模式使用真实 Redis／MySQL 插件 DSO 与自有服务，先观察带标记的服务端工作，再调用 `task_group::cancel(id)`，保留原生取消／未知结果，并检查所属线程完成和自然退出。证据仅覆盖观察到的 ID、影响及有限观察窗口；MySQL 最终计数为零或一，不证明回滚，也不覆盖全部重试竞争。`check-database` 只编译该程序，不启动服务。构建命令、可信 TLS、独占写入数据与准确边界见[取消验收指南](cancellation_CN.md)。
