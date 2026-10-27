@@ -38,7 +38,7 @@ public:
     virtual int32_t get_int32(const std::string& name) const = 0;
     virtual uint32_t get_u_int32(const std::string& name) const = 0;
     virtual int64_t get_int64(const std::string& name) const = 0;
-    virtual int64_t get_u_int64(const std::string& name) const = 0;
+    virtual uint64_t get_u_int64(const std::string& name) const = 0;
     virtual float get_float(const std::string& name) const = 0;
     virtual double get_double(const std::string& name) const = 0;
     virtual const std::string& get_string(const std::string& name) const = 0;
@@ -48,7 +48,7 @@ public:
     virtual int32_t get_int32(const uint32_t index) const = 0;
     virtual uint32_t get_u_int32(const uint32_t index) const = 0;
     virtual int64_t get_int64(const uint32_t index) const = 0;
-    virtual int64_t get_u_int64(const uint32_t index) const = 0;
+    virtual uint64_t get_u_int64(const uint32_t index) const = 0;
     virtual float get_float(const uint32_t index) const = 0;
     virtual double get_double(const uint32_t index) const = 0;
     virtual const std::string& get_string(const uint32_t index) const = 0;

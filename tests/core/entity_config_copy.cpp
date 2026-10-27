@@ -5,6 +5,7 @@
 #include <fstream>
 #include <limits>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "../network/doctest.h"
@@ -14,6 +15,13 @@
 #include "ark/kernel/data_list_impl.hpp"
 #include "ark/kernel/kernel_module_impl.hpp"
 #include "ark/kernel/map_module_impl.hpp"
+#include "ark/kernel/node_impl.hpp"
+#include "ark/kernel/static_entity_impl.hpp"
+
+static_assert(
+    std::is_same_v<decltype(std::declval<const ark::static_entity&>().get_u_int64(std::string{})), std::uint64_t>);
+static_assert(
+    std::is_same_v<decltype(std::declval<const ark::static_entity&>().get_u_int64(std::uint32_t{})), std::uint64_t>);
 
 namespace {
 
@@ -477,4 +485,20 @@ TEST_CASE("public entity custom uint32 rejects other scalar types without changi
     CHECK(object->get_custom_float("float") == 3.5F);
     CHECK(object->get_custom_double("double") == 4.25);
     CHECK(std::string(object->get_custom_string("string")) == "updated");
+}
+
+TEST_CASE("static configuration uint64 getters expose the full unsigned range by name and index") {
+    const auto schema = std::make_shared<ark::class_meta>("UnsignedConfig");
+    const auto field = schema->create_data_meta("amount", 1);
+    REQUIRE(field != nullptr);
+    field->set_type(ark::data_type::dt_uint64);
+    const auto nodes = std::make_shared<ark::node_manager>(schema);
+    auto* value = nodes->create_data(field);
+    REQUIRE(value != nullptr);
+    value->set_u_int64(std::numeric_limits<std::uint64_t>::max());
+    const ark::static_entity_impl implementation(schema, nodes, 1);
+    const ark::static_entity& config = implementation;
+    CHECK(config.get_u_int64("amount") == std::numeric_limits<std::uint64_t>::max());
+    CHECK(config.get_u_int64(1) == std::numeric_limits<std::uint64_t>::max());
+    CHECK(config.get_u_int64("amount") > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()));
 }
