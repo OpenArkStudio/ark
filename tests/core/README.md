@@ -68,6 +68,12 @@ exit code 1 with a manifest diagnostic, including on Windows, and is included in
 `resource/meta/`. It checks four kernel/config initialization orders with both
 resource-relative paths and legacy paths beginning with `/`, for eight combinations.
 
+The same target runs `kernel_delayed_sync.cpp`: real container creation, removal
+and destruction pass through delayed collection, Kernel update, Protobuf serialization
+and the existing mask delivery callback. It covers full payloads, entity references,
+empty-slot/destruction markers, self-only masks and empty/scalar/table/mixed controls.
+A narrow test-only friend observes that callback; no transport or client is supplied.
+
 `check-logging` runs the independent C++ logging path regressions and is included
 in `check-core`. It checks relative and nested filenames, extensions and hidden
 files, dotted directory names, both hourly sink factories, and the configured

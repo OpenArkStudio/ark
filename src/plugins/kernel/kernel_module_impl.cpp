@@ -695,7 +695,7 @@ int kernel_module_impl::on_sync_container(const guid_t& self, const uint32_t ind
 
 int kernel_module_impl::on_delay_sync_data(
     const guid_t& self, const data_mask mask_value, const delay_sync_data& data) {
-    if (data.node_list.size() == 0 && data.table_list.size() == 0)
+    if (data.node_list.empty() && data.table_list.empty() && data.container_list.empty())
     {
         return 0;
     }
