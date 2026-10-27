@@ -16,6 +16,8 @@ cmake --build build-config-tool --target ark_config_tool check-config-tool
 
 This build does not configure framework networking, Protobuf or runtime plugins. The executable is `build-config-tool/bin/ark_config_tool` (`ark_config_tool.exe` on Windows). Multi-configuration generators also need `--config Release` on the build command. `ARK_INSTALL=ON` installs the executable and its notices. The XLSX reader belongs to this optional offline tool; a server loading JSON does not require it.
 
+An OpenXLSX installation may bundle pugixml/miniz or use separate packages. For the latter, keep their CMake package configurations discoverable as well; the exporter loads their dependency targets before OpenXLSX. The vcpkg feature supplies these dependencies automatically.
+
 ## Export and validate
 
 From the repository root, use a new output directory:

@@ -16,6 +16,8 @@ cmake --build build-config-tool --target ark_config_tool check-config-tool
 
 这种构建不配置框架网络、Protobuf 或运行时插件。输出为 `build-config-tool/bin/ark_config_tool`，Windows 为 `ark_config_tool.exe`。多配置生成器需要在构建命令中添加 `--config Release`。`ARK_INSTALL=ON` 安装可执行文件及许可证声明。XLSX 读取器只属于这个可选离线工具；服务器加载 JSON 不需要它。
 
+OpenXLSX 可以自带 pugixml/miniz，也可以使用独立安装的依赖。后一种情况需同时提供这些依赖的 CMake 包配置，导出器会先加载它们的依赖目标。vcpkg feature 会自动安装所需依赖。
+
 ## 导出与校验
 
 在仓库根目录运行，使用尚不存在的输出目录：

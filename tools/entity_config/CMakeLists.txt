@@ -1,4 +1,11 @@
 # Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
+# OpenXLSX may bundle these libraries or reference externally packaged targets.
+# Its 0.5.1 config does not discover external link dependencies itself.
+find_package(pugixml CONFIG QUIET)
+find_package(miniz CONFIG QUIET)
+if(WIN32)
+    find_package(Boost CONFIG REQUIRED COMPONENTS nowide)
+endif()
 find_package(OpenXLSX 0.5.1 CONFIG REQUIRED)
 if(NOT TARGET ark::kernel_json)
     include("${CMAKE_CURRENT_SOURCE_DIR}/../../src/plugins/kernel/entity_json.cmake")
@@ -13,7 +20,6 @@ target_link_libraries(ark_entity_export PUBLIC ark::kernel_json PRIVATE OpenXLSX
 add_executable(ark_config_tool main.cpp)
 set_property(TARGET ark_config_tool PROPERTY LINK_LIBRARIES ark_entity_export)
 if(WIN32)
-    find_package(Boost CONFIG REQUIRED COMPONENTS nowide)
     target_link_libraries(ark_config_tool PRIVATE Boost::nowide)
 endif()
 set_target_properties(ark_config_tool PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
@@ -46,6 +52,10 @@ if(ARK_BUILD_CONFIG_TOOL_TESTS)
             "-DFIXTURES=${CMAKE_CURRENT_SOURCE_DIR}/../../resources/entity_config"
             "-DRUN_DIR=${CMAKE_CURRENT_BINARY_DIR}/cli acceptance"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/config_tool/cli.cmake"
+        COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
+            "-DRUN_DIR=${CMAKE_CURRENT_BINARY_DIR}/dependency acceptance"
+            "-DGENERATOR=${CMAKE_GENERATOR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/config_tool/cmake_dependencies.cmake"
         DEPENDS ark_config_tool_tests ark_config_tool ark_config_generated_header_check USES_TERMINAL VERBATIM)
     if(TARGET check-core)
         add_dependencies(check-core check-config-tool)
