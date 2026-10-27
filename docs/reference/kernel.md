@@ -250,6 +250,12 @@ The application may explicitly dispatch `entity_evt_all_finished`; the creation 
 
 Use `add_node_call_back()` and `add_table_call_back()` for field and table changes. Their arguments include the entity ID, changed location and old / new values. `do_event(id, event_id, args)` dispatches an application event for one entity. Consult the public headers for callback signatures and priority parameters.
 
+### Delayed synchronization batches
+
+Changes with `sync_view` or `sync_self` and without `real_time` are collected until `kernel_module::update()`. A container-only batch follows the same `protobuf_delay_entity` serialization and mask callback dispatch as scalar, table and mixed batches; only a batch with no scalar, table or container entries is skipped. Existing container payloads retain full entity data or entity references, empty-slot markers and destruction markers according to the current sent state.
+
+`check-kernel-initialization` exercises real container mutations through delayed collection, Kernel update, serialization and the existing delivery callback, with empty, scalar, table and mixed controls. Its test-only callback observer does not provide network delivery. The existing `send_to_self()` path remains a stub; these checks do not establish a client replication protocol, acknowledgements or AOI behavior.
+
 ## Maps and data conversion
 
 Each map is identified by `map_id` and can have multiple instances. `create_map_instance()` returns an instance ID on success or `-1` on failure. `switch_map()` moves an existing entity to a target instance; the target map and instance must already exist.

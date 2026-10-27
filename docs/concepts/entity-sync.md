@@ -6,7 +6,7 @@ Read [data-driven design](data-driven.md), [data structures](../guides/data-stru
 
 ## Existing foundation and gaps
 
-The source review below uses revision `4e815386259d0576aec6bca53ad056c5863cdf84`. These are source observations, not transport acceptance results.
+The source review below uses revision `c1c407a14eae428f7646e10aa2ae205802a75ead`. These are source observations, not transport acceptance results.
 
 | Area | Existing behavior | Boundary for this proposal |
 | --- | --- | --- |
@@ -18,9 +18,9 @@ The source review below uses revision `4e815386259d0576aec6bca53ad056c5863cdf84`
 | Legacy delivery | `sync_view` walks `Player` entities in the same map instance; `sync_self` reaches `send_to_self()` | `send_to_self()` currently returns success without sending. Team/guild/map masks do not establish delivery policies |
 | Sample | `guest_room::broadcast()` reads Entity fields, constructs a full room JSON snapshot and enqueues it explicitly | The sample's snapshots are application code, not generic dirty-field replication |
 
-Relevant implementation: [node manager](https://github.com/OpenArkStudio/ark/blob/4e815386259d0576aec6bca53ad056c5863cdf84/src/plugins/kernel/node_manager.cpp), [table mutations](https://github.com/OpenArkStudio/ark/blob/4e815386259d0576aec6bca53ad056c5863cdf84/src/plugins/kernel/table_impl.cpp), [container mutations](https://github.com/OpenArkStudio/ark/blob/4e815386259d0576aec6bca53ad056c5863cdf84/src/plugins/kernel/container_impl.cpp), [callback collection](https://github.com/OpenArkStudio/ark/blob/4e815386259d0576aec6bca53ad056c5863cdf84/src/plugins/kernel/class_call_back_manager.cpp), [Kernel lifecycle/conversion/delivery](https://github.com/OpenArkStudio/ark/blob/4e815386259d0576aec6bca53ad056c5863cdf84/src/plugins/kernel/kernel_module_impl.cpp) and [guest room](https://github.com/OpenArkStudio/ark/blob/4e815386259d0576aec6bca53ad056c5863cdf84/examples/guest_room/guest_room_module.cpp).
+Relevant implementation: [node manager](https://github.com/OpenArkStudio/ark/blob/c1c407a14eae428f7646e10aa2ae205802a75ead/src/plugins/kernel/node_manager.cpp), [table mutations](https://github.com/OpenArkStudio/ark/blob/c1c407a14eae428f7646e10aa2ae205802a75ead/src/plugins/kernel/table_impl.cpp), [container mutations](https://github.com/OpenArkStudio/ark/blob/c1c407a14eae428f7646e10aa2ae205802a75ead/src/plugins/kernel/container_impl.cpp), [callback collection](https://github.com/OpenArkStudio/ark/blob/c1c407a14eae428f7646e10aa2ae205802a75ead/src/plugins/kernel/class_call_back_manager.cpp), [Kernel lifecycle/conversion/delivery](https://github.com/OpenArkStudio/ark/blob/c1c407a14eae428f7646e10aa2ae205802a75ead/src/plugins/kernel/kernel_module_impl.cpp) and [guest room](https://github.com/OpenArkStudio/ark/blob/c1c407a14eae428f7646e10aa2ae205802a75ead/examples/guest_room/guest_room_module.cpp).
 
-Existing paths need correctness work before reuse: the deferred handler returns early for a container-only batch; deferred table swap and immediate table clear have no complete handling. Callback registration also lacks a general public unregister counterpart. A reusable collector must define ownership, teardown and callback reentrancy, rather than expose the current borrowed-pointer sets as a client contract.
+Container-only deferred batches reach serialization and mask delivery callbacks; this does not supply network delivery. Remaining paths need correctness work before reuse: deferred table swap and immediate table clear have no complete handling. Callback registration also lacks a general public unregister counterpart. A reusable collector must define ownership, teardown and callback reentrancy, rather than expose the current borrowed-pointer sets as a client contract.
 
 ## Recommended initial scope
 

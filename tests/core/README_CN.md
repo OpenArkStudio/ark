@@ -62,6 +62,8 @@ cmake --build hash-header-build --target check-murmur-hash-header
 `check-kernel-initialization` 从 `resource/meta/` 加载真实元数据和静态数据，
 分别使用资源相对路径及以 `/` 开头的旧路径，验证内核与配置模块的四种初始化顺序，共八种组合。
 
+同一 target 运行 `kernel_delayed_sync.cpp`：真实容器创建、移除和销毁经过延迟收集、Kernel 更新、Protobuf 序列化和既有掩码交付回调。用例覆盖完整载荷、实体引用、空槽／销毁标记、仅自身同步掩码，以及空批次、标量、表格和混合对照。范围受限的测试友元仅观察该回调，不提供传输层或客户端。
+
 `check-logging` 运行独立的 C++ 日志路径回归测试，并由 `check-core` 一并执行。
 用例覆盖相对路径、嵌套路径、扩展名、隐藏文件、含点的目录名、两个按小时轮转的日志创建函数，
 以及配置中的日志目录。`output_path` 为空时使用当前工作目录。按小时轮转的日志仍采用

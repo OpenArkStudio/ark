@@ -250,6 +250,12 @@ private:
 
 字段和表格回调分别使用 `add_node_call_back()`、`add_table_call_back()`；参数包含实体 ID、变化位置以及旧值 / 新值。`do_event(id, event_id, args)` 用于分发单实体业务事件。回调参数和优先级以公开头文件签名为准。
 
+### 延迟同步批次
+
+带有 `sync_view` 或 `sync_self`、且没有 `real_time` 的变更收集到 `kernel_module::update()` 时处理。仅包含容器变更的批次与标量、表格和混合批次使用相同的 `protobuf_delay_entity` 序列化与掩码回调分发路径；只有标量、表格和容器条目都为空时才跳过。容器载荷按现有发送状态保留完整实体数据或实体引用、空槽标记和销毁标记。
+
+`check-kernel-initialization` 从真实容器操作经过延迟收集、Kernel 更新、序列化和既有交付回调验证此路径，并保留空批次、标量、表格和混合对照。仅用于测试的回调观察器不提供网络交付。现有 `send_to_self()` 仍是占位实现；这些检查不证明客户端复制协议、确认机制或 AOI 行为。
+
 ## 地图与数据转换
 
 地图按 `map_id` 区分，每张地图可以创建多个实例。`create_map_instance()` 成功时返回实例 ID，失败返回 `-1`。`switch_map()` 将已有实体移到目标实例；目标地图和实例必须事先存在。
