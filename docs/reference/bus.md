@@ -38,9 +38,9 @@ config = "bus.plugin.toml"
 ```
 
 The application must also load Net and Utility as required by the existing module
-dependencies. This snippet does not establish cross-plugin initialization order
-or start a listener. The TOML schema, required fields, defaults of public value
-types, validation diagnostics and message serialization/routing are unchanged.
+dependencies. Net queues configured outgoing SS connections during `post_init()`;
+the application still starts its listeners explicitly. The public value types and
+message serialization interfaces remain unchanged.
 
 `check-bus-plugin`, included in application-enabled `check-core`, loads actual
 Bus/Net/Utility DSOs and verifies both public interface keys, TOML queries,
@@ -113,7 +113,11 @@ check_interval = "10s"
 check_timeout = "3s"
 ```
 
-This is a Bus configuration example, not a complete two-process launch configuration. Applications must also load Bus, Net and their dependencies, set each process's Bus ID, start listeners and initiate connections. `relations` supplies target types; reading a relationship does not automatically create a connection.
+Applications load Bus, Net and Utility, set a deployment-assigned Bus ID, and start listeners with `create_server()`. During Net `post_init()`, each directed relation selects configured target processes of that type in the local channel and zone. Self is excluded, and each target Bus ID is queued once through the existing SS client service. A relation with no eligible process records queues nothing. Bus queries retain their existing semantics; `get_other_proc(type, list)` itself does not filter channel or zone.
+
+The selected target's `intranet_endpoint` must contain a dialable TCP or UDP host, a nonzero port and no path. Missing endpoints, unsupported transports and wildcard dial addresses (`0.0.0.0`, `::`) fail Net startup with the target Bus ID and field in the diagnostic. Hostnames remain supported. Wildcard addresses remain valid for listening: where a wildcard bind is needed, use `server_endpoint` for that listener and a reachable `intranet_endpoint` for SS traffic. `intranet_endpoint` currently serves both as the SS listener address and the advertised dial target; there is no separate bind/advertise field.
+
+Connection requests run on subsequent manager updates; successful startup does not mean the target is connected. Targets can start later or restart at the same configured identity and endpoint. The existing client state machine, SS registration and heartbeat handle the connection lifecycle. Configuration is a startup snapshot: it does not support hot reload, dynamic membership, automatic ID assignment or global uniqueness enforcement. Deployments, including Kubernetes, must assign stable Bus IDs and reachable endpoints; no Kubernetes API integration is implied.
 
 Configuring `bus.registry` does not enable dynamic registration or discovery. The Consul registration and health-based discovery paths in the current network service manager remain commented out. This configuration alone cannot discover target processes.
 
@@ -135,7 +139,9 @@ All four sections and their fields are required. Arrays may be empty (`applicati
 
 Bus IDs require exactly four decimal components in `0..255`. Nonempty endpoints require a supported protocol and `protocol://host:port` (optional path), with port `0..65535`. Hostnames are retained without DNS lookup. IPv6 literals use brackets, for example `tcp://[::1]:9011`; their numeric syntax is validated locally, and the stored host is `::1` without brackets for arknet. The public endpoint formatter is unchanged. An empty endpoint remains allowed and disables that listener. Both endpoints are validated independently. Registry interval and timeout strings are passed through without interpreting their duration grammar.
 
-The public `app_config`, `proc_config` and `reg_center` fields and query methods remain unchanged. Application maps and other-process maps keep their first entry for a duplicate key; the last matching self-process entry wins, and relations retain input order and duplicates. A missing self-process entry remains unconfigured. These settings do not enable discovery or create network connections. The private schema validator uses the shared compiled `ark::config` file/TOML reader; toml++ stays private to configuration and plugin implementation targets.
+The public `app_config`, `proc_config` and `reg_center` fields and query methods remain unchanged. Duplicate application names, application types, directed relations and process Bus IDs now fail Bus initialization with the file, array index and field. A missing self-process entry remains unconfigured. The private schema validator uses the shared compiled `ark::config` file/TOML reader; toml++ stays private to configuration and plugin implementation targets.
+
+**Upgrade:** remove duplicate records and provide a reachable `intranet_endpoint` for every same-channel, same-zone process selected by an outgoing relation before starting Net. Configurations that previously loaded duplicate or empty selected-target records now fail startup. Relations now initiate outgoing connections automatically; remove relations that should not initiate traffic. The shipped general-purpose configuration includes historical entries and is not a complete deployment inventory; review its relations and endpoints for the chosen process identity.
 
 ## Query local and target processes
 
@@ -185,9 +191,9 @@ std::vector<ark::proc_config> configured_targets(ark::plugin_manager& manager) {
 | `get_other_proc(id, proc)` | Copies the configuration and returns `true` when found; otherwise returns `false` |
 | `combine_bus_id(type, instance)` | Combines the local channel and zone with the supplied type and instance |
 
-## Establish a TCP connection
+## Explicit TCP connections
 
-The target process first starts its listeners with `net_service_manager_module::create_server()`. The following function reads the target's configured intranet endpoint and queues a TCP connection through the network service manager.
+The target process starts its listeners with `net_service_manager_module::create_server()`. Normal relation-selected targets are queued automatically. For application-managed targets outside that bootstrap policy, the following function queues an explicit TCP connection through the existing interface.
 
 ```cpp
 #include "ark/bus/bus_module.hpp"
@@ -221,7 +227,7 @@ bool queue_tcp_connection(ark::plugin_manager& manager, ark::bus_id_t target_id)
 
 `true` means the connection request was queued in the client service and will be processed by subsequent `update()` calls. It does not mean the connection has succeeded. Observe connection events with the client service's `reg_net_event_callback()` and register message handlers with `reg_msg_callback()`. The receiver registers handlers on the corresponding server service.
 
-The current client service handles reconnection through its connection state machine, with a 30-second retry interval in the implementation. This is not a configurable backoff policy in the XML file. Reconnection does not replay application messages whose earlier send failed.
+The current client service handles reconnection through its connection state machine, with a 30-second retry interval in the implementation. This is not a configurable backoff policy in the TOML file. Reconnection does not replay application messages whose earlier send failed.
 
 ## Send and receive messages
 
@@ -250,9 +256,9 @@ The receive flow is: the network service extracts a `net_msg` → invokes the ha
 
 ## Coverage and planned work
 
-These examples cover configuration queries, an explicit TCP connection request and sending through an existing connection. They are not an accepted multi-process deployment example, and do not imply that every protocol is integrated with the service manager. See the [Net plugin](network.md) for transport integration.
+`check-static-services` (Unix, application-enabled `check-core`) launches two separately owned processes with the actual Bus/Net/Utility dynamic libraries on a private loopback TCP endpoint. It verifies type/channel/zone eligibility and self exclusion, selected-target endpoint diagnostics, SS registration/session mapping, Protobuf request/response, failed sends while disconnected, and a target restart followed by another round trip through the existing 30-second service retry policy. Both processes stop normally; the controller retains raw child logs locally. Run it with `cmake --build build --target check-static-services --parallel 1` after configuring application and core tests.
 
-TODO: provide a standalone two-process example and tests covering connection setup, message round trips, process restarts, reconnection and cross-host routing. Implement and validate dynamic registration / discovery separately.
+This is bounded local functional acceptance, not cross-host routing, UDP integration, Windows process-controller acceptance, capacity or a deployment guarantee. See the [Net plugin](network.md) for transport integration. TODO: provide a standalone deployment example and validate cross-host routing and dynamic registration/discovery separately.
 
 ## API sources
 

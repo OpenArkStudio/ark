@@ -77,7 +77,7 @@ intranet_endpoint = ''
 max_connections = 10
 threads = 1
 [[bus.processes]]
-bus_id = '1.1.30.2'
+bus_id = '1.2.30.2'
 server_endpoint = ''
 intranet_endpoint = ''
 max_connections = 10
@@ -95,7 +95,8 @@ check_timeout = '3s'
     log.set_log_func([](spdlog::level::level_enum, const std::string& text) { std::cout << text << std::endl; });
     ark::plugin_manager manager;
     const ark::bus_addr self(1, 1, 31, 1);
-    const ark::bus_addr target(1, 1, 30, 2);
+    // Keep the serialization seam independent of automatic same-zone dialing.
+    const ark::bus_addr target(1, 2, 30, 2);
     manager.set_bus_id(self.bus_id);
     const bool started = manager.start(0, std::string(argv[1]) + "/", "",
         {{"ark_bus_plugin", "bus.toml"}, {"ark_net_plugin", ""}, {"ark_utility_plugin", ""}});
