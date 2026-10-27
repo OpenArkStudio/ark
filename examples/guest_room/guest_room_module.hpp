@@ -18,7 +18,7 @@ class room_module final : public module_base<module>
 {
 public:
     bool init() override;
-    bool post_init() override;
+    bool pre_update() override;
     bool update() override;
     bool pre_shut() override;
 
@@ -43,6 +43,7 @@ private:
     void on_event(const net_event* event);
     void join_room(peer& connection, const json& body);
     void move_player(peer& connection, const json& body);
+    void act_player(peer& connection, const json& body);
     void enqueue(peer& connection, msg_id_t id, const json& body);
     void reject(peer& connection, const std::string& code, const std::string& reason);
     void broadcast();

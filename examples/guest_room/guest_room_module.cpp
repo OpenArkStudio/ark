@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <vector>
 
 #include "ark/kernel/data_list_impl.hpp"
 #include "ark/kernel/map_module.hpp"
@@ -23,12 +24,48 @@ bool room_module::init() {
     return kernel_ != nullptr;
 }
 
-bool room_module::post_init() {
+bool room_module::pre_update() {
     owner_thread();
     auto* maps = find_module<map_module>();
     auto* network = find_module<net_service_manager_module>();
-    if (maps == nullptr || network == nullptr || !maps->create_map(1) ||
-        !network->create_server(60000, header(true), header(true)))
+    if (maps == nullptr || network == nullptr || !maps->create_map(1))
+    {
+        return false;
+    }
+    const auto profile = kernel_->get_static_entity(1);
+    if (!profile || profile->get_class_name() != "GuestPlayer")
+    {
+        throw std::runtime_error("guest_room requires GuestPlayer Entity schema and configuration profile 1");
+    }
+    auto probe = kernel_->create_entity(null_guid, 1, 0, "GuestPlayer", 1, data_list_impl());
+    if (!probe)
+    {
+        throw std::runtime_error("guest_room cannot create the configured GuestPlayer Entity");
+    }
+    const std::vector<std::string> fields{"name", "x", "y", "move_seq", "hp", "mp", "hp_max", "mp_max", "action_seq"};
+    for (std::size_t offset = 0; offset < fields.size(); ++offset)
+    {
+        const auto index = static_cast<std::uint32_t>(100 + offset);
+        const auto type = offset == 0   ? data_type::dt_string
+                          : offset <= 2 ? data_type::dt_double
+                                        : data_type::dt_uint32;
+        if (probe->get_index(fields[offset]) != index || probe->get_node_type(fields[offset]) != type)
+        {
+            throw std::runtime_error("guest_room requires the declared GuestPlayer field: " + fields[offset]);
+        }
+    }
+    if (!kernel_->destroy_entity(probe->get_id()))
+    {
+        throw std::runtime_error("guest_room cannot retire its startup schema validation Entity");
+    }
+    probe.reset();
+    if (profile->get_u_int32("hp") > profile->get_u_int32("hp_max") ||
+        profile->get_u_int32("mp") > profile->get_u_int32("mp_max") || profile->get_u_int32("move_seq") != 0 ||
+        profile->get_u_int32("action_seq") != 0)
+    {
+        throw std::runtime_error("guest_room profile 1 requires bounded HP/MP and zero initial sequences");
+    }
+    if (!network->create_server(60000, header(true), header(true)))
     {
         return false;
     }
@@ -37,7 +74,7 @@ bool room_module::post_init() {
     {
         return false;
     }
-    for (const auto id : {join, move, ping, unsupported})
+    for (const auto id : {join, move, ping, action, unsupported})
     {
         if (!server_->reg_msg_callback(id, this, &room_module::on_message))
         {
@@ -45,7 +82,7 @@ bool room_module::post_init() {
         }
     }
     server_->reg_net_event_callback(this, &room_module::on_event);
-    ARK_LOG_INFO("guest_room ready: lobby, 16 players, ARK1 protocol");
+    ARK_LOG_INFO("guest_room ready: lobby, 16 players, ARK2 protocol");
     return true;
 }
 
@@ -75,9 +112,11 @@ void room_module::broadcast() {
         if (connection.player != nullptr && !connection.closing)
         {
             const auto& player = *connection.player;
-            players.push_back({{"id", connection.player_id}, {"name", player.get_custom_string("name")},
-                {"x", player.get_custom_double("x")}, {"y", player.get_custom_double("y")},
-                {"seq", player.get_custom_int64("seq")}});
+            players.push_back({{"id", connection.player_id}, {"name", player.get_string("name")},
+                {"x", player.get_double("x")}, {"y", player.get_double("y")}, {"seq", player.get_u_int32("move_seq")},
+                {"hp", player.get_u_int32("hp")}, {"mp", player.get_u_int32("mp")},
+                {"hp_max", player.get_u_int32("hp_max")}, {"mp_max", player.get_u_int32("mp_max")},
+                {"action_seq", player.get_u_int32("action_seq")}});
         }
     }
     const json state{{"room", "lobby"}, {"players", std::move(players)}};
@@ -109,15 +148,15 @@ void room_module::join_room(peer& connection, const json& body) {
         reject(connection, "room_full", "The lobby has 16 players");
         return;
     }
-    auto player = kernel_->create_entity(null_guid, 1, 0, "GuestPlayer", 0, data_list_impl());
+    auto player = kernel_->create_entity(null_guid, 1, 0, "GuestPlayer", 1, data_list_impl());
     if (player == nullptr)
     {
         throw std::runtime_error("guest_room Kernel entity creation failed");
     }
-    player->add_custom_string("name", body["name"].get<std::string>());
-    player->add_custom_double("x", 80.0 + static_cast<double>((next_player_ - 1) % 8) * 100.0);
-    player->add_custom_double("y", 100.0 + static_cast<double>(((next_player_ - 1) / 8) % 2) * 200.0);
-    player->add_custom_int64("seq", 0);
+    // Typed setters report false for unchanged values; the schema was checked at startup.
+    player->set_string("name", body["name"].get<std::string>());
+    player->set_double("x", 80.0 + static_cast<double>((next_player_ - 1) % 8) * 100.0);
+    player->set_double("y", 100.0 + static_cast<double>(((next_player_ - 1) / 8) % 2) * 200.0);
     connection.player_id = std::to_string(next_player_++);
     connection.player = std::move(player);
     enqueue(connection, accepted,
@@ -146,14 +185,71 @@ void room_module::move_player(peer& connection, const json& body) {
         reject(connection, "invalid_message", "Coordinates must be within 0..960 and 0..540");
         return;
     }
-    if (sequence <= connection.player->get_custom_int64("seq"))
+    if (sequence <= connection.player->get_u_int32("move_seq"))
     {
         reject(connection, "stale_sequence", "Movement sequence must strictly increase from 1");
         return;
     }
-    connection.player->set_custom_double("x", x);
-    connection.player->set_custom_double("y", y);
-    connection.player->set_custom_int64("seq", sequence);
+    connection.player->set_double("x", x);
+    connection.player->set_double("y", y);
+    connection.player->set_u_int32("move_seq", sequence);
+    broadcast();
+}
+
+void room_module::act_player(peer& connection, const json& body) {
+    std::uint32_t sequence = 0;
+    const bool valid_sequence = body.contains("seq") && uint32_value(body["seq"], sequence);
+    const auto fail = [&](const std::string& code, const std::string& reason) {
+        enqueue(connection, error, {{"code", code}, {"message", reason}, {"action_seq", sequence}});
+    };
+    if (connection.player == nullptr)
+    {
+        fail("not_joined", "Join the lobby before using an attribute action");
+        return;
+    }
+    if (!valid_sequence || sequence == 0 || body.size() != 2 || !body.contains("kind") || !body["kind"].is_string())
+    {
+        fail("invalid_message", "Expected only seq >= 1 (uint32) and kind damage, skill or rest");
+        return;
+    }
+    const auto& kind = body["kind"].get_ref<const std::string&>();
+    if (kind != "damage" && kind != "skill" && kind != "rest")
+    {
+        fail("invalid_message", "Attribute action kind must be damage, skill or rest");
+        return;
+    }
+    auto& player = *connection.player;
+    if (sequence <= player.get_u_int32("action_seq"))
+    {
+        fail("stale_sequence", "Attribute action sequence must strictly increase from 1");
+        return;
+    }
+    auto hp = player.get_u_int32("hp");
+    auto mp = player.get_u_int32("mp");
+    if (kind == "damage")
+    {
+        hp = hp > 15 ? hp - 15 : 0;
+    }
+    else if (kind == "skill")
+    {
+        if (mp < 20)
+        {
+            fail("insufficient_resource", "Skill requires at least 20 MP");
+            return;
+        }
+        mp -= 20;
+    }
+    else
+    {
+        const auto hp_max = player.get_u_int32("hp_max");
+        const auto mp_max = player.get_u_int32("mp_max");
+        hp += std::min(std::uint32_t{20}, hp_max - hp);
+        mp += std::min(std::uint32_t{20}, mp_max - mp);
+    }
+    // A clamped no-op still acknowledges the independently increasing action sequence.
+    player.set_u_int32("hp", hp);
+    player.set_u_int32("mp", mp);
+    player.set_u_int32("action_seq", sequence);
     broadcast();
 }
 
@@ -186,7 +282,22 @@ void room_module::on_message(const net_msg* message, conv_id_t session) {
         false);
     if (excessive_depth || body.is_discarded() || !body.is_object())
     {
-        reject(connection, "invalid_message", "Expected a UTF-8 JSON object of at most eight nesting levels");
+        if (message->get_msg_id() == action)
+        {
+            std::uint32_t sequence = 0;
+            if (body.is_object() && body.contains("seq"))
+            {
+                uint32_value(body["seq"], sequence);
+            }
+            enqueue(connection, error,
+                {{"code", "invalid_message"},
+                    {"message", "Expected a UTF-8 JSON object of at most eight nesting levels"},
+                    {"action_seq", sequence}});
+        }
+        else
+        {
+            reject(connection, "invalid_message", "Expected a UTF-8 JSON object of at most eight nesting levels");
+        }
         return;
     }
     switch (message->get_msg_id())
@@ -196,6 +307,9 @@ void room_module::on_message(const net_msg* message, conv_id_t session) {
         break;
     case move:
         move_player(connection, body);
+        break;
+    case action:
+        act_player(connection, body);
         break;
     case ping:
     {

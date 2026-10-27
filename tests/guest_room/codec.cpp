@@ -36,6 +36,7 @@ TEST_CASE("Guest room golden frames match the C sharp shared fixture") {
     std::ifstream input(ARK_GUEST_ROOM_VECTORS);
     REQUIRE(input.good());
     const auto fixtures = json::parse(input);
+    CHECK(fixtures["format"] == "ARK2");
     for (const auto& vector : fixtures["vectors"])
     {
         const auto id = vector["message_id"].get<ark::msg_id_t>();
@@ -86,25 +87,25 @@ TEST_CASE("Guest room invalid headers fail before body allocation and callback")
         }
         else
         {
-            bytes[10] = 0x10;
-            bytes[11] = 1; // 4097-byte body, with no body present.
+            bytes[10] = 0x20;
+            bytes[11] = 1; // 8193-byte body, with no body present.
         }
         header parsed;
         parsed.parse_from_array(bytes.data());
-        CHECK(parsed.message_length() == 4097);
+        CHECK(parsed.message_length() == max_body + 1);
         ark::tcp_client_session session(std::make_shared<header>(), 1, nullptr, 16);
         session.add_buffer(bytes.data(), bytes.size());
         CHECK_FALSE(session.parse_buffer_to_msg());
         ark::net_msg* message = nullptr;
         CHECK_FALSE(session.pop_net_msg(message));
     }
-    const auto maximum = frame(join, std::string(4096, 'x'));
+    const auto maximum = frame(join, std::string(max_body, 'x'));
     ark::tcp_client_session session(std::make_shared<header>(), 1, nullptr, 16);
     session.add_buffer(maximum.data(), maximum.size());
     REQUIRE(session.parse_buffer_to_msg());
     ark::net_msg* message = nullptr;
     REQUIRE(session.pop_net_msg(message));
-    CHECK(message->get_msg_length() == 4096);
+    CHECK(message->get_msg_length() == max_body);
     ark::net_msg::release(message);
 }
 
@@ -122,13 +123,22 @@ TEST_CASE("Guest room reconnect owns fresh parser state and reserved IDs cannot 
     REQUIRE(fresh.pop_net_msg(message));
     CHECK(message->get_msg_id() == ping);
     ark::net_msg::release(message);
-    for (const auto id : {0, 1, 65535, 60001, 12345})
+    for (const auto id : {0, 1, 65535, 60001, 60007, 12345})
     {
         const auto unsupported_frame = frame(static_cast<ark::msg_id_t>(id), "{}");
         header request(true);
         request.parse_from_array(unsupported_frame.data());
         CHECK(request.message_id() == unsupported);
     }
+    const auto action_frame = frame(action, R"({"seq":1,"kind":"damage"})");
+    header request(true);
+    request.parse_from_array(action_frame.data());
+    CHECK(request.message_id() == action);
+    CHECK(request.max_body_size() == 8192);
+    auto old_marker = action_frame;
+    old_marker[3] = '1';
+    request.parse_from_array(old_marker.data());
+    CHECK(request.message_length() > request.max_body_size());
 }
 
 TEST_CASE("Guest room unsigned values and encoded name bounds are strict") {
@@ -155,7 +165,13 @@ TEST_CASE("Guest room worst encoded roster fits the framing budget") {
     {
         players.push_back({{"id", "18446744073709551615"}, {"name", std::string(64, '"')},
             {"x", 2.2250738585072014e-308}, {"y", 2.2250738585072014e-308}, {"seq", 4294967295u}});
+        auto& player = players.back();
+        for (const auto* field : {"hp", "mp", "hp_max", "mp_max", "action_seq"})
+        {
+            player[field] = 4294967295u;
+        }
     }
     const json roster{{"room", "lobby"}, {"players", players}};
     CHECK(roster.dump().size() <= max_body);
+    CHECK(roster.dump().size() > 4096);
 }

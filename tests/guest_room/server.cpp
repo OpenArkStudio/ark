@@ -5,6 +5,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <sys/wait.h>
@@ -33,7 +35,7 @@ struct launcher
     pid_t pid{-1};
     bool stopped{false};
 
-    launcher(const std::string& program, const std::string& directory) {
+    launcher(const std::string& program, const std::string& directory, const std::string& log_name = "launcher.log") {
         pid = fork();
         require(pid >= 0, "fork failed");
         if (pid == 0)
@@ -42,7 +44,7 @@ struct launcher
             {
                 _exit(126);
             }
-            const int log = open("launcher.log", O_WRONLY | O_CREAT | O_TRUNC, 0600);
+            const int log = open(log_name.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
             if (log < 0)
             {
                 _exit(126);
@@ -72,6 +74,26 @@ struct launcher
             std::this_thread::sleep_for(10ms);
         }
         throw std::runtime_error("launcher did not finish shutdown");
+    }
+
+    void expect_failure(const std::filesystem::path& log_path) {
+        const auto deadline = std::chrono::steady_clock::now() + 5s;
+        int status = 0;
+        while (std::chrono::steady_clock::now() < deadline)
+        {
+            if (waitpid(pid, &status, WNOHANG) == pid)
+            {
+                stopped = true;
+                require(WIFEXITED(status) && WEXITSTATUS(status) == 1, "invalid profile did not fail normal startup");
+                std::ifstream log(log_path);
+                const std::string text{std::istreambuf_iterator<char>(log), std::istreambuf_iterator<char>()};
+                require(text.find("profile 1 requires bounded HP/MP and zero initial sequences") != std::string::npos,
+                    "invalid profile lacked an application configuration diagnostic");
+                return;
+            }
+            std::this_thread::sleep_for(10ms);
+        }
+        throw std::runtime_error("invalid profile launcher did not exit");
     }
 
     ~launcher() {
@@ -202,10 +224,14 @@ const json& player(const json& state, const std::string& id) {
     throw std::runtime_error("player missing from authoritative snapshot");
 }
 
-void error_is(client& peer, const std::string& code) {
+void error_is(client& peer, const std::string& code, std::optional<std::uint32_t> action_sequence = std::nullopt) {
     const auto body = peer.receive(error);
     require(body["code"] == code, "wrong error code");
     require(body["message"].get<std::string>().size() <= 160, "unbounded error text");
+    if (action_sequence)
+    {
+        require(body["action_seq"] == *action_sequence, "wrong action error correlation");
+    }
 }
 
 void exercise(unsigned short port) {
@@ -285,7 +311,7 @@ void exercise(unsigned short port) {
         }
         if (kind == 2)
         {
-            bytes[10] = 0x10;
+            bytes[10] = 0x20;
             bytes[11] = 1;
         }
         malformed.write(bytes);
@@ -316,10 +342,158 @@ void exercise(unsigned short port) {
     full.send(join, {{"name", "Overflow"}, {"room", "lobby"}});
     error_is(full, "room_full");
     full.close();
-    for (const auto& member : capacity)
+    for (const auto& peer : capacity)
     {
-        member->close();
+        peer->send(move, {{"seq", 1}, {"x", 2.2250738585072014e-308}, {"y", 2.2250738585072014e-308}});
+        for (const auto& member : capacity)
+        {
+            require(member->receive(snapshot)["players"].size() == 16, "worst-coordinate roster overflowed");
+        }
     }
+    while (capacity.size() > 1)
+    {
+        capacity.back()->close();
+        capacity.pop_back();
+        for (const auto& member : capacity)
+        {
+            require(
+                member->receive(snapshot)["players"].size() == capacity.size(), "capacity departure roster incorrect");
+        }
+    }
+    capacity.front()->close();
+}
+
+void exercise_attributes(unsigned short port) {
+    client owner(port);
+    owner.send(action, {{"seq", 1}, {"kind", "damage"}});
+    error_is(owner, "not_joined", 1);
+    owner.send(join, {{"name", "Attributes"}, {"room", "lobby"}});
+    const auto id = owner.receive(accepted)["player_id"].get<std::string>();
+    std::uint32_t hp = 100, mp = 100, sequence = 0, move_sequence = 0, observer_sequence = 0;
+    const auto verify = [&](const json& state) {
+        const auto& value = player(state, id);
+        require(value["hp"] == hp && value["mp"] == mp && value["hp_max"] == 100 && value["mp_max"] == 100 &&
+                    value["action_seq"] == sequence && value["seq"] == move_sequence,
+            "authoritative attribute or independent movement sequence changed");
+    };
+    verify(owner.receive(snapshot));
+    client observer(port);
+    observer.send(join, {{"name", "Observer"}, {"room", "lobby"}});
+    observer.receive(accepted);
+    verify(observer.receive(snapshot));
+    verify(owner.receive(snapshot));
+    const auto accept_action = [&](std::uint32_t next, const std::string& kind, std::uint32_t health,
+                                   std::uint32_t mana) {
+        // Exercise the unchanged 32-message/s policy without overflowing it.
+        std::this_thread::sleep_for(35ms);
+        owner.send(action, {{"seq", next}, {"kind", kind}});
+        hp = health;
+        mp = mana;
+        sequence = next;
+        verify(owner.receive(snapshot));
+        verify(observer.receive(snapshot));
+    };
+    const auto unchanged_after_error = [&] {
+        observer.send(move, {{"seq", ++observer_sequence}, {"x", 500}, {"y", 200}});
+        verify(owner.receive(snapshot));
+        verify(observer.receive(snapshot));
+    };
+    const auto reject_action = [&](const json& body, const std::string& code, std::uint32_t correlation) {
+        std::this_thread::sleep_for(35ms);
+        owner.send(action, body);
+        error_is(owner, code, correlation);
+        unchanged_after_error();
+    };
+    accept_action(1, "damage", 85, 100);
+    owner.send(move, {{"seq", ++move_sequence}, {"x", 120}, {"y", 100}});
+    verify(owner.receive(snapshot));
+    verify(observer.receive(snapshot));
+    accept_action(2, "skill", 85, 80);
+    reject_action({{"seq", 1}, {"kind", "rest"}}, "stale_sequence", 1);
+    for (const auto& value : {json(0), json(-1), json(4294967296ULL), json(1.0), json(true), json(nullptr), json("3")})
+    {
+        reject_action({{"seq", value}, {"kind", "damage"}}, "invalid_message", 0);
+    }
+    for (const auto& body : std::vector<json>{{{"seq", 3}, {"kind", "heal"}}, {{"seq", 3}, {"kind", 1}}, {{"seq", 3}},
+             {{"seq", 3}, {"kind", "damage"}, {"amount", 99}}, {{"seq", 3}, {"kind", "damage"}, {"target", "someone"}},
+             {{"seq", 3}, {"kind", "rest"}, {"hp", 1000}}, {{"seq", 3}, {"kind", "rest"}, {"mp", 1000}}})
+    {
+        reject_action(body, "invalid_message", 3);
+    }
+    reject_action({{"kind", "damage"}}, "invalid_message", 0);
+    reject_action(json::array(), "invalid_message", 0);
+    std::this_thread::sleep_for(35ms);
+    owner.write(client::encode(action, "{"));
+    error_is(owner, "invalid_message", 0);
+    unchanged_after_error();
+    accept_action(3, "rest", 100, 100);
+    accept_action(4, "rest", 100, 100); // Clamped no-op still acknowledges this sequence.
+    for (std::uint32_t next = 5; next <= 9; ++next)
+    {
+        accept_action(next, "skill", 100, 100 - (next - 4) * 20);
+    }
+    reject_action({{"seq", 10}, {"kind", "skill"}}, "insufficient_resource", 10);
+    accept_action(10, "rest", 100, 20); // A rejected sequence remains available.
+    accept_action(11, "skill", 100, 0); // Exactly 20 MP succeeds.
+    for (std::uint32_t next = 12; next <= 18; ++next)
+    {
+        accept_action(next, "damage", next == 18 ? 0 : 100 - (next - 11) * 15, 0);
+    }
+    accept_action(19, "damage", 0, 0);
+    owner.send(move, {{"seq", ++move_sequence}, {"x", 200}, {"y", 150}});
+    verify(owner.receive(snapshot));
+    verify(observer.receive(snapshot));
+    accept_action(4294967295u, "rest", 20, 20);
+    reject_action({{"seq", 4294967295u}, {"kind", "damage"}}, "stale_sequence", 4294967295u);
+    owner.close();
+    observer.receive(snapshot);
+    client fresh(port);
+    fresh.send(join, {{"name", "Attributes"}, {"room", "lobby"}});
+    const auto fresh_id = fresh.receive(accepted)["player_id"].get<std::string>();
+    require(fresh_id != id, "attribute reconnect reused the previous identity");
+    const auto state = fresh.receive(snapshot);
+    const auto& value = player(state, fresh_id);
+    require(value["hp"] == 100 && value["mp"] == 100 && value["hp_max"] == 100 && value["mp_max"] == 100 &&
+                value["action_seq"] == 0 && value["seq"] == 0,
+        "reconnect did not load a fresh configured attribute profile");
+    observer.receive(snapshot);
+    fresh.send(action, {{"seq", 1}, {"kind", "skill"}});
+    require(player(fresh.receive(snapshot), fresh_id)["mp"] == 80, "fresh action sequence did not reset");
+    observer.receive(snapshot);
+    fresh.close();
+    observer.receive(snapshot);
+    observer.close();
+}
+
+void exercise_configured_profile(unsigned short port) {
+    client peer(port, true);
+    peer.send(join, {{"name", "Configured"}, {"room", "lobby"}});
+    const auto id = peer.receive(accepted)["player_id"].get<std::string>();
+    const auto state = peer.receive(snapshot);
+    const auto& initial = player(state, id);
+    require(initial["hp"] == 4294967290u && initial["mp"] == 4294967285u && initial["hp_max"] == 4294967295u &&
+                initial["mp_max"] == 4294967295u,
+        "Entity configuration profile was replaced with hardcoded attribute defaults");
+    peer.send(action, {{"seq", 1}, {"kind", "rest"}});
+    const auto recovered = peer.receive(snapshot);
+    require(player(recovered, id)["hp"] == 4294967295u && player(recovered, id)["mp"] == 4294967295u &&
+                player(recovered, id)["action_seq"] == 1,
+        "rest overflowed instead of clamping at configured uint32 maxima");
+    peer.close();
+}
+
+void exercise_resource_boundary(unsigned short port) {
+    client peer(port, true);
+    peer.send(join, {{"name", "ResourceBoundary"}, {"room", "lobby"}});
+    const auto id = peer.receive(accepted)["player_id"].get<std::string>();
+    require(player(peer.receive(snapshot), id)["mp"] == 19, "19 MP profile was not loaded");
+    peer.send(action, {{"seq", 1}, {"kind", "skill"}});
+    error_is(peer, "insufficient_resource", 1);
+    peer.send(action, {{"seq", 1}, {"kind", "rest"}});
+    const auto state = peer.receive(snapshot);
+    require(player(state, id)["mp"] == 39 && player(state, id)["hp"] == 100 && player(state, id)["action_seq"] == 1,
+        "19 MP rejection mutated resources or advanced its sequence");
+    peer.close();
 }
 } // namespace
 
@@ -328,10 +502,54 @@ int main(int argc, char** argv) {
     {
         require(argc == 4, "usage: server-test LAUNCHER RUNTIME_DIR PORT");
         launcher process(argv[1], argv[2]);
-        exercise(static_cast<unsigned short>(std::stoul(argv[3])));
+        const auto port = static_cast<unsigned short>(std::stoul(argv[3]));
+        exercise(port);
+        exercise_attributes(port);
         process.stop();
+        const auto path = std::filesystem::path(argv[2]) / "resource/meta/entity_schema.json";
+        std::ifstream input(path);
+        auto configuration = json::parse(input);
+        const auto original = configuration;
+        auto& profile = configuration["configs"][0]["rows"][0];
+        profile["hp"] = 4294967290u;
+        profile["mp"] = 4294967285u;
+        profile["hp_max"] = 4294967295u;
+        profile["mp_max"] = 4294967295u;
+        {
+            std::ofstream output(path);
+            output << configuration.dump(2);
+        }
+        launcher configured(argv[1], argv[2], "launcher-configured-profile.log");
+        exercise_configured_profile(port);
+        configured.stop();
+        auto boundary = original;
+        boundary["configs"][0]["rows"][0]["mp"] = 19;
+        {
+            std::ofstream output(path);
+            output << boundary.dump(2);
+        }
+        launcher resource_boundary(argv[1], argv[2], "launcher-resource-boundary.log");
+        exercise_resource_boundary(port);
+        resource_boundary.stop();
+        for (const auto* field : {"hp", "move_seq"})
+        {
+            auto invalid = original;
+            invalid["configs"][0]["rows"][0][field] = std::string(field) == "hp" ? 101 : 1;
+            {
+                std::ofstream output(path);
+                output << invalid.dump(2);
+            }
+            const auto name = "launcher-invalid-" + std::string(field) + ".log";
+            launcher invalid_process(argv[1], argv[2], name);
+            invalid_process.expect_failure(std::filesystem::path(argv[2]) / name);
+        }
+        {
+            std::ofstream output(path);
+            output << original.dump(2);
+        }
         std::cout << "guest_room: actual launcher, Kernel entities, two peers, authoritative moves, errors, "
-                     "split/coalesced frames, disconnect/rejoin, invalid framing and normal shutdown passed\n";
+                     "attribute actions, configured defaults, uint32 clamp boundaries, split/coalesced frames, "
+                     "disconnect/rejoin, invalid framing and normal shutdown passed\n";
         return 0;
     }
     catch (const std::exception& exception)
