@@ -6,9 +6,25 @@ This page distinguishes supported source behavior from remaining design and depl
 
 - Core code lives in `src/core/`, the launcher in `src/application/`, shared manifest/configuration reading in `src/config/`, and official plugin headers and implementation together in `src/plugins/<name>/`. Explicit CMake public-header mappings preserve `<ark/...>` include paths. See [project layout and public interfaces](../reference/directory-structure.md) for targets, rebuild requirements and optional plugin boundaries.
 - Public [MySQL](../reference/mysql.md) and [Redis](../reference/redis.md) modules use arknet native clients through Asio coroutine entry points. Inputs and results own their storage; manager-owned task groups resume on the module owner thread. MySQL includes prepared statements and transactions; Redis includes commands and pipelines. Legacy database drivers are no longer the public plugin interface.
+- The native C++20 [Entity configuration exporter](../guides/tools.md) reads CSV, XLSX or canonical JSON and exports validated Entity definitions, static business profiles and C++/C# field-index constants. [Kernel JSON loading](../reference/kernel.md#json-entity-schema-and-business-data) uses the selected schema and profile snapshot at startup; malformed selected JSON fails startup, while absence preserves the legacy XML path. Export does not reload running servers, migrate databases or filter separate client/server distributions.
+- The [guest-room example](../guides/examples.md) uses JSON-defined Kernel Entities and the real Net transport for server-authoritative movement and HP/MP actions through guest-room demonstration messages. The matching official [C# Godot demo](https://github.com/OpenArkStudio/ark-client-godot) has passed local manual testing. Restart/rejoin creates fresh state; the example provides no account service or persistence. Its bounded native checks and local manual testing do not establish production capacity, comprehensive hostile-client hardening or public deployment acceptance.
 - Startup callbacks propagate the first failure. The launcher reports the failed phase and exits with code `1` before the update loop. Shutdown stops managed task admission, drains accepted tasks and waits for module readiness. A configured cooperative wait timeout retains the process/resources and disables unloading. These behaviors do not provide partial-startup rollback or a hard process-stop deadline. See [application startup and shutdown](../guides/applications.md) and [managed tasks](../guides/tasks.md).
 
 Public database service/failure checks, [real-plugin DSO positive workflows](../guides/database-validation.md#real-plugin-dsos-against-real-services), [bounded request cancellation](../guides/database-validation.md#real-plugin-request-cancellation), [observed read-only server termination](../guides/database-validation.md#real-plugin-server-termination) and [Redis TLS command/pipeline and certificate rejection](../guides/database-validation.md#real-plugin-redis-tls) passed against isolated Redis and MySQL servers on macOS. The [database service acceptance record](../guides/database-validation.md) keeps their distinct tested revisions, environments and scope; those results do not cover every deployment or source revision.
+
+## Priority design: Entity incremental synchronization
+
+General-purpose Entity incremental synchronization is a core ark capability to design, with the same discussion priority as startup/shutdown lifecycle work. The current guest-room example explicitly broadcasts full snapshots from business code; it is a functional baseline, not an implementation of automatic framework replication.
+
+The design agenda covers:
+
+- **Change collection:** scalar fields, table/container changes, entity creation/destruction and mutation ownership; define how ordinary Entity APIs record changes without business code constructing each synchronization message.
+- **Snapshots and deltas:** initial state, changed fields, batching, repeated updates, stable field IDs and synchronization versions. Distinguish replicated state from business events so coalescing state cannot silently discard events.
+- **Recipients and authority:** server-owned state, owner/public/server-only fields, subscriptions and the boundary with interest-management or AOI systems.
+- **Recovery and limits:** reconnect baselines, stale/duplicate updates, slow consumers, bounded queues and full-state recovery. Select delivery and acknowledgement rules before fixing a wire format.
+- **Client integration and evidence:** shared schema/codec requirements for C++ and C#, with the two-client Godot room as the first end-to-end consumer. Acceptance should show full state on initial visibility and deltas for later movement/HP/MP changes, including ordering, visibility and recovery checks; measure encoded bytes against the full-snapshot baseline.
+
+These are design topics and acceptance goals, not finalized APIs, protocols or completed capabilities. Agree on the model and compatibility boundaries before implementation.
 
 ## Remaining acceptance and design
 
@@ -21,6 +37,6 @@ Public database service/failure checks, [real-plugin DSO positive workflows](../
 
 ## Deferred directions
 
-Registry design and business-plugin hot update remain paused. In-flight work, state ownership, dependency order and compatibility need an agreed design before implementation or broader unload claims. Business-configuration export changes are also deferred; the shared application-manifest reader does not replace business-resource formats or their export tools.
+Registry design and business-plugin hot update remain paused. In-flight work, state ownership, dependency order and compatibility need an agreed design before implementation or broader unload claims.
 
 Historical ideas in the archive are not automatically scheduled work. Future scope should name the affected API or deployment, its prerequisites and concrete acceptance evidence before it is promoted into this roadmap.
