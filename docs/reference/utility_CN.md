@@ -52,6 +52,12 @@ zlib、LZ4 和 Zstandard 普通调用不再共享可写输出缓冲区。Zstanda
 
 **源码不兼容变更：** SDK 移除 `ark/utility/{guid,timer,schedule,compress}_module_impl.hpp` 和 `ark/utility/utility_plugin.hpp`。实现类定义在各自 cpp 文件中，插件类型及返回接口的工厂属于私有装配。将直接构造实现类的代码改为公开接口查找，或应用自行维护实现。仅手写 `-I <ark-source>/include` 的调用需改用目标传递的包含目录。插件和使用方应一起重新编译；公开虚函数及动态入口签名保持不变，不代表兼容旧实现类二进制。
 
+## Core UID 位分配
+
+`<ark/uid_generator.hpp>` 保留默认的有符号 64 位 UID 布局：预留 1 位符号位、29 位时间戳、24 位工作节点和 10 位序号。合法字段生成的 ID 保持不变。`bits_allocator` 构造与 `alloc()` 支持 C++20 常量求值。
+
+各字段位宽必须非负，合计为 63 位有效载荷；非法布局在执行移位前抛出 `std::invalid_argument`，Debug 与 Release 行为一致。分配的字段值必须非负且不超过各自位宽，否则 `alloc()` 抛出 `std::out_of_range`，避免工作节点或序号占用相邻字段。零位宽字段仅接受零值。运行时生成仍使用既有纪元、时钟检查和序号回绕规则；此项修改不改变 UID 格式，也不提供跨进程工作节点 ID 协调。
+
 ## Core 随机数工具
 
 `<ark/random/random_generator.hpp>` 通过 `ark::core` 提供 `ark::random_generator`，无需加载 Utility 插件。有符号 `random(int, int)` 重载接受任意两个 `int` 端点，包括 `INT_MIN` 和 `INT_MAX`，范围计算不会溢出。端点不同时，先按大小排序，再返回 `[lower, upper)` 内的值。端点相同时，直接返回该值，不推进生成器状态。

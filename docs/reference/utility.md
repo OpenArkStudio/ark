@@ -58,6 +58,12 @@ Public headers now have their single source in `src/plugins/utility/`. CMake cop
 
 **Breaking source change:** `ark/utility/{guid,timer,schedule,compress}_module_impl.hpp` and `ark/utility/utility_plugin.hpp` are removed from the SDK. Implementations are defined in their cpp files; the plugin type and interface-returning factories are private. Replace direct implementation construction with public interface lookup or an application-owned implementation. Handwritten `-I <ark-source>/include` consumers must use target-provided include roots. Rebuild the plugin and consumers together; unchanged public virtual functions and exported entry signatures do not establish compatibility with old implementation-class binaries.
 
+## Core UID bit allocation
+
+`<ark/uid_generator.hpp>` retains the default signed 64-bit UID layout: one reserved sign bit, 29 timestamp bits, 24 worker bits and 10 sequence bits. Valid field values produce the same IDs. `bits_allocator` construction and `alloc()` support C++20 constant evaluation.
+
+Widths must be nonnegative and total 63 payload bits; invalid layouts throw `std::invalid_argument` before any shift, in both Debug and Release. Each allocation field must fit its own width and be nonnegative; otherwise `alloc()` throws `std::out_of_range`, preventing worker or sequence bits from spilling into an adjacent field. Zero-width fields accept only zero. Runtime generation still uses the existing epoch, clock checks and sequence rollover; this does not change the UID format or provide cross-process worker-ID coordination.
+
 ## Core random helper
 
 `<ark/random/random_generator.hpp>` provides `ark::random_generator` through `ark::core`; it does not require loading the Utility plugin. The signed `random(int, int)` overload accepts any pair of `int` endpoints, including `INT_MIN` and `INT_MAX`, without overflowing the range calculation. Different endpoints produce a value in `[lower, upper)` after ordering the endpoints. Equal endpoints return that value without advancing the generator.
