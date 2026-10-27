@@ -304,7 +304,7 @@ bool websocket_server::send_msg(const char* msg, const size_t msg_len, conv_id_t
 
 bool websocket_server::send_msg(msg_header* head, const char* msg_data, conv_id_t session_id) {
     ARK_ASSERT_RET_VAL(head != nullptr && msg_data != nullptr, false);
-    if (head->message_length() > ark_msg_max_length)
+    if (!head->accepts_body_size(head->message_length()))
     {
         return false;
     }
@@ -318,12 +318,13 @@ bool websocket_server::send_msg(msg_header* head, const char* msg_data, conv_id_
 
     std::string buffer;
     head->serialize_to_string(buffer);
-    if (buffer.empty())
+    const auto message_length = head->message_length();
+    if (buffer.empty() || !head->accepts_body_size(message_length))
     {
         return false;
     }
 
-    buffer.append(msg_data, head->message_length());
+    buffer.append(msg_data, message_length);
     return session->get_session()->async_send(std::move(buffer));
 }
 
@@ -341,18 +342,19 @@ void websocket_server::send_msg_to_all_client(const char* msg, size_t msg_len) {
 
 void websocket_server::broadcast_msg(msg_header* head, const char* msg_data) {
     ARK_ASSERT_RET_NONE(head != nullptr && msg_data != nullptr);
-    if (head->message_length() > ark_msg_max_length)
+    if (!head->accepts_body_size(head->message_length()))
     {
         return;
     }
 
     std::string buffer;
     head->serialize_to_string(buffer);
-    if (buffer.empty())
+    const auto message_length = head->message_length();
+    if (buffer.empty() || !head->accepts_body_size(message_length))
     {
         return;
     }
-    buffer.append(msg_data, head->message_length());
+    buffer.append(msg_data, message_length);
 
     send_msg_to_all_client(buffer.data(), buffer.size());
 }

@@ -226,7 +226,7 @@ bool tcp_client::send_msg(msg_header* head, const char* msg_data, conv_id_t sess
     std::string buffer;
     head->serialize_to_string(buffer);
     const auto message_length = head->message_length();
-    if (buffer.empty() || message_length > ark_msg_max_length)
+    if (buffer.empty() || !head->accepts_body_size(message_length))
     {
         return false;
     }

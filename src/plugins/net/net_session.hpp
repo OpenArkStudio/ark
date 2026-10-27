@@ -158,6 +158,10 @@ public:
     bool parse_buffer_to_msg() {
         size_t pos = 0;
         const size_t head_len = get_head_len();
+        if (head_len == 0)
+        {
+            return false;
+        }
         while (get_buffer_len() - pos >= head_len)
         {
             auto msg_head = std::move(pending_header_);
@@ -167,7 +171,7 @@ public:
                 msg_head->parse_from_array(get_buffer() + pos);
             }
             const size_t msg_len = msg_head->message_length();
-            if (msg_len > ark_msg_max_length)
+            if (!req_header_->accepts_body_size(msg_len))
             {
                 return false;
             }

@@ -22,6 +22,7 @@
 #include "ark/net/tcp_server.hpp"
 #include "ark/net/websocket_client.hpp"
 #include "ark/net/websocket_server.hpp"
+#include "body_limit_header.hpp"
 
 namespace {
 
@@ -371,6 +372,9 @@ TEST_CASE("TCP server preserves fragmented and coalesced ARK frames") {
         header->set_source_bus_id(11);
         header->set_dest_bus_id(22);
     }
+    SUBCASE("locally configured 8192-byte body limit") {
+        header = std::make_shared<ark::test::large_body_header<ark::s_msg_header>>();
+    }
     receiver receiver;
     auto server = std::make_shared<ark::tcp_server>(&receiver, &receiver::receive_message, &receiver::on_event);
     const auto port = available_port();
@@ -383,7 +387,7 @@ TEST_CASE("TCP server preserves fragmented and coalesced ARK frames") {
         wire += data;
     });
     REQUIRE(client.start("127.0.0.1", port));
-    const std::string body(4096, '\xA5');
+    const std::string body(header->max_body_size(), '\xA5');
     const auto first = encode_frame(*header, 7, body);
     const auto second = encode_frame(*header, 8, "");
     REQUIRE(client.send(first.data(), 3) == 3);
@@ -417,13 +421,30 @@ TEST_CASE("TCP server preserves fragmented and coalesced ARK frames") {
         CHECK(wire == expected);
     }
     CHECK_FALSE(server->send_msg(header.get(), body.data(), messages[0].session + 1));
+    server->broadcast_msg(header.get(), body.data());
+    REQUIRE(wait([&] {
+        std::lock_guard guard(wire_mutex);
+        return wire.size() >= expected.size() * 2;
+    }));
+    {
+        std::lock_guard guard(wire_mutex);
+        CHECK(wire == expected + expected);
+    }
+    header->set_message_length(header->max_body_size() + 1);
+    CHECK_FALSE(server->send_msg(header.get(), body.data(), messages[0].session));
 }
 
 TEST_CASE("WebSocket server sends binary ARK frames") {
     receiver receiver;
     auto server = std::make_shared<ark::websocket_server>(&receiver, &receiver::receive_message, &receiver::on_event);
     const auto port = available_port();
-    auto header = std::make_shared<ark::s_msg_header>();
+    std::shared_ptr<ark::msg_header> header;
+    SUBCASE("native 4096-byte body limit") {
+        header = std::make_shared<ark::s_msg_header>();
+    }
+    SUBCASE("locally configured 8192-byte body limit") {
+        header = std::make_shared<ark::test::large_body_header<ark::s_msg_header>>();
+    }
     REQUIRE(server->start_server(header, 11, "127.0.0.1", port, 2, 10, 30000));
     std::atomic<bool> binary{false};
     std::mutex mutex;
@@ -441,7 +462,7 @@ TEST_CASE("WebSocket server sends binary ARK frames") {
         reply.assign(data);
     });
     REQUIRE(client.start("127.0.0.1", port));
-    const std::string body(4096, '\xFF');
+    const std::string body(header->max_body_size(), '\xFF');
     const auto bytes = encode_frame(*header, 17, body);
     REQUIRE(client.send(bytes) == bytes.size());
     CHECK(receiver.message_snapshot().empty());
@@ -459,6 +480,8 @@ TEST_CASE("WebSocket server sends binary ARK frames") {
         CHECK(reply == bytes);
     }
     CHECK_FALSE(receiver.wrong_thread.load());
+    header->set_message_length(header->max_body_size() + 1);
+    CHECK_FALSE(server->send_msg(header.get(), body.data(), message.session));
 }
 
 TEST_CASE("TCP and WebSocket clients preserve ARK frames and use Update dispatch") {
@@ -468,12 +491,18 @@ TEST_CASE("TCP and WebSocket clients preserve ARK frames and use Update dispatch
         server.bind_recv([](auto& session, std::string_view data) { session->async_send(data); });
         REQUIRE(server.start("127.0.0.1", 0));
         auto client = create_client<ark::tcp_client>(receiver);
-        auto header = std::make_shared<ark::ss_msg_header>();
+        std::shared_ptr<ark::msg_header> header;
+        SUBCASE("native 4096-byte body limit") {
+            header = std::make_shared<ark::ss_msg_header>();
+        }
+        SUBCASE("locally configured 8192-byte body limit") {
+            header = std::make_shared<ark::test::large_body_header<ark::ss_msg_header>>();
+        }
         header->set_actor_id(987654321);
         header->set_source_bus_id(11);
         header->set_dest_bus_id(22);
         REQUIRE(client->start_client(header, 11, "127.0.0.1", server.listen_port()));
-        const std::string body(4096, '\xFE');
+        const std::string body(header->max_body_size(), '\xFE');
         encode_frame(*header, 71, body);
         REQUIRE(client->send_msg(header.get(), body.data(), 0));
         CHECK(receiver.event_snapshot().empty());
@@ -484,6 +513,8 @@ TEST_CASE("TCP and WebSocket clients preserve ARK frames and use Update dispatch
         CHECK(message.source == 11);
         CHECK(message.destination == 22);
         CHECK_FALSE(receiver.wrong_thread.load());
+        header->set_message_length(header->max_body_size() + 1);
+        CHECK_FALSE(client->send_msg(header.get(), body.data(), 0));
         const std::weak_ptr weak = client;
         client.reset();
         CHECK(weak.expired());
@@ -499,9 +530,15 @@ TEST_CASE("TCP and WebSocket clients preserve ARK frames and use Update dispatch
         });
         REQUIRE(server.start("127.0.0.1", 0));
         auto client = create_client<ark::websocket_client>(receiver);
-        auto header = std::make_shared<ark::s_msg_header>();
+        std::shared_ptr<ark::msg_header> header;
+        SUBCASE("native 4096-byte body limit") {
+            header = std::make_shared<ark::s_msg_header>();
+        }
+        SUBCASE("locally configured 8192-byte body limit") {
+            header = std::make_shared<ark::test::large_body_header<ark::s_msg_header>>();
+        }
         REQUIRE(client->start_client(header, 11, "127.0.0.1", server.listen_port()));
-        const std::string body(4096, '\xFE');
+        const std::string body(header->max_body_size(), '\xFE');
         encode_frame(*header, 71, body);
         REQUIRE(client->send_msg(header.get(), body.data(), 0));
         CHECK(receiver.event_snapshot().empty());
@@ -511,6 +548,8 @@ TEST_CASE("TCP and WebSocket clients preserve ARK frames and use Update dispatch
         CHECK(receiver.websocket_reference_session == receiver.message_snapshot().front().session);
         CHECK(binary.load());
         CHECK_FALSE(receiver.wrong_thread.load());
+        header->set_message_length(header->max_body_size() + 1);
+        CHECK_FALSE(client->send_msg(header.get(), body.data(), 0));
         const std::weak_ptr weak = client;
         client.reset();
         CHECK(weak.expired());
