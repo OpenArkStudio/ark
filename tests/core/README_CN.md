@@ -15,6 +15,8 @@ cmake --build core-build --target check-core
 启用 `ARK_BUILD_CORE_TESTS=ON` 时，`check-network` 也会运行这些用例，现有 CI
 矩阵会执行该入口。测试不需要数据库服务。
 
+字符串匹配回归覆盖空分隔符、空替换模式、有限与无限次数、空输入、已有输出元素和内嵌空字符，并保留非空分隔符、剩余后缀、替换次数与删除语义。执行 `ark_core_tests --test-case="*String utilit*"` 可单独运行。参见[字符串匹配规则](../../docs/reference/utility_CN.md#core-字符串匹配)。
+
 C++20 语言回归验证六种精确整数类型分类、限定符与引用处理、常量值、异常契约和固定 UID 位分配结果。独立 array-map 头文件检查还会拒绝重新引入旧语言兼容宏。
 
 UID 回归另行验证编译期分配、非法及极端位宽、字段溢出和 63/0/0 的三种位宽排列。执行 `ark_core_tests --test-case="UID*"` 可单独运行。非法布局抛出 `std::invalid_argument`，非法字段值抛出 `std::out_of_range`，不受断言开关影响。参见 [UID 位分配](../../docs/reference/utility_CN.md#core-uid-位分配)。
