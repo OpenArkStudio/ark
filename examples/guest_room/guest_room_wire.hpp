@@ -6,6 +6,7 @@
 #include <limits>
 #include <stdexcept>
 #include <type_traits>
+#include <utility>
 
 #include "ark/kernel/entity_stream.hpp"
 #include "ark/proto/guest_room.pb.h"
@@ -84,8 +85,7 @@ inline void encode_field(std::uint32_t index, const entity_sync::scalar_value& v
             }
             else if constexpr (std::is_same_v<type, entity_sync::guid_value>)
             {
-                if (item.value < std::numeric_limits<std::int64_t>::min() ||
-                    item.value > std::numeric_limits<std::int64_t>::max())
+                if (!std::in_range<std::int64_t>(item.value))
                 {
                     throw std::invalid_argument("Scalar GUID exceeds the wire width");
                 }
