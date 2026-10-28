@@ -19,6 +19,8 @@ Kernel 管理运行时实体、实体结构、静态配置和地图实例。业�
 
 没有选择 JSON 结构时，元数据模块在 `init()` 中加载 `resource/meta/config_class.config` 和 `resource/meta/entity_class.config`。这两个文件引用具体的结构文件；配置结构还可指定数据资源文件。`config_module` 在 `post_init()` 中按元数据加载静态记录。
 
+XML 配置加载在正常返回或 C++ 异常展开时回收临时 ID 节点；Debug 断言和进程退出不保证栈展开。后续配置行被拒绝时，已加入配置管理器的记录不回滚；管理器仍在正常 `shut()` 阶段释放。调用方持有的共享配置记录在最后一个所有者释放前保持有效。插件安装后的启动失败仍遵循现有进程退出策略。
+
 业务代码应在框架完成相应初始化后查询配置。创建运行时实体前，需要存在对应类结构、地图和地图实例。类事件回调应在目标实体创建前注册。模块接入方式见[创建模块](../guides/modules_CN.md)。
 
 ## JSON 实体定义与业务配置
@@ -143,6 +145,8 @@ std::shared_ptr<ark::entity> create_player(ark::plugin_manager& manager, int map
 
 `config_id > 0` 时，配置记录必须存在且与实体类匹配。配置为未指定的字段提供默认值，合法的 `args` 覆盖同一字段；显式传入 `0` 或空字符串也会覆盖配置值。同一字段在合法参数中重复出现时，最后一个值生效。实体数据独立于配置记录，修改实体不会修改原配置。
 
+节点复制或插入抛出异常时，会释放尚未发布的节点并向调用方传播异常。深复制的数据仍独立，重复索引保留原值。
+
 参数按 `(value, uint32_t field_index)` 成对排列：先加入值，再用 `add_u_int()` 加入字段索引。索引必须来自已加载的实体结构，值类型必须与字段类型完全一致；不要依赖隐式转换。
 
 下面使用声明为 int32 的 `Player.level` 和 string 的 `Player.name`，显式将等级设为 `0`、名称设为空字符串，其余字段保留配置默认值。调用前，目标地图、实例和对应的 Player 配置记录必须存在。
@@ -177,6 +181,8 @@ std::shared_ptr<ark::entity> create_configured_player(
 
 GUID 字段回调保留 `dt_guid` 标签。默认 GUID64 构建使用 `data::get_int64()` 读取其原生有符号值，`ARK_USE_GUID_32` 构建使用 `data::get_int()`。`data_impl::from_guid()` 显式构造带标签的值；复制、赋值、节点转换和相等比较均保留 GUID 类型。普通数字构造函数继续要求匹配的数字类型。
 
+`data_impl`/`data_base` 的字符串或用户数据分配返回空指针时，抛出 `std::bad_alloc`。赋值或设置失败保留目标原值，复制保留源值。设置操作支持引用自身有效存储的输入。
+
 ```cpp
 #include <cstdint>
 #include <string>
@@ -202,6 +208,12 @@ bool set_int32_field(ark::kernel_module& kernel, const ark::guid_t& id, const st
 | 静态配置 | `config_module::find_static_entity(config_id)` 返回 `shared_ptr<static_entity>`；检查空值后按已知字段类型读取 |
 
 `table*` 和 `row*` 是借用指针，不独立拥有实体数据。表格删除行、清空表格或销毁所属实体后，不要继续使用相关指针。
+
+禁用断言时，行分配失败返回 `nullptr`，保留现有行及下一个自动索引，不触发 `table_add`。内存恢复后可以重试；Debug 构建保留添加失败时的既有断言。插入 map 时若抛出异常，会在向上传播前回收尚未发布的行；既有行仍由表格持有。
+
+### 自定义标量的所有权
+
+创建自定义标量时，值构造或插入抛出异常会释放尚未发布的值，向调用方传播异常，不新增名称记录。插入成功的值仍由实体持有。
 
 ### 自定义无符号值
 

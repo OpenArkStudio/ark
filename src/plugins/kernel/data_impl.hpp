@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include <new>
 #include <string>
 
 #include "ark/core_def.hpp"
@@ -503,9 +504,8 @@ public:
     }
 
     void set_string(const char* value) override {
-        release();
-        type_ = data_type::dt_string;
-        inner_set_string(value);
+        self_t replacement(data_type::dt_string, value);
+        swap(replacement);
     }
 
     void set_u_int(uint32_t value) override {
@@ -527,9 +527,8 @@ public:
     }
 
     void set_user_data(const void* value, size_t size) override {
-        release();
-        type_ = data_type::dt_userdata;
-        inner_set_user_data(value, size);
+        self_t replacement(data_type::dt_userdata, value, size);
+        swap(replacement);
     }
 
     void set_raw_user_data(void* value) override {
@@ -638,6 +637,10 @@ protected:
         if (value_size > buffer_size)
         {
             p = (char*)allocator_.alloc(value_size);
+            if (p == nullptr)
+            {
+                throw std::bad_alloc{};
+            }
             allocated_length_ = (uint32_t)value_size;
         }
         else
@@ -652,6 +655,10 @@ protected:
     void inner_set_user_data(const void* data, size_t size) {
         size_t value_size = get_raw_user_data_size(size);
         char* p = (char*)allocator_.alloc(value_size);
+        if (p == nullptr)
+        {
+            throw std::bad_alloc{};
+        }
         init_raw_user_data(p, data, size);
         user_data_ = p;
         allocated_length_ = (uint32_t)value_size;

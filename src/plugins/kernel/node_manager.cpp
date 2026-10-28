@@ -18,11 +18,25 @@
  *
  */
 
+#include <memory>
+
 #include "ark/kernel/data_impl.hpp"
 #include "ark/kernel/node_impl.hpp"
 #include "ark/kernel/node_manager.hpp"
 
 namespace ark {
+namespace {
+
+struct unpublished_node_deleter
+{
+    void operator()(node* pointer) const noexcept {
+        ARK_DELETE(pointer);
+    }
+};
+
+using scoped_node = std::unique_ptr<node, unpublished_node_deleter>;
+
+} // namespace
 
 node_manager::node_manager(std::shared_ptr<class_meta> class_meta_ptr) {
     class_meta_ = class_meta_ptr;
@@ -137,33 +151,32 @@ node* node_manager::create_data(std::shared_ptr<node_meta> data_meta_ptr) {
     ARK_ASSERT_RET_VAL(index > 0, nullptr);
     ARK_ASSERT_RET_VAL(data_list_.find_value(index) == nullptr, nullptr);
 
-    auto data_ptr = create_data_by_meta(data_meta_ptr);
+    scoped_node data_ptr(create_data_by_meta(data_meta_ptr));
     ARK_ASSERT_RET_VAL(data_ptr != nullptr, nullptr);
 
-    if (!data_list_.insert(index, data_ptr).second)
+    if (!data_list_.insert(index, data_ptr.get()).second)
     {
-        ARK_DELETE(data_ptr);
         return nullptr;
     }
 
-    return data_ptr;
+    return data_ptr.release();
 }
 
 // this is only called when create new entity so do no need check whether node exist
 bool node_manager::create_data(node* data_ptr) {
     ARK_ASSERT_RET_VAL(data_ptr != nullptr, false);
 
-    auto new_data_ptr = create_data_by_meta(data_ptr->get_meta());
+    scoped_node new_data_ptr(create_data_by_meta(data_ptr->get_meta()));
     ARK_ASSERT_RET_VAL(new_data_ptr != nullptr, false);
 
     new_data_ptr->copy_from(data_ptr);
 
-    if (!data_list_.insert(new_data_ptr->get_index(), new_data_ptr).second)
+    if (!data_list_.insert(new_data_ptr->get_index(), new_data_ptr.get()).second)
     {
-        ARK_DELETE(new_data_ptr);
         return false;
     }
 
+    new_data_ptr.release();
     return true;
 }
 
@@ -658,14 +671,14 @@ node* node_manager::find_data(const uint32_t index) {
         auto data_meta_ptr = class_meta_->find_data_meta(index);
         ARK_ASSERT_RET_VAL(data_meta_ptr != nullptr, nullptr);
 
-        data_ptr = create_data_by_meta(data_meta_ptr);
-        ARK_ASSERT_RET_VAL(data_ptr != nullptr, nullptr);
+        scoped_node candidate(create_data_by_meta(data_meta_ptr));
+        ARK_ASSERT_RET_VAL(candidate != nullptr, nullptr);
 
-        if (!data_list_.insert(index, data_ptr).second)
+        if (!data_list_.insert(index, candidate.get()).second)
         {
-            ARK_DELETE(data_ptr);
             return nullptr;
         }
+        data_ptr = candidate.release();
     }
 
     return data_ptr;

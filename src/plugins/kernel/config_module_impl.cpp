@@ -18,6 +18,8 @@
  *
  */
 
+#include <memory>
+
 #include "ark/kernel/config_module_impl.hpp"
 #include "ark/kernel/node_impl.hpp"
 #include "ark/kernel/node_manager.hpp"
@@ -108,7 +110,8 @@ bool config_module_impl::load_config(std::shared_ptr<class_meta> class_meta_ptr)
         auto id_meta_ptr = data_meta_list.find_value(idx);
         ARK_ASSERT_RET_VAL(id_meta_ptr != nullptr, false);
 
-        node* id_data_ptr = create_data_by_meta(id_meta_ptr);
+        const auto delete_id = [](node* value) { ARK_DELETE(value); };
+        std::unique_ptr<node, decltype(delete_id)> id_data_ptr(create_data_by_meta(id_meta_ptr), delete_id);
         ARK_ASSERT_RET_VAL(id_data_ptr != nullptr, false);
 
         id_data_ptr->from_string(data_node.get_string(id_data_ptr->get_name().c_str()));
@@ -121,8 +124,8 @@ bool config_module_impl::load_config(std::shared_ptr<class_meta> class_meta_ptr)
             static_entity_manager_->create_static_entity(class_meta_ptr, node_manager_ptr, id_data_ptr->get_value());
         ARK_ASSERT_RET_VAL(obj_ptr != nullptr, false);
 
-        // delete id data do not need it
-        ARK_DELETE(id_data_ptr);
+        // The temporary ID is no longer needed after the record is created.
+        id_data_ptr.reset();
 
         // read by class meta
         for (auto iter : data_meta_list)

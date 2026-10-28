@@ -19,6 +19,8 @@ Schemas and configuration values are separate data: a schema defines field names
 
 When no JSON schema is selected, the metadata module loads `resource/meta/config_class.config` and `resource/meta/entity_class.config` during `init()`. These files reference individual schema files; configuration schemas may also specify data resources. During `post_init()`, `config_module` loads static records using this metadata.
 
+XML configuration loading releases its temporary ID node on normal return or C++ exception unwinding. Debug assertions and process exit do not guarantee stack unwinding. A rejected later row does not roll back records already added to the configuration manager; normal `shut()` still releases the manager. Shared configuration records held by callers remain valid until their last owner releases them. Failures after plugin installation retain the existing application exit policy.
+
 Query configuration after the framework has completed the relevant initialization. Creating a runtime entity requires its class schema, map and map instance to exist. Register class event callbacks before creating entities of that class. See [Create a module](../guides/modules.md) for module integration.
 
 ## JSON Entity schema and business data
@@ -143,6 +145,8 @@ Holding a `shared_ptr<entity>` does not mean the entity remains registered with 
 
 When `config_id > 0`, the configuration record must exist and match the entity class. Configuration supplies defaults for unspecified fields; valid `args` override the same field, including an explicit `0` or empty string. If a field appears more than once in valid arguments, the last value wins. Entity data is independent of the configuration record, so modifying an entity does not modify the source configuration.
 
+Node creation releases an unpublished node if copying its value or inserting it fails, then propagates the exception. Deep copies remain independent; duplicate indices preserve the existing value.
+
 Arguments are `(value, uint32_t field_index)` pairs: add the value first, then add its index with `add_u_int()`. Indices must belong to the loaded entity schema, and each value type must exactly match its field type. Do not rely on implicit conversions.
 
 The following example uses `Player.level` declared as int32 and `Player.name` declared as string. It explicitly sets the level to `0` and the name to an empty string, while retaining configuration defaults for the other fields. The target map, instance and matching Player configuration record must already exist.
@@ -177,6 +181,8 @@ Field access belongs to `entity`, using a field name or metadata index. The acce
 
 GUID field callbacks retain the `dt_guid` tag. Read their native signed value with `data::get_int64()` in the default GUID64 build, or `data::get_int()` with `ARK_USE_GUID_32`. `data_impl::from_guid()` constructs an explicit tagged value; copying, assignment, node conversion and equality preserve its GUID type. The ordinary numeric constructors continue to require their matching numeric types.
 
+`data_impl`/`data_base` report null string or user-data allocations as `std::bad_alloc`. Failed assignment and setters preserve the destination; copies preserve the source. Setters accept valid input that refers to their own storage.
+
 ```cpp
 #include <cstdint>
 #include <string>
@@ -202,6 +208,12 @@ bool set_int32_field(ark::kernel_module& kernel, const ark::guid_t& id, const st
 | Static configuration | `config_module::find_static_entity(config_id)` returns `shared_ptr<static_entity>`; check for null, then read fields with their known schema types |
 
 `table*` and `row*` are borrowed pointers, with no independent ownership of entity data. Do not retain them after removing the row, clearing the table or destroying the owning entity.
+
+With assertions disabled, a failed row allocation returns `nullptr`, preserves existing rows and the next automatic index, and emits no `table_add` event. Retry after memory recovers; Debug builds retain the existing failed-add assertion. A map insertion exception reclaims the unpublished row before propagating; existing rows remain owned by the table.
+
+### Custom scalar ownership
+
+Custom scalar creation releases an unpublished value if value construction or map insertion throws; the exception propagates without adding the name. Successful values remain owned by the entity.
 
 ### Custom unsigned values
 

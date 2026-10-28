@@ -56,6 +56,43 @@ if(TARGET check-proto-configuration)
     add_dependencies(check-core check-proto-configuration check-proto-naming)
 endif()
 
+set(ark_node_copy_test_sources main.cpp node_copy_ownership.cpp
+    ../../src/plugins/kernel/node_manager.cpp
+    ../../src/plugins/kernel/class_meta.cpp
+    ../../src/plugins/kernel/class_call_back_manager.cpp
+    ../../src/plugins/kernel/table_meta.cpp)
+add_executable(ark_node_copy_tests ${ark_node_copy_test_sources})
+set_property(TARGET ark_node_copy_tests PROPERTY LINK_LIBRARIES ark::kernel)
+add_executable(ark_node_copy_hook_tests ${ark_node_copy_test_sources})
+set_property(TARGET ark_node_copy_hook_tests PROPERTY LINK_LIBRARIES ark::kernel)
+target_compile_definitions(ark_node_copy_hook_tests PRIVATE NDEBUG ARK_NODE_COPY_TEST_HOOKS)
+# Identical hook expansion in every TU avoids mixing different inline definitions.
+if(MSVC)
+    target_compile_options(ark_node_copy_hook_tests PRIVATE "/FI${CMAKE_CURRENT_SOURCE_DIR}/node_copy_hooks.hpp")
+else()
+    target_compile_options(ark_node_copy_hook_tests PRIVATE -include "${CMAKE_CURRENT_SOURCE_DIR}/node_copy_hooks.hpp")
+endif()
+add_custom_target(check-node-copy
+    COMMAND $<TARGET_FILE:ark_node_copy_tests>
+    COMMAND $<TARGET_FILE:ark_node_copy_hook_tests>
+    DEPENDS ark_node_copy_tests ark_node_copy_hook_tests USES_TERMINAL VERBATIM)
+add_dependencies(check-core check-node-copy)
+
+# Default nothrow new[] failure injection stays isolated from ordinary Core tests.
+add_executable(ark_data_allocation_tests main.cpp data_allocation_failure.cpp)
+set_property(TARGET ark_data_allocation_tests PROPERTY LINK_LIBRARIES ark::kernel)
+add_executable(ark_data_allocation_hook_tests main.cpp data_allocation_hooks.cpp)
+set_property(TARGET ark_data_allocation_hook_tests PROPERTY LINK_LIBRARIES ark::kernel)
+add_executable(ark_data_guid32_tests main.cpp data_allocation_failure.cpp data_strings.cpp node_data_storage.cpp)
+set_property(TARGET ark_data_guid32_tests PROPERTY LINK_LIBRARIES ark::kernel)
+target_compile_definitions(ark_data_guid32_tests PRIVATE ARK_USE_GUID_32)
+add_custom_target(check-data-allocation
+    COMMAND $<TARGET_FILE:ark_data_allocation_tests>
+    COMMAND $<TARGET_FILE:ark_data_allocation_hook_tests>
+    COMMAND $<TARGET_FILE:ark_data_guid32_tests>
+    DEPENDS ark_data_allocation_tests ark_data_allocation_hook_tests ark_data_guid32_tests USES_TERMINAL VERBATIM)
+add_dependencies(check-core check-data-allocation)
+
 add_executable(ark_entity_stream_tests main.cpp entity_stream.cpp)
 set_property(TARGET ark_entity_stream_tests PROPERTY LINK_LIBRARIES ark::kernel)
 add_custom_target(check-entity-stream
@@ -116,6 +153,30 @@ add_custom_target(check-pod-array-failure
     COMMAND $<TARGET_FILE:ark_pod_array_failure_tests>
     DEPENDS ark_pod_array_failure_tests USES_TERMINAL VERBATIM)
 add_dependencies(check-core check-pod-array-failure)
+
+if(ARK_BUILD_PROTO)
+    # Every TU uses the same allocation/delete hooks; ordinary Kernel binaries remain independent.
+    add_executable(ark_entity_custom_ownership_tests main.cpp entity_custom_ownership.cpp
+        ../../src/plugins/kernel/class_call_back_manager.cpp
+        ../../src/plugins/kernel/class_meta.cpp
+        ../../src/plugins/kernel/container_impl.cpp
+        ../../src/plugins/kernel/container_manager_impl.cpp
+        ../../src/plugins/kernel/entity_impl.cpp
+        ../../src/plugins/kernel/node_manager.cpp
+        ../../src/plugins/kernel/row.cpp
+        ../../src/plugins/kernel/table_impl.cpp
+        ../../src/plugins/kernel/table_meta.cpp)
+    target_link_libraries(ark_entity_custom_ownership_tests PRIVATE ark::kernel)
+    target_compile_definitions(ark_entity_custom_ownership_tests PRIVATE NDEBUG)
+    set(entity_custom_hooks "${CMAKE_CURRENT_SOURCE_DIR}/entity_custom_hooks.hpp")
+    target_compile_options(ark_entity_custom_ownership_tests PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/FI${entity_custom_hooks}>"
+        "$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-include${entity_custom_hooks}>")
+    add_custom_target(check-entity-custom-ownership
+        COMMAND $<TARGET_FILE:ark_entity_custom_ownership_tests>
+        DEPENDS ark_entity_custom_ownership_tests USES_TERMINAL)
+    add_dependencies(check-core check-entity-custom-ownership)
+endif()
 
 find_package(Threads REQUIRED)
 add_library(ark_task_header_checks OBJECT headers/task.cpp)
@@ -286,7 +347,7 @@ if(ARK_BUILD_CONFIG)
 endif()
 
 if(ARK_BUILD_PROTO)
-    add_executable(ark_kernel_initialization_tests main.cpp module_initialization.cpp entity_config_copy.cpp entity_json_loading.cpp kernel_delayed_sync.cpp entity_snapshot.cpp entity_snapshot_interface.cpp
+    add_executable(ark_kernel_initialization_tests main.cpp module_initialization.cpp kernel_resource_ownership.cpp table_row_allocation.cpp entity_config_copy.cpp entity_json_loading.cpp kernel_delayed_sync.cpp entity_snapshot.cpp entity_snapshot_interface.cpp
         ../../src/plugins/kernel/class_call_back_manager.cpp
         ../../src/plugins/kernel/class_meta.cpp
         ../../src/plugins/kernel/class_meta_module_impl.cpp
@@ -315,10 +376,38 @@ if(ARK_BUILD_PROTO)
             DEPENDS ark_kernel_initialization_tests USES_TERMINAL VERBATIM)
         add_dependencies(check-server-plugins check-game-initialization)
     endif()
+    # CI configures Debug, whose duplicate-ID guard aborts instead of returning.
+    # Compile the exercised implementation and its dependencies with NDEBUG in an
+    # independent executable; ark::kernel supplies interfaces, not runtime code.
+    add_executable(ark_kernel_resource_ownership_tests main.cpp kernel_resource_ownership.cpp
+        ../../src/plugins/kernel/class_call_back_manager.cpp
+        ../../src/plugins/kernel/class_meta.cpp
+        ../../src/plugins/kernel/class_meta_module_impl.cpp
+        ../../src/plugins/kernel/config_module_impl.cpp
+        ../../src/plugins/kernel/node_manager.cpp
+        ../../src/plugins/kernel/static_entity_impl.cpp
+        ../../src/plugins/kernel/table_meta.cpp)
+    target_compile_definitions(ark_kernel_resource_ownership_tests PRIVATE NDEBUG)
+    target_link_libraries(ark_kernel_resource_ownership_tests PRIVATE ark::kernel ark::kernel_json)
+    # Isolate nothrow allocation replacement and compile the real implementation
+    # with NDEBUG even when CI configures the ordinary Kernel regressions in Debug.
+    add_executable(ark_table_row_allocation_tests main.cpp table_row_allocation.cpp
+        ../../src/plugins/kernel/class_meta.cpp
+        ../../src/plugins/kernel/node_manager.cpp
+        ../../src/plugins/kernel/row.cpp
+        ../../src/plugins/kernel/table_impl.cpp
+        ../../src/plugins/kernel/table_meta.cpp)
+    target_compile_definitions(ark_table_row_allocation_tests PRIVATE NDEBUG ARK_TABLE_ROW_FAILURE_TEST)
+    target_link_libraries(ark_table_row_allocation_tests PRIVATE ark::kernel)
+    add_custom_target(check-table-row-allocation
+        COMMAND $<TARGET_FILE:ark_table_row_allocation_tests>
+        DEPENDS ark_table_row_allocation_tests USES_TERMINAL)
     add_custom_target(check-kernel-initialization
         COMMAND $<TARGET_FILE:ark_kernel_initialization_tests>
-        DEPENDS ark_kernel_initialization_tests
+        COMMAND $<TARGET_FILE:ark_kernel_resource_ownership_tests>
+        DEPENDS ark_kernel_initialization_tests ark_kernel_resource_ownership_tests
         USES_TERMINAL)
+    add_dependencies(check-kernel-initialization check-table-row-allocation)
     add_dependencies(check-core check-kernel-initialization)
 endif()
 
