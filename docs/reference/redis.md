@@ -122,3 +122,4 @@ covers tagged slow requests, not general write-replay behavior; see the
 [failure-check limits](../../tests/database/README.md#public-real-service-failure-checks).
 
 The recorded machine, revisions and outcomes are in [local public-service acceptance](../guides/database-validation.md).
+The [Redis restart acceptance](../guides/database-restart.md) records recovery through explicit new commands on the existing pool.
