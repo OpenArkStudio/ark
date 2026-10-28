@@ -1,37 +1,16 @@
 # Third-party notices
 
-ark is distributed under [Apache-2.0](https://github.com/OpenArkStudio/ark/blob/main/LICENSE). Dependencies retain their own licenses in their source or distribution packages. The independent arknet library uses BSL-1.0; consult its [third-party notices](https://openarkstudio.github.io/arknet/project/third-party-notices/).
+ark uses [Apache-2.0](https://github.com/OpenArkStudio/ark/blob/main/LICENSE). Runtime package licenses are listed under [dependency licenses](../reference/third-party-notices.md).
 
-The documentation uses [Cloudflare Nimbus](https://github.com/cloudflare/nimbus) 0.17.0 and its 0.7.11 starter. The MIT license is preserved in [docs/site/LICENSE](https://github.com/OpenArkStudio/ark/blob/main/docs/site/LICENSE). Astro, Tailwind, Pagefind and the locked npm packages retain their applicable licenses. These are documentation-build dependencies.
-
-## Native Entity configuration exporter
-
-The optional `ark_config_tool` uses the following dependencies. The copied texts
-are kept in `docs/licenses/config-tool/`; redistribute applicable notices with
-the executable. The framework runtime loads the generated JSON without OpenXLSX.
-
-| Dependency | Purpose | License text |
+| Dependency | Purpose | License |
 | --- | --- | --- |
-| OpenXLSX 0.5.1 | XLSX reading | [BSD-3-Clause](https://github.com/OpenArkStudio/ark/blob/main/docs/licenses/config-tool/OpenXLSX-LICENSE.md) |
-| miniz 3.0.2 / 3.1.2 | ZIP dependency: direct-source / pinned vcpkg builds | [MIT, identical text for both versions](https://github.com/OpenArkStudio/ark/blob/main/docs/licenses/config-tool/miniz-LICENSE.txt) |
-| pugixml 1.15 | XML dependency: direct-source OpenXLSX build | [MIT, copyright 2006–2025](https://github.com/OpenArkStudio/ark/blob/main/docs/licenses/config-tool/pugixml-LICENSE.md) |
-| pugixml 1.16 | XML dependency: pinned vcpkg build | [MIT, copyright 2006–2026](https://github.com/OpenArkStudio/ark/blob/main/docs/licenses/config-tool/pugixml-vcpkg-LICENSE.md) |
-| nlohmann/json 3.12.0 | Shared Entity JSON parser/serializer | [MIT](https://github.com/OpenArkStudio/ark/blob/main/docs/licenses/config-tool/nlohmann-json-LICENSE.txt) |
-| Boost.Nowide | UTF-8 paths/arguments on Windows | [Boost Software License 1.0](https://github.com/OpenArkStudio/ark/blob/main/docs/licenses/config-tool/Boost-LICENSE.txt) |
+| arknet | Networking | [BSL-1.0](https://github.com/OpenArkStudio/arknet/blob/main/LICENSE) · [dependencies](https://openarkstudio.github.io/arknet/project/third-party-notices/) |
+| OpenXLSX 0.5.1 | XLSX import | [BSD-3-Clause](https://github.com/troldal/OpenXLSX/blob/v0.5.1/LICENSE.md) |
+| miniz 3.0.2 / 3.1.2 | XLSX ZIP dependency | [MIT](https://github.com/richgel999/miniz/blob/3.1.2/LICENSE) |
+| pugixml 1.15 / 1.16 | XLSX XML dependency | [MIT](https://github.com/zeux/pugixml/blob/v1.16/LICENSE.md) |
+| nlohmann/json 3.12.0 | Entity JSON import/export | [MIT](https://github.com/nlohmann/json/blob/v3.12.0/LICENSE.MIT) |
+| Boost.Nowide | Windows UTF-8 paths | [BSL-1.0](https://www.boost.org/LICENSE_1_0.txt) |
+| Cloudflare Nimbus | Documentation | [MIT](https://github.com/cloudflare/nimbus/blob/main/LICENSE) |
+| Inter / JetBrains Mono | Documentation and social-card fonts | [Inter OFL](/fonts/OFL-Inter.txt) · [JetBrains Mono OFL](/fonts/OFL-JetBrains-Mono.txt) |
 
-OpenXLSX 0.5.1 specifies miniz 3.0.2 and pugixml 1.15 for dependencies fetched from source.
-The repository's pinned [vcpkg baseline](https://github.com/microsoft/vcpkg/tree/0699a19d0c6386247ce50d4dedbb8217d484d536)
-selects miniz 3.1.2 and pugixml 1.16 instead. Both combinations are covered here;
-use the notices matching the libraries actually distributed. The official
-[miniz 3.1.2 license](https://github.com/richgel999/miniz/blob/3.1.2/LICENSE) is
-byte-identical to the 3.0.2 text. The official
-[pugixml 1.16 license](https://github.com/zeux/pugixml/blob/v1.16/LICENSE.md)
-has a newer copyright year, so both pugixml texts are retained.
-
-nlohmann/json's text comes from its 3.12.0 source package. The Boost text is the
-[official license](https://www.boost.org/LICENSE_1_0.txt). Dependency packages may
-provide additional notices for their exact build; retain those when distributing
-different versions or linked components. The legacy Python/openpyxl workflow has
-its own package dependencies and does not become part of the native executable.
-
-Inter and JetBrains Mono use the SIL Open Font License 1.1. The font notices are included in the site's [Inter license](/fonts/OFL-Inter.txt) and [JetBrains Mono license](/fonts/OFL-JetBrains-Mono.txt); this also covers the bundled Inter font used for social cards.
+The exporter dependencies are optional; loading its JSON output does not require OpenXLSX. Direct-source and pinned vcpkg builds select different miniz/pugixml versions. Original texts remain in [docs/licenses/config-tool](https://github.com/OpenArkStudio/ark/tree/main/docs/licenses/config-tool); use the notices supplied with the actual packages. Other documentation-build dependencies retain their licenses in the locked npm packages.
