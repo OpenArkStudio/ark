@@ -264,7 +264,7 @@ if(ARK_BUILD_CONFIG)
 endif()
 
 if(ARK_BUILD_PROTO)
-    add_executable(ark_kernel_initialization_tests main.cpp module_initialization.cpp kernel_resource_ownership.cpp entity_config_copy.cpp entity_json_loading.cpp kernel_delayed_sync.cpp entity_snapshot.cpp entity_snapshot_interface.cpp
+    add_executable(ark_kernel_initialization_tests main.cpp module_initialization.cpp kernel_resource_ownership.cpp table_row_allocation.cpp entity_config_copy.cpp entity_json_loading.cpp kernel_delayed_sync.cpp entity_snapshot.cpp entity_snapshot_interface.cpp
         ../../src/plugins/kernel/class_call_back_manager.cpp
         ../../src/plugins/kernel/class_meta.cpp
         ../../src/plugins/kernel/class_meta_module_impl.cpp
@@ -306,11 +306,25 @@ if(ARK_BUILD_PROTO)
         ../../src/plugins/kernel/table_meta.cpp)
     target_compile_definitions(ark_kernel_resource_ownership_tests PRIVATE NDEBUG)
     target_link_libraries(ark_kernel_resource_ownership_tests PRIVATE ark::kernel ark::kernel_json)
+    # Isolate nothrow allocation replacement and compile the real implementation
+    # with NDEBUG even when CI configures the ordinary Kernel regressions in Debug.
+    add_executable(ark_table_row_allocation_tests main.cpp table_row_allocation.cpp
+        ../../src/plugins/kernel/class_meta.cpp
+        ../../src/plugins/kernel/node_manager.cpp
+        ../../src/plugins/kernel/row.cpp
+        ../../src/plugins/kernel/table_impl.cpp
+        ../../src/plugins/kernel/table_meta.cpp)
+    target_compile_definitions(ark_table_row_allocation_tests PRIVATE NDEBUG ARK_TABLE_ROW_FAILURE_TEST)
+    target_link_libraries(ark_table_row_allocation_tests PRIVATE ark::kernel)
+    add_custom_target(check-table-row-allocation
+        COMMAND $<TARGET_FILE:ark_table_row_allocation_tests>
+        DEPENDS ark_table_row_allocation_tests USES_TERMINAL)
     add_custom_target(check-kernel-initialization
         COMMAND $<TARGET_FILE:ark_kernel_initialization_tests>
         COMMAND $<TARGET_FILE:ark_kernel_resource_ownership_tests>
         DEPENDS ark_kernel_initialization_tests ark_kernel_resource_ownership_tests
         USES_TERMINAL)
+    add_dependencies(check-kernel-initialization check-table-row-allocation)
     add_dependencies(check-core check-kernel-initialization)
 endif()
 
