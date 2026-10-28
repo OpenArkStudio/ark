@@ -123,6 +123,8 @@ config = ""
 
 路径相对于进程工作目录解析。当前加载器直接拼接 `plugin_library_dir` 与库文件名，以及 `plugin_config_dir` 与 `config`，因此目录末尾需要保留分隔符。示例中的空 `config` 表示插件没有需要读取的配置文件，但插件收到的解析路径仍是配置目录前缀，不是空字符串。提供配置文件时，可通过 `sample_plugin::get_plugin_conf()` 读取这个路径。
 
+Windows 库路径使用 UTF-8。加载器先转换为使用本地分隔符的绝对宽字符路径，再调用 `LoadLibraryExW(..., LOAD_WITH_ALTERED_SEARCH_PATH)`。这样，在可执行文件和工作目录位于其他位置时，也能查找插件旁的依赖，并保留既有的 altered-search 策略和 PATH 处理；不设置进程级 DLL 目录，也不把依赖复制到各个可执行文件旁。加载失败时保留 `GetLastError()`，供管理器输出原生诊断；错误 126 也可能表示某个依赖缺失，不能仅据此认定主 DLL 不存在。非 Windows 加载方式不变。按[协议部署约定](../reference/protobuf_CN.md#构建与包含)部署匹配的 `AFProto` DLL 及其他依赖。
+
 ## 排查模块不可用
 
 | 现象 | 检查项 |
