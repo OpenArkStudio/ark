@@ -20,6 +20,10 @@
 
 #pragma once
 
+#include <algorithm>
+#include <string>
+#include <utility>
+
 #include "ark/logger.hpp"
 #include "ark/macros.hpp"
 
@@ -50,8 +54,18 @@ public:
     }
 
     bool load(const std::string& path) {
+#ifdef ARK_PLATFORM_WIN
+        const auto result = load_windows_library(path + name_);
+        lib_inst_ = result.first;
+        if (!lib_inst_)
+        {
+            // Preserve the native failure after temporary path buffers retire.
+            SetLastError(result.second);
+        }
+#else
         std::string dynamic_lib_path = path + name_;
         lib_inst_ = DYNLIB_LOAD(dynamic_lib_path.c_str());
+#endif
 
         return lib_inst_ != nullptr;
     }
@@ -71,6 +85,42 @@ public:
 
 private:
     friend struct detail::dynamic_library_test_access;
+
+#ifdef ARK_PLATFORM_WIN
+    static std::pair<DYNLIB_HANDLE, DWORD> load_windows_library(const std::string& path) {
+        const auto count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path.c_str(), -1, nullptr, 0);
+        if (count == 0)
+        {
+            return {nullptr, GetLastError()};
+        }
+        std::wstring requested(count, L'\0');
+        if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path.c_str(), -1, requested.data(), count) == 0)
+        {
+            return {nullptr, GetLastError()};
+        }
+        const auto capacity = GetFullPathNameW(requested.c_str(), 0, nullptr, nullptr);
+        if (capacity == 0)
+        {
+            return {nullptr, GetLastError()};
+        }
+        std::wstring absolute(capacity, L'\0');
+        const auto length = GetFullPathNameW(requested.c_str(), capacity, absolute.data(), nullptr);
+        if (length == 0)
+        {
+            return {nullptr, GetLastError()};
+        }
+        if (length >= capacity)
+        {
+            return {nullptr, ERROR_INSUFFICIENT_BUFFER};
+        }
+        absolute.resize(length);
+        std::replace(absolute.begin(), absolute.end(), L'/', L'\\');
+        // An absolute native-separator path makes the existing altered search
+        // policy well-defined, without changing process-wide DLL directories.
+        const auto handle = LoadLibraryExW(absolute.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+        return {reinterpret_cast<DYNLIB_HANDLE>(handle), handle ? ERROR_SUCCESS : GetLastError()};
+    }
+#endif
 
     static bool native_unload_succeeded(int result) {
 #ifdef ARK_PLATFORM_WIN

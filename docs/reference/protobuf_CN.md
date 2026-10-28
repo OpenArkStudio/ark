@@ -20,7 +20,9 @@ Windows 上，`AFProto`／`ark::proto` 构建为单一生成消息共享库。�
 
 **Windows 二进制迁移：**一起重建宿主和插件，部署既有构建 `bin/` 中的 `AFProto.dll`（Debug 为 `AFProto_d.dll`）。Windows 宿主、插件和消息 DLL 必须使用同一套兼容的 Protobuf 运行时与构建配置。既有 RUNTIME 安装规则把 DLL 放到 `bin/`，导入库放到库目录。虽然 `.lib` 文件名保留，也不能混用旧静态 AFProto 归档与新导入库。此变更影响 Windows 链接和部署，不改变协议字段号或二进制编码。
 
-`check-proto-configuration` 配置两个 CMake 分支并运行真实 protoc，检查消息／描述符导出声明、消费者导入定义及原有非 Windows 生成路径。它不在其他平台上编译或加载 Windows 二进制。`check-kernel-plugin` 保留宿主创建的 Protobuf 对象及真实跨 DSO 转换；Windows 加载验收仍要求该平台的原生运行。
+Windows 插件加载器会先把请求路径解析为本机格式的绝对路径。即使可执行文件或工作目录位于其他位置，也会从插件目录查找旁边的依赖，例如 `AFProto_d.dll`。部署时将依赖与插件放在一起；缺失或不兼容的库仍会导致加载失败，并保留 Windows 原生错误码。
+
+`check-proto-configuration` 配置两个 CMake 分支并运行真实 protoc，检查消息／描述符导出声明、消费者导入定义及原有非 Windows 生成路径。它不在其他平台上编译或加载 Windows 二进制。`check-kernel-plugin` 保留宿主创建的 Protobuf 对象及真实跨 DSO 转换。`check-native-loader` 单独测试宿主与插件分目录、依赖只放在插件旁边的场景，同时覆盖绝对和相对路径。Windows 加载验收仍要求该平台的原生运行。
 
 ## 消息序列化
 

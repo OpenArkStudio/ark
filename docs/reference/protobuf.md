@@ -20,7 +20,9 @@ On Windows, `AFProto` / `ark::proto` builds one shared generated-message library
 
 **Windows binary migration:** rebuild hosts and plugins together and deploy `AFProto.dll` (`AFProto_d.dll` for Debug) from the existing build `bin/` directory. The Windows host, plugins and message DLL must use the same compatible Protobuf runtime and build configuration. The DLL is installed to `bin/` by the existing RUNTIME rule; its import library goes to the library directory. Do not mix the previous static AFProto archive with the new import library, despite their retained `.lib` filenames. This changes Windows linking/deployment, not protocol field numbers or wire encoding.
 
-`check-proto-configuration` configures both CMake branches and runs the real protoc to check message/descriptor export declarations, consumer imports and unchanged native generation. It does not compile or load Windows binaries on another platform. `check-kernel-plugin` retains its host-created Protobuf object and real cross-DSO conversion; Windows loader acceptance requires that platform's native run.
+The Windows plugin loader resolves the requested path to an absolute native path before loading. Dependencies beside the plugin, such as `AFProto_d.dll`, are searched from that directory even when the executable or working directory is elsewhere. Keep plugin dependencies with the plugin; missing or incompatible libraries still fail loading and retain the native Windows error code.
+
+`check-proto-configuration` configures both CMake branches and runs the real protoc to check message/descriptor export declarations, consumer imports and unchanged native generation. It does not compile or load Windows binaries on another platform. `check-kernel-plugin` retains its host-created Protobuf object and real cross-DSO conversion. `check-native-loader` separately exercises a host and plugin in different directories with a dependency found only beside the plugin, using absolute and relative paths. Windows loader acceptance requires that platform's native run.
 
 ## Message serialization
 

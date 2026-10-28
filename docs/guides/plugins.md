@@ -123,6 +123,8 @@ Use the [application launcher](applications.md) to select this manifest. The lib
 
 Paths are resolved from the process working directory. The current loader concatenates `plugin_library_dir` with the filename and `plugin_config_dir` with `config`; keep the trailing separators. An empty `config` in this example means the plugin has no configuration file to read. It still receives the configuration directory prefix; it does not receive an empty resolved path. A supplied plugin configuration path can be read through `sample_plugin::get_plugin_conf()`.
 
+On Windows, library paths are UTF-8. The loader converts them to absolute wide-character paths with native separators before `LoadLibraryExW(..., LOAD_WITH_ALTERED_SEARCH_PATH)`. This supports dependencies beside the loaded plugin when the executable and working directory are elsewhere, while retaining the existing altered-search policy and PATH handling. It does not set a process-wide DLL directory or copy dependencies beside individual executables. Native load failures retain `GetLastError()` for the manager diagnostic; error 126 can identify a missing dependency as well as the requested DLL. Non-Windows loading is unchanged. Deploy the matching `AFProto` DLL and other dependencies using the [protocol deployment contract](../reference/protobuf.md#build-and-include).
+
 ## Diagnose a missing module
 
 | Symptom | Check |
