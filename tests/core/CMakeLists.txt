@@ -240,6 +240,18 @@ if(ARK_BUILD_PROTO)
         ../../src/plugins/kernel/table_impl.cpp
         ../../src/plugins/kernel/table_meta.cpp)
     target_link_libraries(ark_kernel_initialization_tests PRIVATE ark::kernel ark::utility ark::proto ark::kernel_json)
+    if(TARGET ark_game_plugin AND TARGET ark_kernel_plugin AND TARGET ark_bus_plugin AND TARGET ark_utility_plugin)
+        target_sources(ark_kernel_initialization_tests PRIVATE ../server/game_initialization.cpp
+            ../../src/server/game/game_plugin.cpp ../../src/server/game/game_net_module_impl.cpp
+            ../../src/plugins/bus/bus_module_impl.cpp ../../src/plugins/utility/guid_module_impl.cpp)
+        target_include_directories(ark_kernel_initialization_tests PRIVATE
+            "${PROJECT_SOURCE_DIR}/src/server/game" "${PROJECT_SOURCE_DIR}/src/plugins")
+        target_link_libraries(ark_kernel_initialization_tests PRIVATE ark::bus ark::net ark::config tomlplusplus::tomlplusplus)
+        add_custom_target(check-game-initialization
+            COMMAND $<TARGET_FILE:ark_kernel_initialization_tests> "--test-case=Game*"
+            DEPENDS ark_kernel_initialization_tests USES_TERMINAL VERBATIM)
+        add_dependencies(check-server-plugins check-game-initialization)
+    endif()
     add_custom_target(check-kernel-initialization
         COMMAND $<TARGET_FILE:ark_kernel_initialization_tests>
         DEPENDS ark_kernel_initialization_tests
