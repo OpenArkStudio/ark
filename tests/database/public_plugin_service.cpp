@@ -343,6 +343,162 @@ void check_mysql() {
                 std::get<std::string>(prepared->result.rows[0][1]) == binary,
         "MySQL results did not survive plugin module/manager destruction");
 }
+
+template<class reply_type>
+void mysql_success(plugin_host& host, const reply_type& reply) {
+    host.check_executor();
+    require(bool(reply) && !reply.statement_close_exception && (!reply.statement_close || bool(*reply.statement_close)),
+        "MySQL DSO write workflow operation or statement cleanup failed");
+}
+
+std::uint64_t mysql_integer(const arknet::mysql::query_result& result) {
+    require(result.rows.size() == 1 && result.rows[0].size() == 1, "MySQL DSO scalar result has wrong shape");
+    const auto& field = result.rows[0][0];
+    if (const auto* value = std::get_if<std::uint64_t>(&field))
+    {
+        return *value;
+    }
+    const auto* value = std::get_if<std::int64_t>(&field);
+    require(value && *value >= 0, "MySQL DSO scalar result is not a nonnegative integer");
+    return static_cast<std::uint64_t>(*value);
+}
+
+ark::task<> mysql_write_checks(plugin_host& host, ark::mysql_module& database, std::string table, std::string binary,
+    std::optional<ark::mysql_reply>& retained, std::optional<ark::mysql_transaction_reply>& retained_transaction) {
+    auto writer = co_await database.query("service", "SELECT CONNECTION_ID()", 5s);
+    mysql_success(host, writer);
+    auto observer = co_await database.query("observer", "SELECT CONNECTION_ID()", 5s);
+    mysql_success(host, observer);
+    require(mysql_integer(writer.result) != mysql_integer(observer.result),
+        "MySQL DSO observer did not use an independent server connection");
+    auto autocommit = co_await database.query("observer", "SELECT @@autocommit", 5s);
+    mysql_success(host, autocommit);
+    require(mysql_integer(autocommit.result) == 1, "MySQL DSO observer is not in autocommit mode");
+
+    std::vector<arknet::mysql::field_value> initial{std::int64_t{0}, binary};
+    auto written = co_await database.execute(
+        "service", "INSERT INTO " + table + " (id, payload) VALUES (?, ?)", std::move(initial), 5s);
+    mysql_success(host, written);
+    require(written.result.affected_rows == 1 && written.statement_close,
+        "MySQL DSO parameterized autocommit write failed");
+    retained = co_await database.query("observer", "SELECT payload FROM " + table + " WHERE id=0", 5s);
+    mysql_success(host, *retained);
+    require(retained->result.rows.size() == 1 && retained->result.rows[0].size() == 1 &&
+                std::get<std::string>(retained->result.rows[0][0]) == binary,
+        "MySQL DSO observer did not see the parameterized autocommit write");
+
+    for (const bool commit : {true, false})
+    {
+        auto begun = co_await database.begin("service", {15s, 3s});
+        mysql_success(host, begun);
+        require(begun.transaction && begun.transaction_status.outcome == ark::mysql_transaction_outcome::active,
+            "MySQL DSO write transaction did not begin");
+        const auto id = commit ? 1 : 2;
+        const auto predicate = " WHERE id=" + std::to_string(id);
+        std::exception_ptr failure;
+        bool ended{};
+        try
+        {
+            std::vector<arknet::mysql::field_value> values{std::int64_t{id}, binary};
+            auto inserted = co_await database.execute(
+                begun.transaction, "INSERT INTO " + table + " (id, payload) VALUES (?, ?)", std::move(values));
+            mysql_success(host, inserted);
+            require(inserted.result.affected_rows == 1 && inserted.statement_close,
+                "MySQL DSO parameterized transaction write failed");
+            retained_transaction =
+                co_await database.query(begun.transaction, "SELECT payload FROM " + table + predicate);
+            mysql_success(host, *retained_transaction);
+            require(retained_transaction->result.rows.size() == 1 && retained_transaction->result.rows[0].size() == 1 &&
+                        std::get<std::string>(retained_transaction->result.rows[0][0]) == binary,
+                "MySQL DSO transaction did not read its own binary write");
+            auto hidden = co_await database.query("observer", "SELECT COUNT(*) FROM " + table + predicate, 5s);
+            mysql_success(host, hidden);
+            require(mysql_integer(hidden.result) == 0, "MySQL DSO observer saw an uncommitted write");
+            auto terminal =
+                commit ? co_await database.commit(begun.transaction) : co_await database.rollback(begun.transaction);
+            mysql_success(host, terminal);
+            ended = true;
+            require(terminal.transaction_status.outcome == (commit ? ark::mysql_transaction_outcome::committed
+                                                                   : ark::mysql_transaction_outcome::rolled_back) &&
+                        !terminal.transaction_status.cleanup_exception &&
+                        !terminal.transaction_status.lease_return_exception,
+                "MySQL DSO write transaction did not confirm commit/rollback");
+            auto visible = co_await database.query("observer", "SELECT COUNT(*) FROM " + table + predicate, 5s);
+            mysql_success(host, visible);
+            require(mysql_integer(visible.result) == (commit ? 1 : 0),
+                "MySQL DSO observer did not see confirmed commit/rollback visibility");
+        }
+        catch (...)
+        { failure = std::current_exception(); }
+        if (failure)
+        {
+            if (!ended)
+            {
+                // Explicit cleanup only; cancellation is not rollback evidence.
+                co_await database.rollback(begun.transaction);
+                host.check_executor();
+            }
+            std::rethrow_exception(failure);
+        }
+    }
+    auto committed = co_await database.query("observer", "SELECT payload FROM " + table + " WHERE id=1", 5s);
+    mysql_success(host, committed);
+    require(committed.result.rows.size() == 1 && committed.result.rows[0].size() == 1 &&
+                std::get<std::string>(committed.result.rows[0][0]) == binary &&
+                std::get<std::string>(retained->result.rows[0][0]) == binary &&
+                std::get<std::string>(retained_transaction->result.rows[0][0]) == binary,
+        "MySQL DSO committed data or retained owning results changed after later operations");
+}
+
+ark::task<> mysql_write_workflow(plugin_host& host, ark::mysql_module& database, std::string table, std::string binary,
+    std::optional<ark::mysql_reply>& retained, std::optional<ark::mysql_transaction_reply>& retained_transaction) {
+    auto created = co_await database.query(
+        "service", "CREATE TABLE " + table + " (id BIGINT PRIMARY KEY, payload VARBINARY(128)) ENGINE=InnoDB", 5s);
+    mysql_success(host, created);
+    std::exception_ptr failure;
+    try
+    { co_await mysql_write_checks(host, database, table, std::move(binary), retained, retained_transaction); }
+    catch (...)
+    { failure = std::current_exception(); }
+    auto dropped = co_await database.query("observer", "DROP TABLE " + table, 5s);
+    mysql_success(host, dropped);
+    if (failure)
+    {
+        std::rethrow_exception(failure);
+    }
+}
+
+void check_mysql_transactions() {
+    ark::mysql_options options;
+    options.pool.connection.host = environment("ARK_DATABASE_MYSQL_HOST");
+    require(options.pool.connection.host == "127.0.0.1",
+        "MySQL DSO write acceptance requires an owned IPv4 loopback service");
+    options.pool.connection.port = port("ARK_DATABASE_MYSQL_PORT");
+    options.pool.connection.username = environment("ARK_DATABASE_MYSQL_USER");
+    options.pool.connection.password = environment("ARK_DATABASE_MYSQL_PASSWORD", true);
+    options.pool.connection.database = environment("ARK_DATABASE_MYSQL_DATABASE");
+    options.pool.connection.ca_file = environment("ARK_DATABASE_MYSQL_CA");
+    options.pool.connection.tls = arknet::mysql::tls_mode::required;
+    options.pool.connection.timeout = 5s;
+    options.pool.max_connections = 1;
+    const std::string binary("dso\0write'\\\r\nvalue", 18);
+    const auto table =
+        "ark_dso_transaction_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    std::optional<ark::mysql_reply> retained;
+    std::optional<ark::mysql_transaction_reply> retained_transaction;
+    {
+        plugin_host host("ark_database_mysql_plugin");
+        auto* database = host.manager.find_module<ark::mysql_module>();
+        require(database != nullptr, "Real MySQL DSO did not register its public module");
+        require(database->configure("service", options) && database->configure("observer", options),
+            "MySQL DSO write/observer configuration failed");
+        host.run(mysql_write_workflow(host, *database, table, binary, retained, retained_transaction));
+    }
+    require(retained && retained_transaction && bool(*retained) && bool(*retained_transaction) &&
+                std::get<std::string>(retained->result.rows[0][0]) == binary &&
+                std::get<std::string>(retained_transaction->result.rows[0][0]) == binary,
+        "MySQL DSO write results did not survive plugin module/manager/runtime destruction");
+}
 #endif
 
 } // namespace
@@ -351,7 +507,7 @@ int main(int argc, char** argv) {
     try
     {
         require(argc == 2, "Usage: ark_database_public_plugin_service_tests "
-                           "redis|mysql|redis-tls|redis-tls-untrusted-ca|redis-tls-wrong-host");
+                           "redis|mysql|mysql-transactions|redis-tls|redis-tls-untrusted-ca|redis-tls-wrong-host");
         const std::string_view protocol(argv[1]);
         if (protocol == "redis")
         {
@@ -365,6 +521,10 @@ int main(int argc, char** argv) {
         else if (protocol == "mysql")
         {
             check_mysql();
+        }
+        else if (protocol == "mysql-transactions")
+        {
+            check_mysql_transactions();
         }
 #endif
         else
