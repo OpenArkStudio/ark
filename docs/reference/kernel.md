@@ -205,12 +205,7 @@ bool set_int32_field(ark::kernel_module& kernel, const ark::guid_t& id, const st
 
 ### Custom scalar ownership
 
-The seven supported custom scalar adders retain ownership until their named value
-is inserted. Exceptions from value construction or map allocation propagate and
-release the unpublished candidate through `ARK_DELETE`; no named value is added.
-Successful insertion keeps the owning map's existing destruction path. Allocation
-hooks, duplicate/null checks, public signatures and class layouts are unchanged.
-`check-entity-custom-ownership` exercises failures with isolated allocation hooks.
+Custom scalar creation releases an unpublished value if value construction or map insertion throws; the exception propagates without adding the name. Successful values remain owned by the entity.
 
 ### Custom unsigned values
 
