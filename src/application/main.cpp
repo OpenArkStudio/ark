@@ -483,7 +483,10 @@ int main(int argc, char* argv[]) {
     g_cmd_thread.join();
 #endif
 
-    ARK_LOG_INFO("{}", "ARK Server stop ...");
+    // Complete the final lifecycle diagnostic before returning: the async
+    // logger's queue is not drained when the process exits.
+    std::fputs("ARK Server stop ...\n", stdout);
+    std::fflush(stdout);
 
     return 0;
 }
