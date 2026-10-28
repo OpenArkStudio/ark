@@ -62,6 +62,10 @@ cmake --build hash-header-build --target check-murmur-hash-header
 `check-kernel-initialization` 从 `resource/meta/` 加载真实元数据和静态数据，
 分别使用资源相对路径及以 `/` 开头的旧路径，验证内核与配置模块的四种初始化顺序，共八种组合。
 
+`entity_snapshot.cpp` 使用真实 Entity／定义对象，检查独立拥有的显式标量捕获、全部受支持原生类型、整数／GUID 边界、有限浮点值、二进制字符串、不创建节点的惰性零值、隐藏字段排除、源销毁、限额，以及失败后源保持不变。头文件消费者还在关闭 Protobuf 时编译独立的快照值契约。
+
+捕获测试通过 `kernel_module` 指针调用。`entity_snapshot_interface.cpp` 保留一份只实现原有纯虚接口的外部源码实现，检查它仍可实例化、默认方法抛出 `logic_error`、自定义覆写及框架覆写。
+
 同一 target 运行 `kernel_delayed_sync.cpp`：真实容器创建、移除和销毁经过延迟收集、Kernel 更新、Protobuf 序列化和既有掩码交付回调。用例覆盖完整载荷、实体引用、空槽／销毁标记、仅自身同步掩码，以及空批次、标量、表格和混合对照。范围受限的测试友元仅观察该回调，不提供传输层或客户端。
 
 延迟交付用例还在交付回调中收集标量／表格／容器变更，验证递归刷新被拒绝，以及回调异常后防护复位、新变更保留。整个过程保持借用节点存活。
@@ -137,7 +141,7 @@ cmake --build core-build --target check-business-runtime
 
 Applications CI 显式开启 `ARK_BUILD_PLUGIN_HTTP=ON` 并运行 `check-core`，因此既有源码检查与全矩阵均包含真实 HTTP 动态库回归。本地启用 HTTP 的原生验证已通过；本次变更的托管全矩阵仍待验收。永久 CI 策略测试检查配置到真实动态库回归的依赖链。
 
-Kernel 的 38 个既有头通过 `ark::kernel` 从 `src/plugins/kernel/` 映射；`check-core` 保留数据与节点回归，`check-kernel-initialization` 保留初始化与配置复制断言。独立工程 `tests/consumer/kernel` 在 Protobuf 开启/关闭时分别消费 38/35 个头，其中 `container_meta.hpp` 保留原有 `ark/define.hpp` 与 `ark/enum.hpp` 前置包含要求。详见 [Kernel 参考](../../docs/reference/kernel_CN.md)。
+Kernel 的公开头通过 `ark::kernel` 从 `src/plugins/kernel/` 映射；`check-core` 保留数据与节点回归，`check-kernel-initialization` 保留初始化与配置复制断言。独立工程 `tests/consumer/kernel` 在 Protobuf 开启／关闭时消费公开头，关闭时排除三个依赖 Protobuf 的模块头；其中 `container_meta.hpp` 保留原有 `ark/define.hpp` 与 `ark/enum.hpp` 前置包含要求。详见 [Kernel 参考](../../docs/reference/kernel_CN.md)。
 
 Net 注册的 HTTP 客户端现在由私有接口工厂创建。`check-net-plugin` 还验证无需管理器更新即可完成的 future，以及 DSO 仍加载时通过 `pre_shut()` 取消未完成请求；在正常插件退出前消费这些 future，不证明 future 可跨任意卸载继续使用。`check-network` 经由相同私有工厂和公开客户端接口保留请求、超时、回调与停机覆盖。
 
@@ -150,6 +154,8 @@ Net 注册的 HTTP 客户端现在由私有接口工厂创建。`check-net-plugi
 保留的固定演示端点与真实传输验证边界见 [HTTP 示例](../../docs/reference/http_CN.md#旧-http-示例的类型化创建)。
 
 开启 Protobuf 且存在 Kernel／Utility 运行时 target 时，`check-kernel-plugin` 通过独立公开接口 runner 加载真实 DSO，检查原有四个接口键与管理器指针、元数据／静态记录加载、地图／实体注册和回调、管理器更新、停机销毁与重复 stop。它与现有直接初始化／实体默认值测试一起纳入 `check-core`；不在卸载后检查注册表，也不证明任意热更新安全。Kernel 公开头消费者检查全部保留类型的基类和 update 声明。
+
+该独立 runner 还通过加载 DSO 的接口指针调用 `kernel_module::capture_scalar_snapshot()`，覆盖空选择、全部标量类型、惰性默认值、原生宽度、限额，以及源修改和正常插件停止后快照值仍有效。runner 不把捕获实现编入自身可执行文件。此虚方法改变 Kernel 虚函数表 ABI，加载新接口前必须一起重建所有插件和宿主／消费者。
 
 XXTEA 用例覆盖精确长度分配的短密钥、16 字节与内嵌零字节密钥、二进制往返及输出追加，参见[密钥约定](../../docs/reference/xxtea_CN.md)。
 

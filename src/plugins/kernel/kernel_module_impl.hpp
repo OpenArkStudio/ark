@@ -90,6 +90,9 @@ public:
     bool entity_table_to_protobuf_data(std::shared_ptr<entity> entity_ptr,
         ark::protobuf::protobuf_entity_data* protobuf_data, const mask_type mask = 0) override;
 
+    entity_sync::scalar_snapshot capture_scalar_snapshot(const entity& source,
+        std::span<const std::uint32_t> allowed_indices, const entity_sync::snapshot_limits& limits = {}) override;
+
 protected:
     bool destroy_self(const guid_t& self);
 

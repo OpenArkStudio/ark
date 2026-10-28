@@ -437,6 +437,41 @@ TEST_CASE("public entity custom uint32 updates preserve the full unsigned range"
     }
 }
 
+TEST_CASE("public entity uint64 setters preserve values and report only actual changes") {
+    struct uint64_observer
+    {
+        int changed(
+            const ark::guid_t&, const std::string&, std::uint32_t, const ark::data& before, const ark::data& after) {
+            CHECK(before.get_type() == ark::data_type::dt_uint64);
+            CHECK(after.get_type() == ark::data_type::dt_uint64);
+            values.emplace_back(before.get_u_int64(), after.get_u_int64());
+            return 0;
+        }
+
+        std::vector<std::pair<std::uint64_t, std::uint64_t>> values;
+    } observer;
+
+    configured_world world;
+    const auto object = world.create(10, 0);
+    REQUIRE(object != nullptr);
+    const auto index = object->get_index("id");
+    REQUIRE(index != 0);
+    ark::kernel_module& kernel = world.kernel;
+    REQUIRE(kernel.add_node_call_back("Player", "id", &observer, &uint64_observer::changed));
+    const auto maximum = std::numeric_limits<std::uint64_t>::max();
+    REQUIRE(object->set_u_int64("id", maximum));
+    CHECK(object->get_u_int64("id") == maximum);
+    CHECK(object->get_u_int64(index) == maximum);
+    CHECK_FALSE(object->set_u_int64(index, maximum));
+    REQUIRE(object->set_u_int64(index, 42));
+    CHECK(object->get_u_int64("id") == 42);
+    CHECK(object->get_u_int64(index) == 42);
+    CHECK_FALSE(object->set_u_int64("id", 42));
+    REQUIRE(observer.values.size() == 2);
+    CHECK(observer.values[0] == std::pair<std::uint64_t, std::uint64_t>{0, maximum});
+    CHECK(observer.values[1] == std::pair<std::uint64_t, std::uint64_t>{maximum, 42});
+}
+
 TEST_CASE("public entity custom uint32 rejects missing names without creating data") {
     configured_world world;
     const std::shared_ptr<ark::entity> object = world.create(10, 0);

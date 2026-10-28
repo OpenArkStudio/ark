@@ -1,6 +1,7 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
 #include <cstddef>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <new>
 #include <string>
@@ -76,6 +77,47 @@ std::shared_ptr<ark::node_meta> metadata(ark::data_type type) {
 using tracked_data = ark::data_base<8, tracked_allocator>;
 
 } // namespace
+
+DOCTEST_TEST_CASE("GUID data values preserve their tag through factory copy assignment node conversion and equality") {
+    for (const auto value :
+        {std::numeric_limits<ark::guid_t>::min(), ark::guid_t{}, std::numeric_limits<ark::guid_t>::max()})
+    {
+        auto original = ark::data_impl::from_guid(value);
+        ark::data_impl copied(original);
+        const ark::data& erased = original;
+        ark::data_impl copied_data(erased);
+        ark::data_impl assigned(ark::data_type::dt_string, "previous allocation");
+        assigned.assign(erased);
+        for (auto* item : {&original, &copied, &copied_data, &assigned})
+        {
+            DOCTEST_CHECK(item->get_type() == ark::data_type::dt_guid);
+#if defined(ARK_USE_GUID_32)
+            DOCTEST_CHECK(item->get_int() == value);
+#else
+            DOCTEST_CHECK(item->get_int64() == value);
+#endif
+            DOCTEST_CHECK(item->equal(erased));
+        }
+        auto different = ark::data_impl::from_guid(value == 0 ? 1 : 0);
+        DOCTEST_CHECK_FALSE(original.equal(different));
+        ark::data_impl number;
+#if defined(ARK_USE_GUID_32)
+        number.set_int(value);
+#else
+        number.set_int64(value);
+#endif
+        DOCTEST_CHECK_FALSE(original.equal(number));
+
+        allocation_scope allocations;
+        ark::node_guid node(metadata(ark::data_type::dt_guid));
+        node.set_object(value);
+        tracked_data converted(ark::data_type::dt_string, "previous allocated storage");
+        DOCTEST_REQUIRE(tracked_allocator::outstanding.size() == 1);
+        DOCTEST_REQUIRE(converted.from(&node));
+        DOCTEST_CHECK(converted.equal(erased));
+        DOCTEST_CHECK(tracked_allocator::outstanding.empty());
+    }
+}
 
 DOCTEST_TEST_CASE("Node conversion releases an old allocated string before retaining a scalar") {
     allocation_scope allocations;

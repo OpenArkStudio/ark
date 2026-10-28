@@ -72,6 +72,15 @@ exit code 1 with a manifest diagnostic, including on Windows, and is included in
 `resource/meta/`. It checks four kernel/config initialization orders with both
 resource-relative paths and legacy paths beginning with `/`, for eight combinations.
 
+`entity_snapshot.cpp` uses real Entity/schema objects to check owning selected scalar
+capture, every supported native type, integer/GUID boundaries, finite floating values,
+binary strings, typed lazy zeroes without node creation, hidden-field exclusion,
+source destruction, limits and unchanged sources after errors. The header consumer
+also compiles the independent snapshot value contract with Protobuf disabled.
+Capture tests call through `kernel_module` pointers. `entity_snapshot_interface.cpp`
+keeps an external source implementation of the original pure interface concrete,
+checks the default `logic_error`, a custom override and the framework override.
+
 The same target runs `kernel_delayed_sync.cpp`: real container creation, removal
 and destruction pass through delayed collection, Kernel update, Protobuf serialization
 and the existing mask delivery callback. It covers full payloads, entity references,
@@ -160,7 +169,7 @@ With `ARK_BUILD_PLUGIN_HTTP=ON`, `check-http-plugin` loads the actual HTTP DSO a
 
 Applications CI explicitly enables `ARK_BUILD_PLUGIN_HTTP=ON` and runs `check-core`, so its existing source and full matrices include the real HTTP DSO fixture. Local HTTP-enabled native validation has passed; hosted full-matrix acceptance for this change remains pending. The permanent CI policy test guards this configuration-to-DSO dependency chain.
 
-Kernel maps its 38 existing headers from `src/plugins/kernel/` through `ark::kernel`. `check-core` retains data/node regressions; `check-kernel-initialization` retains initialization/configuration-copy assertions. The independent `tests/consumer/kernel` project consumes 38/35 headers with Protobuf enabled/disabled; `container_meta.hpp` retains its existing `ark/define.hpp` and `ark/enum.hpp` include prerequisites. See [Kernel reference](../../docs/reference/kernel.md).
+Kernel maps its public headers from `src/plugins/kernel/` through `ark::kernel`. `check-core` retains data/node regressions; `check-kernel-initialization` retains initialization/configuration-copy assertions. The independent `tests/consumer/kernel` project consumes public headers with Protobuf enabled/disabled, excluding the three Protobuf-dependent module headers when disabled; `container_meta.hpp` retains its existing `ark/define.hpp` and `ark/enum.hpp` include prerequisites. See [Kernel reference](../../docs/reference/kernel.md).
 
 The registered Net HTTP client now comes from a private interface factory. `check-net-plugin` additionally checks future completion without manager updates and pending-request cancellation through `pre_shut()` while the DSO remains loaded. It consumes those futures before normal plugin exit; no arbitrary post-unload future lifetime is established. `check-network` retains request/timeout/callback/shutdown coverage through the same private factory and public client interface.
 
@@ -177,6 +186,13 @@ No external HTTP/etcd request is made. See [HTTP examples](../../docs/reference/
 for the preserved fixed demonstration endpoints and the real-wire coverage boundary.
 
 With Protobuf and the Kernel/Utility runtime targets enabled, `check-kernel-plugin` loads their actual DSOs through an independent public-interface runner. It checks the four original interface keys and manager pointers, metadata/static record loading, map/entity registration and callbacks, manager updates, shutdown destruction and repeated stop. It is part of `check-core`, alongside the existing direct initialization/entity-default tests; no post-unload registry inspection or arbitrary hot-update safety is claimed. The Kernel public-header consumer checks all retained types and their typed bases/update declarations.
+
+That independent runner also calls `kernel_module::capture_scalar_snapshot()`
+through the loaded DSO's interface pointer, with empty and all-scalar selections,
+lazy defaults, native widths, limits and values retained after source mutation and
+normal plugin stop. The runner does not compile the capture implementation into
+its own executable. Adding this virtual method changes the Kernel vtable ABI;
+rebuild every plugin and host/consumer together before loading the new interface.
 
 The XXTEA cases cover exact-size short-key allocations, 16-byte and embedded-zero
 keys, binary round trips and output appending. See the [key contract](../../docs/reference/xxtea.md).

@@ -499,7 +499,7 @@ bool node_manager::set_u_int64(const uint32_t index, const uint64_t value) {
     ARK_ASSERT_RET_VAL(data_ptr != nullptr, false);
 
     auto data_type = data_ptr->get_type();
-    ARK_ASSERT_RET_VAL(data_type == data_type::dt_int64, false);
+    ARK_ASSERT_RET_VAL(data_type == data_type::dt_uint64, false);
 
     auto old_value = data_ptr->get_u_int64();
     if (old_value == value)
@@ -634,7 +634,7 @@ bool node_manager::set_guid(const uint32_t index, const guid_t& value) {
     if (func_)
     {
         // data callbacks
-        func_(data_ptr, data_impl(data_type, old_value), data_impl(data_type, value));
+        func_(data_ptr, data_impl::from_guid(old_value), data_impl::from_guid(value));
     }
 
     return true;

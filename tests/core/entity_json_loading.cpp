@@ -1,4 +1,5 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
+#include <array>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -11,6 +12,7 @@
 #include "ark/kernel/config_module_impl.hpp"
 #include "ark/kernel/data_list_impl.hpp"
 #include "ark/kernel/entity_json.hpp"
+#include "ark/kernel/entity_snapshot.hpp"
 #include "ark/kernel/kernel_module_impl.hpp"
 #include "ark/kernel/map_module_impl.hpp"
 
@@ -86,9 +88,18 @@ private:
 class json_world
 {
 public:
-    explicit json_world(bool replace_after_metadata = false, bool omit_player = false) {
+    explicit json_world(bool replace_after_metadata = false, bool omit_player = false, ark::guid_t owner = 42) {
         ark::logger::init(&logger_);
         logger_.set_log_func([](spdlog::level::level_enum, const std::string&) {});
+        if (owner != 42)
+        {
+            auto text = schema();
+            const std::string original = "\"owner\":\"42\"";
+            const auto position = text.find(original);
+            REQUIRE(position != std::string::npos);
+            text.replace(position, original.size(), "\"owner\":\"" + std::to_string(owner) + "\"");
+            files_.write("entity_schema.json", text);
+        }
         if (omit_player)
         {
             auto document = ark::entity_json::parse(schema());
@@ -144,6 +155,61 @@ private:
     guid_sequence guid_;
 };
 } // namespace
+
+TEST_CASE("scalar snapshots capture configured GUID boundaries without narrowing or retaining the entity") {
+    for (const auto guid : {std::numeric_limits<ark::guid_t>::min(), std::numeric_limits<ark::guid_t>::max()})
+    {
+        json_world world(false, false, guid);
+        auto source = world.create(10);
+        REQUIRE(source != nullptr);
+        const std::array<std::uint32_t, 1> selection{109};
+        ark::kernel_module* kernel = &world.kernel;
+        const auto snapshot = kernel->capture_scalar_snapshot(*source, selection);
+        REQUIRE(snapshot.fields.size() == 1);
+        CHECK(std::get<ark::entity_sync::guid_value>(snapshot.fields.at(109)).value == guid);
+        REQUIRE(source->set_string(100, "modified"));
+        REQUIRE(world.kernel.destroy_entity(10));
+        source.reset();
+        CHECK(std::get<ark::entity_sync::guid_value>(snapshot.fields.at(109)).value == guid);
+    }
+}
+
+TEST_CASE("public entity GUID setters preserve tagged callback values through name and index") {
+    struct guid_observer
+    {
+        int changed(
+            const ark::guid_t&, const std::string&, std::uint32_t, const ark::data& before, const ark::data& after) {
+            CHECK(before.get_type() == ark::data_type::dt_guid);
+            CHECK(after.get_type() == ark::data_type::dt_guid);
+#if defined(ARK_USE_GUID_32)
+            values.emplace_back(before.get_int(), after.get_int());
+#else
+            values.emplace_back(before.get_int64(), after.get_int64());
+#endif
+            return 0;
+        }
+
+        std::vector<std::pair<ark::guid_t, ark::guid_t>> values;
+    } observer;
+
+    json_world world;
+    const auto object = world.create(10);
+    REQUIRE(object != nullptr);
+    ark::kernel_module& kernel = world.kernel;
+    REQUIRE(kernel.add_node_call_back("GuestPlayer", "owner", &observer, &guid_observer::changed));
+    const auto index = object->get_index("owner");
+    const auto minimum = std::numeric_limits<ark::guid_t>::min();
+    const auto maximum = std::numeric_limits<ark::guid_t>::max();
+    REQUIRE(object->set_guid("owner", minimum));
+    CHECK(object->get_guid(index) == minimum);
+    CHECK_FALSE(object->set_guid(index, minimum));
+    REQUIRE(object->set_guid(index, maximum));
+    CHECK(object->get_guid("owner") == maximum);
+    CHECK_FALSE(object->set_guid("owner", maximum));
+    REQUIRE(observer.values.size() == 2);
+    CHECK(observer.values[0] == std::pair<ark::guid_t, ark::guid_t>{42, minimum});
+    CHECK(observer.values[1] == std::pair<ark::guid_t, ark::guid_t>{minimum, maximum});
+}
 
 TEST_CASE(
     "Kernel JSON installs explicit attributes and configured defaults with args overriding only supplied fields") {
