@@ -252,8 +252,8 @@ public:
     template<typename plugin_type>
     void register_plugin(std::string const& plugin_name) {
         check_registration();
-        plugin* new_plugin = ARK_NEW plugin_type();
         std::string runtime_plugin_name = GET_CLASS_NAME(plugin_type);
+        plugin* new_plugin = ARK_NEW plugin_type();
         register_plugin(new_plugin, plugin_name, runtime_plugin_name);
     }
 
@@ -355,7 +355,13 @@ public:
 
 protected:
     void register_plugin(plugin* plugin, std::string const& plugin_name, std::string const& runtime_plugin_name) {
+        const auto destroy = [](ark::plugin* value) { ARK_DELETE(value); };
+        std::unique_ptr<ark::plugin, decltype(destroy)> candidate(plugin, destroy);
         check_registration();
+        if (!candidate)
+        {
+            return;
+        }
         // The library stem selects configuration; the runtime name identifies
         // the C++ plugin type registered by its entry point.
 
@@ -368,6 +374,9 @@ protected:
         // set plugin self configuration
         plugin->set_plugin_conf(plugin_conf_dir_ + iter->second);
         // Install modules
+        // Installation may publish resources that require cooperative shutdown.
+        // Retain the existing process-exit policy once user installation begins.
+        candidate.release();
         plugin->install();
         // manage this plugin
         plugin_instances_.insert(std::make_pair(runtime_plugin_name, plugin));
@@ -540,17 +549,20 @@ protected:
         auto iter = plugin_libs_.find(plugin_name);
         ARK_ASSERT_RET_VAL(iter == plugin_libs_.end(), false);
 
-        auto* library = ARK_NEW dynamic_library(plugin_name);
+        const auto destroy = [](dynamic_library* value) { ARK_DELETE(value); };
+        std::unique_ptr<dynamic_library, decltype(destroy)> library(ARK_NEW dynamic_library(plugin_name), destroy);
         ARK_ASSERT_RET_VAL(library != nullptr, false);
 
         bool load_ret = library->load(plugin_library_dir_);
         if (load_ret)
         {
-            plugin_libs_.insert(std::make_pair(plugin_name, library));
-            auto func = reinterpret_cast<dll_entry_plugin_func>(library->get_symbol("DllEntryPlugin"));
+            auto* loaded_library = library.get();
+            plugin_libs_.insert(std::make_pair(plugin_name, loaded_library));
+            library.release();
+            auto func = reinterpret_cast<dll_entry_plugin_func>(loaded_library->get_symbol("DllEntryPlugin"));
             if (func == nullptr)
             {
-                ARK_LOG_ERROR("Shared library[{}] has no DllEntryPlugin entrypoint", library->get_name());
+                ARK_LOG_ERROR("Shared library[{}] has no DllEntryPlugin entrypoint", loaded_library->get_name());
                 // Keep an already loaded handle until process exit. Static
                 // initializers may have started work before symbol validation.
                 return false;
@@ -568,7 +580,6 @@ protected:
 #endif
             ARK_LOG_ERROR("Load shared library[{}] failed, ErrorNo[{}]", library->get_name(), error);
             // Native loading failed, so this object owns no loaded handle.
-            ARK_DELETE(library);
             return false;
         }
     }
