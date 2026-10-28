@@ -13,6 +13,8 @@
 namespace {
 
 std::size_t fail_remaining{};
+std::size_t fail_minimum_size{};
+std::size_t failed_size{};
 bool failure_consumed{};
 
 std::shared_ptr<ark::node_meta> field(const std::shared_ptr<ark::class_meta>& schema, ark::data_type type) {
@@ -23,14 +25,24 @@ std::shared_ptr<ark::node_meta> field(const std::shared_ptr<ark::class_meta>& sc
 
 void fail_second_allocation() {
     failure_consumed = false;
-    fail_remaining = 2; // Allocate the node first, then fail its string or map allocation.
+    fail_minimum_size = 0;
+    fail_remaining = 2; // The int32 node has no allocating members; fail its map insertion.
+}
+
+void fail_string_buffer_allocation(std::size_t minimum_size) {
+    failure_consumed = false;
+    failed_size = 0;
+    fail_remaining = 0;
+    fail_minimum_size = minimum_size;
 }
 
 } // namespace
 
 void* operator new(std::size_t size) {
-    if (fail_remaining && --fail_remaining == 0)
+    if ((fail_minimum_size && size >= fail_minimum_size) || (fail_remaining && --fail_remaining == 0))
     {
+        fail_minimum_size = 0;
+        failed_size = size;
         failure_consumed = true;
         throw std::bad_alloc{};
     }
@@ -61,30 +73,47 @@ void operator delete(void* pointer, const std::nothrow_t&) noexcept {
 }
 
 TEST_CASE("Node clone string allocation failure destroys the unpublished candidate") {
-    const auto schema = std::make_shared<ark::class_meta>("Copy");
-    auto meta = field(schema, ark::data_type::dt_string);
-    ark::node_string source(meta);
-    const std::string text(1024, 's');
-    source.set_string(text);
-    ark::node_manager manager(schema);
-    const auto references = meta.use_count();
+    for (bool simulate_proxy : {false, true})
+    {
+        CAPTURE(simulate_proxy);
+        const auto schema = std::make_shared<ark::class_meta>("Copy");
+        auto meta = field(schema, ark::data_type::dt_string);
+        ark::node_string source(meta);
+        const std::string text(1024, 's');
+        source.set_string(text);
+        ark::node_manager manager(schema);
+        const auto references = meta.use_count();
+        const auto minimum_size = text.size() + 1;
+        REQUIRE(sizeof(ark::node_string) < minimum_size);
 #if defined(ARK_NODE_COPY_TEST_HOOKS)
-    const auto releases = node_copy_hooks::releases;
+        const auto releases = node_copy_hooks::releases;
 #endif
-    fail_second_allocation();
-    bool threw{};
-    try
-    { manager.create_data(&source); }
-    catch (const std::bad_alloc&)
-    { threw = true; }
-    CHECK(threw);
-    CHECK(failure_consumed);
-    CHECK(manager.is_empty());
-    CHECK(meta.use_count() == references);
-    CHECK(source.get_string() == text);
+        // Ignore node storage and Debug iterator proxies; select the owning
+        // character buffer allocated by copy_from(), independent of STL rounding.
+        fail_string_buffer_allocation(minimum_size);
+        bool threw{};
+        try
+        {
+            if (simulate_proxy)
+            {
+                // Exercise an extra small allocation even on libraries without proxies.
+                auto* proxy = ::operator new(2 * sizeof(void*));
+                ::operator delete(proxy);
+            }
+            manager.create_data(&source);
+        }
+        catch (const std::bad_alloc&)
+        { threw = true; }
+        CHECK(threw);
+        CHECK(failure_consumed);
+        CHECK(failed_size >= minimum_size);
+        CHECK(manager.is_empty());
+        CHECK(meta.use_count() == references);
+        CHECK(source.get_string() == text);
 #if defined(ARK_NODE_COPY_TEST_HOOKS)
-    CHECK(node_copy_hooks::releases == releases + 1);
+        CHECK(node_copy_hooks::releases == releases + 1);
 #endif
+    }
 }
 
 TEST_CASE("Node clone map allocation failure destroys the copied unpublished candidate") {
@@ -119,6 +148,7 @@ TEST_CASE("Node creation and lazy creation release candidates if map insertion t
         const auto schema = std::make_shared<ark::class_meta>("Create");
         auto meta = field(schema, ark::data_type::dt_int32);
         ark::node_manager manager(schema);
+        const std::string name("value"); // Construct any Debug iterator proxy before arming the fault.
         const auto references = meta.use_count();
         fail_second_allocation();
         bool threw{};
@@ -126,7 +156,7 @@ TEST_CASE("Node creation and lazy creation release candidates if map insertion t
         {
             if (lazy)
             {
-                manager.create_data(std::string("value"));
+                manager.create_data(name);
             }
             else
             {
