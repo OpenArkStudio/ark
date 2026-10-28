@@ -353,6 +353,10 @@ row* table_impl::create_row(uint32_t row, const data_list& args) {
         std::placeholders::_3, std::placeholders::_4);
 
     auto row_ptr = ARK_NEW row_impl(class_meta_ptr, row, args, std::move(func));
+    if (row_ptr == nullptr)
+    {
+        return nullptr;
+    }
     if (!data_.insert(row, row_ptr).second)
     {
         ARK_DELETE(row_ptr);

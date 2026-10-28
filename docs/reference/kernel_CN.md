@@ -203,6 +203,8 @@ bool set_int32_field(ark::kernel_module& kernel, const ark::guid_t& id, const st
 
 `table*` 和 `row*` 是借用指针，不独立拥有实体数据。表格删除行、清空表格或销毁所属实体后，不要继续使用相关指针。
 
+禁用断言时，行分配返回空指针会使 `add_row()` 返回 `nullptr`；行数、后续自动索引和现有记录保持不变，也不触发 `table_add`。分配恢复后可用同一索引重试；Debug 构建保留添加失败时的既有断言。`check-table-row-allocation` 已纳入 `check-kernel-initialization`，以 NDEBUG 编译生产实现验证失败路径；常规 Kernel 回归另覆盖自动和显式索引的成功插入。
+
 ### 自定义无符号值
 
 `entity::add_custom_u_int32(name, value)` 创建按名称访问的运行时 `uint32_t` 值，与元数据字段分开。创建后，`set_custom_u_int32(name, value)` 可在 `0` 到 `UINT32_MAX` 的完整范围内更新值，使用 `get_custom_u_int32(name)` 读取。名称不存在或对应其他标量类型时，设置操作在 Debug 和 Release 构建中均返回 `false`，不会创建数据、转换类型或修改已有值。使用 `find_custom_data()` 检查是否存在；已存储的零是有效值。
