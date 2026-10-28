@@ -66,6 +66,8 @@ cmake --build hash-header-build --target check-murmur-hash-header
 
 捕获测试通过 `kernel_module` 指针调用。`entity_snapshot_interface.cpp` 保留一份只实现原有纯虚接口的外部源码实现，检查它仍可实例化、默认方法抛出 `logic_error`、自定义覆写及框架覆写。
 
+`check-entity-stream` 纳入 `check-core`，无需 Protobuf 即可验证标量发布端与接收端，覆盖保留的不可变状态、合并、重复与缺口、身份与类型检查、移除、更高代次恢复和限额。Entity 测试还捕获真实 HP／MP／名称字段，应用基线与增量，销毁源对象后验证保留值，并在删除标记后恢复。这些是 C++ 状态检查，不代表网络交付或 Godot 验收。
+
 同一 target 运行 `kernel_delayed_sync.cpp`：真实容器创建、移除和销毁经过延迟收集、Kernel 更新、Protobuf 序列化和既有掩码交付回调。用例覆盖完整载荷、实体引用、空槽／销毁标记、仅自身同步掩码，以及空批次、标量、表格和混合对照。范围受限的测试友元仅观察该回调，不提供传输层或客户端。
 
 延迟交付用例还在交付回调中收集标量／表格／容器变更，验证递归刷新被拒绝，以及回调异常后防护复位、新变更保留。整个过程保持借用节点存活。
