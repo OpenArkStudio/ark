@@ -20,6 +20,9 @@
 
 #pragma once
 
+#include <array>
+#include <memory>
+
 #include "ark/define.hpp"
 #include "ark/platform.hpp"
 #include "ark/time/date_time.hpp"
@@ -55,54 +58,82 @@ public:
 
 class time_wheel_manager
 {
+    struct timer_deleter
+    {
+        template<typename T>
+        void operator()(T* value) const noexcept {
+            ARK_DELETE(value);
+        }
+    };
+
+    using timer_owner = std::unique_ptr<time_wheel_data, timer_deleter>;
+    using timer_vec_owner = std::unique_ptr<time_wheel_vec, timer_deleter>;
+
 public:
+    time_wheel_manager() = default;
+    time_wheel_manager(const time_wheel_manager&) = delete;
+    time_wheel_manager& operator=(const time_wheel_manager&) = delete;
+    time_wheel_manager(time_wheel_manager&&) = delete;
+    time_wheel_manager& operator=(time_wheel_manager&&) = delete;
+
     void init(uint64_t now_time) {
-        now_slot_ = 0;
-        timer_idx_ = 0;
-        last_update_time_ = now_time;
+        // Commit only a complete wheel; local owners also cover container exceptions.
+        std::vector<timer_owner> timer_storage;
+        std::list<time_wheel_data*> free_timers;
+        std::array<timer_vec_owner, tv_num> tw_vecs{};
+        timer_storage.reserve(free_timer_size);
 
         for (uint32_t i = 0; i < free_timer_size; ++i)
         {
-            time_wheel_data* data = ARK_NEW time_wheel_data();
+            timer_owner data(ARK_NEW time_wheel_data());
             ARK_ASSERT_RET_NONE(data != nullptr);
-            free_timers_.push_back(data);
+            free_timers.push_back(data.get());
+            timer_storage.push_back(std::move(data));
         }
 
         for (uint32_t i = 0; i < tv_num; ++i)
         {
-            time_wheel_vec* tv = ARK_NEW time_wheel_vec();
-            init_timer_vec(tv, tv_size);
-            tw_vecs_[i] = tv;
+            timer_vec_owner tv(ARK_NEW time_wheel_vec());
+            ARK_ASSERT_RET_NONE(tv != nullptr);
+            init_timer_vec(tv.get(), tv_size);
+            tw_vecs[i] = std::move(tv);
         }
+
+        shut();
+        timer_storage_ = std::move(timer_storage);
+        free_timers_ = std::move(free_timers);
+        tw_vecs_ = std::move(tw_vecs);
+        now_slot_ = 0;
+        timer_idx_ = 0;
+        last_update_time_ = now_time;
+    }
+
+    bool initialized() const noexcept {
+        return tw_vecs_[0] != nullptr;
     }
 
     void update(int64_t now_time) {
-        update_timer(now_time);
+        if (tw_vecs_[0])
+        {
+            update_timer(now_time);
+        }
     }
 
     void shut() {
-        for (auto iter : timers_)
-        {
-            ARK_DELETE(iter.second);
-        }
-
-        for (auto iter : free_timers_)
-        {
-            ARK_DELETE(iter);
-        }
-
-        for (auto iter : tw_vecs_)
-        {
-            ARK_DELETE(iter);
-        }
-
         timers_.clear();
         free_timers_.clear();
+        for (auto& tv : tw_vecs_)
+        {
+            tv.reset();
+        }
+        timer_storage_.clear();
     }
 
     uint64_t add_timer(
         const guid_t& entity_id, uint32_t count, const std ::chrono::milliseconds interval, timer_functor&& callback) {
+        ARK_ASSERT_RET_VAL(tw_vecs_[0] != nullptr, 0);
         time_wheel_data* timer = get_free_timer();
+        ARK_ASSERT_RET_VAL(timer != nullptr, 0);
         timer->idx = ++timer_idx_;
         timer->expires = (interval.count() / timer_precision) + now_slot_;
         timer->count = count;
@@ -144,8 +175,10 @@ protected:
         time_wheel_data* timer = nullptr;
         if (free_timers_.empty())
         {
-            timer = ARK_NEW time_wheel_data;
-            ARK_ASSERT_RET_VAL(timer != nullptr, nullptr);
+            timer_owner data(ARK_NEW time_wheel_data);
+            ARK_ASSERT_RET_VAL(data != nullptr, nullptr);
+            timer = data.get();
+            timer_storage_.push_back(std::move(data));
         }
         else
         {
@@ -181,7 +214,7 @@ protected:
         int64_t idx = expires - now_slot_;
         if (idx <= 0)
         {
-            time_wheel_vec* tv = tw_vecs_[0];
+            time_wheel_vec* tv = tw_vecs_[0].get();
             tv->vec[tv->index].push_back(timer_data);
             return;
         }
@@ -208,7 +241,7 @@ protected:
             uint32_t n = 1;
             do
             {
-                carry_timers(tw_vecs_[n]);
+                carry_timers(tw_vecs_[n].get());
             } while (tw_vecs_[n]->index == 1 && (++n < tv_num));
         }
 
@@ -266,7 +299,9 @@ protected:
 
 private:
     uint32_t now_slot_{0};
-    time_wheel_vec* tw_vecs_[tv_num];
+    // Slots, active IDs and the free list borrow from this single owner pool.
+    std::vector<timer_owner> timer_storage_;
+    std::array<timer_vec_owner, tv_num> tw_vecs_{};
     uint64_t last_update_time_{0};
     uint64_t timer_idx_{0};
     std::unordered_map<uint64_t, time_wheel_data*> timers_;
