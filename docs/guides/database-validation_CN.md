@@ -1,6 +1,6 @@
 # 数据库服务验收
 
-本页分别记录公开模块的真实服务正常／故障检查、插件 DSO 正常流程、经服务端观察确认的请求取消、自有服务终止，以及可信 Redis TLS。每类检查保留各自的测试版本与环境；通过结果仅适用于对应范围。
+本页分别记录公开模块的真实服务正常／故障检查、插件 DSO 正常流程、MySQL DSO 写入事务、经服务端观察确认的请求取消、自有服务终止，以及可信 Redis TLS。每类检查保留各自的测试版本与环境；通过结果仅适用于对应范围。
 
 ## 公开模块与真实服务
 
@@ -59,6 +59,23 @@ cmake --build database-build --target ark_database_public_plugin_service_tests -
 ```
 
 这些模式由独立 C++ 程序执行，不创建或停止服务。缺少配置、构建中没有所选协议时，程序返回失败，不会跳过并报告成功。`check-database` 仅构建该程序及其 DSO，不运行真实服务模式。
+
+## MySQL DSO 写入与两连接提交可见性
+
+**2026-10-29**，`ark_database_public_plugin_service_tests` 的 `mysql-transactions` 模式通过，退出码为 `0`。实际执行的 ark 源码为 `4452acaeed6a3834d048f025f2970825803402bb`；本记录在执行后补入，程序源码未再变化。本地 arknet 源码与 CI 固定提交 `a0dfe09cd543e75cfb5996e537ce2fa49f2a758f` 完全一致。机器为 Mac16,11／Apple M4 Pro／14 核／48 GiB，系统为 macOS 27.0.1（26A434）arm64。C++20 Debug 构建使用 Apple Clang 21.0.0、Boost.Asio 1.90.0 与 OpenSSL 3.6.4；私有服务为 MySQL Community Server 8.4.13，要求 TLS 并校验可信 CA 与 IP 身份。
+
+C++ 宿主加载真实隐藏符号 MySQL 插件 DSO，仅使用公开协程 API，在专用 schema 中创建唯一 InnoDB 表。参数化 autocommit 和事务插入保留含 NUL、引号及反斜杠的二进制值，并确认独立的语句关闭诊断成功。两个公开连接配置对应不同的服务端连接 ID，观察连接处于 autocommit 模式。两个事务均可读取自身写入，观察连接在事务结束前看不到对应行；确认 commit 后，观察连接能读取已提交的二进制行，确认显式 rollback 后则看不到已回滚行。保留的查询与事务结果在后续操作、删除测试表和模块／管理器／运行时销毁后仍可读取。每次恢复均位于所属线程／共享执行器，已受理流程通过自然排空和可重复 stop 完成。
+
+服务使用全新私有数据目录、专用 schema 及要求 SSL 的账户，账户仅获该 schema 的 CREATE、DROP、SELECT 和 INSERT 权限。独立清理查询确认剩余测试表为 `0`。自有服务通过认证的 `mysqladmin shutdown` 正常退出，并以退出码 `0` 回收；独立检查确认精确 PID 和 loopback 监听均不存在。私有数据、凭据与 TLS 密钥已删除。缺少 host 和非 loopback host 对照均在连接前失败，退出码为 `1`。
+
+按[写入模式说明](../../tests/database/README_CN.md#真实插件动态库与真实服务)准备私有服务与环境变量后，执行：
+
+```sh
+cmake --build database-build --target ark_database_public_plugin_service_tests --parallel 1
+./database-build/tests/database/ark_database_public_plugin_service_tests mysql-transactions
+```
+
+本轮覆盖单节点的两连接提交可见性，不代表全部隔离级别、事务取消、崩溃持久性或重启恢复验收。服务正常关闭属于清理，不是故障恢复证据。本轮不新增数据库协议、连接池策略、重试或强制停机。`check-database` 仅编译该显式模式，不启动服务；仅编译成功不能复现本次结果。
 
 ## 真实插件请求取消
 
@@ -164,4 +181,4 @@ bash tests/database/owned_server_fault_actor_guards.sh
 
 ## 验收边界
 
-DSO 流程覆盖正常插件销毁与原生关闭调用。`FreeLibrary` 或 `dlclose` 成功不证明操作系统已物理移除库映像。本机请求取消与服务端终止验收仅覆盖记录中的操作。重启恢复、持久化与写入效果、事务取消、双向 TLS 与证书轮换／撤销、Redis TLS 取消／故障恢复、其他取消／故障竞争、操作系统库映像移除、其他平台／部署环境与跨机器容量仍未验收。这些记录均不证明任意热更新安全或生产容量。
+DSO 流程覆盖正常插件销毁与原生关闭调用。`FreeLibrary` 或 `dlclose` 成功不证明操作系统已物理移除库映像。本机请求取消、服务端终止及 MySQL 写入／提交可见性验收仅覆盖记录中的操作。重启恢复、崩溃持久性、完整隔离级别覆盖、事务取消、双向 TLS 与证书轮换／撤销、Redis TLS 取消／故障恢复、其他取消／故障竞争、操作系统库映像移除、其他平台／部署环境与跨机器容量仍未验收。这些记录均不证明任意热更新安全或生产容量。

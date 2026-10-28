@@ -1,6 +1,6 @@
 # Database service acceptance
 
-This record separates public-module service/failure checks, positive plugin-DSO workflows, server-observed request cancellation, owned-server termination and verified Redis TLS. Each scope has its own tested revisions and environment; a passing result applies only to that scope.
+This record separates public-module service/failure checks, positive plugin-DSO workflows, MySQL DSO write transactions, server-observed request cancellation, owned-server termination and verified Redis TLS. Each scope has its own tested revisions and environment; a passing result applies only to that scope.
 
 ## Public modules against real services
 
@@ -59,6 +59,23 @@ cmake --build database-build --target ark_database_public_plugin_service_tests -
 ```
 
 These are standalone C++ test modes. They do not create or stop services; missing configuration or an unavailable protocol fails rather than becoming a successful skip. `check-database` builds this program and its DSOs without running the real-service modes.
+
+## MySQL DSO writes and two-connection commit visibility
+
+On **2026-10-29**, the `mysql-transactions` mode of `ark_database_public_plugin_service_tests` passed with exit code `0`. The executed ark source was `4452acaeed6a3834d048f025f2970825803402bb`; this record was added afterward without changing the executable source. The local arknet source matched CI pin `a0dfe09cd543e75cfb5996e537ce2fa49f2a758f`. The machine was Mac16,11 / Apple M4 Pro / 14 cores / 48 GiB, running macOS 27.0.1 (26A434) arm64. The C++20 Debug build used Apple Clang 21.0.0, Boost.Asio 1.90.0 and OpenSSL 3.6.4; the private server was MySQL Community Server 8.4.13 with required TLS, trusted CA and IP identity verification.
+
+The C++ host loaded the actual hidden-symbol MySQL plugin DSO and used only public coroutine APIs. It created a unique InnoDB table in a dedicated schema. Parameterized autocommit and transaction inserts preserved binary values containing NUL, a quote and a backslash, with successful statement-close diagnostics. Two public connection configurations had distinct server connection IDs, and the observer was in autocommit mode. Both transactions read their own writes while the observer saw no corresponding row before completion. After confirmed commit, the observer saw the committed binary row; after confirmed explicit rollback, it saw no rolled-back row. Retained query and transaction results remained readable after subsequent operations, table removal and module/manager/runtime destruction. Every continuation used the owner thread/shared executor, and the accepted workflow finished through natural manager drain and idempotent stop.
+
+The service had a fresh private data directory, dedicated schema and SSL-required account restricted to CREATE, DROP, SELECT and INSERT on that schema. A separate cleanup query confirmed zero remaining tables. The owned server shut down through authenticated `mysqladmin shutdown` and was reaped with exit code `0`; independent checks confirmed its exact PID and loopback listener were absent. Private data, credentials and TLS keys were removed. Missing-host and non-loopback-host controls both failed with exit code `1` before connecting.
+
+Prepare the private service and environment using the [write-mode instructions](../../tests/database/README.md#real-plugin-dsos-against-real-services), then run:
+
+```sh
+cmake --build database-build --target ark_database_public_plugin_service_tests --parallel 1
+./database-build/tests/database/ark_database_public_plugin_service_tests mysql-transactions
+```
+
+This is single-node, two-connection commit-visibility acceptance. It does not verify every isolation level, transaction cancellation, crash durability or restart recovery. Normal server shutdown is cleanup, not failure-recovery evidence. No new database protocol, connection-pool policy, retry or forced shutdown was added. `check-database` compiles this opt-in mode without starting a service; compilation alone does not reproduce this result.
 
 ## Real plugin request cancellation
 
@@ -164,4 +181,4 @@ This record does not cover mutual TLS, certificate rotation/revocation or TLS ca
 
 ## Acceptance boundaries
 
-The DSO workflows exercise normal plugin teardown and native close calls. Successful `FreeLibrary` or `dlclose` does not prove that the operating system physically removed the library image. Request cancellation and server-termination acceptance are limited to the recorded operations on this host. Restart/recovery, persistence and write effects, transaction cancellation, mutual TLS and certificate rotation/revocation, Redis TLS cancellation/fault recovery, other cancellation/fault races, OS image removal, other platforms/deployment environments and cross-machine capacity remain unverified. These records do not establish arbitrary hot-update safety or production capacity.
+The DSO workflows exercise normal plugin teardown and native close calls. Successful `FreeLibrary` or `dlclose` does not prove that the operating system physically removed the library image. Request cancellation, server termination and MySQL write/commit-visibility acceptance are limited to the recorded operations on this host. Restart recovery, crash durability, complete isolation-level coverage, transaction cancellation, mutual TLS and certificate rotation/revocation, Redis TLS cancellation/fault recovery, other cancellation/fault races, OS image removal, other platforms/deployment environments and cross-machine capacity remain unverified. These records do not establish arbitrary hot-update safety or production capacity.
