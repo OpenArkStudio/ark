@@ -143,6 +143,11 @@ std::shared_ptr<ark::entity> create_player(ark::plugin_manager& manager, int map
 
 `config_id > 0` 时，配置记录必须存在且与实体类匹配。配置为未指定的字段提供默认值，合法的 `args` 覆盖同一字段；显式传入 `0` 或空字符串也会覆盖配置值。同一字段在合法参数中重复出现时，最后一个值生效。实体数据独立于配置记录，修改实体不会修改原配置。
 
+`node_manager::create_data(node*)` 在深复制和所属 map 插入均成功前持有新节点。
+字符串复制或 map 分配抛出异常时，会释放尚未交给 map 的节点，并向调用方传播异常。
+索引重复时返回 `false`，保留原有节点。按元数据创建和惰性创建使用相同的临时所有权
+边界；`ARK_NEW`/`ARK_DELETE` 覆盖和空分配断言保持不变。公开接口与对象布局不变。
+
 参数按 `(value, uint32_t field_index)` 成对排列：先加入值，再用 `add_u_int()` 加入字段索引。索引必须来自已加载的实体结构，值类型必须与字段类型完全一致；不要依赖隐式转换。
 
 下面使用声明为 int32 的 `Player.level` 和 string 的 `Player.name`，显式将等级设为 `0`、名称设为空字符串，其余字段保留配置默认值。调用前，目标地图、实例和对应的 Player 配置记录必须存在。

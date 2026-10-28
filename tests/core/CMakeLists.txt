@@ -56,6 +56,28 @@ if(TARGET check-proto-configuration)
     add_dependencies(check-core check-proto-configuration check-proto-naming)
 endif()
 
+set(ark_node_copy_test_sources main.cpp node_copy_ownership.cpp
+    ../../src/plugins/kernel/node_manager.cpp
+    ../../src/plugins/kernel/class_meta.cpp
+    ../../src/plugins/kernel/class_call_back_manager.cpp
+    ../../src/plugins/kernel/table_meta.cpp)
+add_executable(ark_node_copy_tests ${ark_node_copy_test_sources})
+set_property(TARGET ark_node_copy_tests PROPERTY LINK_LIBRARIES ark::kernel)
+add_executable(ark_node_copy_hook_tests ${ark_node_copy_test_sources})
+set_property(TARGET ark_node_copy_hook_tests PROPERTY LINK_LIBRARIES ark::kernel)
+target_compile_definitions(ark_node_copy_hook_tests PRIVATE NDEBUG ARK_NODE_COPY_TEST_HOOKS)
+# Identical hook expansion in every TU avoids mixing different inline definitions.
+if(MSVC)
+    target_compile_options(ark_node_copy_hook_tests PRIVATE "/FI${CMAKE_CURRENT_SOURCE_DIR}/node_copy_hooks.hpp")
+else()
+    target_compile_options(ark_node_copy_hook_tests PRIVATE -include "${CMAKE_CURRENT_SOURCE_DIR}/node_copy_hooks.hpp")
+endif()
+add_custom_target(check-node-copy
+    COMMAND $<TARGET_FILE:ark_node_copy_tests>
+    COMMAND $<TARGET_FILE:ark_node_copy_hook_tests>
+    DEPENDS ark_node_copy_tests ark_node_copy_hook_tests USES_TERMINAL VERBATIM)
+add_dependencies(check-core check-node-copy)
+
 add_executable(ark_entity_stream_tests main.cpp entity_stream.cpp)
 set_property(TARGET ark_entity_stream_tests PROPERTY LINK_LIBRARIES ark::kernel)
 add_custom_target(check-entity-stream
