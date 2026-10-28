@@ -223,8 +223,8 @@ void check_role_startup(bool game) {
     check_startup(true, false, true, true, game);
     if (game)
     {
-        // Game registers Kernel callbacks in init. An absent Kernel must fail
-        // before those dereferences; this fixture does not simulate Kernel.
+        // Game validates Kernel in init and registers its callbacks in post_init.
+        // This dependency fixture does not simulate Kernel.
         check_startup(true, true, true, true, true);
     }
     else
