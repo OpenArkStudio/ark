@@ -26,6 +26,25 @@ Pointers are borrowed from the loaded plugin. Keep the owning plugin alive while
 
 The plugin keeps installation order GUID, timer, schedule, compression and reverses that order during uninstallation. Timer `pre_shut()` still shuts down its time wheel. GUID layout, compression levels/algorithms and scheduler behavior are unchanged. The library stem remains `ark_utility_plugin`, with the existing platform extension and Debug `_d` postfix.
 
+## Timer ownership and allocation
+
+The time wheel owns every allocated timer, including cancelled entries waiting in
+wheel slots. Shutdown or destruction releases the pool and wheel vectors; repeated
+`shut()` is safe. Use and close the wheel on its owner thread after callbacks have
+finished. Slot precision remains 10 ms, with intervals truncated to whole slots;
+callback ordering, repeat counts and cancellation timing are unchanged.
+
+`ARK_NEW` and `ARK_DELETE` overrides remain the allocation boundary. A null
+allocation retains the debug assertion; with assertions disabled, initialization
+leaves the existing wheel intact and `add_timer()` returns `0` if the wheel or a
+new timer is unavailable. Standard container allocation exceptions can still
+propagate. **Breaking source change:** `time_wheel_manager` explicitly rejects
+copying and moving. Direct consumers must keep it at a stable location under one
+owner, for example behind a `std::unique_ptr`, rather than copy or move the wheel.
+The public low-level type's object layout also changes: rebuild the library and
+all direct `time_wheel_manager` consumers together. The `timer_module` virtual
+interface is unchanged.
+
 ## Compression buffers and concurrency
 
 The core helpers `<ark/compress/zlib.hpp>`, `<ark/compress/zstd.hpp>` and
@@ -169,3 +188,7 @@ acceptance evidence.
 `check-typed-examples` loads the actual Utility DSO with `timers`, `module_lifecycle` and `entity_operations`. It verifies all four interface RTTI keys and manager ownership, GUID generation/parsing, zlib/Zstandard binary round trips, a timer triggered by owner-thread time advancement, and normal/idempotent shutdown. `check-app-presets` exercises the shipped launcher preset; `check-core` includes both when applications, examples, Kernel and Utility are enabled. The independent `tests/consumer` project's `check-sdk` compiles public/helper paths with runtime plugins disabled and rejects visible implementation or assembly headers. These are correctness checks, not performance or arbitrary callback-lifetime acceptance.
 
 `check-core` also includes standalone random-header compilation and deterministic random-range regressions for extreme, mixed-sign, reversed and equal endpoints. See [core regressions](../../tests/core/README.md) for the build commands.
+
+`check-timer`, included in `check-core`, verifies wheel order, repeats, cancellation,
+resource cleanup and allocation-failure recovery. Run it separately with
+`cmake --build <build-dir> --target check-timer`.

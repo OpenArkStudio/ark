@@ -87,6 +87,18 @@ add_custom_target(check-buffer
     USES_TERMINAL VERBATIM)
 add_dependencies(check-core check-buffer)
 
+# Isolate timer allocation hooks and Release-mode assertion fallback checks.
+add_executable(ark_timer_tests main.cpp timers.cpp)
+set_property(TARGET ark_timer_tests PROPERTY LINK_LIBRARIES ark::core)
+add_executable(ark_timer_hook_tests main.cpp timer_hooks.cpp)
+set_property(TARGET ark_timer_hook_tests PROPERTY LINK_LIBRARIES ark::core)
+target_compile_definitions(ark_timer_hook_tests PRIVATE NDEBUG)
+add_custom_target(check-timer
+    COMMAND $<TARGET_FILE:ark_timer_tests>
+    COMMAND $<TARGET_FILE:ark_timer_hook_tests>
+    DEPENDS ark_timer_tests ark_timer_hook_tests USES_TERMINAL VERBATIM)
+add_dependencies(check-core check-timer)
+
 # Isolate global new[] failure injection from the ordinary Core executables.
 add_executable(ark_pod_array_failure_tests main.cpp pod_array_failure.cpp)
 set_property(TARGET ark_pod_array_failure_tests PROPERTY LINK_LIBRARIES ark::core)

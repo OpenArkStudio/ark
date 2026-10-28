@@ -26,6 +26,21 @@ const auto entity = guids->create_guid();
 
 插件按 GUID、timer、schedule、compress 顺序安装模块，卸载顺序相反。timer 的 `pre_shut()` 仍关闭时间轮。GUID 布局、压缩级别与算法、scheduler 行为不变。动态库主体名称仍为 `ark_utility_plugin`，保留平台扩展名和 Debug `_d` 后缀。
 
+## 定时器所有权与分配
+
+时间轮持有所有已分配的定时器，包括取消后仍留在轮槽中的条目。关闭或析构会释放
+对象池与轮向量；重复调用 `shut()` 是安全的。在所属线程使用和关闭时间轮，并先完成
+回调。轮槽精度保持为 10 ms，间隔仍向下取整到完整轮槽；回调顺序、重复次数和取消
+生效时机不变。
+
+`ARK_NEW` 和 `ARK_DELETE` 覆盖仍是分配边界。分配返回空指针时保留 Debug 断言；
+关闭断言后，初始化失败会保留原有时间轮，时间轮或新定时器不可用时 `add_timer()`
+返回 `0`。标准容器的分配异常仍可能向外传播。**源码不兼容变更：**
+`time_wheel_manager` 显式禁止复制和移动。直接使用该类型的调用方须通过单一所有者
+将其保持在固定位置，例如由 `std::unique_ptr` 持有，不能复制或移动时间轮。
+该公开低层类型的对象布局也有变化，库与所有直接使用 `time_wheel_manager` 的代码
+须一起重新编译。`timer_module` 的虚接口保持不变。
+
 ## 压缩缓冲区与并发
 
 核心辅助头 `<ark/compress/zlib.hpp>`、`<ark/compress/zstd.hpp>` 和
@@ -141,3 +156,6 @@ UndefinedBehaviorSanitizer 可检查无效对齐。固定值验证哈希行为�
 `check-typed-examples` 与 timers、module_lifecycle、entity_operations 一起加载真实 Utility DSO，验证四个接口的 RTTI 注册键与管理器归属、GUID 生成与解析、zlib/Zstandard 二进制往返、由所属线程时间推进触发的定时器，以及正常和重复停机。`check-app-presets` 使用仓库启动器预设；应用、示例、Kernel、Utility 开启时，`check-core` 包含这两组检查。独立 `tests/consumer` 项目的 `check-sdk` 在关闭运行时插件时编译公开接口与辅助头路径，并拒绝可见的实现或装配头。这些检查验证正确性，不代表性能或任意回调生命周期验收。
 
 `check-core` 还包含随机数头文件的独立编译，以及极值、异号、逆序和相等端点的确定性随机范围回归。构建命令见[核心回归](../../tests/core/README_CN.md)。
+
+`check-timer`（`check-core` 的依赖）验证时间轮顺序、重复、取消、资源回收与分配失败恢复。
+可单独执行 `cmake --build <build-dir> --target check-timer`。
