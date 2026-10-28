@@ -59,6 +59,8 @@ cmake --build hash-header-build --target check-murmur-hash-header
 
 `check-app-startup-failures` 使用真实启动器和测试动态库，覆盖四个启动阶段各自返回 false 或抛出异常，并分别读取 TOML 和 XML 清单；还验证非标准异常、插件入口抛出异常、库文件缺失，以及可加载但没有 `DllEntryPlugin` 的动态库。每次受控模块失败或插件入口异常前，已注册的测试模块都会启动并保留一个真实的 owned loopback TCP 监听端点，使用系统分配的端口。缺少入口的测试库会记录自身初始化，确认库已加载后才发生失败。24 个子进程均须输出一次准确的阶段、模块或插件诊断，保留可用异常信息，以正常退出码 1 结束，且不执行后续启动调用、update、正常关闭或卸载。核心用例检查失败上下文、原始异常传播、多模块中的首次失败停止及所属线程访问。若失败启动后仍保留模块所有权，该端点会使普通静态清理等待，因此退出检查覆盖真实的活动 IO 池。这些测试证明失败报告与进程终止，不证明部分启动资源清理或同进程恢复。
 
+启用 Protobuf 时，`check-core` 还包含 `check-proto-configuration`。该检查执行两个平台分支的生产 target 配置，核对传递给消费者的 DLL 导入定义和运行时目录，并通过真实 protoc 输出验证消息／描述符导出及原有无导出标注路径。生成 fixture 使用 Ninja，不编译 Windows 二进制。真实 Kernel DSO 测试保留宿主持有的生成 Protobuf 消息和跨 DSO 转换，继续覆盖公开 DLL 边界。
+
 `check-kernel-initialization` 从 `resource/meta/` 加载真实元数据和静态数据，
 分别使用资源相对路径及以 `/` 开头的旧路径，验证内核与配置模块的四种初始化顺序，共八种组合。
 
@@ -136,6 +138,10 @@ cmake --build core-build --target check-business-runtime
 启用 Net、Bus、Utility 与 Protobuf 时，`check-net-plugin` 加载真实动态库，验证两个 Net 接口及 RTTI 键、管理器线程上的 TCP／HTTP 回调、重复停服与监听端口释放。该目标也是 `check-core` 的依赖，无需外部服务。独立的 `tests/consumer/net` 工程仅链接 `ark::net`，逐个编译保留的公开头。
 
 启用 Bus、Net、Utility 与 Protobuf 时，`check-bus-plugin` 加载真实动态库，验证 Bus／消息接口键、配置查询、路由 Protobuf 消息头与正文、传输失败传播及正常重复停服。`check-core` 包含该目标。独立的 `tests/consumer/bus` 工程仅链接 `ark::bus`，分别编译两个公开模块头。既有解析／配置用例通过接口工厂保留原断言，仍支持关闭 Protobuf 的构建。
+
+在 POSIX 平台启用应用、Bus、Net、Utility 和 Kernel 后，`check-server-startup-game` 使用私有 `Player` JSON 结构和 Bus 身份 `1.1.31.1`，启动真实 Utility、Bus、Net、Kernel 和 Game 动态库。健康场景要求真实 TCP 连接、配合信号停服、客户端连接关闭、新连接被拒绝，以及退出码 0。端口占用场景要求完整的 Game／`post_init` 启动失败诊断和退出码 1。Kernel 目标存在时，这两个场景纳入 `check-server-startup`、`check-server-plugins` 和 `check-core`。测试沿用现有有限等待，只拥有自己创建的子进程与回环端点，不检查 Game 回调注册、Entity、玩法、随仓库提供的预设、服务发现或生产就绪状态。Windows 保留独立的创建测试。详见[服务端架构](../../docs/concepts/server-architecture_CN.md#角色启动错误)。
+
+启用 Game、Kernel、Bus 和 Utility 目标后，`check-game-initialization` 运行生产 Game 工厂／装配，以及真实 Kernel、Metadata、Map、Config、Guid 和 Bus 实现。测试先调用 Game `init()`，再调用 Kernel `init()`，覆盖 Game／Kernel `post_init()` 的两种顺序，并通过元数据事件分发观察真实 Player 类回调。另一份不含 Player 的合法结构必须在创建监听器前失败。测试只控制监听器创建，不替换 Kernel 接口。这些用例纳入 `check-kernel-initialization`、`check-server-plugins` 和 `check-core`。真实套接字启动与停服由上文的 POSIX DSO 场景覆盖；玩法和部分启动回滚不在测试范围内。
 
 同一 `check-typed-examples` 还通过仓库清单和示例元数据加载实体操作 DSO，验证四个 Player 实体、原有字段／自定义值与物品行、没有计时循环输出的有界启动、编译期模块／update 契约、bag 回调分发、四次销毁事件、更新及正常／重复停机。显式的 `check-entity-benchmark-smoke` 是独立可选 target，不作为 `check-core` 的依赖。
 

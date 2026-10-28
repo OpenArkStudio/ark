@@ -17,11 +17,20 @@ add_dependencies(ark_core_tests ark_construction_header_checks)
 if(ARK_BUILD_PROTO)
     target_sources(ark_core_tests PRIVATE protobuf_messages.cpp)
     target_link_libraries(ark_core_tests PRIVATE ark::bus ark::proto)
+    add_custom_target(check-proto-configuration
+        COMMAND ${CMAKE_COMMAND} "-DARK_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+            "-DPROTOC=${PROTOBUF_PROTOC_EXECUTABLE}"
+            "-DTEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/proto configuration"
+            -P "${PROJECT_SOURCE_DIR}/tests/proto/check_configuration.cmake"
+        USES_TERMINAL VERBATIM)
 endif()
 add_custom_target(check-core
     COMMAND $<TARGET_FILE:ark_core_tests>
     DEPENDS ark_core_tests
     USES_TERMINAL)
+if(TARGET check-proto-configuration)
+    add_dependencies(check-core check-proto-configuration)
+endif()
 
 add_executable(ark_entity_stream_tests main.cpp entity_stream.cpp)
 set_property(TARGET ark_entity_stream_tests PROPERTY LINK_LIBRARIES ark::kernel)
@@ -248,6 +257,18 @@ if(ARK_BUILD_PROTO)
         ../../src/plugins/kernel/table_impl.cpp
         ../../src/plugins/kernel/table_meta.cpp)
     target_link_libraries(ark_kernel_initialization_tests PRIVATE ark::kernel ark::utility ark::proto ark::kernel_json)
+    if(TARGET ark_game_plugin AND TARGET ark_kernel_plugin AND TARGET ark_bus_plugin AND TARGET ark_utility_plugin)
+        target_sources(ark_kernel_initialization_tests PRIVATE ../server/game_initialization.cpp
+            ../../src/server/game/game_plugin.cpp ../../src/server/game/game_net_module_impl.cpp
+            ../../src/plugins/bus/bus_module_impl.cpp ../../src/plugins/utility/guid_module_impl.cpp)
+        target_include_directories(ark_kernel_initialization_tests PRIVATE
+            "${PROJECT_SOURCE_DIR}/src/server/game" "${PROJECT_SOURCE_DIR}/src/plugins")
+        target_link_libraries(ark_kernel_initialization_tests PRIVATE ark::bus ark::net ark::config tomlplusplus::tomlplusplus)
+        add_custom_target(check-game-initialization
+            COMMAND $<TARGET_FILE:ark_kernel_initialization_tests> "--test-case=Game*"
+            DEPENDS ark_kernel_initialization_tests USES_TERMINAL VERBATIM)
+        add_dependencies(check-server-plugins check-game-initialization)
+    endif()
     add_custom_target(check-kernel-initialization
         COMMAND $<TARGET_FILE:ark_kernel_initialization_tests>
         DEPENDS ark_kernel_initialization_tests

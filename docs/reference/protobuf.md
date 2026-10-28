@@ -16,6 +16,12 @@ Generated C++ files remain in the CMake build directory under `src/proto/generat
 
 Use Protobuf, Abseil and utf8_range from one compatible installation prefix. In a manual package selection, align `Protobuf_DIR`, `absl_DIR` and `utf8_range_DIR`; a successful link alone does not validate reflection/JSON behavior.
 
+On Windows, `AFProto` / `ark::proto` builds one shared generated-message library. The host and loaded plugins import the same message classes and descriptors, including when the host creates a message for a public Kernel conversion call. CMake generates `ARK_PROTO_EXPORT` declarations with protoc and propagates import definitions through `ark::proto`; do not compile a second copy of the generated `.pb.cc` files into consumers or define the export macro manually. Other platforms retain the existing static AFProto library and unchanged generation command.
+
+**Windows binary migration:** rebuild hosts and plugins together and deploy `AFProto.dll` (`AFProto_d.dll` for Debug) from the existing build `bin/` directory. The Windows host, plugins and message DLL must use the same compatible Protobuf runtime and build configuration. The DLL is installed to `bin/` by the existing RUNTIME rule; its import library goes to the library directory. Do not mix the previous static AFProto archive with the new import library, despite their retained `.lib` filenames. This changes Windows linking/deployment, not protocol field numbers or wire encoding.
+
+`check-proto-configuration` configures both CMake branches and runs the real protoc to check message/descriptor export declarations, consumer imports and unchanged native generation. It does not compile or load Windows binaries on another platform. `check-kernel-plugin` retains its host-created Protobuf object and real cross-DSO conversion; Windows loader acceptance requires that platform's native run.
+
 ## Message serialization
 
 Messages use the generated Protobuf API directly. The Bus module's message send paths in `src/plugins/bus/msg_module_impl.cpp` call `SerializeToString` and return `false` if serialization fails. The public `msg_module::decode_protobuf` helper in `<ark/bus/msg_module.hpp>` calls `ParseFromString` on the network message body, returning `false` on a parse failure and copying the actor ID on success. See [Bus](bus.md) for the message and transport boundary.

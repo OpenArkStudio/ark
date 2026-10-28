@@ -50,6 +50,14 @@ identity, binary messages, legacy wire payloads and external JSON field names.
 They also exercise the new `ark::protobuf` descriptor and enum names.
 Initialize Protobuf as described for application builds.
 
+With Protobuf enabled, `check-proto-configuration` is included in `check-core`.
+It executes the production target configuration for both platform branches,
+checks transitive DLL import definitions/runtime directories, and uses real protoc
+outputs to validate message/descriptor exports and the legacy unannotated path.
+The fixture uses Ninja for generation only; it does not compile Windows binaries.
+The actual Kernel DSO test keeps its host-owned generated Protobuf message and
+cross-DSO conversion, so the test continues to cover the public DLL boundary.
+
 The C++20 language regressions check the exact six built-in integer classifications, qualifier and reference handling, constant values, exception contracts and fixed UID allocation outputs. The standalone array-map header check also rejects reintroduced legacy language macros.
 
 UID regressions also check compile-time allocation, invalid/extreme widths, field overflow and the three 63/0/0 width permutations. `ark_core_tests --test-case="UID*"` selects them. Invalid layouts throw `std::invalid_argument`; invalid field values throw `std::out_of_range`, independently of assertion settings. See [UID bit allocation](../../docs/reference/utility.md#core-uid-bit-allocation).
@@ -169,6 +177,10 @@ With applications, examples, Kernel and Utility enabled, `check-typed-examples` 
 With Net, Bus, Utility and Protobuf enabled, `check-net-plugin` loads actual DSOs and checks both Net interfaces and RTTI keys, manager-thread TCP/HTTP callbacks, repeated shutdown and listener release. It is also a `check-core` dependency and requires no external service. The independent `tests/consumer/net` project links only `ark::net` and compiles every retained public header separately.
 
 With Bus, Net, Utility and Protobuf enabled, `check-bus-plugin` loads actual DSOs and checks Bus/message interface keys, configured queries, routed Protobuf headers/body, transport failure propagation and repeated normal shutdown. `check-core` includes this target. The independent `tests/consumer/bus` project links only `ark::bus` and compiles both public module headers separately. Existing parser/configuration cases use an interface factory while retaining their assertions, and still support Protobuf-disabled builds.
+
+On POSIX hosts with applications, Bus, Net, Utility and Kernel enabled, `check-server-startup-game` launches the actual Utility/Bus/Net/Kernel/Game DSOs with a private `Player` JSON schema and Bus identity `1.1.31.1`. Its healthy case requires a real TCP connection, cooperative signal shutdown, peer closure, listener refusal and exit code 0. Its occupied-endpoint case requires a complete Game/`post_init` startup failure diagnostic and exit code 1. The cases join `check-server-startup`, `check-server-plugins` and `check-core` when the Kernel target is present. They retain the existing bounded waits and own only their child process and loopback endpoints. They do not check Game callback registration, entities, gameplay, shipped presets, discovery or production readiness. Windows retains the separate construction tests. See [server architecture](../../docs/concepts/server-architecture.md#role-startup-errors).
+
+With the Game, Kernel, Bus and Utility targets enabled, `check-game-initialization` runs the production Game factory/assembly and real Kernel, Metadata, Map, Config, Guid and Bus implementations. It calls Game `init()` before Kernel `init()`, then checks both Game/Kernel `post_init()` orders and observes the actual Player class callback through metadata event dispatch. A separate valid schema without Player must fail before listener creation. Only listener creation is controlled; no Kernel interface is replaced. These cases are included in `check-kernel-initialization`, `check-server-plugins` and `check-core`. Actual socket startup/shutdown remains covered by the POSIX DSO cases above; gameplay and partial-start rollback remain outside these tests.
 
 The same `check-typed-examples` target also loads the entity operations DSO with its shipped manifest and example metadata. It verifies four Player entities, original field/custom values and item rows, a bounded startup with no timed-loop output, the compile-time module/update contract, bag callback dispatch, four destruction events, updates and normal/idempotent shutdown. The explicit `check-entity-benchmark-smoke` target is separate and optional; it never becomes a dependency of `check-core`.
 
