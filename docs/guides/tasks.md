@@ -1,12 +1,10 @@
 # Coroutine tasks
 
-`<ark/task.hpp>` provides `ark::task<T>` and `ark::task_group`. Business modules can use the shared executor and module-owned groups provided by `plugin_manager`; standalone tools can still create their own runtime and groups.
-
-`ark::task<T>` is an alias for Asio `awaitable<T>`; it adds no coroutine promise implementation. A group starts `task<void>` roots. A root can `co_await task<T>` to receive an owning value, just as it awaits other compatible Asio operations.
+`<ark/task.hpp>` provides `ark::task<T>` (an Asio `awaitable<T>` alias, with no custom promise) and `ark::task_group`. Groups start top-level `task<void>` tasks, which can await `task<T>` for an owning result or await compatible Asio operations. Modules use `plugin_manager`'s shared executor and module groups; standalone tools can create their own.
 
 ## Build and run the example
 
-Initialize the existing dependencies using [Install and build](../get-started/installation.md). On macOS or Linux, run these commands from the ark source directory with the configured dependencies available:
+Follow [Install and build](../get-started/installation.md) to configure dependencies, then run from the ark source directory on macOS or Linux:
 
 ```sh
 cmake -S . -B task-build -G Ninja -DCMAKE_BUILD_TYPE=Debug \
@@ -25,17 +23,17 @@ cmake --build task-build --target ark_task_example check-task-sdk
 .\task-build\examples\task_group\ark_task_example.exe
 ```
 
-Add the dependency toolchain/prefix options used for the rest of the project when required. The default uses Boost.Asio; core-only task builds also support `-DASIO_STANDALONE=ON`. `ARK_BUILD_EXAMPLES=ON` builds this ordinary executable even with applications disabled; it requires no plugin DLL, generated Protobuf messages or database server.
+Add your project's dependency toolchain/prefix options as needed. Boost.Asio is the default; core-only builds also support `-DASIO_STANDALONE=ON`. `ARK_BUILD_EXAMPLES=ON` builds this executable with applications disabled, without plugin DLLs, generated Protobuf messages or a database server.
 
-The [complete example](../../examples/task_group/main.cpp) returns `result=42 completed=1`. It starts one coroutine, closes top-level admission, and keeps polling until that accepted task finishes. Its two-second failure guard terminates the sample with code 2 instead of destroying pending frames; it is not an application shutdown timeout or abandonment strategy.
+The [complete example](../../examples/task_group/main.cpp) prints `result=42 completed=1`: start one coroutine, stop accepting new top-level tasks, then poll until completion. Its two-second failure guard exits with code 2 without destroying pending frames; it is not an application shutdown timeout or abandonment strategy.
 
-A consumer whose CMake project already adds ark uses the public `ark::core` target:
+If your CMake project already adds ark, use the public target:
 
 ```cmake
 target_link_libraries(my_tasks PRIVATE ark::core)
 ```
 
-The target propagates C++20, public include paths and arknet requirements. No private `src/plugins` include directory is needed. The task implementation remains in the public header.
+`ark::core` propagates C++20, public includes and arknet requirements; no private `src/plugins` includes are needed. Tasks remain implemented in the public header.
 
 ## Start typed work on the owner thread
 
@@ -54,19 +52,22 @@ ark::task<> compute(int& result) {
 }
 ```
 
-The example's `main()` creates a shared `arknet::manual_runtime` and a group, then submits `compute(result)` with a completion handler. The handler receives an `std::exception_ptr`, empty on successful completion. Keep referenced state alive until the task completes. Do not let a coroutine lambda outlive its closure; named coroutine functions with explicitly owned parameters make that lifetime easier to see.
+The example's `main()` creates a shared `arknet::manual_runtime` and group, then submits `compute(result)`. Its completion handler receives `std::exception_ptr` (empty on success). Referenced state must outlive the task; coroutines must not access captured state after their lambda closure is destroyed. Prefer named coroutine functions with explicit parameter ownership.
 
-Construct, operate and destroy the runtime and group on the same thread. `manual_runtime` creates no worker to run task bodies or continuations: `poll()` runs ready Asio handlers on its constructing thread. Platform services such as timers or name resolution can use their own internal helper threads. Native database/network pools retain their separately documented IO ownership.
+Construct, operate and destroy runtime/group on one thread. `manual_runtime` creates no task/continuation worker: `poll()` runs ready Asio handlers on its constructing thread. Timers/name resolution may use internal helper threads; native database/network pools retain their documented IO ownership.
 
 ## Shared business executor for modules
 
 ![Module tasks and their shared executor](../assets/shared-business-runtime.svg)
 
-Each manager owns one library-provided `manual_runtime`. After registering a module, call `manager.create_task_group(module, maximum)` during initialization, then submit work through `manager.get_tasks(module)`. Capacity must be positive; unknown modules, duplicate groups and creation after shutdown begins are rejected. A module pointer can be registered only once. Group references remain stable when other modules register.
+Each manager owns one library-provided `manual_runtime`. Register the module, call `manager.create_task_group(module, maximum)` during initialization, then submit through `manager.get_tasks(module)`. Capacity must be positive. Unknown modules, duplicate groups and creation during shutdown are rejected. Register each module pointer once; other registrations do not invalidate group references.
 
-Private database bridges use `manager.get_task_runtime()` to share that exact executor. A module's `update()` calls `service.update()` and `bridge.dispatch()` first; `manager.update(timestamp, maximum_handlers = 64)` then polls the runtime once. All groups share the handler budget. Modules must not also poll their group or runtime; a handler budget is not a frame-time limit. The public MySQL and Redis plugins use these bridges internally.
+Private database bridges share this executor through `manager.get_task_runtime()`, including those inside public MySQL/Redis plugins. Drive updates in order:
 
-`manager.stop(timestamp)` stops top-level business-task admission in every managed group and returns `false` without waiting while tasks or an active update/completion stack remain. Accepted coroutines may submit later operations, so keep their services and bridges accepting. Only another `stop()` after task completion and stack unwinding enters shutdown hooks. It then executes `pre_shut()`, `shut()` and unloading synchronously; user hooks may block, so this API does not bound shutdown duration.
+1. Module `update()`: call `service.update()`, then `bridge.dispatch()`.
+2. `manager.update(timestamp, maximum_handlers = 64)`: poll once, sharing the handler budget across all groups. Modules must not also poll their group/runtime.
+
+`manager.stop(timestamp)` stops accepting new top-level tasks in every group. It returns `false` without waiting while tasks or update/completion stacks remain. Keep services and bridges accepting for accepted coroutines' later operations. After completion and stack unwinding, another `stop()` synchronously runs `pre_shut()`, `shut()` and unloading; user hooks may block.
 
 | State | Caller action |
 | --- | --- |
@@ -75,15 +76,21 @@ Private database bridges use `manager.get_task_runtime()` to share that exact ex
 | `failed` | A shutdown hook failed/threw or a native library close failed; stop further unloading and retain remaining resources |
 | `stopped` | Shutdown hooks and native close calls succeeded; repeated `stop()` returns `true` |
 
-Use `get_shutdown_state()`, `get_shutdown_failure()` and `get_shutdown_exception()` to distinguish waiting from failure. The launcher keeps pumping while tasks remain, and reports a hook failure once while retaining the process. There is no implicit shutdown timeout, cancellation, detach or frame destruction as a drain substitute. The pending-task check does not wait for completion. The poll budget limits handler count, not execution time, and does not bound user-hook or total shutdown latency.
+Inspect `get_shutdown_state()`, `get_shutdown_failure()` and `get_shutdown_exception()` to distinguish waiting from failure. The launcher continues driving pending tasks; on hook failure it reports once and retains the process. There is no implicit shutdown timeout, cancellation, detach or frame destruction instead of draining; task checks do not wait and handler budgets do not bound shutdown latency.
 
-`dynamic_library::unload()` returns `false` on a native close failure and keeps its handle. Success clears the handle; unloading an empty or already closed wrapper returns `true` without another native call. Manager failure records `unload: <plugin>` and latches the existing failed state, retaining the failed wrapper and remaining libraries. It does not retry plugin exits or closes on a later `stop()`, roll back previous teardown, or establish OS image removal.
+| `dynamic_library::unload()` result | Effect |
+| --- | --- |
+| Native close fails | Return `false`, keep handle; manager records `unload: <plugin>`, latches failure and retains the wrapper/remaining libraries |
+| Native close succeeds | Clear handle |
+| Empty/already closed wrapper | Return `true` without a native call |
 
-Use the manager and its groups on their constructing thread. Do not mutate module registries or recursively update from update/shutdown hooks or executor callbacks. While any managed task is pending, no module can unregister: another module’s task may still borrow that provider. Destroying a manager with tasks, on an active callback stack or from another thread terminates; destruction is not a drain entry point.
+Later `stop()` calls do not retry plugin exits/closes or roll back teardown. Close success does not establish OS image removal.
+
+Use manager/groups on their constructing thread. In update/shutdown hooks or executor callbacks, do not mutate module registries or recursively update. Any pending managed task prevents every module's unregistration: it may borrow another provider. Destroying a manager with tasks, on an active callback stack or from another thread terminates; destruction cannot initiate draining.
 
 <Aside type="caution" title="Task completion does not release native IO resources">
 
-This drain check covers only top-level business tasks accepted by managed groups. Modules do not yet define a common phase for stopping incoming requests. External callbacks must return, connection-pool workers must exit and background cleanup must complete before their code can be safely unloaded. A zero task count does not prove those conditions. Unmanaged work must not reference a module being destroyed.
+The check covers only managed groups' accepted top-level tasks. Modules have no common phase for stopping incoming requests. Safe code unloading also requires external callbacks to return, pool workers to exit and background cleanup to finish; zero tasks proves none of these. Unmanaged work must not reference a module being destroyed.
 
 </Aside>
 
@@ -91,34 +98,37 @@ This drain check covers only top-level business tasks accepted by managed groups
 
 | API | Behavior |
 | --- | --- |
-| `task_group(runtime, maximum = 64)` | Keep the shared runtime alive and limit accepted root tasks; a null runtime or zero limit throws `std::invalid_argument` |
-| `start(task<>, completion = {})` | Return a nonzero observation/cancellation ID, or zero if admission is full or stopped; a refused lazy task never starts and its completion handler is not called |
-| `stop_accepting()` | Refuse new root tasks without cancelling or polling accepted work; repeated owner-thread calls are harmless |
-| `cancel(id)` / `cancel_all()` | Request terminal cancellation; accepted tasks remain owned until their real completion |
-| `close()` | Stop admission and request cancellation; does not poll or wait |
-| `poll(maximum = 64)` | Run at most this many ready handlers on the shared runtime without waiting; zero does no work |
-| `pending()` | Count accepted root tasks whose completion has not retired |
-| `closed()` | True only when admission has stopped and no accepted root tasks remain |
+| `task_group(runtime, maximum = 64)` | Retain shared runtime and cap accepted top-level tasks; null runtime/zero limit throws `std::invalid_argument` |
+| `start(task<>, completion = {})` | Return a nonzero observation/cancellation ID, or zero when full/stopped; refused lazy tasks never start or invoke completion |
+| `stop_accepting()` | Refuse new top-level tasks without cancelling/polling accepted work; harmless when repeated on owner thread |
+| `cancel(id)` / `cancel_all()` | Request terminal cancellation; retain accepted tasks until actual completion |
+| `close()` | Stop admission and request cancellation; no polling/waiting |
+| `poll(maximum = 64)` | Run up to this many ready shared-runtime handlers without waiting; zero does nothing |
+| `pending()` | Count accepted top-level tasks whose completion has not retired |
+| `closed()` | True only when admission is stopped and no accepted top-level tasks remain |
 
-Dropping an ID does not cancel its task. Dropping an unstarted `task<T>` performs no coroutine body work. A task-body exception reaches the optional completion handler; it is not a successful result. Exceptions thrown by user completion handlers propagate from `poll()`.
+Dropping an ID does not cancel; dropping an unstarted `task<T>` runs no coroutine body. Task-body exceptions reach the optional completion handler as failures; completion-handler exceptions propagate from `poll()`.
 
-Polling the shared runtime can run handlers belonging to other groups or operations on that runtime. The handler limit is not a task-step count, an elapsed-time budget or a guarantee that user work finishes within a frame. Reentrant runtime polling is rejected. Calls on a different thread throw `std::logic_error`; the destructor contract below is stricter.
+Shared-runtime polling may run other groups' or operations' handlers. The limit counts handlers, not task steps/time; it bounds neither frame time nor hook/shutdown duration. Reentrant polling is rejected. Wrong-thread calls throw `std::logic_error`; destruction has stricter rules below.
 
 ## Finish accepted work before destruction
 
-For natural completion, call `stop_accepting()` and continue the usual owner update sequence. Accepted tasks may perform further awaits. Their underlying services and operation bridges must remain available and accepting if those tasks need to submit their next operation.
+| Intent | Action and required driving |
+| --- | --- |
+| Natural completion | `stop_accepting()`, then continue owner updates; keep services/bridges available and accepting further asynchronous operations |
+| Cancellation | `close()`, then drive service completions, bridge dispatch and runtime polls until actual completion |
 
-For cancellation, call `close()` and continue driving every required service completion, bridge dispatch and runtime poll until the tasks have actually finished. Cancellation support depends on the awaited operation and coroutine code; a request does not forcibly destroy a frame or establish that a remote write did not happen.
+Cancellation depends on the awaited operation and coroutine code. Requests neither forcibly destroy frames nor prove that a remote write did not happen.
 
 <Aside type="caution" title="Destruction requires an empty owner">
 
-Destroy a group only on its constructing thread and with `pending() == 0`. A pending-task or wrong-thread destruction calls `std::terminate`. Destruction does not detach work, recursively poll or block until completion. Keep the runtime, awaited-operation owners and state referenced by coroutines alive for the required duration.
+Destroy a group on its constructing thread with `pending() == 0`; otherwise it calls `std::terminate`. Destruction does not detach, recursively poll or wait. Keep runtime, awaited-operation owners and referenced state alive as long as needed.
 
 </Aside>
 
-The last completion retires its group membership before invoking user completion code, so that handler may destroy the now-empty group facade. This does not allow destroying unrelated outstanding operations. `closed()` describes this group's tracked roots; it is not a transport drain, callback barrier, DLL-unload guarantee or completed module shutdown design.
+The last completion retires group membership before invoking user code, which may destroy the empty group object, but not unrelated outstanding operations. `closed()` tracks only this group's top-level tasks: it does not establish transport drain, a callback barrier, safe DLL unload or a complete module shutdown design.
 
-All plugins must be rebuilt against the same updated manager headers; this change does not provide a stable binary plugin ABI or hot-update compatibility.
+Rebuild all plugins against the same updated manager headers; stable binary plugin ABI and hot-update compatibility are not provided.
 
 ## Continue
 
@@ -127,4 +137,4 @@ All plugins must be rebuilt against the same updated manager headers; this chang
 - [Database coroutine tests](../../tests/database/COROUTINES.md): private native-operation bridges, owner update order and explicit test teardown.
 - [MySQL](../reference/mysql.md) and [Redis](../reference/redis.md): public plugin configuration, shared business executor and native pool retirement.
 
-Code deriving directly from the scheduler helper base should use `ark::scheduler_task`. `ark::task<T>` denotes an Asio coroutine; `ark::scheduler` scheduling calls keep their existing signatures.
+Use `ark::scheduler_task` when deriving from the scheduler helper base. `ark::task<T>` denotes Asio coroutines; `ark::scheduler` call signatures are unchanged.
