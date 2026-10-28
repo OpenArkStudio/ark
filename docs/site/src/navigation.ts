@@ -231,6 +231,11 @@ const tree: Entry[] = [
         "guides/database-validation",
         "Database service acceptance",
         "数据库服务验收"
+      ],
+      [
+        "guides/database-restart",
+        "Redis restart recovery",
+        "Redis 重启恢复"
       ]
     ]
   },

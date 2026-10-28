@@ -97,3 +97,4 @@ bash scripts/test_databases.sh database-build public-redis-failures
 不证明一般写操作的重放行为，具体限制见测试指南中的“公开真实服务负面验收”。
 
 测试机器、源码版本与执行结果见[本机公开接口服务验收](../guides/database-validation_CN.md)。
+原连接池通过显式新命令恢复的流程见[Redis 重启恢复验收](../guides/database-restart_CN.md)。

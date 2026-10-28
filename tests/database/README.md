@@ -364,3 +364,10 @@ The opt-in [public-plugin server-termination guide](server_termination.md) cover
 server-observed blocking read-only work, a separately verified owned-PID fault
 actor, native transport failure and exactly-once local retirement. Ordinary
 checks compile the program without executing a server fault.
+
+## Redis restart recovery acceptance
+
+The opt-in [restart operations manual](restart.md) covers private service setup,
+fault coordination and cleanup. The [short guide](../../docs/guides/database-restart.md)
+summarizes existing same-pool recovery and local results. Ordinary checks only
+compile the runner.

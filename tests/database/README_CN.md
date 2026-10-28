@@ -291,3 +291,9 @@ cmake --build database-build --target check-database-samples --parallel 2
 可选的[公开插件服务异常退出指南](server_termination_CN.md)覆盖真实服务观察到的只读阻塞请求、
 独立核验自有 PID 后的故障注入、原生传输失败及本地仅完成一次的退出。
 常规检查只编译程序，不执行服务故障。
+
+## Redis 重启恢复验收
+
+可选的[重启操作手册](restart_CN.md)说明私有服务配置、故障协调与清理步骤。
+[简短指南](../../docs/guides/database-restart_CN.md)汇总原池恢复行为与本地结果。
+常规检查只编译该程序。
