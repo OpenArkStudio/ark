@@ -43,6 +43,34 @@ private:
 public:
     object_map_base() = default;
 
+    object_map_base(const object_map_base&)
+        requires(!std::is_pointer_v<v_type>)
+    = default;
+    object_map_base(const object_map_base&)
+        requires(std::is_pointer_v<v_type>)
+    = delete;
+    object_map_base& operator=(const object_map_base&)
+        requires(!std::is_pointer_v<v_type>)
+    = default;
+    object_map_base& operator=(const object_map_base&)
+        requires(std::is_pointer_v<v_type>)
+    = delete;
+
+    object_map_base(object_map_base&& other) noexcept(std::is_nothrow_move_constructible_v<map_type>)
+        : nodes_(std::move(other.nodes_)) {
+        other.nodes_.clear();
+    }
+
+    object_map_base& operator=(object_map_base&& other) noexcept(std::is_nothrow_move_assignable_v<map_type>) {
+        if (this != &other)
+        {
+            clear();
+            nodes_ = std::move(other.nodes_);
+            other.nodes_.clear();
+        }
+        return *this;
+    }
+
     ~object_map_base() {
         clear();
     }
@@ -151,7 +179,8 @@ private:
     void delete_value(stored_type& value) {
         if constexpr (std::is_pointer_v<stored_type>)
         {
-            ARK_DELETE(value);
+            delete value;
+            value = nullptr;
         }
     }
 };

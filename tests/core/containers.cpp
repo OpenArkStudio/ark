@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "../network/doctest.h"
@@ -26,6 +27,44 @@ struct counted_object
 
     int& destroyed_;
 };
+
+using owned_object_map = ark::object_map<int, counted_object>;
+using owned_object_hashmap = ark::object_hashmap<int, counted_object>;
+using shared_object_map = ark::shared_object_map<int, counted_object>;
+using shared_object_hashmap = ark::shared_object_hashmap<int, counted_object>;
+
+static_assert(!std::is_copy_constructible_v<owned_object_map>);
+static_assert(!std::is_copy_assignable_v<owned_object_map>);
+static_assert(std::is_move_constructible_v<owned_object_map>);
+static_assert(std::is_move_assignable_v<owned_object_map>);
+static_assert(std::is_nothrow_move_constructible_v<owned_object_map> ==
+              std::is_nothrow_move_constructible_v<owned_object_map::map_type>);
+static_assert(std::is_nothrow_move_assignable_v<owned_object_map> ==
+              std::is_nothrow_move_assignable_v<owned_object_map::map_type>);
+static_assert(!std::is_copy_constructible_v<owned_object_hashmap>);
+static_assert(!std::is_copy_assignable_v<owned_object_hashmap>);
+static_assert(std::is_move_constructible_v<owned_object_hashmap>);
+static_assert(std::is_move_assignable_v<owned_object_hashmap>);
+static_assert(std::is_nothrow_move_constructible_v<owned_object_hashmap> ==
+              std::is_nothrow_move_constructible_v<owned_object_hashmap::map_type>);
+static_assert(std::is_nothrow_move_assignable_v<owned_object_hashmap> ==
+              std::is_nothrow_move_assignable_v<owned_object_hashmap::map_type>);
+static_assert(std::is_copy_constructible_v<shared_object_map>);
+static_assert(std::is_copy_assignable_v<shared_object_map>);
+static_assert(std::is_move_constructible_v<shared_object_map>);
+static_assert(std::is_move_assignable_v<shared_object_map>);
+static_assert(std::is_nothrow_move_constructible_v<shared_object_map> ==
+              std::is_nothrow_move_constructible_v<shared_object_map::map_type>);
+static_assert(std::is_nothrow_move_assignable_v<shared_object_map> ==
+              std::is_nothrow_move_assignable_v<shared_object_map::map_type>);
+static_assert(std::is_copy_constructible_v<shared_object_hashmap>);
+static_assert(std::is_copy_assignable_v<shared_object_hashmap>);
+static_assert(std::is_move_constructible_v<shared_object_hashmap>);
+static_assert(std::is_move_assignable_v<shared_object_hashmap>);
+static_assert(std::is_nothrow_move_constructible_v<shared_object_hashmap> ==
+              std::is_nothrow_move_constructible_v<shared_object_hashmap::map_type>);
+static_assert(std::is_nothrow_move_assignable_v<shared_object_hashmap> ==
+              std::is_nothrow_move_assignable_v<shared_object_hashmap::map_type>);
 
 } // namespace
 
@@ -77,28 +116,123 @@ DOCTEST_TEST_CASE("Object-map constant end iterators delimit all entries") {
     DOCTEST_CHECK(count == 2);
 }
 
-DOCTEST_TEST_CASE("Object maps release owned objects exactly once and shared maps retain external owners") {
+DOCTEST_TEST_CASE_TEMPLATE("Object maps release erased cleared and remaining objects exactly once", map_type,
+    owned_object_map, owned_object_hashmap) {
     int destroyed = 0;
     {
-        ark::object_map<int, counted_object> values;
+        map_type values;
         values.insert(1, new counted_object(destroyed));
         values.insert(2, new counted_object(destroyed));
         DOCTEST_REQUIRE(values.erase(1));
         DOCTEST_REQUIRE(destroyed == 1);
         DOCTEST_REQUIRE_FALSE(values.erase(1));
+
+        values.erase(values.find(2));
+        DOCTEST_REQUIRE(destroyed == 2);
+        DOCTEST_REQUIRE(values.empty());
+        DOCTEST_CHECK(values.erase(values.end()) == values.end());
+        values.insert(3, nullptr);
+        DOCTEST_REQUIRE(values.erase(3));
+        DOCTEST_CHECK(destroyed == 2);
+
+        values.insert(4, new counted_object(destroyed));
         values.clear();
         DOCTEST_REQUIRE(values.empty());
-        DOCTEST_REQUIRE(destroyed == 2);
+        DOCTEST_REQUIRE(destroyed == 3);
+        values.clear();
+        DOCTEST_CHECK(destroyed == 3);
+
+        values.insert(5, new counted_object(destroyed));
+        auto rejected = std::make_unique<counted_object>(destroyed);
+        DOCTEST_REQUIRE_FALSE(values.insert(5, rejected.get()).second);
+        DOCTEST_CHECK(destroyed == 3);
+        rejected.reset();
+        DOCTEST_CHECK(destroyed == 4);
     }
+    DOCTEST_CHECK(destroyed == 5);
+}
+
+DOCTEST_TEST_CASE_TEMPLATE("Object-map moves transfer entries and release overwritten destination objects", map_type,
+    owned_object_map, owned_object_hashmap) {
+    int destroyed = 0;
+    int replaced = 0;
+    int reused = 0;
+    {
+        map_type source;
+        auto* owned = new counted_object(destroyed);
+        source.insert(1, owned);
+        source.insert(2, nullptr);
+        map_type moved(std::move(source));
+        DOCTEST_REQUIRE(source.empty());
+        DOCTEST_REQUIRE(moved.size() == 2);
+        DOCTEST_CHECK(moved.find_value(1) == owned);
+        DOCTEST_CHECK(moved.find(2) != moved.end());
+        DOCTEST_CHECK(moved.find_value(2) == nullptr);
+        source.insert(3, new counted_object(reused));
+        source.clear();
+        DOCTEST_CHECK(reused == 1);
+
+        map_type destination;
+        destination.insert(9, new counted_object(replaced));
+        destination = std::move(moved);
+        DOCTEST_CHECK(replaced == 1);
+        DOCTEST_REQUIRE(moved.empty());
+        DOCTEST_REQUIRE(destination.size() == 2);
+        DOCTEST_CHECK(destination.find_value(1) == owned);
+        DOCTEST_CHECK(destination.find(2) != destination.end());
+        auto& self = destination;
+        destination = std::move(self);
+        DOCTEST_REQUIRE(destination.size() == 2);
+        DOCTEST_CHECK(destination.find_value(1) == owned);
+        DOCTEST_CHECK(destroyed == 0);
+    }
+    DOCTEST_CHECK(destroyed == 1);
+    DOCTEST_CHECK(replaced == 1);
+    DOCTEST_CHECK(reused == 1);
+}
+
+DOCTEST_TEST_CASE_TEMPLATE("Shared object maps copy ownership and move entries while retaining external owners",
+    map_type, shared_object_map, shared_object_hashmap) {
+    int destroyed = 0;
+    int replaced = 0;
     auto owner = std::make_shared<counted_object>(destroyed);
     {
-        ark::shared_object_hashmap<int, counted_object> values;
+        map_type values;
         values.insert(1, owner);
+        map_type copied(values);
+        DOCTEST_CHECK(owner.use_count() == 3);
+        map_type assigned;
+        assigned.insert(9, std::make_shared<counted_object>(replaced));
+        assigned = copied;
+        DOCTEST_CHECK(replaced == 1);
+        DOCTEST_CHECK(owner.use_count() == 4);
+
+        map_type moved(std::move(values));
+        DOCTEST_REQUIRE(values.empty());
+        DOCTEST_CHECK(moved.find_value(1) == owner);
+        DOCTEST_CHECK(owner.use_count() == 4);
+        values.insert(9, std::make_shared<counted_object>(replaced));
         values.clear();
-        DOCTEST_REQUIRE(destroyed == 2);
+        DOCTEST_CHECK(replaced == 2);
+        map_type destination;
+        destination.insert(9, std::make_shared<counted_object>(replaced));
+        destination = std::move(moved);
+        DOCTEST_REQUIRE(moved.empty());
+        DOCTEST_CHECK(replaced == 3);
+        DOCTEST_CHECK(destination.find_value(1) == owner);
+        auto& self = destination;
+        destination = std::move(self);
+        DOCTEST_CHECK(destination.find_value(1) == owner);
+        DOCTEST_CHECK(owner.use_count() == 4);
+
+        DOCTEST_REQUIRE(copied.erase(1));
+        assigned.clear();
+        DOCTEST_CHECK(owner.use_count() == 2);
+        DOCTEST_REQUIRE(destroyed == 0);
     }
+    DOCTEST_CHECK(owner.use_count() == 1);
     owner.reset();
-    DOCTEST_REQUIRE(destroyed == 3);
+    DOCTEST_REQUIRE(destroyed == 1);
 }
 
 namespace {
