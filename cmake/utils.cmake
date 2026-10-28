@@ -23,14 +23,24 @@ function(ark_extract_version)
 endfunction()
 
 function(MY_PROTOBUF_GENERATE_CPP PATH SRCS HDRS)
-    if (NOT ARGN)
+    cmake_parse_arguments(ark_proto "" "EXPORT_DECL" "" ${ARGN})
+    if (ark_proto_KEYWORDS_MISSING_VALUES OR NOT ark_proto_UNPARSED_ARGUMENTS)
         message(SEND_ERROR "Error: PROTOBUF_GENERATE_CPP() called without any proto files")
         return()
+    endif ()
+    # Keep the legacy command arguments unchanged when no export is requested.
+    set(ark_proto_cpp_args --cpp_out ${PATH})
+    if (ark_proto_EXPORT_DECL)
+        if (NOT ark_proto_EXPORT_DECL MATCHES "^[A-Za-z_][A-Za-z_0-9]*$")
+            message(SEND_ERROR "Error: EXPORT_DECL must be a C++ identifier")
+            return()
+        endif ()
+        set(ark_proto_cpp_args --cpp_out "dllexport_decl=${ark_proto_EXPORT_DECL}:${PATH}")
     endif ()
 
     if (PROTOBUF_GENERATE_CPP_APPEND_PATH)
         # Create an include path for each file specified
-        foreach (FIL ${ARGN})
+        foreach (FIL ${ark_proto_UNPARSED_ARGUMENTS})
             get_filename_component(ABS_FIL ${FIL} ABSOLUTE)
             get_filename_component(ABS_PATH ${ABS_FIL} PATH)
             list(FIND _protobuf_include_path ${ABS_PATH} _contains_already)
@@ -54,7 +64,7 @@ function(MY_PROTOBUF_GENERATE_CPP PATH SRCS HDRS)
 
     set(${SRCS})
     set(${HDRS})
-    foreach (FIL ${ARGN})
+    foreach (FIL ${ark_proto_UNPARSED_ARGUMENTS})
         get_filename_component(ABS_FIL ${FIL} ABSOLUTE)
         get_filename_component(FIL_WE ${FIL} NAME_WE)
 
@@ -67,7 +77,7 @@ function(MY_PROTOBUF_GENERATE_CPP PATH SRCS HDRS)
                 OUTPUT "${PATH}/${FIL_WE}.pb.cc"
                 "${PATH}/${FIL_WE}.pb.h"
                 COMMAND ${PROTOBUF_PROTOC_EXECUTABLE}
-                ARGS --cpp_out ${PATH} ${_protobuf_include_path} ${ABS_FIL}
+                ARGS ${ark_proto_cpp_args} ${_protobuf_include_path} ${ABS_FIL}
                 DEPENDS ${ABS_FIL}
                 COMMENT "Running C++ protocol buffer compiler on ${FIL}"
                 VERBATIM)
