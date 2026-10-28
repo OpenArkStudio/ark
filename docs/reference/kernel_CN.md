@@ -373,7 +373,7 @@ if (auto delta = sender.update(kernel->capture_scalar_snapshot(*player, visible)
 }
 ```
 
-示例在同一进程中传递 C++ 值，没有发送网络消息，也没有修改 Godot 房间协议。表、容器和业务事件不属于这条标量路径；现有借用指针的延迟同步路径继续独立存在。
+示例在同一进程中传递 C++ 值。网络编码、连接基线与 Godot 接入见[访客房间 Protobuf 适配层](../../examples/guest_room/protocol_CN.md)。表、容器和业务事件不属于这条标量路径；现有借用指针的延迟同步路径继续独立存在。
 
 | 条件 | 行为 |
 | --- | --- |
@@ -394,4 +394,4 @@ if (auto delta = sender.update(kernel->capture_scalar_snapshot(*player, visible)
 
 每个发布／接收对象由一个所有者线程使用；跨线程传递返回的拥有型值／不可变句柄，不传递发布对象、接收对象或 Entity。调用者需限制保留历史句柄的数量。本组件没有吞吐量或带宽测试结论。
 
-`check-entity-stream` 提供永久状态机回归，关闭 Protobuf 后也能运行。`check-kernel-initialization` 另从真实 Entity 验证捕获、基线、合并后的 HP／MP 变更、接收状态、源销毁、删除与新基线。这是原生 C++ 状态闭环，网络与 Godot 接入仍需单独完成。
+`check-entity-stream` 提供永久状态机回归，关闭 Protobuf 后也能运行。`check-kernel-initialization` 另从真实 Entity 验证捕获、基线、合并后的 HP／MP 变更、接收状态、源销毁、删除与新基线。这些检查覆盖原生 C++ 状态闭环；`check-guest-room` 与配套 Godot 客户端测试分别覆盖传输与表现边界。

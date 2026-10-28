@@ -9,6 +9,8 @@
 
 #include <ark/bus/msg_module.hpp>
 #include <ark/net/net_msg.hpp>
+#include <ark/proto/guest_room.pb.h>
+#include <ark/proto/operational_logs.pb.h>
 
 namespace {
 
@@ -84,14 +86,35 @@ DOCTEST_TEST_CASE("Snake-case protocol messages preserve existing binary payload
     const std::string switch_bytes("\x08\x0b\x10\x0c\x18\x0d\x20\x0e\x28\x0f\x30\x10\x38\x11", 14);
     ark::protobuf::req_switch_server request;
     DOCTEST_REQUIRE(request.ParseFromString(switch_bytes));
-    DOCTEST_REQUIRE(request.selfid() == 11);
-    DOCTEST_REQUIRE(request.self_serverid() == 12);
-    DOCTEST_REQUIRE(request.target_serverid() == 13);
-    DOCTEST_REQUIRE(request.gate_serverid() == 14);
+    DOCTEST_REQUIRE(request.self_id() == 11);
+    DOCTEST_REQUIRE(request.self_server_id() == 12);
+    DOCTEST_REQUIRE(request.target_server_id() == 13);
+    DOCTEST_REQUIRE(request.gate_server_id() == 14);
     DOCTEST_REQUIRE(request.scene_id() == 15);
     DOCTEST_REQUIRE(request.client_id() == 16);
     DOCTEST_REQUIRE(request.group_id() == 17);
     DOCTEST_REQUIRE(request.SerializeAsString() == switch_bytes);
+
+    const std::string acknowledgement_bytes("\x08\x0b\x10\x0c\x18\x0d\x20\x0e", 8);
+    ark::protobuf::ack_switch_server acknowledgement;
+    DOCTEST_REQUIRE(acknowledgement.ParseFromString(acknowledgement_bytes));
+    DOCTEST_REQUIRE(acknowledgement.self_id() == 11);
+    DOCTEST_REQUIRE(acknowledgement.self_server_id() == 12);
+    DOCTEST_REQUIRE(acknowledgement.target_server_id() == 13);
+    DOCTEST_REQUIRE(acknowledgement.gate_server_id() == 14);
+    DOCTEST_REQUIRE(acknowledgement.SerializeAsString() == acknowledgement_bytes);
+
+    const std::string mysql_bytes("\x30\x2a", 2); // Original nreqid tag 6.
+    ark::protobuf::mysql_parameters parameters;
+    DOCTEST_REQUIRE(parameters.ParseFromString(mysql_bytes));
+    DOCTEST_REQUIRE(parameters.request_id() == 42);
+    DOCTEST_REQUIRE(parameters.SerializeAsString() == mysql_bytes);
+
+    const std::string log_bytes("\x0a\x03log", 5); // Original logid tag 1.
+    osslog::login entry;
+    DOCTEST_REQUIRE(entry.ParseFromString(log_bytes));
+    DOCTEST_REQUIRE(entry.log_id() == "log");
+    DOCTEST_REQUIRE(entry.SerializeAsString() == log_bytes);
 
     // Batch type names must remain distinct from the generated repeated-field accessors.
     const std::string batch_bytes("\x0a\x02\x08\x4d", 4);
@@ -138,6 +161,32 @@ DOCTEST_TEST_CASE("Renamed protocol fields retain existing JSON property names")
     DOCTEST_REQUIRE(google::protobuf::util::MessageToJsonString(request, &encoded).ok());
     DOCTEST_REQUIRE(has_same_json_fields(encoded, json));
 
+    ark::protobuf::ack_switch_server acknowledgement;
+    const std::string acknowledgement_json =
+        R"({"selfid":"11","selfServerid":"12","targetServerid":"13","gateServerid":"14"})";
+    DOCTEST_REQUIRE(google::protobuf::util::JsonStringToMessage(acknowledgement_json, &acknowledgement).ok());
+    DOCTEST_REQUIRE(acknowledgement.self_id() == 11);
+    DOCTEST_REQUIRE(acknowledgement.self_server_id() == 12);
+    DOCTEST_REQUIRE(acknowledgement.target_server_id() == 13);
+    DOCTEST_REQUIRE(acknowledgement.gate_server_id() == 14);
+    encoded.clear();
+    DOCTEST_REQUIRE(google::protobuf::util::MessageToJsonString(acknowledgement, &encoded).ok());
+    DOCTEST_REQUIRE(has_same_json_fields(encoded, acknowledgement_json));
+
+    ark::protobuf::mysql_parameters parameters;
+    DOCTEST_REQUIRE(google::protobuf::util::JsonStringToMessage(R"({"nreqid":"42"})", &parameters).ok());
+    DOCTEST_REQUIRE(parameters.request_id() == 42);
+    encoded.clear();
+    DOCTEST_REQUIRE(google::protobuf::util::MessageToJsonString(parameters, &encoded).ok());
+    DOCTEST_REQUIRE(has_same_json_fields(encoded, R"({"nreqid":"42"})"));
+
+    osslog::login entry;
+    DOCTEST_REQUIRE(google::protobuf::util::JsonStringToMessage(R"({"logid":"log"})", &entry).ok());
+    DOCTEST_REQUIRE(entry.log_id() == "log");
+    encoded.clear();
+    DOCTEST_REQUIRE(google::protobuf::util::MessageToJsonString(entry, &encoded).ok());
+    DOCTEST_REQUIRE(has_same_json_fields(encoded, R"({"logid":"log"})"));
+
     ark::protobuf::mysql_server_info mysql;
     mysql.set_str_db_name("ark");
     mysql.set_n_server_id(7);
@@ -154,4 +203,25 @@ DOCTEST_TEST_CASE("Protocol descriptors and textual enum values use the new publ
     DOCTEST_REQUIRE(google::protobuf::util::MessageToJsonString(report, &json).ok());
     DOCTEST_REQUIRE(has_same_json_fields(json, R"({"logicStatus":"e_st_busy"})"));
     DOCTEST_REQUIRE(static_cast<int>(ark::protobuf::e_st_busy) == 2);
+}
+
+DOCTEST_TEST_CASE("Guest-room snake-case enum symbols preserve numeric wire values") {
+    namespace wire = ark::protobuf::guest_room;
+    for (const auto kind : {wire::action_unspecified, wire::action_damage, wire::action_skill, wire::action_rest})
+    {
+        const auto numeric = static_cast<int>(kind);
+        wire::action_request request;
+        const auto original =
+            numeric == 0 ? std::string("\x08\x01", 2) : std::string("\x08\x01\x10", 3) + static_cast<char>(numeric);
+        DOCTEST_REQUIRE(request.ParseFromString(original));
+        DOCTEST_REQUIRE(request.sequence() == 1);
+        DOCTEST_REQUIRE(request.kind() == kind);
+        DOCTEST_REQUIRE(request.SerializeAsString() == original);
+    }
+    wire::action_request action;
+    action.set_sequence(1);
+    action.set_kind(wire::action_damage);
+    std::string encoded;
+    DOCTEST_REQUIRE(google::protobuf::util::MessageToJsonString(action, &encoded).ok());
+    DOCTEST_REQUIRE(has_same_json_fields(encoded, R"({"sequence":1,"kind":"action_damage"})"));
 }

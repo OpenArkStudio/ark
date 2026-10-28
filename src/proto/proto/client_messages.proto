@@ -95,20 +95,20 @@ message req_compelete_task  // 完成任务后申请领奖
 // EGEC_REQSWICHSERVER							= 210;
 // // 申请转服
 message req_switch_server {
-  int64 selfid = 1;                            // 角色ID
-  int64 self_serverid = 2;                     // 本来所在的服务器
-  int64 target_serverid = 3;                   // 目标ID
-  int64 gate_serverid = 4;                     // 目标ID
-  int64 scene_id = 5 [json_name = "SceneID"];  //
-  int64 client_id = 6;                         // 客户端id
-  int64 group_id = 7 [json_name = "groupID"];  //  group
+  int64 self_id = 1 [json_name = "selfid"];               // 角色ID
+  int64 self_server_id = 2 [json_name = "selfServerid"];  // 本来所在的服务器
+  int64 target_server_id = 3 [json_name = "targetServerid"];  // 目标ID
+  int64 gate_server_id = 4 [json_name = "gateServerid"];      // 目标ID
+  int64 scene_id = 5 [json_name = "SceneID"];                 //
+  int64 client_id = 6;                                        // 客户端id
+  int64 group_id = 7 [json_name = "groupID"];                 //  group
 }
 
 // EGEC_ACKSWICHSERVER							= 211;
 // // 申请转服
 message ack_switch_server {
-  int64 selfid = 1;           // 角色ID
-  int64 self_serverid = 2;    // 目标ID
-  int64 target_serverid = 3;  // 目标ID
-  int64 gate_serverid = 4;    // 目标ID
+  int64 self_id = 1 [json_name = "selfid"];                   // 角色ID
+  int64 self_server_id = 2 [json_name = "selfServerid"];      // 目标ID
+  int64 target_server_id = 3 [json_name = "targetServerid"];  // 目标ID
+  int64 gate_server_id = 4 [json_name = "gateServerid"];      // 目标ID
 }

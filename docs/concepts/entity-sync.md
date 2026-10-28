@@ -1,6 +1,6 @@
 # Entity incremental synchronization proposal
 
-Generic Entity synchronization lets business modules mutate schema-backed state once, while a reusable synchronization layer delivers authorized changes to clients. The C++ scalar state building blocks below are available; connection binding, encoding and automatic client replication remain proposed integration work.
+Entity synchronization lets business modules mutate schema-backed state once, while a synchronization layer delivers authorized changes to clients. Kernel provides owning scalar captures and revisioned state APIs. The guest-room example connects them to Protobuf messages and the Godot C# client; nested state and general subscription policies remain separate work.
 
 Read [data-driven design](data-driven.md), [data structures](../guides/data-structures.md) and the [Kernel reference](../reference/kernel.md) for the current data model. [Net](../reference/network.md) owns framework message delivery; arknet owns transport IO.
 
@@ -8,25 +8,20 @@ Read [data-driven design](data-driven.md), [data structures](../guides/data-stru
 
 The [Kernel scalar API](../reference/kernel.md#scalar-baselines-and-deltas) provides owning snapshots, a publisher and a replica. At an explicit owner-thread flush point, capture the authorized field selection and compare it with that publisher's baseline. Repeated HP changes coalesce to the captured final value; unchanged state emits no delta. The replica applies consecutive revisions atomically, rejects gaps and incompatible identities, and recovers with a newer-generation baseline. Removal produces a tombstone.
 
-These are in-process C++ value APIs with field and cumulative text limits. They do not subscribe sessions, encode messages or bound a network queue. The guest-room Godot demo still exchanges JSON snapshots. Its transport integration and C# replica are separate steps; the table below retains those end-to-end acceptance conditions.
+The Kernel APIs are in-process C++ values with field and cumulative text limits. The [guest-room adapter](../../examples/guest_room/protocol.md) supplies the network boundary: a full room baseline on join/reconnect, player baselines for later joins, changed scalar fields at the owner-thread flush point and revisioned removal markers. The matching Godot C# replica validates a whole room update before replacing its visible state. This explicit public-player projection does not provide a general subscription service.
 
-## Legacy source review and integration gaps
+## Responsibilities and integration gaps
 
-The source review below uses revision `c1c407a14eae428f7646e10aa2ae205802a75ead`. These are source observations, not transport acceptance results.
-
-| Area | Existing behavior | Boundary for this proposal |
+| Layer | Responsibility | Boundary |
 | --- | --- | --- |
-| Schema | Explicit field/relation indices, scalar types and synchronization masks; canonical JSON schema and static profiles | Indices identify schema members, not subscriptions, revisions or permissions |
-| Scalar mutation | Typed `node_manager::set_*()` changes invoke callbacks with old/new values; unchanged values return without a callback | Observe supported Entity/row mutation paths; direct `node::set_*()` writes and custom data are not automatically covered |
-| Tables | Row add/delete/clear and column-update callbacks carry table/row/column indices; row numbers can be reused | A row number alone cannot distinguish an old row from its replacement; table masks currently govern column callbacks |
-| Containers | Place/remove/destroy/swap callbacks; child entities retain IDs and parent relationships | Removal and destruction have different meanings; slot number is not child identity |
-| Legacy sync machinery | `real_time` invokes mask-routed callbacks immediately; other changes collect until Kernel Update. Protobuf conversion and nested-container paths exist | Deferred sets contain borrowed `node*`; flush clears the collection. This is not a durable or acknowledged change log |
-| Legacy delivery | `sync_view` walks `Player` entities in the same map instance; `sync_self` reaches `send_to_self()` | `send_to_self()` currently returns success without sending. Team/guild/map masks do not establish delivery policies |
-| Sample | `guest_room::broadcast()` reads Entity fields, constructs a full room JSON snapshot and enqueues it explicitly | The sample's snapshots are application code, not generic dirty-field replication |
+| Schema | Stable class/field indices, scalar types and explicit selected fields | Metadata masks alone do not authorize a recipient |
+| Kernel | Owning captures and a publisher/replica for one scalar projection | No session subscription, encoding or automatic flush phase |
+| Guest room | Server-assigned logical player/Entity identity, public fields 100–108, owner-thread flush and bounded pending messages | One public lobby; no private/team/AOI subscription policy |
+| Net and arknet | Ordered frame delivery and transport IO | Enqueue success is not an application acknowledgment |
+| Godot C# | Validate and commit a room baseline/delta, then update presentation on the engine thread | Client input requests actions; it cannot assign authoritative HP/MP or Entity identity |
+| Nested state | Existing table/container mutation callbacks and conversions | Row incarnations, relationship ordering and nested wire replication need a separate contract |
 
-Relevant implementation: [node manager](https://github.com/OpenArkStudio/ark/blob/c1c407a14eae428f7646e10aa2ae205802a75ead/src/plugins/kernel/node_manager.cpp), [table mutations](https://github.com/OpenArkStudio/ark/blob/c1c407a14eae428f7646e10aa2ae205802a75ead/src/plugins/kernel/table_impl.cpp), [container mutations](https://github.com/OpenArkStudio/ark/blob/c1c407a14eae428f7646e10aa2ae205802a75ead/src/plugins/kernel/container_impl.cpp), [callback collection](https://github.com/OpenArkStudio/ark/blob/c1c407a14eae428f7646e10aa2ae205802a75ead/src/plugins/kernel/class_call_back_manager.cpp), [Kernel lifecycle/conversion/delivery](https://github.com/OpenArkStudio/ark/blob/c1c407a14eae428f7646e10aa2ae205802a75ead/src/plugins/kernel/kernel_module_impl.cpp) and [guest room](https://github.com/OpenArkStudio/ark/blob/c1c407a14eae428f7646e10aa2ae205802a75ead/examples/guest_room/guest_room_module.cpp).
-
-Container-only deferred batches reach serialization and mask delivery callbacks; this does not supply network delivery. Remaining paths need correctness work before reuse: deferred table swap and immediate table clear have no complete handling. Callback registration also lacks a general public unregister counterpart. A reusable collector must define ownership, teardown and callback reentrancy, rather than expose the current borrowed-pointer sets as a client contract.
+The explicit capture path does not expose borrowed node pointers to IO workers. Legacy delayed-sync callbacks remain separate from the new owning values and must not be treated as a durable or acknowledged change log.
 
 ## Recommended initial scope
 
@@ -34,7 +29,7 @@ Deliver stages 1–2 below as the minimum synchronization loop over an ordered, 
 
 Bound pending bytes, batches, age and baseline size. Disconnect on overflow or revision/schema mismatch, then establish a new baseline on reconnect; an explicit in-place reset can be added if useful. Do not add replay history, an application ACK protocol, baseline fragmentation or AOI to this first delivery. Reject a baseline that exceeds the configured limit. The transport queue must own admitted payloads and preserve order; batches and removal markers need no separate retained ACK history. These are recommended design choices, not finalized wire fields or APIs.
 
-![Proposed data flow](../assets/entity-sync-flow.svg)
+![Scalar synchronization flow](../assets/entity-sync-flow.svg)
 
 ## Proposed state contract
 
@@ -85,7 +80,9 @@ Kernel state, collection, recipient decisions and revision advancement stay on t
 
 The [native configuration exporter](../guides/tools.md) produces canonical JSON and optional C++/C# field-index constants. Constants share names/indices; they do not generate a C# Entity runtime, decoder, transport binding or Godot scene integration. Keep explicit indices stable and validate a schema identity before installing a baseline. Removing/reusing indices or changing types requires a declared compatibility/reset policy; JSON schema format version alone does not identify an application's schema revision.
 
-Define cross-language scalar behavior before selecting an encoding: exact signed/unsigned 64-bit values and GUIDs, zero/absent values, finite floating-point values, UTF-8 strings and enum handling. JSON numbers cannot be assumed lossless for every integer consumer. Unsupported values fail explicitly. Share golden baseline/delta fixtures between C++ and Godot C#, including limits and malformed inputs; apply decoded changes to the Godot scene on its main thread. Binary layout, message IDs and schema checking remain protocol decisions, not an implied extension of `guest_room` JSON or existing Protobuf messages. An application ACK protocol is outside the initial scope.
+The canonical [`guest_room.proto`](https://github.com/OpenArkStudio/ark/blob/main/src/proto/proto/guest_room.proto) generates C++ and C# message types. Explicit `oneof` alternatives preserve signedness, width and zero-value presence; positive Entity identities use unsigned 64-bit wire values bounded to the native signed range, GUID-valued fields use signed 64-bit values, and scalar strings use bytes. The room validates player names as UTF-8 and rejects non-finite/out-of-range positions. Field IDs 100–108 and schema ID `ark.guest-player.v1` define its exact public scalar projection; configuration field 99 is excluded. Shared encoded baseline/delta fixtures check both languages. Godot scene updates stay on its main thread.
+
+The 12-byte frame remains separate from the Protobuf body. This wire change requires upgrading the guest-room server and Godot client together; JSON-only peers cannot join. Entity schema/profile files remain JSON. There is no additional application ACK, replay or baseline-fragmentation protocol.
 
 ## Incremental delivery and acceptance
 
@@ -98,4 +95,4 @@ Each stage is independently reviewable. The tests below are acceptance criteria 
 | 3. Nested state | Row generations, clear/delete/reuse, container placement/move/destruction; repair or replace incomplete legacy paths | Apply each ordering case above to a baseline and compare final state; exercise container-only batches, revoke during queueing, GUID reuse, shutdown and stale references; no resurrection or unauthorized child data |
 | 4. Client integration | Godot C# adapter and the same compatibility fixtures; any event stream, ACK/replay or fragmented baseline requires a separate later contract | C++/C# produce equal state and reject equal invalid inputs; baseline/reset input is atomic; scene updates stay on the main thread; any later event duplicate/gap/overflow behavior is observable |
 
-Before the initial implementation, decide the concrete epoch/revision representation, schema identity/checking rules, flush integration, session-policy ownership and numeric queue limits. Choose the wire mapping and client API in a separate reviewed contract using existing Net/arknet facilities. Row replacement belongs to the nested stage; ACK/replay, event delivery and fragmentation are later decisions, not prerequisites. Measure payload reduction and owner-thread cost after correctness tests; do not infer production capacity from local replay. RPC, persistence, Registry, hot update and AOI are outside the initial scope.
+For applications beyond the public guest-room projection, define their own schema identity, authorized session policy, flush integration and numeric queue limits. The room v1 contract fixes its Protobuf mapping and C# application rules; general subscription APIs are separate. Row replacement belongs to the nested stage; ACK/replay, event delivery and fragmentation are later decisions, not prerequisites. Measure payload reduction and owner-thread cost after correctness tests; do not infer production capacity from local replay. RPC, persistence, Registry, hot update and AOI are outside the initial scope.

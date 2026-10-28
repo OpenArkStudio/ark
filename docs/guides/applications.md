@@ -137,6 +137,10 @@ names and require exactly one explicit PID. Recheck the PID's executable and
 command line immediately before use; a PID can be reused after a process exits.
 There is no process-name wildcard or machine-wide stop command.
 
+On successful shutdown, the launcher writes `ARK Server stop ...` to standard
+output, flushes it and exits with status `0`. This final lifecycle message uses
+synchronous output.
+
 ## Migrate old helper commands
 
 - Replace `rund.sh` / `rund.bat` with `run.sh Debug ...` / `run.bat Debug ...`.

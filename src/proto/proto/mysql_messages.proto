@@ -8,7 +8,7 @@ message mysql_parameters {
   string field_vec_list = 3 [json_name = "fieldVecList"];
   string value_vec_list = 4 [json_name = "valueVecList"];
   int64 b_exit = 5 [json_name = "bExit"];
-  int64 nreqid = 6;
+  int64 request_id = 6 [json_name = "nreqid"];
   int64 n_ret = 7 [json_name = "nRet"];
   int64 e_type = 8 [json_name = "eType"];
 }

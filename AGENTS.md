@@ -156,6 +156,20 @@ branch or worktree when the existing checkout contains uncommitted changes.
 - Keep raw measurements and build logs outside the source repository. Published
   performance claims must identify the machine, workload, units and tested
   revision; local tests do not establish production PCU capacity.
+- Guest-room client/server message bodies use the canonical
+  `src/proto/proto/guest_room.proto`; Entity definitions and profiles remain JSON.
+  Use lowercase `snake_case` for every project `.proto` filename, message, enum,
+  enum value, field and handwritten oneof. Keep field numbers, types and enum
+  numbers stable during naming changes; retain existing JSON keys explicitly
+  with `json_name` where required. Document generated-source API and text/JSON
+  enum migrations separately from binary compatibility. Run `check-proto-naming`;
+  compiler-generated map entries and optional-field oneofs are not source names.
+  Synchronize the Godot schema, generated C# and golden vectors with wire changes,
+  verify cross-repository parity and run the real two-client integration before
+  claiming acceptance. Preserve owning scalar capture, explicit authorized
+  fields, owner-thread flush, revision checks and bounded pending messages.
+  Incompatible wire changes require coordinated server/client upgrades and a
+  migration notice; never hand-edit generated Protobuf output.
 
 ## Task execution and CI admission
 

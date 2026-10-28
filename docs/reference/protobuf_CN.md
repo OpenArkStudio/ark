@@ -40,6 +40,29 @@ ark 不提供可替换的消息 codec API。现有序列化流程使用生成的
 
 当前名称包括 `ark::protobuf::protobuf_data`、`protobuf_node_data`、`protobuf_entity_data`。相关辅助接口使用完整的 `protobuf`，不再使用 `pb` 缩写前缀，例如 Bus 模块的 `msg_module::decode_protobuf`。依赖的 C++ 代码需要与生成消息一同重新构建。
 
+## ID 字段与访客操作枚举迁移
+
+重新生成 Protobuf 源码，并将调用方切换到以下字段名。C++ getter、`set_`、`mutable_` 等生成访问接口随字段名变化；包名、消息名、字段号、类型及重复性保持不变。已有二进制消息仍按原 tag 解析。字段名反射及 Protobuf 文本格式的字段键改用新名称。
+
+| 消息 | 原字段 | 新字段 | 保留的 JSON 键 | tag |
+| --- | --- | --- | --- | --- |
+| `req_switch_server`、`ack_switch_server` | `selfid` | `self_id` | `selfid` | 1 |
+| 同上 | `self_serverid` | `self_server_id` | `selfServerid` | 2 |
+| 同上 | `target_serverid` | `target_server_id` | `targetServerid` | 3 |
+| 同上 | `gate_serverid` | `gate_server_id` | `gateServerid` | 4 |
+| `mysql_parameters` | `nreqid` | `request_id` | `nreqid` | 6 |
+| `osslog.login` | `logid` | `log_id` | `logid` | 1 |
+
+上述旧 JSON 键现在通过显式 `json_name` 保留，包括原先隐式生成的驼峰键。既有 `SceneID`、`groupID`、Consul 的外部键及其他 `json_name` 不变。此次只拆分已确认的 ID 词边界，不调整既有缩写、业务词汇或拼写。
+
+访客房间的四个枚举符号由 `ACTION_UNSPECIFIED`、`ACTION_DAMAGE`、`ACTION_SKILL`、`ACTION_REST` 改为 `action_unspecified`、`action_damage`、`action_skill`、`action_rest`，数值仍依次为 0、1、2、3。更新 C++ 常量引用，并从相同 schema 重新生成 C#。Protobuf 二进制帧及共享线格式向量不变；使用 Protobuf JSON／文本格式的工具须采用新的枚举字符串，这部分文本名称不兼容旧大写形式。
+
+`check-proto-naming` 通过真实 protoc 为 `src/proto/proto/` 与 `resources/photon/proto/` 生成 descriptor set，再检查所有源码文件、手写消息、字段、oneof、枚举及枚举值的 lower_snake_case。检查排除 protoc 自动生成的 map entry 类名及 proto3 optional 合成 oneof，并验证改名字段的 tag／类型／JSON 键及代表性旧二进制、JSON 消息。该目标随 `check-core` 执行；也可独立运行：
+
+```sh
+cmake --build app-build --target check-proto-naming --parallel 1
+```
+
 ## 外部 JSON 拼写
 
 Consul 的 C++ 字段使用小写，`json_name` 显式保留其外部键。例如 `consul::service_data::meta()` 对应 JSON 的 `Meta`；`ID`、`Name`、`Address`、`Port`、`Tags`、`Check` 也保留要求的拼写。不要为匹配 C++ 标识符而修改这些外部键。

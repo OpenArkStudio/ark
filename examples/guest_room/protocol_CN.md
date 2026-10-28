@@ -1,36 +1,49 @@
-# ARK 访客房间协议 v2
+# ARK 访客房间 Protobuf 协议
 
 [English](protocol.md)
 
-TCP 帧使用固定的 12 字节头部：第 `0..3` 字节为 ASCII `ARK2`，第 `4..5` 字节为大端无符号 16 位消息 ID，第 `6..7` 字节为必须为零的 16 位 flags，第 `8..11` 字节为大端无符号 32 位正文长度。正文长度不包含头部，最多为 8192 字节。该上限由本地示例头部配置，不通过线格式协商；原生 CS／SS 头部仍默认限制为 4096 字节。正文为 UTF-8 JSON 对象，不压缩。标记错误、flags 非零或正文超限时，在消息分配和业务回调之前关闭连接。解析器保留不完整头部和正文，分别处理粘连的完整帧；每个连接使用全新的解析状态。
+[guest_room.proto](../../src/proto/proto/guest_room.proto) 是权威契约，包名为 `ark.protobuf.guest_room`，C# 命名空间为 `Ark.Client.Protocol`。两端从该 schema 生成消息。应用协议版本为 `1`，Join 和 Accepted 均须携带。服务端与 Godot 客户端须一起升级：传输标记仍为 `ARK2`，但原有 ARK2 JSON 正文已不兼容。服务端 Entity 字段定义与配置仍使用 JSON。
 
-**从 v1 升级：**服务端和 C# 客户端须一起更新。v2 拒绝 `ARK1` 帧，旧客户端拒绝 `ARK2`。扩展后的快照和 8192 字节预算保留 16 人上限，可容纳 64 字节转义名称和完整 uint32 属性。因 `max_body_size()` 改变头部 ABI，须重新构建匹配的 Net 和协议消费者。
+TCP 帧使用固定的 12 字节头部：第 `0..3` 字节为 ASCII `ARK2`，第 `4..5` 字节为大端无符号 16 位消息 ID，第 `6..7` 字节为必须为零的 16 位 flags，第 `8..11` 字节为大端无符号 32 位正文长度。正文长度不含头部，最多为 8192 字节。正文为不压缩的 Protobuf。示例头部上限不改变原生 CS／SS 头部及其 4096 字节默认上限。标记、flags 或长度非法时，在业务回调之前关闭连接。解析器保留不完整帧并分别解析粘包；每个连接使用全新的解析状态。
 
-| ID | 方向 | 正文 |
+| ID | 方向 | Protobuf 消息 |
 | --- | --- | --- |
-| 60000 | 客户端 → 服务端：加入 | `{"name":"Alice","room":"lobby"}` |
-| 60001 | 服务端 → 加入者：接纳 | `{"player_id":"1","name":"Alice","room":"lobby","width":960,"height":540}` |
-| 60002 | 客户端 → 服务端：移动 | `{"seq":1,"x":120.0,"y":100.0}` |
-| 60003 | 服务端 → 已加入者：完整快照 | `{"room":"lobby","players":[{"id":"1","name":"Alice","x":120.0,"y":100.0,"seq":1,"hp":85,"mp":100,"hp_max":100,"mp_max":100,"action_seq":1}]}` |
-| 60004 | 服务端 → 客户端：错误 | `{"code":"invalid_message","message":"bounded reason"}`；属性操作错误还包含 `"action_seq":1` |
-| 60005 | 客户端 → 服务端：ping | `{"nonce":1}` |
-| 60006 | 服务端 → 客户端：pong | `{"nonce":1}` |
-| 60008 | 客户端 → 服务端：属性操作 | `{"seq":1,"kind":"damage"}` |
+| 60000 | 客户端 → 服务端 | `join_request`：name、room、protocol_version |
+| 60001 | 服务端 → 加入者 | `join_accepted`：逻辑 player_id、名称、房间、尺寸、实际 entity_id、protocol_version |
+| 60002 | 客户端 → 服务端 | `move_request`：sequence、x、y |
+| 60003 | 服务端 → 加入者 | `room_baseline`：当前完整授权名单 |
+| 60004 | 服务端 → 客户端 | `error_response`：code、message、可选 action_sequence |
+| 60005／60006 | Ping／pong | `heartbeat`：uint32 nonce |
+| 60008 | 客户端 → 服务端 | `action_request`：sequence 与操作枚举 |
+| 60009 | 服务端 → 已加入者 | `room_delta`：新增基线及修改／删除增量 |
 
-ID 60007 仅作为不支持消息的内部回调键，不作为线格式响应发出。客户端只可请求加入、移动、ping 和属性操作。不支持或方向错误的消息 ID 返回 `invalid_message`；映射到 60007 可避免进入 Net 保留 ID 1／65535 的默认 SS 控制路径。
+60007 仅用于内部不支持消息的分发，不向网络发出。客户端仅可发送 Join、Move、Ping 和 Action。未知／方向错误的消息 ID 及畸形 Protobuf 会关闭连接。允许 Protobuf 未知字段以支持向前兼容；未知操作枚举返回业务错误。错误码包括 `room_full`、`already_joined`、`not_joined`、`invalid_message`、`stale_sequence` 和 `insufficient_resource`。未超过工作量／输出限制时，业务错误保留连接。操作错误携带 `action_sequence`，缺少序列号时为零；其他错误不携带该字段。
 
-仅提供一个 `lobby`，最多容纳 16 名已加入玩家，不进行账号认证。玩家 ID 是服务端分配的不透明字符串，在本次示例进程内唯一。名称占用 `1..64` 个 UTF-8 编码字节，不含 Unicode C0／C1 控制字符。序列号、nonce 及快照中的 HP／MP／上限字段均为 `0..4294967295` 范围内的 JSON 整数，拒绝 `1.0` 等浮点表示、负数、布尔值和字符串。首次移动序列号从 1 开始，后续严格递增，与属性操作序列号独立。快照中的 `seq` 对应 Entity 的 `move_seq`，`action_seq` 对应独立的已接受操作序列号。坐标必须为有限值，且分别位于 `0..960`／`0..540` 内；初始位置由服务端确定。
+仅提供一个 `lobby`，最多容纳 16 名玩家，不进行账号认证。名称须为 `1..64` 个有效 UTF-8 字节，且不含 Unicode C0／C1 控制字符。坐标须为有限值，分别位于 `0..960`／`0..540` 内；出生位置由服务端确定。移动及属性操作分别使用从 1 开始、独立递增的 uint32 序列号。玩家 ID 是进程内唯一的不透明十进制字符串；Entity GUID 标识实际 Kernel 实例。Accepted 将请求会话的两个标识绑定。请求不能通过提供身份选择或授权修改 Entity。
 
-属性操作只允许 `seq` 和 `kind` 两个字段，须先加入房间，并从序列号 1 开始。服务端只修改请求会话自己的 Entity，拒绝客户端指定的数值、目标或 HP／MP 值。
+## 公开 Entity 投影
 
-| kind | 服务端确定的效果 |
-| --- | --- |
-| `damage` | 自身 HP 减少 15，最低为零 |
-| `skill` | MP 至少为 20 时扣除 20 MP，否则拒绝 |
-| `rest` | 恢复 20 HP 和 20 MP，不超过配置上限，且不会发生 uint32 溢出 |
+公开类为 `GuestPlayer`，schema ID 为 `ark.guest-player.v1`。每份玩家基线必须完整且仅包含以下字段；索引 99 的配置 ID 及服务端私有字段不对外同步。
 
-随示例提供的配置将 HP、MP 及两项上限初始化为 100，将两类序列号初始化为零。每次接受操作后递增到请求的 `action_seq` 并广播完整快照；即使数值已到零或上限、操作没有改变数值，仍确认该序列号。HP 为零不影响移动。这是属性演示，不包含战斗、选定目标或 PvP 规则。
+| 索引 | 字段 | Protobuf 标量分支 |
+| --- | --- | --- |
+| 100 | name | `string_value` 字节，并按上述名称规则验证 |
+| 101／102 | x／y | `double_value` |
+| 103 | move_seq | `uint32_value` |
+| 104／105 | hp／mp | `uint32_value` |
+| 106／107 | hp_max／mp_max | `uint32_value` |
+| 108 | action_seq | `uint32_value` |
 
-加入成功时，先将接纳消息加入队列，再向所有已加入者广播完整快照。每次接受移动或属性操作后广播新的权威名单。断线时销毁对应 Kernel Entity，并广播缩减后的名单。重连后重新加入，获得新 ID 并从配置重新初始化属性；不恢复旧身份、序列号或资源值。ping 无需先加入。
+通用标量 oneof 明确区分 bool、sint32、uint32、sint64、uint64、float、double、bytes 和有符号 64 位 GUID；零值仍保留分支存在性。通用适配器的 bytes 可包含任意字节，公开名称另行应用严格 UTF-8 规则。通用 GUID 值保留原生负值，受有符号 64 位线格式及原生位宽限制。房间 Entity 身份仍为正 uint64 值，并限制在原生 `guid_t` 范围。可移植客户端在提交名单修改前验证完整房间消息，包括投影／类型、身份、schema／类、有限坐标、正 HP／MP 上限及当前值范围。
 
-错误码包括 `room_full`、`already_joined`、`not_joined`、`invalid_message`、`stale_sequence` 和 `insufficient_resource`。非法、过期或资源不足的操作不修改任何 Entity 字段，也不推进已接受序列号。操作错误通过 `action_seq` 回传有效的 uint32 请求序列号；序列号缺失或类型非法时使用不关联请求的零值。客户端保留会话、显示错误，并仅在收到匹配序列号的错误或已确认操作的权威快照时结束等待。不自动重放操作。业务错误保留会话，超过工作量或输出限制时关闭连接；可靠业务确认、持久身份和持久化不属于本协议范围。
+房间所属线程在 update 时，为每个活跃 Entity 调用一次真实 `kernel.capture_scalar_snapshot`，再由 `scalar_publisher` 比较选定字段。新连接先收到 Accepted，再收到完整 RoomBaseline。已有连接通过 RoomDelta 收到新增玩家基线、修改字段或 `removed = true` 墓碑。接受 Move／Action 时不立即广播完整名单。同一次 flush 前的修改合并；新增基线已包含最终状态，不再附带中间增量。状态未变化时不发增量。发布前即创建并删除的 Entity 可以不发消息。
+
+每个 Entity 发布器从 generation 1、revision 1 开始。增量保持相同 generation 和实际 Entity GUID，`required_revision` 等于前一版本，且 `revision = required_revision + 1`。删除也推进 revision，不携带字段。版本缺口、schema／类型非法或代际倒退需要通过新连接／基线恢复；重复增量不得使状态回退，墓碑阻止旧实例复活。不提供 ACK、重放或持久化副本历史。重连清空旧解析／副本状态，以新的逻辑 ID 和 Entity GUID 加入并安装完整基线。
+
+## 服务端操作与限制
+
+`action_damage` 将自身 HP 减少 15，最低为零。`action_skill` 要求并消耗 20 MP。`action_rest` 恢复 20 HP／MP，不超过配置上限，且不发生 uint32 溢出。拒绝 `action_unspecified` 及未知枚举。初始值来自配置行 1，随示例提供的 HP／MP／上限均为 100，两类序列号均为零。HP 为零仍可移动。数值已到边界的操作仍推进 `action_seq`，因此增量可以仅包含索引 108。非法／过期／资源不足的操作不修改字段或序列号。客户端仅根据匹配的错误或权威序列号确认结束操作等待，不自动重放。
+
+示例限制为 32 个连接、16 名已加入玩家、所属线程每轮 64 次业务回调、每连接每秒 32 条消息。每连接最多持有八个待发送帧及 `8 * (8192 + 12)` 个待发送字节。工作量／队列超限、序列化／入队／发送失败、捕获状态不支持或 revision 耗尽时关闭相关会话；流级捕获失败时关闭已加入会话，避免继续发布部分状态。仍受底层传输发送队列限制。这些演示限制不代表生产容量、完整恶意客户端防护或 Godot 视觉验收。
+
+[wire-vectors.json](wire-vectors.json) 为 C++ 与 C# 提供共享 Protobuf 正文／帧十六进制向量，包含完整基线、HP 增量及墓碑。服务端和客户端仓库中的 schema 与向量须逐字节一致。

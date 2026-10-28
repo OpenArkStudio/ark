@@ -376,7 +376,7 @@ if (auto delta = sender.update(kernel->capture_scalar_snapshot(*player, visible)
 }
 ```
 
-This example passes C++ values in one process. It does not send network messages or modify the Godot room protocol. Tables, containers and application events are outside this scalar loop. The existing borrowed delayed-sync path is separate.
+This example passes C++ values in one process. For network encoding, connection-bound baselines and Godot application, see the [guest-room Protobuf adapter](../../examples/guest_room/protocol.md). Tables, containers and application events are outside this scalar loop. The existing borrowed delayed-sync path is separate.
 
 | Condition | Behavior |
 | --- | --- |
@@ -397,4 +397,4 @@ The application supplies an opaque `schema_id`, bound entity ID/class and author
 
 Use each publisher/replica on one owner thread. Transfer the returned owning values/immutable handles, not the publisher, replica or Entity, to other threads. Callers bound the number of retained historical handles. No throughput or bandwidth result is claimed for this component.
 
-`check-entity-stream` runs permanent state-machine regressions even with Protobuf disabled. `check-kernel-initialization` additionally exercises a real Entity through capture, baseline, coalesced HP/MP changes, receiver application, source destruction, removal and a new baseline. This is a native C++ state loop; network and Godot integration remain separate work.
+`check-entity-stream` runs permanent state-machine regressions even with Protobuf disabled. `check-kernel-initialization` additionally exercises a real Entity through capture, baseline, coalesced HP/MP changes, receiver application, source destruction, removal and a new baseline. These checks cover the native C++ state loop; `check-guest-room` and the matching Godot client's tests cover their separate transport and presentation boundaries.

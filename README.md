@@ -25,6 +25,7 @@
 
 - **Services:** plugins and modules with lifecycle hooks; business plugins stay in their application repositories.
 - **Entity data:** properties, tables and containers with metadata, configuration defaults and change callbacks.
+- **Incremental state:** selected scalar fields, complete baselines and coalesced deltas; the [Godot demo](https://github.com/OpenArkStudio/ark-client-godot) uses Protobuf for movement and HP/MP synchronization.
 - **Communication:** TCP, WebSocket, HTTP and RUDP through [arknet](https://github.com/OpenArkStudio/arknet), with bus identifiers and message routing.
 - **Tooling:** Protobuf messages and a native [CSV/XLSX-to-Entity JSON exporter](docs/guides/tools.md) with C++/C# field indices; the Python/XML importer remains available for legacy resources.
 

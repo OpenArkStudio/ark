@@ -7,7 +7,7 @@
 - 核心代码位于 `src/core/`，启动器位于 `src/application/`，共享清单与配置读取位于 `src/config/`，官方插件的头文件与实现共置于 `src/plugins/<name>/`。CMake 显式公开头文件映射保留 `<ark/...>` 包含路径。目标、重建要求和可选插件边界见[项目布局与公开接口](../reference/directory-structure_CN.md)。
 - 公开 [MySQL](../reference/mysql_CN.md) 与 [Redis](../reference/redis_CN.md) 模块通过 Asio 协程入口使用 arknet 原生客户端。输入与结果拥有自身存储；管理器拥有的任务组在模块所属线程恢复。MySQL 提供预处理语句与事务，Redis 提供命令与流水线。旧数据库驱动已不再作为公开插件接口。
 - 原生 C++20 [Entity 配置导出器](../guides/tools_CN.md)读取 CSV、XLSX 或规范 JSON，导出经过校验的 Entity 定义、静态业务配置与 C++／C# 字段索引常量。[Kernel JSON 加载](../reference/kernel_CN.md#json-实体定义与业务配置)在启动时使用选定的结构与配置快照；选中的 JSON 非法会使启动失败，文件不存在时保留旧 XML 路径。导出不提供运行中服务器重载、数据库迁移或客户端／服务端分包过滤。
-- [访客房间示例](../guides/examples_CN.md)使用 JSON 定义的 Kernel Entity 与真实 Net 传输，通过访客房间演示消息 提供服务器权威的移动与 HP／MP 操作。配套的官方 [C# Godot 演示](https://github.com/OpenArkStudio/ark-client-godot)已通过本机人工体验。重启或重新加入会创建全新状态；示例不提供账号服务或持久化。有界原生检查与本机人工体验不构成生产容量、全面恶意客户端加固或公开部署验收。
+- [访客房间示例](../guides/examples_CN.md)使用 JSON 定义的 Kernel Entity 与真实 Net 传输，通过 Protobuf 房间消息与显式标量基线／增量提供服务器权威的移动与 HP／MP 操作。配套的官方 [C# Godot 演示](https://github.com/OpenArkStudio/ark-client-godot)已通过本机人工体验。重启或重新加入会创建全新状态；示例不提供账号服务或持久化。有界原生检查与本机人工体验不构成生产容量、全面恶意客户端加固或公开部署验收。
 - 启动回调的首个失败会向上传递。启动器报告失败阶段，在进入更新循环前以退出码 `1` 终止。停止时关闭托管任务接收，排空已接收任务并等待模块就绪。配置的协作式等待超时会保留进程和资源，并禁止卸载。这些行为不提供部分启动回滚，也不构成强制进程退出期限。见[应用启动与停止](../guides/applications_CN.md)和[托管任务](../guides/tasks_CN.md)。
 
 公开数据库接口的正常／故障检查、[真实插件 DSO 正常流程](../guides/database-validation_CN.md#真实插件动态库与真实服务)、[有界请求取消](../guides/database-validation_CN.md#真实插件请求取消)，[经观察确认的只读请求服务终止](../guides/database-validation_CN.md#真实插件服务端终止)，以及 [Redis TLS 命令／流水线与证书拒绝](../guides/database-validation_CN.md#真实插件-redis-tls)，已在 macOS 上通过隔离 Redis 与 MySQL 真实服务验收。[数据库服务验收记录](../guides/database-validation_CN.md)分别保留各自的测试版本、环境与范围；这些结果不覆盖所有部署环境或源码版本。

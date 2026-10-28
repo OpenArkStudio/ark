@@ -132,6 +132,9 @@ macOS/Linux 优先使用 Ctrl+C，Windows 优先在应用控制台输入 `exit`�
 该 PID。两个脚本都只接受一个显式 PID，并拒绝其他可执行文件名。执行前重新确认 PID 的
 可执行文件与命令行；进程退出后，PID 可能被复用。脚本不按名称通配批量停止进程。
 
+正常停服时，启动器向标准输出写入并刷新 `ARK Server stop ...`，然后以退出码 `0`
+结束。这条进程状态消息使用同步输出。
+
 ## 迁移旧命令
 
 - 将 `rund.sh` / `rund.bat` 改为 `run.sh Debug ...` / `run.bat Debug ...`。

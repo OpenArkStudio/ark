@@ -6,11 +6,12 @@
 #include <map>
 #include <memory>
 #include <thread>
+#include <vector>
 
 #include "ark/kernel/kernel_module.hpp"
 #include "ark/module_base.hpp"
 #include "ark/net/net_server_service.hpp"
-#include "guest_room_protocol.hpp"
+#include "guest_room_wire.hpp"
 
 namespace ark::guest_room {
 
@@ -33,6 +34,9 @@ private:
     {
         std::shared_ptr<entity> player;
         std::string player_id;
+        std::unique_ptr<entity_sync::scalar_publisher> publisher;
+        bool needs_baseline{true};
+        std::size_t pending_bytes{0};
         std::deque<output> pending;
         std::chrono::steady_clock::time_point window{std::chrono::steady_clock::now()};
         unsigned messages{0};
@@ -41,18 +45,20 @@ private:
 
     void on_message(const net_msg* message, conv_id_t session);
     void on_event(const net_event* event);
-    void join_room(peer& connection, const json& body);
-    void move_player(peer& connection, const json& body);
-    void act_player(peer& connection, const json& body);
-    void enqueue(peer& connection, msg_id_t id, const json& body);
+    void join_room(peer& connection, const wire::join_request& body);
+    void move_player(peer& connection, const wire::move_request& body);
+    void act_player(peer& connection, const wire::action_request& body);
+    void enqueue(peer& connection, msg_id_t id, const google::protobuf::MessageLite& body);
     void reject(peer& connection, const std::string& code, const std::string& reason);
-    void broadcast();
+    void flush_room();
+    void retire(peer& connection);
     void owner_thread() const;
 
     kernel_module* kernel_{nullptr};
     std::shared_ptr<net_server_service> server_;
     std::map<conv_id_t, peer> peers_;
     std::thread::id owner_;
+    std::vector<std::shared_ptr<const entity_sync::scalar_delta>> removed_;
     std::uint64_t next_player_{1};
     unsigned tick_messages_{0};
     bool stopping_{false};

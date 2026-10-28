@@ -1,36 +1,49 @@
-# ARK guest-room protocol v2
+# ARK guest-room Protobuf protocol
 
 [中文](protocol_CN.md)
 
-TCP frames have a fixed 12-byte header: ASCII `ARK2` at bytes 0..3, unsigned big-endian 16-bit message ID at 4..5, zero 16-bit flags at 6..7 and unsigned big-endian 32-bit body byte length at 8..11. Body length excludes the header and is at most 8192 bytes. This limit belongs to the locally configured sample header, not a negotiated wire field; native CS/SS headers retain their 4096-byte default. The body is a UTF-8 JSON object. There is no compression. Bad magic, nonzero flags or oversized bodies close the connection before message allocation/business dispatch. Partial headers/bodies are retained; coalesced frames are parsed separately. Each connection owns fresh parser state.
+The canonical contract is [guest_room.proto](../../src/proto/proto/guest_room.proto), package `ark.protobuf.guest_room`, C# namespace `Ark.Client.Protocol`. Both peers generate their messages from this schema. The application protocol version is `1`, required in Join and Accepted. Upgrade the server and Godot client together: the former ARK2 JSON bodies are incompatible, although the transport marker remains `ARK2`. JSON remains the Entity schema/configuration format on the server.
 
-**Upgrade from v1:** update both the server and C# client together. `ARK1` frames are rejected by v2, and old clients reject `ARK2`. The expanded snapshot and 8192-byte budget retain the 16-player limit, including 64-byte escaped names and full uint32 attributes. Rebuild matching Net and protocol consumers for the `max_body_size()` header ABI.
+TCP frames have a fixed 12-byte header: ASCII `ARK2` at bytes 0..3, unsigned big-endian 16-bit message ID at 4..5, zero 16-bit flags at 6..7 and unsigned big-endian 32-bit body byte length at 8..11. Body length excludes the header and is at most 8192 bytes. Bodies are uncompressed Protobuf. The sample's header limit does not change native CS/SS headers and their 4096-byte default. Bad magic, flags or excessive length close the connection before business dispatch. Partial frames are retained and coalesced frames are parsed separately; every connection owns fresh parser state.
 
-| ID | Direction | Body |
+| ID | Direction | Protobuf message |
 | --- | --- | --- |
-| 60000 | Client → server: join | `{"name":"Alice","room":"lobby"}` |
-| 60001 | Server → joining client: accepted | `{"player_id":"1","name":"Alice","room":"lobby","width":960,"height":540}` |
-| 60002 | Client → server: move | `{"seq":1,"x":120.0,"y":100.0}` |
-| 60003 | Server → joined peers: full snapshot | `{"room":"lobby","players":[{"id":"1","name":"Alice","x":120.0,"y":100.0,"seq":1,"hp":85,"mp":100,"hp_max":100,"mp_max":100,"action_seq":1}]}` |
-| 60004 | Server → client: error | `{"code":"invalid_message","message":"bounded reason"}`; action errors also include `"action_seq":1` |
-| 60005 | Client → server: ping | `{"nonce":1}` |
-| 60006 | Server → client: pong | `{"nonce":1}` |
-| 60008 | Client → server: attribute action | `{"seq":1,"kind":"damage"}` |
+| 60000 | Client → server | `join_request`: name, room, protocol_version |
+| 60001 | Server → joining client | `join_accepted`: logical player_id, name, room, dimensions, actual entity_id, protocol_version |
+| 60002 | Client → server | `move_request`: sequence, x, y |
+| 60003 | Server → joining client | `room_baseline`: complete current authorized roster |
+| 60004 | Server → client | `error_response`: code, message, optional action_sequence |
+| 60005 / 60006 | Ping / pong | `heartbeat`: uint32 nonce |
+| 60008 | Client → server | `action_request`: sequence and action enum |
+| 60009 | Server → joined peers | `room_delta`: added baselines and changed/removal deltas |
 
-ID 60007 is an internal unsupported-message callback key, never a wire response. Only join, move, ping and action are accepted client request IDs. Unsupported/directionally invalid IDs produce `invalid_message`; mapping them to 60007 keeps Net's reserved IDs 1/65535 out of this protocol's SS control paths.
+60007 is an internal unsupported-message dispatch key and is never emitted. Only Join, Move, Ping and Action are valid client IDs. Unknown/directionally invalid IDs and malformed Protobuf close the connection. Protobuf unknown fields are allowed for forward compatibility; an unknown action enum is a business error. Error codes are `room_full`, `already_joined`, `not_joined`, `invalid_message`, `stale_sequence` and `insufficient_resource`. Business errors retain the connection within its work/output limits. Action errors carry `action_sequence`, including zero for a missing sequence; other errors omit it.
 
-There is one `lobby`, at most 16 joined players and no account authentication. Player IDs are opaque strings assigned uniquely within the running example process. A name contains 1..64 UTF-8 encoded bytes and no Unicode C0/C1 controls. Sequences, nonce and all snapshot HP/MP/max fields are integral JSON values in `0..4294967295`; floating-point representations such as `1.0`, negative values, booleans and strings are rejected. Movement starts at sequence 1 and strictly increases independently of action sequence. Snapshot `seq` exposes the Entity's `move_seq`; `action_seq` exposes its separately accepted action sequence. Coordinates must be finite and inside `0..960` / `0..540`; the server chooses the spawn position.
+There is one `lobby`, at most 16 players and no account authentication. Names require 1..64 valid UTF-8 bytes without Unicode C0/C1 controls. Coordinates must be finite and inside `0..960` / `0..540`; the server chooses spawn positions. Movement and action uint32 sequences each start at 1 and increase independently. Player IDs are opaque decimal strings unique within the process; Entity GUIDs identify actual Kernel incarnations. Accepted binds both identifiers for the requesting session. Requests never select an Entity or authorize mutation through a supplied identity.
 
-An action contains exactly `seq` and `kind`, requires joining, and starts at sequence 1. The server applies it only to the requesting session's Entity. Client amounts, targets or HP/MP values are rejected.
+## Public Entity projection
 
-| Kind | Server-owned effect |
-| --- | --- |
-| `damage` | Reduce own HP by 15, clamped at zero |
-| `skill` | Spend 20 MP only when at least 20 MP is available |
-| `rest` | Restore 20 HP and 20 MP, clamped at the configured maxima without uint32 overflow |
+The public class is `GuestPlayer`, schema ID `ark.guest-player.v1`. Every player baseline contains exactly these fields; the configuration ID at index 99 and all server-only data are excluded.
 
-The shipped profile starts HP, MP and both maxima at 100, and both sequences at zero. Every accepted action advances `action_seq` and broadcasts a full snapshot, including a clamped no-op at zero or maximum. HP zero does not disable movement. This is an attribute demonstration, without combat, targeting or PvP rules.
+| Index | Field | Protobuf scalar alternative |
+| --- | --- | --- |
+| 100 | name | `string_value` bytes, validated as the name above |
+| 101 / 102 | x / y | `double_value` |
+| 103 | move_seq | `uint32_value` |
+| 104 / 105 | hp / mp | `uint32_value` |
+| 106 / 107 | hp_max / mp_max | `uint32_value` |
+| 108 | action_seq | `uint32_value` |
 
-A successful join queues accepted before its full snapshot and broadcasts the roster to joined peers. Each accepted move/action broadcasts a new authoritative roster. Disconnect destroys the session's Kernel Entity and broadcasts the reduced roster. A reconnect rejoins as a fresh player with a new ID and newly loaded profile defaults; old identity, sequences and resources are not resumed. Ping does not require joining.
+Generic scalar oneofs explicitly distinguish bool, sint32, uint32, sint64, uint64, float, double, bytes and signed 64-bit GUID. Zero values retain oneof presence. Bytes may contain arbitrary data in the generic adapter; the public name applies stricter UTF-8 rules. Generic GUID values preserve negative native values and are bounded to signed 64-bit wire/native widths. Room Entity identities remain positive uint64 values bounded to native `guid_t`. The portable client validates a complete room envelope before committing roster changes, including exact projection/type, identities, schema/class, finite coordinates, positive HP/MP maxima and current-value bounds.
 
-Errors are `room_full`, `already_joined`, `not_joined`, `invalid_message`, `stale_sequence` and `insufficient_resource`. Invalid, stale and resource-rejected actions leave every Entity field and accepted sequence unchanged. An action error echoes a valid uint32 request sequence as `action_seq`; missing or invalid sequence values use the uncorrelated sentinel zero. Clients keep the session, show the error and settle a pending action only for its matching sequence or an authoritative snapshot acknowledging it. No automatic replay is promised. Business errors keep the session open unless work/output limits are exceeded; reliable business acknowledgement, durable identity and persistence remain outside this protocol.
+The owner-thread room update calls real `kernel.capture_scalar_snapshot` once per active Entity, then `scalar_publisher` compares the selected fields. Accepted is queued before a full RoomBaseline for a fresh connection. Existing peers receive a RoomDelta containing new player baselines, selected changed fields, or `removed = true` tombstones. Accepted Move/Action requests do not immediately broadcast full rosters. Mutations before a flush coalesce; a newly added baseline already contains their final state. Unchanged state emits no delta. Creation/removal before publication may emit nothing.
+
+Each Entity publisher starts at generation 1 and revision 1. A delta uses the same generation and actual Entity GUID, `required_revision` equal to the previous revision and `revision = required_revision + 1`. A removal advances revision and contains no fields. Gaps, invalid schema/types or generation regressions require a fresh connection/baseline; duplicates cannot regress state, and a tombstone prevents resurrection. There is no ACK, replay or persistent replica history. Reconnection clears old parser/replica state, joins with new logical and Entity IDs and installs a new full baseline.
+
+## Server-owned actions and limits
+
+`action_damage` reduces own HP by 15, clamped at zero. `action_skill` requires and spends 20 MP. `action_rest` restores 20 HP/MP, clamped at the configured maxima without uint32 overflow. `action_unspecified` and unknown enum values are rejected. Initial values come from profile 1, shipped with HP/MP/maxima 100 and both sequences zero. HP zero still permits movement. A clamped action still advances `action_seq`, so its delta may contain only index 108. Invalid/stale/resource-rejected actions change no fields or sequences. Clients settle a pending action only from its matching error or authoritative sequence acknowledgement; they do not replay automatically.
+
+The example admits 32 connections, 16 joined players, 64 business callbacks per owner tick and 32 messages per connection per second. Each peer owns at most eight queued frames and `8 * (8192 + 12)` queued bytes. Work/queue overflow, failed serialization/admission/send, unsupported captured state and revision exhaustion close affected sessions; a stream-wide capture failure closes joined sessions rather than continuing with partial state. Underlying transport queue limits still apply. These demonstration bounds do not establish production capacity, hostile-client completeness or Godot visual acceptance.
+
+[wire-vectors.json](wire-vectors.json) contains shared Protobuf body/frame hex for C++ and C# checks, including full baseline, HP delta and tombstone. The schema and fixtures must remain byte-identical in the server/client repositories.

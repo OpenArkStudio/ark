@@ -8,7 +8,7 @@ package osslog;
 
 // 登录、登出日志
 message login {
-  string logid = 1;
+  string log_id = 1 [json_name = "logid"];
   // TODO
 }
 

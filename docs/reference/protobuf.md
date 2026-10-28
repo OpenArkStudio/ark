@@ -40,6 +40,29 @@ ark does not provide a pluggable message codec API. The generated messages and t
 
 Examples of current names are `ark::protobuf::protobuf_data`, `protobuf_node_data` and `protobuf_entity_data`. API helpers use `protobuf` rather than an abbreviated `pb` prefix; the bus module exposes `msg_module::decode_protobuf`. Rebuild dependent C++ code together with generated messages.
 
+## ID fields and guest action enum migration
+
+Regenerate Protobuf sources and update consumers to these field names. Generated C++ getters, `set_`, `mutable_` and related accessors change with the field name; packages, message names, field numbers, types and cardinality stay the same. Existing binary messages still parse with their original tags. Field-name reflection and Protobuf text-format field keys adopt the new names.
+
+| Message | Previous field | Current field | Preserved JSON key | Tag |
+| --- | --- | --- | --- | --- |
+| `req_switch_server`, `ack_switch_server` | `selfid` | `self_id` | `selfid` | 1 |
+| Same messages | `self_serverid` | `self_server_id` | `selfServerid` | 2 |
+| Same messages | `target_serverid` | `target_server_id` | `targetServerid` | 3 |
+| Same messages | `gate_serverid` | `gate_server_id` | `gateServerid` | 4 |
+| `mysql_parameters` | `nreqid` | `request_id` | `nreqid` | 6 |
+| `osslog.login` | `logid` | `log_id` | `logid` | 1 |
+
+These existing JSON keys now have explicit `json_name` mappings, including the formerly implicit camelcase keys. Existing `SceneID`, `groupID`, Consul external keys and other `json_name` values stay unchanged. This change separates confirmed ID word boundaries without changing existing abbreviations, business vocabulary or spelling.
+
+The four guest-room enum symbols change from `ACTION_UNSPECIFIED`, `ACTION_DAMAGE`, `ACTION_SKILL`, `ACTION_REST` to `action_unspecified`, `action_damage`, `action_skill`, `action_rest`, retaining numeric values 0, 1, 2, 3. Update C++ constant references and regenerate C# from the same schema. Protobuf binary frames and shared wire vectors stay unchanged. Tools using Protobuf JSON/text must adopt the new enum strings; these textual names are incompatible with the former uppercase spelling.
+
+`check-proto-naming` uses the real protoc to build a descriptor set for `src/proto/proto/` and `resources/photon/proto/`, then checks lower_snake_case file names and hand-written messages, fields, oneofs, enums and enum values. It excludes protoc-generated map entry class names and proto3 optional synthetic oneofs, and verifies renamed field tags/types/JSON keys plus representative old binary and JSON messages. The target runs with `check-core`, or independently:
+
+```sh
+cmake --build app-build --target check-proto-naming --parallel 1
+```
+
 ## External JSON spelling
 
 Consul's C++ fields are lower case, while `json_name` explicitly retains its external keys. For example, `consul::service_data::meta()` corresponds to the JSON key `Meta`; `ID`, `Name`, `Address`, `Port`, `Tags` and `Check` retain their required spelling too. Do not replace these external keys just to match C++ identifiers.
