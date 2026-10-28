@@ -32,6 +32,13 @@ if(TARGET check-proto-configuration)
     add_dependencies(check-core check-proto-configuration)
 endif()
 
+add_executable(ark_entity_stream_tests main.cpp entity_stream.cpp)
+set_property(TARGET ark_entity_stream_tests PROPERTY LINK_LIBRARIES ark::kernel)
+add_custom_target(check-entity-stream
+    COMMAND $<TARGET_FILE:ark_entity_stream_tests>
+    DEPENDS ark_entity_stream_tests USES_TERMINAL)
+add_dependencies(check-core check-entity-stream)
+
 add_executable(ark_logging_tests main.cpp logging_paths.cpp logging_source.cpp)
 target_link_libraries(ark_logging_tests PRIVATE ark::core)
 add_dependencies(ark_logging_tests ark_core_header_checks)

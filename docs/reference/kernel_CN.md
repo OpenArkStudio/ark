@@ -347,3 +347,51 @@ cmake --build kernel-headers-build --target check-kernel-headers --parallel 2
 开启 Protobuf 且存在 Kernel／Utility 运行时 target 时，`check-kernel-plugin` 成为 `check-core` 的依赖。独立 runner 仅链接公开 `ark::kernel`，加载两个真实 DSO，检查四个接口注册键与管理器归属、元数据／静态记录加载、地图／实体注册、公开生命周期回调、管理器更新、正常插件退出和重复 stop。不在卸载后检查注册表，也不证明任意热更新安全。公开头消费者还检查类型基类及原有 update 覆写；现有初始化和实体默认值回归继续保留。
 
 **无符号 64 位 getter 迁移：**`static_entity::get_u_int64()` 及 `static_entity_impl` 的两个覆写现在返回 `uint64_t`，保留到 `UINT64_MAX` 的完整范围。将自定义覆写和误用 `int64_t` 的接收变量改为无符号类型，并一起重新构建 Kernel 与 C++ 消费者。有符号字段继续使用 `get_int64()`。
+
+## 标量基线与增量
+
+`<ark/kernel/entity_stream.hpp>` 基于拥有型快照提供 C++ 状态闭环。`scalar_publisher` 在应用显式刷新时比较完整的所选状态，只返回变化字段；`scalar_replica` 安装基线、检查流代次与修订号连续性，再原子应用增量。接收状态与增量的共享句柄指向不可变的拥有型值，后续更新或生产者销毁不会使已保存的句柄失效。
+
+```cpp
+#include <array>
+#include "ark/kernel/entity_stream.hpp"
+
+// kernel 和 player 属于当前模块线程。
+const std::array visible{104U, 105U}; // GuestPlayer 的 HP、MP
+using namespace ark::entity_sync;
+auto state = kernel->capture_scalar_snapshot(*player, visible);
+scalar_publisher sender({"guest-player/v1", 1, 1, state});
+scalar_replica receiver("guest-player/v1", state.entity_id, state.class_name);
+receiver.apply(sender.baseline());
+
+player->set_u_int32(104, 90);
+player->set_u_int32(104, 80);
+// 业务修改后统一刷新，本次 HP 只输出最终值 80。
+if (auto delta = sender.update(kernel->capture_scalar_snapshot(*player, visible)))
+{
+    receiver.apply(*delta);
+}
+```
+
+示例在同一进程中传递 C++ 值，没有发送网络消息，也没有修改 Godot 房间协议。表、容器和业务事件不属于这条标量路径；现有借用指针的延迟同步路径继续独立存在。
+
+| 条件 | 行为 |
+| --- | --- |
+| 状态未变 | 不产生增量，也不增加修订号 |
+| 一次捕获前多次写入 | 比较捕获时的最终值 |
+| 同一流代次中的重复帧 | 忽略，不使当前状态回退 |
+| 缺口、绑定／Schema／类型不匹配、非法或超限帧 | 拒绝并使接收状态失效，不暴露部分更新 |
+| 在同一接收对象上恢复 | 使用更大流代次的基线，完整替换所选状态 |
+| 字段选择或类型变化 | 建立新的发布对象／流代次和基线 |
+| 移除实体 | 按顺序应用删除标记；旧重复帧不能使实体复活 |
+| 修订号耗尽 | 发布端抛出 `std::overflow_error`，不推进状态 |
+
+流代次区分重建的状态流，修订号标识流内的状态版本。共享句柄不提供动态库卸载保障；卸载插件代码前应排空并释放由该插件创建的句柄。
+
+应用提供 `schema_id`、绑定的实体 ID／类名及已授权的字段集合。匹配标识不等于校验完整 Schema 定义，也不进行会话认证。新连接可以创建新的接收对象；已有接收对象在失效或移除后保留流代次，旧基线不能将其重置。发布端的输入／限额错误抛出标准异常；接收端对非法值返回 `scalar_apply_result::rejected`。分配异常向外传播，已提交状态保持不变。
+
+`snapshot_limits` 同样约束重建后的完整状态，不能只检查增量大小。Schema 标识使用同一字节限额单独检查。限额针对字段数与文本字节数，不代表编码长度或精确进程内存。本层不提供待发队列、确认、重放历史或传输；后续适配层需约束编码负载和待发任务，在入队失败时关闭／重置流，并先确认活动会话绑定与授权。字符串为 C++ 字节串，线协议编解码器须执行自己的文本校验。不能将这些结构体的内存或 variant 序号直接作为二进制协议。
+
+每个发布／接收对象由一个所有者线程使用；跨线程传递返回的拥有型值／不可变句柄，不传递发布对象、接收对象或 Entity。调用者需限制保留历史句柄的数量。本组件没有吞吐量或带宽测试结论。
+
+`check-entity-stream` 提供永久状态机回归，关闭 Protobuf 后也能运行。`check-kernel-initialization` 另从真实 Entity 验证捕获、基线、合并后的 HP／MP 变更、接收状态、源销毁、删除与新基线。这是原生 C++ 状态闭环，网络与 Godot 接入仍需单独完成。

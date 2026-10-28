@@ -89,6 +89,13 @@ Capture tests call through `kernel_module` pointers. `entity_snapshot_interface.
 keeps an external source implementation of the original pure interface concrete,
 checks the default `logic_error`, a custom override and the framework override.
 
+`check-entity-stream`, included in `check-core`, runs the scalar publisher/replica
+without Protobuf. It covers immutable retained states, coalescing, duplicate and
+gap handling, identity/type checks, removal, newer-generation recovery and limits.
+The Entity tests also capture real HP/MP/name fields, apply baseline and deltas,
+destroy the source and recover after a tombstone. These are C++ state checks, not
+network delivery or Godot acceptance.
+
 The same target runs `kernel_delayed_sync.cpp`: real container creation, removal
 and destruction pass through delayed collection, Kernel update, Protobuf serialization
 and the existing mask delivery callback. It covers full payloads, entity references,

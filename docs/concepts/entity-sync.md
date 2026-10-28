@@ -1,10 +1,16 @@
 # Entity incremental synchronization proposal
 
-**Status: design proposal; no new runtime API or wire format is defined here.** Generic Entity synchronization is a core direction for ark: business modules should mutate schema-backed state once, while a reusable synchronization layer delivers authorized state changes to clients. This page defines the proposed correctness boundaries and implementation stages. It does not describe automatic replication as an available feature.
+Generic Entity synchronization lets business modules mutate schema-backed state once, while a reusable synchronization layer delivers authorized changes to clients. The C++ scalar state building blocks below are available; connection binding, encoding and automatic client replication remain proposed integration work.
 
 Read [data-driven design](data-driven.md), [data structures](../guides/data-structures.md) and the [Kernel reference](../reference/kernel.md) for the current data model. [Net](../reference/network.md) owns framework message delivery; arknet owns transport IO.
 
-## Existing foundation and gaps
+## Scalar state building blocks
+
+The [Kernel scalar API](../reference/kernel.md#scalar-baselines-and-deltas) provides owning snapshots, a publisher and a replica. At an explicit owner-thread flush point, capture the authorized field selection and compare it with that publisher's baseline. Repeated HP changes coalesce to the captured final value; unchanged state emits no delta. The replica applies consecutive revisions atomically, rejects gaps and incompatible identities, and recovers with a newer-generation baseline. Removal produces a tombstone.
+
+These are in-process C++ value APIs with field and cumulative text limits. They do not subscribe sessions, encode messages or bound a network queue. The guest-room Godot demo still exchanges JSON snapshots. Its transport integration and C# replica are separate steps; the table below retains those end-to-end acceptance conditions.
+
+## Legacy source review and integration gaps
 
 The source review below uses revision `c1c407a14eae428f7646e10aa2ae205802a75ead`. These are source observations, not transport acceptance results.
 

@@ -13,6 +13,7 @@
 #include "ark/kernel/data_list_impl.hpp"
 #include "ark/kernel/entity_impl.hpp"
 #include "ark/kernel/entity_snapshot.hpp"
+#include "ark/kernel/entity_stream.hpp"
 #include "ark/kernel/kernel_module_impl.hpp"
 
 namespace {
@@ -64,6 +65,44 @@ public:
 };
 
 } // namespace
+
+TEST_CASE("real Entity captures drive an owning scalar baseline delta and reconnect loop") {
+    using namespace ark::entity_sync;
+    snapshot_entity fixture;
+    auto& source = *fixture.source;
+    REQUIRE(source.set_u_int32(3, 100));
+    REQUIRE(source.set_u_int64(5, 50));
+    REQUIRE(source.set_string(8, "Alice"));
+    REQUIRE(source.set_bool(1, true));
+    const std::array<std::uint32_t, 3> visible{3, 5, 8};
+    const auto initial = capture_scalar_snapshot(source, visible);
+    CHECK(initial.fields.count(1) == 0);
+    scalar_publisher publisher({"player/v1", 1, 1, initial});
+    scalar_replica peer("player/v1", initial.entity_id, initial.class_name);
+    REQUIRE(peer.apply(publisher.baseline()) == scalar_apply_result::applied);
+    const auto retained = peer.state();
+    REQUIRE(source.set_u_int32(3, 90));
+    REQUIRE(source.set_u_int32(3, 80));
+    REQUIRE(source.set_u_int64(5, 30));
+    REQUIRE(source.set_string(8, "Bob"));
+    const auto latest = capture_scalar_snapshot(source, visible);
+    const auto delta = publisher.update(latest);
+    REQUIRE(delta != nullptr);
+    CHECK(delta->fields.size() == 3);
+    REQUIRE(peer.apply(*delta) == scalar_apply_result::applied);
+    CHECK(*peer.state() == latest);
+    CHECK_FALSE(publisher.update(capture_scalar_snapshot(source, visible)));
+    fixture.source.reset();
+    CHECK(std::get<std::uint32_t>(retained->fields.at(3)) == 100);
+    CHECK(std::get<std::uint64_t>(peer.state()->fields.at(5)) == 30);
+    CHECK(std::get<std::string>(retained->fields.at(8)) == "Alice");
+    const auto removed = publisher.remove();
+    REQUIRE(peer.apply(*removed) == scalar_apply_result::applied);
+    CHECK(peer.state() == nullptr);
+    scalar_publisher reconnected({"player/v1", 2, 1, latest});
+    REQUIRE(peer.apply(reconnected.baseline()) == scalar_apply_result::applied);
+    CHECK(*peer.state() == latest);
+}
 
 TEST_CASE("scalar snapshots preserve native types boundaries and independent ownership") {
     snapshot_entity fixture;

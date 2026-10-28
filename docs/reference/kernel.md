@@ -350,3 +350,51 @@ Installation retains the table order; uninstallation uses its reverse. Registrat
 `check-kernel-plugin` is a `check-core` dependency when Protobuf and the Kernel/Utility runtime targets are available. The independent runner links only the public `ark::kernel` target and loads both actual DSOs. It checks all four interface keys and manager ownership, metadata/static record loading, map/entity registration, public lifecycle callbacks, manager updates, normal plugin exit and repeated stop. It does not inspect the registry after unloading or certify arbitrary hot update. The public-header consumer also checks the typed bases and retained update overrides; existing initialization/entity-default regressions remain required.
 
 **Unsigned 64-bit getter migration:** `static_entity::get_u_int64()` and both `static_entity_impl` overrides now return `uint64_t`, preserving values through `UINT64_MAX`. Update custom overrides and variables that incorrectly used `int64_t`, and rebuild Kernel together with its C++ consumers. Signed fields continue to use `get_int64()`.
+
+## Scalar baselines and deltas
+
+`<ark/kernel/entity_stream.hpp>` provides a C++ state loop over owning snapshots. `scalar_publisher` compares the complete selected state at an explicit application flush point and returns only changed fields. `scalar_replica` installs a baseline, checks generation/revision continuity and applies a patch atomically. Retained replica states and delta handles are immutable shared values that remain valid after subsequent updates or destruction of their producer.
+
+```cpp
+#include <array>
+#include "ark/kernel/entity_stream.hpp"
+
+// kernel and player belong to the current module thread.
+const std::array visible{104U, 105U}; // GuestPlayer HP and MP
+using namespace ark::entity_sync;
+auto state = kernel->capture_scalar_snapshot(*player, visible);
+scalar_publisher sender({"guest-player/v1", 1, 1, state});
+scalar_replica receiver("guest-player/v1", state.entity_id, state.class_name);
+receiver.apply(sender.baseline());
+
+player->set_u_int32(104, 90);
+player->set_u_int32(104, 80);
+// Flush once after the business mutations; HP is emitted as 80.
+if (auto delta = sender.update(kernel->capture_scalar_snapshot(*player, visible)))
+{
+    receiver.apply(*delta);
+}
+```
+
+This example passes C++ values in one process. It does not send network messages or modify the Godot room protocol. Tables, containers and application events are outside this scalar loop. The existing borrowed delayed-sync path is separate.
+
+| Condition | Behavior |
+| --- | --- |
+| State unchanged | No delta or revision increment |
+| Repeated writes before one capture | The captured final value is compared |
+| Duplicate frame in the same generation | Ignore without regressing the current state |
+| Gap, wrong binding/schema/type, malformed or oversized frame | Reject and invalidate the replica; no partial state is exposed |
+| Recovery on the same replica | Install a baseline with a strictly greater generation; replace the entire selected state |
+| Field selection/type changes | Establish a new publisher/generation and baseline |
+| Removal | Apply an ordered tombstone; old duplicates cannot revive the entity |
+| Revision exhaustion | Publisher throws `std::overflow_error` without advancing |
+
+A generation identifies a rebuilt state stream; a revision identifies its state version. Shared handles do not make dynamic-library unloading safe; release plugin-created handles before unloading their code.
+
+The application supplies an opaque `schema_id`, bound entity ID/class and authorized field selection. ID matching does not validate the complete schema definition or authenticate a session. A new connection may create a new replica. An existing replica retains its generation after invalidation/removal, so stale baselines cannot reset it. Publisher input/limit errors throw standard exceptions; invalid receiver envelopes return `scalar_apply_result::rejected`. Allocation failures propagate with the previously committed state intact.
+
+`snapshot_limits` also bounds each complete reconstructed state; checking only the patch is insufficient. The schema ID has a separate string check using the same limit. These limits cover field count and text bytes, not encoded length or exact process memory. There is no outbound queue, acknowledgement, replay history or transport implementation here. The adapter must bound encoded payloads and pending work, close/reset on enqueue failure, and bind the active session and authorization before accepting state. Strings are C++ byte strings; a wire codec must enforce its text rules. Never serialize these structs or variant indices as a binary ABI.
+
+Use each publisher/replica on one owner thread. Transfer the returned owning values/immutable handles, not the publisher, replica or Entity, to other threads. Callers bound the number of retained historical handles. No throughput or bandwidth result is claimed for this component.
+
+`check-entity-stream` runs permanent state-machine regressions even with Protobuf disabled. `check-kernel-initialization` additionally exercises a real Entity through capture, baseline, coalesced HP/MP changes, receiver application, source destruction, removal and a new baseline. This is a native C++ state loop; network and Godot integration remain separate work.
