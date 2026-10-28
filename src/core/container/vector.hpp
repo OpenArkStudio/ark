@@ -110,7 +110,7 @@ public:
         {
             for (auto data : datas_)
             {
-                ARK_DELETE(data);
+                delete data;
             }
         }
 
@@ -158,7 +158,7 @@ public:
         ARK_ASSERT_RET_NONE(index < size());
         if constexpr (!is_smart_ptr)
         {
-            ARK_DELETE(datas_[index]);
+            delete datas_[index];
         }
         datas_[index] = nullptr;
     }
@@ -175,7 +175,8 @@ public:
             {
                 if (datas_[index] != value)
                 {
-                    ARK_DELETE(datas_[index]);
+                    delete datas_[index];
+                    datas_[index] = nullptr;
                 }
             }
             datas_[index] = std::move(value);

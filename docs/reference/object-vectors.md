@@ -20,6 +20,8 @@ Every non-null raw pointer must occupy only one owning slot. Do not insert it in
 another slot or owning container, or delete a pointer borrowed through `at()` or
 an iterator. Use the container methods to replace or clear slots; assigning to a
 raw-pointer slot through an iterator bypasses its ownership handling.
+Raw objects are released with scalar C++ `delete`; each inserted pointer must
+refer to an object that can be deleted through `T*`.
 
 Ownership transfers after insertion succeeds. If appending allocates and throws,
 the caller still owns the incoming raw pointer. Keep it in a `unique_ptr` until
@@ -73,3 +75,30 @@ Replace copies of `pointer_vector` with `std::move` when transferring ownership.
 Use `shared_vector` when independent containers must share objects. Its stored
 element and iterator types are `std::shared_ptr<T>`; the raw variant stores `T*`.
 Keep `value_vector` or `std::vector` for value storage.
+
+Owning raw vectors and maps now use scalar C++ `delete` directly and no longer
+apply `ARK_DELETE` overrides. For custom release, use a shared container with a
+`std::shared_ptr` custom deleter, or a standard container of smart pointers.
+The `buffer` allocation/release hooks `ARK_NEW_ARRAY` / `ARK_DELETE_ARRAY` are
+unchanged; see [receive-buffer ownership](network.md#receive-buffer-ownership).
+
+## Related object maps
+
+Include `<ark/container/map.hpp>` for `object_map<K, T>` and
+`object_hashmap<K, T>`. A successful `insert(key, pointer)` transfers ownership;
+a rejected duplicate key leaves the incoming pointer with the caller.
+`erase(key)`, `erase(iterator)`, `clear()` and destruction release owned objects
+with scalar `delete`. Each object must belong to only one owning entry, and
+pointers returned by lookup or iteration are borrowed. Assigning a raw pointer
+through an iterator bypasses ownership handling.
+
+Owning raw maps forbid copying. Moving transfers all entries and empties the
+source; move assignment first releases the destination's previous objects.
+Self-move assignment leaves the map unchanged. The `shared_object_map<K, T>` and
+`shared_object_hashmap<K, T>` variants retain shared-copy semantics and the same
+move behavior; removal releases only the stored references.
+
+This is a source compatibility change for raw maps: replace former shallow copies
+with `std::move` to transfer ownership, or use a shared map when independent maps
+must retain references to the same objects. Rebuild consumers that instantiate
+these public templates. No deep-copy operation is provided.
