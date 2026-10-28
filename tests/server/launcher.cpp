@@ -95,6 +95,8 @@ std::string read_log(const std::filesystem::path& path) {
 } // namespace
 
 int main(int argc, char** argv) {
+    std::filesystem::path child_log;
+    int observed_status = -1;
     try
     {
         require(argc == 5 || argc == 7,
@@ -118,6 +120,7 @@ int main(int argc, char** argv) {
         require(std::filesystem::create_directory(runtime), "Runtime directory must be fresh");
         std::filesystem::permissions(runtime, std::filesystem::perms::owner_all);
         const auto log_path = runtime / "output.log";
+        child_log = log_path;
         unsigned short port = 0;
         socket_owner reservation;
         {
@@ -200,6 +203,7 @@ int main(int argc, char** argv) {
             const auto waited = ::waitpid(child.pid, &status, WNOHANG);
             if (waited == child.pid)
             {
+                observed_status = status;
                 child.pid = -1;
                 require(scenario == "occupied", "Launcher exited before readiness");
                 require(WIFEXITED(status) && WEXITSTATUS(status) == 1,
@@ -268,6 +272,28 @@ int main(int argc, char** argv) {
     catch (const std::exception& error)
     {
         std::cerr << error.what() << '\n';
+        if (observed_status >= 0)
+        {
+            if (WIFSIGNALED(observed_status))
+            {
+                std::cerr << "Child terminated by signal " << WTERMSIG(observed_status) << '\n';
+            }
+            else if (WIFEXITED(observed_status))
+            {
+                std::cerr << "Child exit code " << WEXITSTATUS(observed_status) << '\n';
+            }
+        }
+        std::ifstream diagnostic(child_log, std::ios::binary | std::ios::ate);
+        const auto end = diagnostic.tellg();
+        if (end > 0)
+        {
+            const auto count = end > 16384 ? std::streamoff{16384} : std::streamoff{end};
+            diagnostic.seekg(end - count);
+            std::string tail(static_cast<std::size_t>(count), '\0');
+            diagnostic.read(tail.data(), count);
+            tail.resize(static_cast<std::size_t>(diagnostic.gcount()));
+            std::cerr << "Owned child diagnostic (last 16 KiB):\n" << tail << '\n';
+        }
         return 1;
     }
 }

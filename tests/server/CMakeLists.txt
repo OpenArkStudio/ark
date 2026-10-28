@@ -97,4 +97,16 @@ if(UNIX AND TARGET app AND TARGET ark_utility_plugin AND TARGET ark_bus_plugin A
         endforeach()
     endforeach()
     add_dependencies(check-server-plugins check-server-startup)
+    add_executable(ark_server_early_exit_probe early_exit.cpp)
+    set_property(TARGET ark_server_early_exit_probe PROPERTY LINK_LIBRARIES "")
+    add_custom_target(check-server-launcher-diagnostics
+        COMMAND ${CMAKE_COMMAND}
+            "-DPROGRAM=$<TARGET_FILE:ark_server_launcher_tests>"
+            "-DPROBE=$<TARGET_FILE:ark_server_early_exit_probe>"
+            "-DPLUGIN_DIR=$<TARGET_FILE_DIR:ark_login_plugin>"
+            "-DSOURCE_ROOT=${PROJECT_SOURCE_DIR}"
+            "-DRUNTIME_ROOT=${CMAKE_CURRENT_BINARY_DIR}/diagnostic runtime"
+            -P "${PROJECT_SOURCE_DIR}/tests/server/diagnostics.cmake"
+        DEPENDS ark_server_launcher_tests ark_server_early_exit_probe USES_TERMINAL VERBATIM)
+    add_dependencies(check-server-plugins check-server-launcher-diagnostics)
 endif()
