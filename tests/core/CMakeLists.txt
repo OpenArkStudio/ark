@@ -304,11 +304,17 @@ add_subdirectory(../osssdk "${CMAKE_CURRENT_BINARY_DIR}/osssdk")
 
 add_executable(ark_native_unload_tests main.cpp dynamic_library.cpp)
 set_property(TARGET ark_native_unload_tests PROPERTY LINK_LIBRARIES ark::core)
+foreach(probe ark_plugin_allocation_first ark_plugin_allocation_second)
+    add_library(${probe} SHARED plugin_allocation_entry.cpp)
+    set_property(TARGET ${probe} PROPERTY LINK_LIBRARIES ark::core)
+    set_target_properties(${probe} PROPERTIES PREFIX "")
+endforeach()
 target_compile_definitions(ark_native_unload_tests PRIVATE
-    ARK_UNLOAD_PROBE_DIR="$<TARGET_FILE_DIR:ark_oss_sdk_entry_probe>/")
+    ARK_UNLOAD_PROBE_DIR="$<TARGET_FILE_DIR:ark_oss_sdk_entry_probe>/"
+    ARK_ALLOCATION_PROBE_DIR="$<TARGET_FILE_DIR:ark_plugin_allocation_first>/")
 add_custom_target(check-native-unload
     COMMAND $<TARGET_FILE:ark_native_unload_tests>
-    DEPENDS ark_native_unload_tests ark_oss_sdk_entry_probe
+    DEPENDS ark_native_unload_tests ark_oss_sdk_entry_probe ark_plugin_allocation_first ark_plugin_allocation_second
     USES_TERMINAL VERBATIM)
 add_dependencies(check-core check-native-unload)
 add_subdirectory(native_loader)

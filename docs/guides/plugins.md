@@ -205,6 +205,17 @@ registered modules. A later installation failure retains earlier resources under
 the existing startup-failure process-exit policy, without same-process rollback
 or retry.
 
+`plugin_manager::register_plugin<T>()` keeps `ARK_NEW`/`ARK_DELETE` allocation
+hooks, including nullable nothrow allocation. A null allocation returns without
+installation and records `allocate_plugin: <library stem>` as the startup failure.
+The manager then returns false from `start()` before later libraries or module phases.
+Before `install()` starts, a metadata exception destroys the plugin
+candidate once; once installation starts, the existing process-exit policy above
+applies. Dynamic-library wrappers also have scoped ownership until published to
+the manager. Failed native loads retire the wrapper even if logging throws;
+loaded handles keep the existing explicit unload policy. No caller migration is
+required.
+
 Existing macros and plugins remain supported. Export the entry functions
 explicitly with the existing platform visibility macro. The plugin boundary
 still passes C++ types; this API does not promise a pure C ABI or cross-version

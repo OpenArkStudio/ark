@@ -1,6 +1,7 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
 #include <cstddef>
 #include <memory>
+#include <new>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -9,6 +10,7 @@
 #include "../network/doctest.h"
 
 #include <ark/dynamic_library.hpp>
+#include <ark/plugin_base.hpp>
 #include <ark/plugin_manager.hpp>
 
 namespace ark::detail {
@@ -31,6 +33,11 @@ struct dynamic_library_test_access
 
 struct plugin_manager_test_access
 {
+    static void configure(plugin_manager& manager, const std::string& name) {
+        manager.plugins_.emplace(name, "ownership.toml");
+        manager.plugin_conf_dir_ = "conf/";
+    }
+
     static void add(plugin_manager& manager, std::string name, dynamic_library* library) {
         manager.plugin_libs_.emplace(std::move(name), library);
     }
@@ -64,6 +71,89 @@ namespace {
 using library_access = ark::detail::dynamic_library_test_access;
 using manager_access = ark::detail::plugin_manager_test_access;
 
+enum class plugin_failure
+{
+    none,
+    allocation,
+    manager_metadata,
+    configuration_metadata,
+    install
+};
+
+struct plugin_events
+{
+    plugin_failure failure{};
+    unsigned destroyed{};
+    unsigned deallocated{};
+    unsigned manager_assignments{};
+    unsigned configuration_assignments{};
+    unsigned installs{};
+    unsigned uninstalls{};
+    ark::plugin* retained{};
+};
+
+class ownership_plugin final : public ark::plugin_base<ownership_plugin>
+{
+public:
+    inline static plugin_events* events{};
+
+    static void* operator new(std::size_t size, const std::nothrow_t& tag) noexcept {
+        return events->failure == plugin_failure::allocation ? nullptr : ::operator new(size, tag);
+    }
+
+    static void operator delete(void* value) noexcept {
+        ++events->deallocated;
+        ::operator delete(value);
+    }
+
+    static void operator delete(void* value, const std::nothrow_t&) noexcept {
+        operator delete(value);
+    }
+
+    ~ownership_plugin() override {
+        ++events->destroyed;
+    }
+
+    void set_plugin_manager(ark::plugin_manager* manager) override {
+        ++events->manager_assignments;
+        if (events->failure == plugin_failure::manager_metadata)
+        {
+            throw std::runtime_error("manager metadata failed");
+        }
+        plugin_base::set_plugin_manager(manager);
+    }
+
+    void set_plugin_conf(const std::string& configuration) override {
+        ++events->configuration_assignments;
+        if (events->failure == plugin_failure::configuration_metadata)
+        {
+            throw std::runtime_error("configuration metadata failed");
+        }
+        CHECK(configuration == "conf/ownership.toml");
+        plugin_base::set_plugin_conf(configuration);
+    }
+
+    void install() override {
+        ++events->installs;
+        events->retained = this;
+        if (events->failure == plugin_failure::install)
+        {
+            throw std::runtime_error("installation failed");
+        }
+    }
+
+    void uninstall() override {
+        ++events->uninstalls;
+    }
+};
+
+unsigned allocation_entry_calls{};
+
+void allocate_entry_plugin(ark::plugin_manager* manager, const std::string& name) {
+    ++allocation_entry_calls;
+    manager->register_plugin<ownership_plugin>(name);
+}
+
 constexpr const char* probe = "ark_oss_sdk_entry_probe";
 #ifdef ARK_PLATFORM_WIN
 constexpr int native_failure = 0;
@@ -74,8 +164,13 @@ constexpr int native_failure = 1;
 class quiet_logger
 {
 public:
-    quiet_logger() {
-        logger_.set_log_func([](spdlog::level::level_enum, const std::string&) {});
+    explicit quiet_logger(bool throw_error = false) {
+        logger_.set_log_func([throw_error](spdlog::level::level_enum level, const std::string&) {
+            if (throw_error && level == spdlog::level::err)
+            {
+                throw std::runtime_error("load diagnostic failed");
+            }
+        });
         ark::logger::set_instance(&logger_);
     }
 
@@ -106,6 +201,138 @@ struct retained_manager
 };
 
 } // namespace
+
+TEST_CASE("Plugin candidates retain nothrow allocation and retire failed metadata once") {
+    for (const auto failure : {plugin_failure::allocation, plugin_failure::manager_metadata,
+             plugin_failure::configuration_metadata, plugin_failure::none})
+    {
+        CAPTURE(static_cast<int>(failure));
+        plugin_events events{failure};
+        ownership_plugin::events = &events;
+        ark::plugin_manager manager;
+        manager_access::configure(manager, "ownership-probe");
+        if (failure == plugin_failure::manager_metadata)
+        {
+            CHECK_THROWS_WITH_AS(manager.register_plugin<ownership_plugin>("ownership-probe"),
+                "manager metadata failed", std::runtime_error);
+        }
+        else if (failure == plugin_failure::configuration_metadata)
+        {
+            CHECK_THROWS_WITH_AS(manager.register_plugin<ownership_plugin>("ownership-probe"),
+                "configuration metadata failed", std::runtime_error);
+        }
+        else
+        {
+            CHECK_NOTHROW(manager.register_plugin<ownership_plugin>("ownership-probe"));
+        }
+        CHECK(events.manager_assignments == (failure == plugin_failure::allocation ? 0 : 1));
+        CHECK(events.configuration_assignments ==
+              (failure == plugin_failure::allocation || failure == plugin_failure::manager_metadata ? 0 : 1));
+        CHECK(events.installs == (failure == plugin_failure::none ? 1 : 0));
+        CHECK(events.uninstalls == 0);
+        CHECK(
+            events.destroyed ==
+            (failure == plugin_failure::manager_metadata || failure == plugin_failure::configuration_metadata ? 1 : 0));
+        CHECK(events.deallocated == events.destroyed);
+        CHECK(manager.get_startup_failure() ==
+              (failure == plugin_failure::allocation ? "allocate_plugin: ownership-probe" : ""));
+        if (failure == plugin_failure::none)
+        {
+            // A distinct library stem still unregisters through the RTTI key.
+            CHECK_NOTHROW(manager.unregister_plugin<ownership_plugin>());
+            CHECK(events.uninstalls == 1);
+            CHECK(events.destroyed == 1);
+            CHECK(events.deallocated == 1);
+        }
+    }
+}
+
+TEST_CASE("Plugin installation exceptions keep the existing explicit cleanup boundary") {
+    plugin_events events{plugin_failure::install};
+    ownership_plugin::events = &events;
+    ark::plugin_manager manager;
+    manager_access::configure(manager, "ownership-probe");
+    CHECK_THROWS_WITH_AS(
+        manager.register_plugin<ownership_plugin>("ownership-probe"), "installation failed", std::runtime_error);
+    CHECK(events.installs == 1);
+    CHECK(events.uninstalls == 0);
+    CHECK(events.destroyed == 0);
+    REQUIRE(events.retained != nullptr);
+    // This fixture publishes no modules or asynchronous work. Production startup
+    // failures retain those resources until process exit instead of rolling back.
+    delete events.retained;
+    CHECK(events.destroyed == 1);
+    CHECK(events.deallocated == 1);
+}
+
+TEST_CASE("Failed library loading retires unpublished wrappers even when diagnostics throw") {
+    for (const bool throw_error : {false, true})
+    {
+        quiet_logger logger(throw_error);
+        ark::plugin_manager manager;
+        const auto start = [&] {
+            return manager.start(0, ARK_UNLOAD_PROBE_DIR, {}, {{"ark_missing_ownership_probe", ""}});
+        };
+        if (throw_error)
+        {
+            CHECK_THROWS_WITH_AS(start(), "load diagnostic failed", std::runtime_error);
+        }
+        else
+        {
+            CHECK_FALSE(start());
+        }
+        CHECK(manager_access::libraries(manager).empty());
+        CHECK(manager.get_startup_failure() == "load_plugin: ark_missing_ownership_probe");
+        CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::running);
+    }
+}
+
+TEST_CASE("A null plugin allocation fails its real entrypoint before later libraries and module startup") {
+    quiet_logger logger;
+    plugin_events events{plugin_failure::allocation};
+    ownership_plugin::events = &events;
+    allocation_entry_calls = 0;
+    ark::dynamic_library first("ark_plugin_allocation_first");
+    ark::dynamic_library second("ark_plugin_allocation_second");
+    REQUIRE(first.load(ARK_ALLOCATION_PROBE_DIR));
+    REQUIRE(second.load(ARK_ALLOCATION_PROBE_DIR));
+    using set_entry = void (*)(void (*)(ark::plugin_manager*, const std::string&));
+    for (auto* library : {&first, &second})
+    {
+        const auto set = reinterpret_cast<set_entry>(library->get_symbol("allocation_probe_set_entry"));
+        REQUIRE(set != nullptr);
+        set(allocate_entry_plugin);
+    }
+
+    struct startup_module final : ark::module
+    {
+        bool init() override {
+            ++calls;
+            return true;
+        }
+
+        unsigned calls{};
+    } module;
+
+    {
+        retained_manager owner;
+        REQUIRE(owner.manager.add_module("allocation-startup-observer", &module));
+        CHECK_FALSE(owner.manager.start(0, ARK_ALLOCATION_PROBE_DIR, {},
+            {{"ark_plugin_allocation_first", ""}, {"ark_plugin_allocation_second", ""}}));
+        CHECK(allocation_entry_calls == 1);
+        CHECK(module.calls == 0);
+        CHECK(events.installs == 0);
+        CHECK(events.uninstalls == 0);
+        CHECK(events.destroyed == 0);
+        const auto retained = manager_access::libraries(owner.manager);
+        REQUIRE(retained.size() == 1);
+        CHECK(owner.manager.get_startup_failure() == "allocate_plugin: " + retained.front().first);
+        CHECK(retained.front().second->get_symbol("DllEntryPlugin") != nullptr);
+        CHECK(owner.manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::running);
+    }
+    CHECK(first.unload());
+    CHECK(second.unload());
+}
 
 TEST_CASE("Native unload results follow the platform success convention") {
 #ifdef ARK_PLATFORM_WIN
