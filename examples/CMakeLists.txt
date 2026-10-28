@@ -53,7 +53,7 @@ add_subdirectory(entity_operations)
 #add_subdirectory(http_client)
 #add_subdirectory(mysql_sample)
 
-option(ARK_BUILD_GUEST_ROOM_EXAMPLE "Build the optional JSON guest-room client/server example" OFF)
+option(ARK_BUILD_GUEST_ROOM_EXAMPLE "Build the optional Protobuf guest-room client/server example" OFF)
 if(ARK_BUILD_GUEST_ROOM_EXAMPLE)
     add_subdirectory(guest_room)
 endif()

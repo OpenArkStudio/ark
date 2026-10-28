@@ -51,6 +51,10 @@ class data_base final : public data
 public:
     using self_t = data_base<buffer_size, allocator_type>;
 
+    static self_t from_guid(const guid_t& value) {
+        return self_t(guid_tag{}, value);
+    }
+
     data_base() {
         type_ = data_type::dt_empty;
         int64_value_ = 0;
@@ -73,6 +77,9 @@ public:
             break;
         case data_type::dt_int64:
             int64_value_ = src.int64_value_;
+            break;
+        case data_type::dt_guid:
+            set_guid_storage(read_guid(src));
             break;
         case data_type::dt_uint32:
             uint32_value_ = src.uint32_value_;
@@ -114,6 +121,9 @@ public:
             break;
         case data_type::dt_int64:
             int64_value_ = src.get_int64();
+            break;
+        case data_type::dt_guid:
+            set_guid_storage(read_guid(src));
             break;
         case data_type::dt_uint32:
             uint32_value_ = src.get_u_int();
@@ -161,6 +171,9 @@ public:
             break;
         case data_type::dt_int64:
             replacement.int64_value_ = data_ptr->get_int64();
+            break;
+        case data_type::dt_guid:
+            replacement.set_guid_storage(data_ptr->get_object());
             break;
         case data_type::dt_uint32:
             replacement.uint32_value_ = data_ptr->get_u_int32();
@@ -383,11 +396,23 @@ public:
     }
 
     int get_int() const override {
+#if defined(ARK_USE_GUID_32)
+        if (type_ == data_type::dt_guid)
+        {
+            return int_value_;
+        }
+#endif
         ARK_ASSERT_RET_VAL(type_ == data_type::dt_int32, null_int);
         return int_value_;
     }
 
     int64_t get_int64() const override {
+#if !defined(ARK_USE_GUID_32)
+        if (type_ == data_type::dt_guid)
+        {
+            return int64_value_;
+        }
+#endif
         ARK_ASSERT_RET_VAL(type_ == data_type::dt_int64, null_int64);
         return int64_value_;
     }
@@ -645,6 +670,33 @@ protected:
     }
 
 private:
+    struct guid_tag
+    {
+    };
+
+    data_base(guid_tag, const guid_t& value)
+        : type_(data_type::dt_guid)
+        , int64_value_(0) {
+        set_guid_storage(value);
+    }
+
+    static guid_t read_guid(const data& value) {
+#if defined(ARK_USE_GUID_32)
+        return value.get_int();
+#else
+        return value.get_int64();
+#endif
+    }
+
+    void set_guid_storage(const guid_t& value) {
+#if defined(ARK_USE_GUID_32)
+        int64_value_ = 0;
+        int_value_ = value;
+#else
+        int64_value_ = value;
+#endif
+    }
+
     allocator_type allocator_;
     data_type type_;
 

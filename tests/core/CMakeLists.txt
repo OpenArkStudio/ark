@@ -23,6 +23,13 @@ add_custom_target(check-core
     DEPENDS ark_core_tests
     USES_TERMINAL)
 
+add_executable(ark_entity_stream_tests main.cpp entity_stream.cpp)
+set_property(TARGET ark_entity_stream_tests PROPERTY LINK_LIBRARIES ark::kernel)
+add_custom_target(check-entity-stream
+    COMMAND $<TARGET_FILE:ark_entity_stream_tests>
+    DEPENDS ark_entity_stream_tests USES_TERMINAL)
+add_dependencies(check-core check-entity-stream)
+
 add_executable(ark_logging_tests main.cpp logging_paths.cpp logging_source.cpp)
 target_link_libraries(ark_logging_tests PRIVATE ark::core)
 add_dependencies(ark_logging_tests ark_core_header_checks)
@@ -224,7 +231,7 @@ if(ARK_BUILD_CONFIG)
 endif()
 
 if(ARK_BUILD_PROTO)
-    add_executable(ark_kernel_initialization_tests main.cpp module_initialization.cpp entity_config_copy.cpp entity_json_loading.cpp kernel_delayed_sync.cpp
+    add_executable(ark_kernel_initialization_tests main.cpp module_initialization.cpp entity_config_copy.cpp entity_json_loading.cpp kernel_delayed_sync.cpp entity_snapshot.cpp entity_snapshot_interface.cpp
         ../../src/plugins/kernel/class_call_back_manager.cpp
         ../../src/plugins/kernel/class_meta.cpp
         ../../src/plugins/kernel/class_meta_module_impl.cpp
@@ -232,6 +239,7 @@ if(ARK_BUILD_PROTO)
         ../../src/plugins/kernel/container_impl.cpp
         ../../src/plugins/kernel/container_manager_impl.cpp
         ../../src/plugins/kernel/entity_impl.cpp
+        ../../src/plugins/kernel/entity_snapshot.cpp
         ../../src/plugins/kernel/kernel_module_impl.cpp
         ../../src/plugins/kernel/map_module_impl.cpp
         ../../src/plugins/kernel/node_manager.cpp

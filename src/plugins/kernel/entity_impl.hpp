@@ -36,6 +36,10 @@
 
 namespace ark {
 
+namespace entity_sync {
+class snapshot_access;
+}
+
 class entity_opt_charactor
 {
 public:
@@ -65,6 +69,7 @@ class entity_impl final : public entity
 {
 private:
     friend class kernel_module_impl;
+    friend class entity_sync::snapshot_access;
 
     // object unique id
     guid_t guid_{null_guid};

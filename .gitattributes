@@ -1,3 +1,5 @@
 *.html linguist-language=C++
 *.c linguist-language=C++
 *.cc linguist-language=C++
+src/proto/proto/guest_room.proto text eol=lf
+examples/guest_room/wire-vectors.json text eol=lf

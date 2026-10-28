@@ -173,6 +173,10 @@ std::shared_ptr<ark::entity> create_configured_player(
 
 字段读写属于 `entity`，可以使用字段名称或元数据索引。类型应与结构定义一致；不要用数值返回值判断实体或字段是否存在。
 
+`set_u_int64()` 的名称和索引重载均接受已声明的 `uint64` 字段，保留到 `UINT64_MAX` 的完整范围。值变化时，字段回调接收无符号的旧值和新值；设置相同值返回 `false`，不触发该回调。
+
+GUID 字段回调保留 `dt_guid` 标签。默认 GUID64 构建使用 `data::get_int64()` 读取其原生有符号值，`ARK_USE_GUID_32` 构建使用 `data::get_int()`。`data_impl::from_guid()` 显式构造带标签的值；复制、赋值、节点转换和相等比较均保留 GUID 类型。普通数字构造函数继续要求匹配的数字类型。
+
 ```cpp
 #include <cstdint>
 #include <string>
@@ -262,6 +266,27 @@ private:
 
 `check-kernel-initialization` 从真实容器操作经过延迟收集、Kernel 更新、序列化和既有交付回调验证此路径，并保留空批次、标量、表格和混合对照。仅用于测试的回调观察器不提供网络交付。现有 `send_to_self()` 仍是占位实现；这些检查不证明客户端复制协议、确认机制或 AOI 行为。
 
+### 拥有型标量快照
+
+`<ark/kernel/entity_snapshot.hpp>` 在 `ark::entity_sync` 中定义不依赖 Entity 的值类型：`guid_value`、`scalar_value`、`scalar_snapshot` 和 `snapshot_limits`。此值类型头不包含 Entity 或 Protobuf。GUID 使用独立的 variant 分支，保留当前配置的 `guid_t` 宽度。快照独立拥有实体 ID、类名和按字段索引存储的值，支持 `bool`、有符号／无符号 32 位和 64 位整数、`float`、`double`、字节字符串及 GUID。源实体修改或销毁后，快照及其副本仍然有效。
+
+**虚函数表 ABI 不兼容变更：** `kernel_module` 新增虚方法 `capture_scalar_snapshot()`。加载前必须一起重新构建所有插件和宿主／消费者，不能混用旧插件二进制与新接口。外部源码子类可以保留默认实现（抛出 `std::logic_error`），也可以覆写该方法。框架的 `kernel_module_impl` 提供捕获实现。此变更不新增模块、自由函数导出或生命周期阶段。
+
+```cpp
+#include <array>
+#include <ark/kernel/kernel_module.hpp>
+
+const std::array<std::uint32_t, 2> authorized_fields{100, 104};
+ark::kernel_module* kernel = manager.find_module<ark::kernel_module>();
+auto snapshot = kernel->capture_scalar_snapshot(*entity, authorized_fields);
+```
+
+调用者必须先授权，再显式选择每个字段。空集合只捕获 ID 和类名，不包含字段，也不表示全部字段。捕获只读取选定索引的定义和节点；调用者选中没有同步掩码的字段时，也会捕获该字段。已声明但尚未物化的字段产出类型正确的零值或空值，不创建节点。未知、零值或重复索引、不支持的类型（包括宽字符串、表格、容器和指针）、选定的非有限浮点值，以及自定义 `entity` 实现均抛出 `std::invalid_argument`。目前仅支持框架的 `entity_impl`。
+
+`snapshot_limits` 默认值为 `max_fields = 1024`、`max_string_bytes = 1024 * 1024`。字节限制累计类名和选定字符串字段的字节数，包括内嵌 NUL；即使没有选择字段，也计算类名。这些限制约束结构和文本大小，不是精确堆内存或编码消息大小上限。捕获在复制字符串前检查字段选择、类型、有限值及累计字节数。超限抛出 `std::length_error`，内存分配异常正常向外传播。失败不返回部分快照，也不修改源实体。
+
+捕获期间必须在源实体所属线程上保持定义和节点稳定；此 API 不同步并发修改。它不改变延迟同步回调，不执行字段授权，不定义线协议，也不提供传输或交付保证。公开聚合值类型还可由调用者直接构造；捕获时的校验不代表任意手工构造的快照已经合法。通过插件管理器返回的既有 `kernel_module` 指针调用捕获方法。独立 `check-kernel-plugin` 宿主仅链接公开接口，调用真实加载的 Kernel DSO，并检查正常实体销毁及插件停止后独立拥有的值仍有效；这不证明任意热更新安全，也不允许卸载后继续持有 Entity。
+
 ## 地图与数据转换
 
 地图按 `map_id` 区分，每张地图可以创建多个实例。`create_map_instance()` 成功时返回实例 ID，失败返回 `-1`。`switch_map()` 将已有实体移到目标实例；目标地图和实例必须事先存在。
@@ -281,7 +306,7 @@ private:
 
 ## Kernel 源码共置
 
-Kernel 的原有 38 个头与 cpp 共同位于 `src/plugins/kernel/`。
+Kernel 的公开头与 cpp 共同位于 `src/plugins/kernel/`。
 `ark::kernel` 的显式映射保留全部 `<ark/kernel/...>` 包含路径，
 包括 `data_impl.hpp`、`data_list_impl.hpp` 和 `kernel_plugin.hpp`，运行时插件关闭时同样可用。
 业务代码仍可使用原有值类型和模板定义。四个模块实现现在继承
@@ -289,8 +314,8 @@ Kernel 的原有 38 个头与 cpp 共同位于 `src/plugins/kernel/`。
 核心源码头位于 `src/core/`。
 
 独立工程 `tests/consumer/kernel` 仅链接 `ark::kernel`，开启 Protobuf 时逐个编译
-38 个头，并运行值类型和模板消费检查。`container_meta.hpp` 保留原有的
-`ark/define.hpp`、`ark/enum.hpp` 前置包含要求，消费者显式提供这两个头。`ARK_BUILD_PROTO=OFF` 时检查其余 35 个头；
+全部公开头，并运行值类型和模板消费检查。`container_meta.hpp` 保留原有的
+`ark/define.hpp`、`ark/enum.hpp` 前置包含要求，消费者显式提供这两个头。`ARK_BUILD_PROTO=OFF` 时检查其余头；
 `kernel_module.hpp`、`kernel_module_impl.hpp`、`map_module_impl.hpp`
 仍要求 Protobuf。数据与节点、初始化与配置、应用回归分别使用 `check-core`、
 `check-kernel-initialization`、`check-typed-examples`。
@@ -322,3 +347,51 @@ cmake --build kernel-headers-build --target check-kernel-headers --parallel 2
 开启 Protobuf 且存在 Kernel／Utility 运行时 target 时，`check-kernel-plugin` 成为 `check-core` 的依赖。独立 runner 仅链接公开 `ark::kernel`，加载两个真实 DSO，检查四个接口注册键与管理器归属、元数据／静态记录加载、地图／实体注册、公开生命周期回调、管理器更新、正常插件退出和重复 stop。不在卸载后检查注册表，也不证明任意热更新安全。公开头消费者还检查类型基类及原有 update 覆写；现有初始化和实体默认值回归继续保留。
 
 **无符号 64 位 getter 迁移：**`static_entity::get_u_int64()` 及 `static_entity_impl` 的两个覆写现在返回 `uint64_t`，保留到 `UINT64_MAX` 的完整范围。将自定义覆写和误用 `int64_t` 的接收变量改为无符号类型，并一起重新构建 Kernel 与 C++ 消费者。有符号字段继续使用 `get_int64()`。
+
+## 标量基线与增量
+
+`<ark/kernel/entity_stream.hpp>` 基于拥有型快照提供 C++ 状态闭环。`scalar_publisher` 在应用显式刷新时比较完整的所选状态，只返回变化字段；`scalar_replica` 安装基线、检查流代次与修订号连续性，再原子应用增量。接收状态与增量的共享句柄指向不可变的拥有型值，后续更新或生产者销毁不会使已保存的句柄失效。
+
+```cpp
+#include <array>
+#include "ark/kernel/entity_stream.hpp"
+
+// kernel 和 player 属于当前模块线程。
+const std::array visible{104U, 105U}; // GuestPlayer 的 HP、MP
+using namespace ark::entity_sync;
+auto state = kernel->capture_scalar_snapshot(*player, visible);
+scalar_publisher sender({"guest-player/v1", 1, 1, state});
+scalar_replica receiver("guest-player/v1", state.entity_id, state.class_name);
+receiver.apply(sender.baseline());
+
+player->set_u_int32(104, 90);
+player->set_u_int32(104, 80);
+// 业务修改后统一刷新，本次 HP 只输出最终值 80。
+if (auto delta = sender.update(kernel->capture_scalar_snapshot(*player, visible)))
+{
+    receiver.apply(*delta);
+}
+```
+
+示例在同一进程中传递 C++ 值。网络编码、连接基线与 Godot 接入见[访客房间 Protobuf 适配层](../../examples/guest_room/protocol_CN.md)。表、容器和业务事件不属于这条标量路径；现有借用指针的延迟同步路径继续独立存在。
+
+| 条件 | 行为 |
+| --- | --- |
+| 状态未变 | 不产生增量，也不增加修订号 |
+| 一次捕获前多次写入 | 比较捕获时的最终值 |
+| 同一流代次中的重复帧 | 忽略，不使当前状态回退 |
+| 缺口、绑定／Schema／类型不匹配、非法或超限帧 | 拒绝并使接收状态失效，不暴露部分更新 |
+| 在同一接收对象上恢复 | 使用更大流代次的基线，完整替换所选状态 |
+| 字段选择或类型变化 | 建立新的发布对象／流代次和基线 |
+| 移除实体 | 按顺序应用删除标记；旧重复帧不能使实体复活 |
+| 修订号耗尽 | 发布端抛出 `std::overflow_error`，不推进状态 |
+
+流代次区分重建的状态流，修订号标识流内的状态版本。共享句柄不提供动态库卸载保障；卸载插件代码前应排空并释放由该插件创建的句柄。
+
+应用提供 `schema_id`、绑定的实体 ID／类名及已授权的字段集合。匹配标识不等于校验完整 Schema 定义，也不进行会话认证。新连接可以创建新的接收对象；已有接收对象在失效或移除后保留流代次，旧基线不能将其重置。发布端的输入／限额错误抛出标准异常；接收端对非法值返回 `scalar_apply_result::rejected`。分配异常向外传播，已提交状态保持不变。
+
+`snapshot_limits` 同样约束重建后的完整状态，不能只检查增量大小。Schema 标识使用同一字节限额单独检查。限额针对字段数与文本字节数，不代表编码长度或精确进程内存。本层不提供待发队列、确认、重放历史或传输；后续适配层需约束编码负载和待发任务，在入队失败时关闭／重置流，并先确认活动会话绑定与授权。字符串为 C++ 字节串，线协议编解码器须执行自己的文本校验。不能将这些结构体的内存或 variant 序号直接作为二进制协议。
+
+每个发布／接收对象由一个所有者线程使用；跨线程传递返回的拥有型值／不可变句柄，不传递发布对象、接收对象或 Entity。调用者需限制保留历史句柄的数量。本组件没有吞吐量或带宽测试结论。
+
+`check-entity-stream` 提供永久状态机回归，关闭 Protobuf 后也能运行。`check-kernel-initialization` 另从真实 Entity 验证捕获、基线、合并后的 HP／MP 变更、接收状态、源销毁、删除与新基线。这些检查覆盖原生 C++ 状态闭环；`check-guest-room` 与配套 Godot 客户端测试分别覆盖传输与表现边界。

@@ -1,0 +1,102 @@
+syntax = "proto3";
+package ark.protobuf.guest_room;
+option csharp_namespace = "Ark.Client.Protocol";
+
+// Canonical C++/C# room contract. Transport framing remains a separate layer.
+message join_request {
+  string name = 1;
+  string room = 2;
+  uint32 protocol_version = 3;
+}
+
+message join_accepted {
+  string player_id = 1;
+  string name = 2;
+  string room = 3;
+  uint32 width = 4;
+  uint32 height = 5;
+  uint64 entity_id = 6;
+  uint32 protocol_version = 7;
+}
+
+message move_request {
+  uint32 sequence = 1;
+  double x = 2;
+  double y = 3;
+}
+
+enum action_kind {
+  ACTION_UNSPECIFIED = 0;
+  ACTION_DAMAGE = 1;
+  ACTION_SKILL = 2;
+  ACTION_REST = 3;
+}
+
+message action_request {
+  uint32 sequence = 1;
+  action_kind kind = 2;
+}
+
+message error_response {
+  string code = 1;
+  string message = 2;
+  optional uint32 action_sequence = 3;
+}
+
+message heartbeat {
+  uint32 nonce = 1;
+}
+
+// Explicit alternatives preserve scalar width, signedness and zero-value
+// presence. string_value carries bytes; a presentation layer must validate its
+// own UTF-8 rules.
+message scalar_field {
+  uint32 index = 1;
+  oneof value {
+    bool bool_value = 2;
+    sint32 int32_value = 3;
+    uint32 uint32_value = 4;
+    sint64 int64_value = 5;
+    uint64 uint64_value = 6;
+    float float_value = 7;
+    double double_value = 8;
+    bytes string_value = 9;
+    sint64 guid_value = 10;
+  }
+}
+
+message scalar_baseline {
+  string schema_id = 1;
+  uint64 generation = 2;
+  uint64 revision = 3;
+  uint64 entity_id = 4;
+  string class_name = 5;
+  repeated scalar_field fields = 6;
+}
+
+message scalar_delta {
+  string schema_id = 1;
+  uint64 generation = 2;
+  uint64 required_revision = 3;
+  uint64 revision = 4;
+  uint64 entity_id = 5;
+  string class_name = 6;
+  repeated scalar_field fields = 7;
+  bool removed = 8;
+}
+
+message player_baseline {
+  string player_id = 1;
+  scalar_baseline state = 2;
+}
+
+message room_baseline {
+  string room = 1;
+  repeated player_baseline players = 2;
+}
+
+message room_delta {
+  string room = 1;
+  repeated player_baseline added = 2;
+  repeated scalar_delta changed = 3;
+}

@@ -59,11 +59,13 @@ bool room_module::pre_update() {
         throw std::runtime_error("guest_room cannot retire its startup schema validation Entity");
     }
     probe.reset();
-    if (profile->get_u_int32("hp") > profile->get_u_int32("hp_max") ||
+    if (profile->get_u_int32("hp_max") == 0 || profile->get_u_int32("mp_max") == 0 ||
+        profile->get_u_int32("hp") > profile->get_u_int32("hp_max") ||
         profile->get_u_int32("mp") > profile->get_u_int32("mp_max") || profile->get_u_int32("move_seq") != 0 ||
         profile->get_u_int32("action_seq") != 0)
     {
-        throw std::runtime_error("guest_room profile 1 requires bounded HP/MP and zero initial sequences");
+        throw std::runtime_error(
+            "guest_room profile 1 requires bounded HP/MP, positive maxima and zero initial sequences");
     }
     if (!network->create_server(60000, header(true), header(true)))
     {
@@ -86,59 +88,124 @@ bool room_module::pre_update() {
     return true;
 }
 
-void room_module::enqueue(peer& connection, msg_id_t id, const json& body) {
+void room_module::enqueue(peer& connection, msg_id_t id, const google::protobuf::MessageLite& body) {
     if (connection.closing || stopping_)
     {
         return;
     }
-    auto text = body.dump();
-    if (text.size() > max_body || connection.pending.size() >= 8)
+    std::string text;
+    if (body.ByteSizeLong() > max_body || !body.SerializeToString(&text) || connection.pending.size() >= 8 ||
+        text.size() + 12 > 8 * (max_body + 12) - connection.pending_bytes)
     {
         connection.closing = true;
         connection.pending.clear();
+        connection.pending_bytes = 0;
         return;
     }
+    connection.pending_bytes += text.size() + 12;
     connection.pending.push_back({id, std::move(text)});
 }
 
 void room_module::reject(peer& connection, const std::string& code, const std::string& reason) {
-    enqueue(connection, error, {{"code", code}, {"message", reason}});
+    wire::error_response response;
+    response.set_code(code);
+    response.set_message(reason);
+    enqueue(connection, error, response);
 }
 
-void room_module::broadcast() {
-    json players = json::array();
-    for (const auto& [session, connection] : peers_)
+void room_module::retire(peer& connection) {
+    if (!connection.player)
     {
-        if (connection.player != nullptr && !connection.closing)
-        {
-            const auto& player = *connection.player;
-            players.push_back({{"id", connection.player_id}, {"name", player.get_string("name")},
-                {"x", player.get_double("x")}, {"y", player.get_double("y")}, {"seq", player.get_u_int32("move_seq")},
-                {"hp", player.get_u_int32("hp")}, {"mp", player.get_u_int32("mp")},
-                {"hp_max", player.get_u_int32("hp_max")}, {"mp_max", player.get_u_int32("mp_max")},
-                {"action_seq", player.get_u_int32("action_seq")}});
-        }
+        return;
     }
-    const json state{{"room", "lobby"}, {"players", std::move(players)}};
+    if (connection.publisher)
+    {
+        removed_.push_back(connection.publisher->remove());
+        connection.publisher.reset();
+    }
+    kernel_->destroy_entity(connection.player->get_id());
+    connection.player.reset();
+}
+
+void room_module::flush_room() {
+    owner_thread();
+    wire::room_delta changes;
+    changes.set_room("lobby");
+    // Each active Entity is captured once at this explicit owner-thread flush.
     for (auto& [session, connection] : peers_)
     {
-        if (connection.player != nullptr)
+        if (connection.closing)
         {
-            enqueue(connection, snapshot, state);
+            retire(connection);
+            continue;
+        }
+        if (!connection.player)
+        {
+            continue;
+        }
+        auto state = kernel_->capture_scalar_snapshot(*connection.player, player_fields, player_limits);
+        if (!connection.publisher)
+        {
+            entity_sync::scalar_baseline initial{player_schema, 1, 1, std::move(state)};
+            validate_player(initial);
+            connection.publisher = std::make_unique<entity_sync::scalar_publisher>(initial, player_limits);
+            auto& added = *changes.add_added();
+            added.set_player_id(connection.player_id);
+            encode(initial, *added.mutable_state());
+        }
+        else
+        {
+            validate_player({player_schema, 1, 1, state});
+            if (const auto changed = connection.publisher->update(state))
+            {
+                encode(*changed, *changes.add_changed());
+            }
         }
     }
+    for (const auto& removed : removed_)
+    {
+        encode(*removed, *changes.add_changed());
+    }
+    for (auto& [session, connection] : peers_)
+    {
+        if (!connection.player || connection.closing)
+        {
+            continue;
+        }
+        if (connection.needs_baseline)
+        {
+            wire::room_baseline baseline;
+            baseline.set_room("lobby");
+            for (const auto& [other_session, other] : peers_)
+            {
+                if (other.player && !other.closing)
+                {
+                    auto& added = *baseline.add_players();
+                    added.set_player_id(other.player_id);
+                    encode(other.publisher->baseline(), *added.mutable_state());
+                }
+            }
+            enqueue(connection, snapshot, baseline);
+            connection.needs_baseline = false;
+        }
+        else if (changes.added_size() != 0 || changes.changed_size() != 0)
+        {
+            enqueue(connection, delta, changes);
+        }
+    }
+    removed_.clear();
 }
 
-void room_module::join_room(peer& connection, const json& body) {
+void room_module::join_room(peer& connection, const wire::join_request& body) {
     if (connection.player != nullptr)
     {
         reject(connection, "already_joined", "This session already joined the lobby");
         return;
     }
-    if (!body.contains("name") || !body["name"].is_string() || !valid_name(body["name"].get<std::string>()) ||
-        !body.contains("room") || body["room"] != "lobby")
+    if (body.protocol_version() != protocol_version || !valid_name(body.name()) || body.room() != "lobby")
     {
-        reject(connection, "invalid_message", "Expected lobby and a name of 1..64 UTF-8 bytes without controls");
+        reject(connection, "invalid_message",
+            "Expected protocol version 1, lobby and a name of 1..64 UTF-8 bytes without controls");
         return;
     }
     const auto count =
@@ -154,32 +221,31 @@ void room_module::join_room(peer& connection, const json& body) {
         throw std::runtime_error("guest_room Kernel entity creation failed");
     }
     // Typed setters report false for unchanged values; the schema was checked at startup.
-    player->set_string("name", body["name"].get<std::string>());
+    player->set_string("name", body.name());
     player->set_double("x", 80.0 + static_cast<double>((next_player_ - 1) % 8) * 100.0);
     player->set_double("y", 100.0 + static_cast<double>(((next_player_ - 1) / 8) % 2) * 200.0);
     connection.player_id = std::to_string(next_player_++);
     connection.player = std::move(player);
-    enqueue(connection, accepted,
-        {{"player_id", connection.player_id}, {"name", body["name"]}, {"room", "lobby"}, {"width", 960},
-            {"height", 540}});
-    broadcast();
+    wire::join_accepted response;
+    response.set_player_id(connection.player_id);
+    response.set_name(body.name());
+    response.set_room("lobby");
+    response.set_width(960);
+    response.set_height(540);
+    response.set_entity_id(encode_identity(connection.player->get_id()));
+    response.set_protocol_version(protocol_version);
+    enqueue(connection, accepted, response);
 }
 
-void room_module::move_player(peer& connection, const json& body) {
+void room_module::move_player(peer& connection, const wire::move_request& body) {
     if (connection.player == nullptr)
     {
         reject(connection, "not_joined", "Join the lobby before moving");
         return;
     }
-    std::uint32_t sequence = 0;
-    if (!body.contains("seq") || !uint32_value(body["seq"], sequence) || !body.contains("x") ||
-        !body["x"].is_number() || !body.contains("y") || !body["y"].is_number())
-    {
-        reject(connection, "invalid_message", "Expected an unsigned sequence and finite coordinates");
-        return;
-    }
-    const auto x = body["x"].get<double>();
-    const auto y = body["y"].get<double>();
+    const auto sequence = body.sequence();
+    const auto x = body.x();
+    const auto y = body.y();
     if (!std::isfinite(x) || !std::isfinite(y) || x < 0 || x > 960 || y < 0 || y > 540)
     {
         reject(connection, "invalid_message", "Coordinates must be within 0..960 and 0..540");
@@ -193,29 +259,26 @@ void room_module::move_player(peer& connection, const json& body) {
     connection.player->set_double("x", x);
     connection.player->set_double("y", y);
     connection.player->set_u_int32("move_seq", sequence);
-    broadcast();
 }
 
-void room_module::act_player(peer& connection, const json& body) {
-    std::uint32_t sequence = 0;
-    const bool valid_sequence = body.contains("seq") && uint32_value(body["seq"], sequence);
+void room_module::act_player(peer& connection, const wire::action_request& body) {
+    const auto sequence = body.sequence();
     const auto fail = [&](const std::string& code, const std::string& reason) {
-        enqueue(connection, error, {{"code", code}, {"message", reason}, {"action_seq", sequence}});
+        wire::error_response response;
+        response.set_code(code);
+        response.set_message(reason);
+        response.set_action_sequence(sequence);
+        enqueue(connection, error, response);
     };
     if (connection.player == nullptr)
     {
         fail("not_joined", "Join the lobby before using an attribute action");
         return;
     }
-    if (!valid_sequence || sequence == 0 || body.size() != 2 || !body.contains("kind") || !body["kind"].is_string())
+    const auto kind = body.kind();
+    if (sequence == 0 || kind < wire::ACTION_DAMAGE || kind > wire::ACTION_REST)
     {
-        fail("invalid_message", "Expected only seq >= 1 (uint32) and kind damage, skill or rest");
-        return;
-    }
-    const auto& kind = body["kind"].get_ref<const std::string&>();
-    if (kind != "damage" && kind != "skill" && kind != "rest")
-    {
-        fail("invalid_message", "Attribute action kind must be damage, skill or rest");
+        fail("invalid_message", "Expected sequence >= 1 and action damage, skill or rest");
         return;
     }
     auto& player = *connection.player;
@@ -226,11 +289,11 @@ void room_module::act_player(peer& connection, const json& body) {
     }
     auto hp = player.get_u_int32("hp");
     auto mp = player.get_u_int32("mp");
-    if (kind == "damage")
+    if (kind == wire::ACTION_DAMAGE)
     {
         hp = hp > 15 ? hp - 15 : 0;
     }
-    else if (kind == "skill")
+    else if (kind == wire::ACTION_SKILL)
     {
         if (mp < 20)
         {
@@ -250,7 +313,6 @@ void room_module::act_player(peer& connection, const json& body) {
     player.set_u_int32("hp", hp);
     player.set_u_int32("mp", mp);
     player.set_u_int32("action_seq", sequence);
-    broadcast();
 }
 
 void room_module::on_message(const net_msg* message, conv_id_t session) {
@@ -272,60 +334,65 @@ void room_module::on_message(const net_msg* message, conv_id_t session) {
         connection.closing = true;
         return;
     }
-    bool excessive_depth = false;
-    const auto body = json::parse(
-        message->get_msg_data(), message->get_msg_data() + message->get_msg_length(),
-        [&excessive_depth](int depth, json::parse_event_t, json&) {
-            excessive_depth = excessive_depth || depth > 8;
-            return depth <= 8;
-        },
-        false);
-    if (excessive_depth || body.is_discarded() || !body.is_object())
-    {
-        if (message->get_msg_id() == action)
-        {
-            std::uint32_t sequence = 0;
-            if (body.is_object() && body.contains("seq"))
-            {
-                uint32_value(body["seq"], sequence);
-            }
-            enqueue(connection, error,
-                {{"code", "invalid_message"},
-                    {"message", "Expected a UTF-8 JSON object of at most eight nesting levels"},
-                    {"action_seq", sequence}});
-        }
-        else
-        {
-            reject(connection, "invalid_message", "Expected a UTF-8 JSON object of at most eight nesting levels");
-        }
-        return;
-    }
+    const auto parse = [&](auto& body) {
+        return body.ParseFromArray(message->get_msg_data(), static_cast<int>(message->get_msg_length()));
+    };
     switch (message->get_msg_id())
     {
     case join:
-        join_room(connection, body);
-        break;
-    case move:
-        move_player(connection, body);
-        break;
-    case action:
-        act_player(connection, body);
-        break;
-    case ping:
     {
-        std::uint32_t nonce = 0;
-        if (!body.contains("nonce") || !uint32_value(body["nonce"], nonce))
+        wire::join_request body;
+        if (parse(body))
         {
-            reject(connection, "invalid_message", "Expected an unsigned 32-bit nonce");
+            join_room(connection, body);
         }
         else
         {
-            enqueue(connection, pong, {{"nonce", nonce}});
+            connection.closing = true;
+        }
+        break;
+    }
+    case move:
+    {
+        wire::move_request body;
+        if (parse(body))
+        {
+            move_player(connection, body);
+        }
+        else
+        {
+            connection.closing = true;
+        }
+        break;
+    }
+    case action:
+    {
+        wire::action_request body;
+        if (parse(body))
+        {
+            act_player(connection, body);
+        }
+        else
+        {
+            connection.closing = true;
+        }
+        break;
+    }
+    case ping:
+    {
+        wire::heartbeat body;
+        if (parse(body))
+        {
+            enqueue(connection, pong, body);
+        }
+        else
+        {
+            connection.closing = true;
         }
         break;
     }
     default:
-        reject(connection, "invalid_message", "Unsupported client message ID");
+        connection.closing = true;
         break;
     }
 }
@@ -345,16 +412,21 @@ void room_module::on_event(const net_event* event) {
         const auto found = peers_.find(event->get_id());
         if (found != peers_.end())
         {
-            const bool joined = found->second.player != nullptr;
-            if (joined)
+            try
+            { retire(found->second); }
+            catch (const std::exception& exception)
             {
-                kernel_->destroy_entity(found->second.player->get_id());
+                ARK_LOG_ERROR("guest_room cannot publish removal: {}", exception.what());
+                for (auto& [session, connection] : peers_)
+                {
+                    connection.closing = true;
+                }
+                if (found->second.player)
+                {
+                    kernel_->destroy_entity(found->second.player->get_id());
+                }
             }
             peers_.erase(found);
-            if (joined)
-            {
-                broadcast();
-            }
         }
     }
 }
@@ -362,6 +434,16 @@ void room_module::on_event(const net_event* event) {
 bool room_module::update() {
     owner_thread();
     tick_messages_ = 0;
+    try
+    { flush_room(); }
+    catch (const std::exception& exception)
+    {
+        ARK_LOG_ERROR("guest_room scalar flush failed: {}", exception.what());
+        for (auto& [session, connection] : peers_)
+        {
+            connection.closing = true;
+        }
+    }
     for (auto& [session, connection] : peers_)
     {
         if (connection.closing)
@@ -373,6 +455,7 @@ bool room_module::update() {
         {
             auto pending = std::move(connection.pending.front());
             connection.pending.pop_front();
+            connection.pending_bytes -= pending.body.size() + 12;
             header response;
             response.set_message_id(pending.id);
             response.set_message_length(static_cast<std::uint32_t>(pending.body.size()));
@@ -380,6 +463,8 @@ bool room_module::update() {
             {
                 connection.closing = true;
                 connection.pending.clear();
+                connection.pending_bytes = 0;
+                server_->get_net()->close_session(session);
                 break;
             }
         }
@@ -398,6 +483,7 @@ bool room_module::pre_shut() {
         }
     }
     peers_.clear();
+    removed_.clear();
     server_.reset();
     return true;
 }

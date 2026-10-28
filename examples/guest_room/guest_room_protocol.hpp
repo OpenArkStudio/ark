@@ -3,10 +3,7 @@
 
 #include <cstdint>
 #include <cstring>
-#include <limits>
 #include <string>
-
-#include <nlohmann/json.hpp>
 
 #include "ark/net/net_msg.hpp"
 
@@ -15,14 +12,15 @@ namespace ark::guest_room {
 inline constexpr msg_id_t join = 60000;
 inline constexpr msg_id_t accepted = 60001;
 inline constexpr msg_id_t move = 60002;
-inline constexpr msg_id_t snapshot = 60003;
+inline constexpr msg_id_t snapshot = 60003; // Full room baseline.
 inline constexpr msg_id_t error = 60004;
 inline constexpr msg_id_t ping = 60005;
 inline constexpr msg_id_t pong = 60006;
 inline constexpr msg_id_t unsupported = 60007; // Internal dispatch key, never emitted.
 inline constexpr msg_id_t action = 60008;
+inline constexpr msg_id_t delta = 60009;
 inline constexpr std::uint32_t max_body = 8192;
-using json = nlohmann::json;
+inline constexpr std::uint32_t protocol_version = 1;
 
 class header final : public msg_header
 {
@@ -97,40 +95,55 @@ private:
     std::uint32_t length_{0};
 };
 
-inline bool uint32_value(const json& value, std::uint32_t& result) {
-    if (value.is_number_unsigned())
-    {
-        const auto number = value.get<std::uint64_t>();
-        if (number <= std::numeric_limits<std::uint32_t>::max())
-        {
-            result = static_cast<std::uint32_t>(number);
-            return true;
-        }
-    }
-    else if (value.is_number_integer())
-    {
-        const auto number = value.get<std::int64_t>();
-        if (number >= 0 && number <= std::numeric_limits<std::uint32_t>::max())
-        {
-            result = static_cast<std::uint32_t>(number);
-            return true;
-        }
-    }
-    return false;
-}
-
 inline bool valid_name(const std::string& name) {
     if (name.empty() || name.size() > 64)
     {
         return false;
     }
-    // JSON parsing validates UTF-8. Reject Unicode C0/C1 control code points too.
-    for (std::size_t i = 0; i < name.size(); ++i)
+    // Validate UTF-8 explicitly: protobuf bytes fields also use this rule for names.
+    for (std::size_t i = 0; i < name.size();)
     {
-        const auto byte = static_cast<unsigned char>(name[i]);
-        if (byte < 0x20 || byte == 0x7f ||
-            (byte == 0xc2 && i + 1 < name.size() && static_cast<unsigned char>(name[i + 1]) >= 0x80 &&
-                static_cast<unsigned char>(name[i + 1]) <= 0x9f))
+        const auto first = static_cast<unsigned char>(name[i++]);
+        std::uint32_t point = first;
+        unsigned continuation = 0;
+        std::uint32_t minimum = 0;
+        if (first >= 0xc2 && first <= 0xdf)
+        {
+            point = first & 0x1f;
+            continuation = 1;
+            minimum = 0x80;
+        }
+        else if (first >= 0xe0 && first <= 0xef)
+        {
+            point = first & 0x0f;
+            continuation = 2;
+            minimum = 0x800;
+        }
+        else if (first >= 0xf0 && first <= 0xf4)
+        {
+            point = first & 0x07;
+            continuation = 3;
+            minimum = 0x10000;
+        }
+        else if (first >= 0x80)
+        {
+            return false;
+        }
+        if (continuation > name.size() - i)
+        {
+            return false;
+        }
+        for (unsigned count = 0; count < continuation; ++count)
+        {
+            const auto byte = static_cast<unsigned char>(name[i++]);
+            if ((byte & 0xc0) != 0x80)
+            {
+                return false;
+            }
+            point = (point << 6) | (byte & 0x3f);
+        }
+        if (point < minimum || point > 0x10ffff || (point >= 0xd800 && point <= 0xdfff) || point < 0x20 ||
+            (point >= 0x7f && point <= 0x9f))
         {
             return false;
         }

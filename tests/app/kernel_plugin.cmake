@@ -22,8 +22,15 @@ message(STATUS "Kernel actual DSO regression: ${output}")
 file(WRITE "${RUNTIME_DIR}/resource/meta/entity_schema.json" [=[
 {"format":"ark.entity-schema","version":1,"classes":[
 {"name":"Player","fields":[{"name":"id","index":99,"type":"uint32"},
-{"name":"name","index":100,"type":"string"},{"name":"hp","index":104,"type":"uint32"}],"tables":[],"containers":[]}],
-"configs":[{"class":"Player","rows":[{"id":42,"name":"Configured","hp":100}]}]}
+{"name":"name","index":100,"type":"string"},{"name":"hp","index":104,"type":"uint32"},
+{"name":"flag","index":105,"type":"bool"},{"name":"offset","index":106,"type":"int32"},
+{"name":"counter","index":107,"type":"uint64"},{"name":"signed_count","index":108,"type":"int64"},
+{"name":"ratio","index":109,"type":"float"},{"name":"precise","index":110,"type":"double"},
+{"name":"owner","index":111,"type":"guid"},{"name":"lazy","index":112,"type":"uint32"}],"tables":[],"containers":[]},
+{"name":"LazyOwner","fields":[{"name":"lazy","index":112,"type":"uint32"}],"tables":[],"containers":[]}],
+"configs":[{"class":"Player","rows":[{"id":42,"name":"Configured","hp":100,"flag":true,
+"offset":-2147483648,"counter":18446744073709551615,"signed_count":-9223372036854775808,
+"ratio":1.25,"precise":2.5,"owner":"42","lazy":0}]}]}
 ]=])
 execute_process(COMMAND "${PROGRAM}" "${PLUGIN_DIR}" json WORKING_DIRECTORY "${RUNTIME_DIR}"
     RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE errors TIMEOUT 15)

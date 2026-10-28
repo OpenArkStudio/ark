@@ -6,6 +6,8 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <limits>
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -15,12 +17,14 @@
 #include <vector>
 
 #include <arknet/external/asio.hpp>
+#include <nlohmann/json.hpp>
 
-#include "../../examples/guest_room/guest_room_protocol.hpp"
+#include "../../examples/guest_room/guest_room_wire.hpp"
 
 namespace {
 using namespace std::chrono_literals;
 using namespace ark::guest_room;
+using json = nlohmann::json;
 using tcp = asio::ip::tcp;
 
 void require(bool condition, const std::string& reason) {
@@ -87,7 +91,8 @@ struct launcher
                 require(WIFEXITED(status) && WEXITSTATUS(status) == 1, "invalid profile did not fail normal startup");
                 std::ifstream log(log_path);
                 const std::string text{std::istreambuf_iterator<char>(log), std::istreambuf_iterator<char>()};
-                require(text.find("profile 1 requires bounded HP/MP and zero initial sequences") != std::string::npos,
+                require(text.find("profile 1 requires bounded HP/MP, positive maxima and zero initial sequences") !=
+                            std::string::npos,
                     "invalid profile lacked an application configuration diagnostic");
                 return;
             }
@@ -154,8 +159,9 @@ struct client
         return bytes + body;
     }
 
-    void send(ark::msg_id_t id, const json& body) {
-        write(encode(id, body.dump()));
+    template<class Message>
+    void send(ark::msg_id_t id, const Message& body) {
+        write(encode(id, body.SerializeAsString()));
     }
 
     std::string read(std::size_t count) {
@@ -177,13 +183,23 @@ struct client
         return bytes;
     }
 
-    json receive(ark::msg_id_t expected) {
+    template<class Message>
+    Message receive(ark::msg_id_t expected) {
         header head;
         const auto bytes = read(12);
         head.parse_from_array(bytes.data());
-        require(head.message_id() == expected, "unexpected response id: " + std::to_string(head.message_id()));
+        require(head.message_id() == expected,
+            "unexpected response id: " + std::to_string(head.message_id()) + " expected " + std::to_string(expected));
         require(head.message_length() <= max_body, "invalid response header");
-        return json::parse(read(head.message_length()));
+        Message body;
+        require(body.ParseFromString(read(head.message_length())), "malformed protobuf response");
+        return body;
+    }
+
+    void quiet() {
+        std::this_thread::sleep_for(50ms);
+        asio::error_code ec;
+        require(socket.available(ec) == 0 && !ec, "unexpected frame after coalesced/no-op flush");
     }
 
     void close() {
@@ -213,94 +229,183 @@ struct client
     }
 };
 
-const json& player(const json& state, const std::string& id) {
-    for (const auto& value : state["players"])
-    {
-        if (value["id"] == id)
-        {
-            return value;
-        }
-    }
-    throw std::runtime_error("player missing from authoritative snapshot");
+wire::join_request join_as(const std::string& name) {
+    wire::join_request body;
+    body.set_name(name);
+    body.set_room("lobby");
+    body.set_protocol_version(protocol_version);
+    return body;
 }
 
-void error_is(client& peer, const std::string& code, std::optional<std::uint32_t> action_sequence = std::nullopt) {
-    const auto body = peer.receive(error);
-    require(body["code"] == code, "wrong error code");
-    require(body["message"].get<std::string>().size() <= 160, "unbounded error text");
-    if (action_sequence)
+wire::move_request move_to(std::uint32_t sequence, double x, double y) {
+    wire::move_request body;
+    body.set_sequence(sequence);
+    body.set_x(x);
+    body.set_y(y);
+    return body;
+}
+
+wire::action_request act(std::uint32_t sequence, wire::action_kind kind) {
+    wire::action_request body;
+    body.set_sequence(sequence);
+    body.set_kind(kind);
+    return body;
+}
+
+void error_is(client& peer, const std::string& code, std::optional<std::uint32_t> sequence = std::nullopt) {
+    const auto body = peer.receive<wire::error_response>(error);
+    require(body.code() == code && body.message().size() <= 160, "wrong error response");
+    require(body.has_action_sequence() == sequence.has_value(), "wrong error correlation presence");
+    if (sequence)
     {
-        require(body["action_seq"] == *action_sequence, "wrong action error correlation");
+        require(body.action_sequence() == *sequence, "wrong action error correlation");
     }
 }
+
+struct roster
+{
+    std::map<ark::guid_t, std::unique_ptr<ark::entity_sync::scalar_replica>> players;
+    std::map<std::string, ark::guid_t> identities;
+
+    void add(const wire::player_baseline& player) {
+        require(!player.player_id().empty() && player.has_state(), "missing baseline identity");
+        const auto baseline = decode(player.state(), player_limits);
+        validate_player(baseline);
+        const auto id = baseline.snapshot.entity_id;
+        require(!players.contains(id) && !identities.contains(player.player_id()), "duplicate identity");
+        auto replica =
+            std::make_unique<ark::entity_sync::scalar_replica>(player_schema, id, "GuestPlayer", player_limits);
+        require(replica->apply(baseline) == ark::entity_sync::scalar_apply_result::applied, "baseline rejected");
+        identities.emplace(player.player_id(), id);
+        players.emplace(id, std::move(replica));
+    }
+
+    void baseline(client& peer) {
+        const auto body = peer.receive<wire::room_baseline>(snapshot);
+        require(body.room() == "lobby", "wrong baseline room");
+        players.clear();
+        identities.clear();
+        for (const auto& value : body.players())
+        {
+            add(value);
+        }
+    }
+
+    wire::room_delta changes(client& peer) {
+        const auto body = peer.receive<wire::room_delta>(delta);
+        require(body.room() == "lobby", "wrong delta room");
+        for (const auto& value : body.added())
+        {
+            add(value);
+        }
+        for (const auto& value : body.changed())
+        {
+            const auto change = decode(value, player_limits);
+            require(players.contains(change.entity_id), "delta references unknown Entity");
+            require(players.at(change.entity_id)->apply(change) == ark::entity_sync::scalar_apply_result::applied,
+                "delta gap, invalid fields or stale generation");
+        }
+        return body;
+    }
+
+    const ark::entity_sync::scalar_snapshot& player(const std::string& id) const {
+        const auto state = players.at(identities.at(id))->state();
+        require(state != nullptr, "player removed");
+        return *state;
+    }
+
+    std::uint32_t number(const std::string& id, std::uint32_t index) const {
+        return std::get<std::uint32_t>(player(id).fields.at(index));
+    }
+};
 
 void exercise(unsigned short port) {
     client alice(port, true);
-    alice.send(move, {{"seq", 1}, {"x", 0}, {"y", 0}});
+    alice.send(move, move_to(1, 0, 0));
     error_is(alice, "not_joined");
-    const auto join_frame = client::encode(join, R"({"name":"Alice","room":"lobby"})");
+    const auto join_frame = client::encode(join, join_as("Alice").SerializeAsString());
     alice.write(join_frame.substr(0, 5));
     alice.write(join_frame.substr(5, 10));
     alice.write(join_frame.substr(15));
-    const auto first_id = alice.receive(accepted)["player_id"].get<std::string>();
-    require(alice.receive(snapshot)["players"].size() == 1, "first roster incorrect");
-    alice.send(join, {{"name", "Again"}, {"room", "lobby"}});
+    const auto first = alice.receive<wire::join_accepted>(accepted);
+    require(first.protocol_version() == protocol_version && first.entity_id() > 0, "missing protocol/Entity binding");
+    roster own;
+    own.baseline(alice);
+    require(
+        own.players.size() == 1 && own.identities.at(first.player_id()) == static_cast<ark::guid_t>(first.entity_id()),
+        "first roster or Accepted binding incorrect");
+    alice.send(join, join_as("Again"));
     error_is(alice, "already_joined");
 
     client bob(port);
-    bob.send(join, {{"name", "Bob"}, {"room", "lobby"}});
-    const auto second_id = bob.receive(accepted)["player_id"].get<std::string>();
-    require(first_id != second_id, "player IDs collided");
-    require(bob.receive(snapshot)["players"].size() == 2, "joining peer missed full roster");
-    require(alice.receive(snapshot)["players"].size() == 2, "existing peer missed join");
+    bob.send(join, join_as("Bob"));
+    const auto second = bob.receive<wire::join_accepted>(accepted);
+    require(first.player_id() != second.player_id() && first.entity_id() != second.entity_id(), "identities collided");
+    roster other;
+    other.baseline(bob);
+    require(other.players.size() == 2, "late join missed full roster");
+    const auto added = own.changes(alice);
+    require(added.added_size() == 1 && added.changed_size() == 0, "join must send added baseline only");
 
-    alice.send(move, {{"seq", 1}, {"x", 120.0}, {"y", 100.0}});
-    const auto own_move = alice.receive(snapshot);
-    const auto other_move = bob.receive(snapshot);
-    require(player(own_move, first_id)["x"] == 120.0, "own authoritative move missing");
-    require(player(other_move, first_id)["seq"] == 1, "peer authoritative sequence missing");
-    alice.send(move, {{"seq", 1}, {"x", 900}, {"y", 500}});
+    // Both commands are in one transport write. No full baseline may appear during movement.
+    alice.write(client::encode(move, move_to(1, 110, 90).SerializeAsString()) +
+                client::encode(move, move_to(2, 120, 100).SerializeAsString()));
+    const auto movement = own.changes(alice);
+    other.changes(bob);
+    require(movement.added_size() == 0 && movement.changed_size() == 1, "movement did not coalesce to one delta");
+    require(own.number(first.player_id(), 103) == 2 && other.number(first.player_id(), 103) == 2 &&
+                std::get<double>(own.player(first.player_id()).fields.at(101)) == 120,
+        "authoritative move missing");
+    alice.quiet();
+    bob.quiet();
+    alice.send(move, move_to(2, 900, 500));
     error_is(alice, "stale_sequence");
-    alice.send(move, {{"seq", 2}, {"x", -1}, {"y", 1}});
+    alice.send(move, move_to(3, -1, 1));
     error_is(alice, "invalid_message");
-    alice.send(move, {{"seq", 1.5}, {"x", 0}, {"y", 0}});
+    alice.send(move, move_to(3, std::numeric_limits<double>::infinity(), 0));
     error_is(alice, "invalid_message");
-    alice.write(client::encode(move, R"({"seq":2,"x":1e999,"y":0})"));
-    error_is(alice, "invalid_message");
-    alice.write(client::encode(move, "[]"));
-    error_is(alice, "invalid_message");
-    alice.write(client::encode(12345, "{}"));
-    error_is(alice, "invalid_message");
-    alice.write(client::encode(1, "{}"));
-    error_is(alice, "invalid_message");
-    alice.write(client::encode(ping, R"({"nonce":1})") + client::encode(ping, R"({"nonce":4294967295})"));
-    require(alice.receive(pong)["nonce"] == 1, "first coalesced ping lost");
-    require(alice.receive(pong)["nonce"] == 4294967295u, "second coalesced ping lost");
+    wire::heartbeat heartbeat;
+    heartbeat.set_nonce(1);
+    wire::heartbeat maximum;
+    maximum.set_nonce(4294967295u);
+    alice.write(
+        client::encode(ping, heartbeat.SerializeAsString()) + client::encode(ping, maximum.SerializeAsString()));
+    require(alice.receive<wire::heartbeat>(pong).nonce() == 1, "first coalesced ping lost");
+    require(alice.receive<wire::heartbeat>(pong).nonce() == 4294967295u, "second coalesced ping lost");
+    alice.quiet();
+    bob.quiet();
 
-    bob.send(move, {{"seq", 1}, {"x", 900}, {"y", 500}});
-    const auto bob_state = alice.receive(snapshot);
-    require(player(bob_state, second_id)["x"] == 900, "second peer movement missing");
-    require(player(bob_state, first_id)["x"] == 120.0, "invalid movement mutated entity");
-    bob.receive(snapshot);
+    bob.send(move, move_to(1, 900, 500));
+    own.changes(alice);
+    other.changes(bob);
     bob.close();
-    require(alice.receive(snapshot)["players"].size() == 1, "disconnect did not retire entity");
-
-    client rejoined(port);
-    rejoined.send(join, {{"name", "Bob"}, {"room", "lobby"}});
-    const auto fresh_id = rejoined.receive(accepted)["player_id"].get<std::string>();
-    require(fresh_id != second_id && fresh_id != first_id, "reconnect reused old identity");
-    const auto fresh_roster = rejoined.receive(snapshot);
-    require(fresh_roster["players"].size() == 2, "rejoin missed full roster");
-    require(player(fresh_roster, fresh_id)["seq"] == 0, "rejoin retained old entity state");
-    alice.receive(snapshot);
-    rejoined.close();
-    alice.receive(snapshot);
+    const auto removal = own.changes(alice);
+    require(removal.changed_size() == 1 && removal.changed(0).removed() && removal.changed(0).fields_size() == 0,
+        "disconnect did not emit a tombstone");
+    require(!own.players.at(static_cast<ark::guid_t>(second.entity_id()))->state(), "retired Entity remained live");
+    client fresh(port);
+    fresh.write(client::encode(join, join_as("Bob").SerializeAsString()) +
+                client::encode(move, move_to(1, 200, 150).SerializeAsString()));
+    const auto rejoined = fresh.receive<wire::join_accepted>(accepted);
+    require(rejoined.player_id() != second.player_id() && rejoined.entity_id() != second.entity_id(),
+        "reconnect reused old incarnation");
+    roster reset;
+    reset.baseline(fresh);
+    require(reset.players.size() == 2 && reset.number(rejoined.player_id(), 103) == 1,
+        "new baseline did not capture pre-publication movement");
+    const auto fresh_added = own.changes(alice);
+    require(fresh_added.added_size() == 1 && fresh_added.changed_size() == 0,
+        "new Entity must not publish an intermediate delta alongside its baseline");
+    fresh.quiet();
+    alice.quiet();
+    fresh.close();
+    own.changes(alice);
     alice.close();
 
-    for (const auto kind : {0, 1, 2})
+    for (const auto kind : {0, 1, 2, 3, 4})
     {
         client malformed(port);
-        auto bytes = client::encode(join, "{}").substr(0, 12);
+        auto bytes = client::encode(join, "").substr(0, 12);
         if (kind == 0)
         {
             bytes[0] = 'X';
@@ -314,185 +419,141 @@ void exercise(unsigned short port) {
             bytes[10] = 0x20;
             bytes[11] = 1;
         }
+        if (kind == 3)
+        {
+            bytes = client::encode(join, std::string(1, static_cast<char>(0x80)));
+        }
+        if (kind == 4)
+        {
+            bytes = client::encode(12345, "");
+        }
         malformed.write(bytes);
         malformed.expect_closed();
     }
+    client queued(port);
+    std::string overflow;
+    for (unsigned index = 0; index < 9; ++index)
+    {
+        overflow += client::encode(ping, heartbeat.SerializeAsString());
+    }
+    queued.write(overflow);
+    queued.expect_closed();
     client names(port);
-    names.send(join, {{"name", std::string(65, 'a')}, {"room", "lobby"}});
+    names.send(join, join_as(std::string(65, 'a')));
     error_is(names, "invalid_message");
-    names.send(join, {{"name", "a\nb"}, {"room", "lobby"}});
+    names.send(join, join_as("a\nb"));
     error_is(names, "invalid_message");
-    names.write(client::encode(join, std::string("{\"name\":\"") + static_cast<char>(0xff) + "\",\"room\":\"lobby\"}"));
+    auto old_version = join_as("Old");
+    old_version.set_protocol_version(0);
+    names.send(join, old_version);
     error_is(names, "invalid_message");
     names.close();
-
-    std::vector<std::unique_ptr<client>> capacity;
-    for (int count = 0; count < 16; ++count)
-    {
-        auto peer = std::make_unique<client>(port);
-        peer->send(join, {{"name", std::string(64, '"')}, {"room", "lobby"}});
-        peer->receive(accepted);
-        capacity.push_back(std::move(peer));
-        for (const auto& member : capacity)
-        {
-            require(member->receive(snapshot)["players"].size() == capacity.size(), "capacity roster incorrect");
-        }
-    }
-    client full(port);
-    full.send(join, {{"name", "Overflow"}, {"room", "lobby"}});
-    error_is(full, "room_full");
-    full.close();
-    for (const auto& peer : capacity)
-    {
-        peer->send(move, {{"seq", 1}, {"x", 2.2250738585072014e-308}, {"y", 2.2250738585072014e-308}});
-        for (const auto& member : capacity)
-        {
-            require(member->receive(snapshot)["players"].size() == 16, "worst-coordinate roster overflowed");
-        }
-    }
-    while (capacity.size() > 1)
-    {
-        capacity.back()->close();
-        capacity.pop_back();
-        for (const auto& member : capacity)
-        {
-            require(
-                member->receive(snapshot)["players"].size() == capacity.size(), "capacity departure roster incorrect");
-        }
-    }
-    capacity.front()->close();
 }
 
 void exercise_attributes(unsigned short port) {
-    client owner(port);
-    owner.send(action, {{"seq", 1}, {"kind", "damage"}});
-    error_is(owner, "not_joined", 1);
-    owner.send(join, {{"name", "Attributes"}, {"room", "lobby"}});
-    const auto id = owner.receive(accepted)["player_id"].get<std::string>();
-    std::uint32_t hp = 100, mp = 100, sequence = 0, move_sequence = 0, observer_sequence = 0;
-    const auto verify = [&](const json& state) {
-        const auto& value = player(state, id);
-        require(value["hp"] == hp && value["mp"] == mp && value["hp_max"] == 100 && value["mp_max"] == 100 &&
-                    value["action_seq"] == sequence && value["seq"] == move_sequence,
-            "authoritative attribute or independent movement sequence changed");
-    };
-    verify(owner.receive(snapshot));
+    client owner(port, true);
+    owner.send(join, join_as("Attributes"));
+    const auto id = owner.receive<wire::join_accepted>(accepted).player_id();
+    roster own;
+    own.baseline(owner);
     client observer(port);
-    observer.send(join, {{"name", "Observer"}, {"room", "lobby"}});
-    observer.receive(accepted);
-    verify(observer.receive(snapshot));
-    verify(owner.receive(snapshot));
-    const auto accept_action = [&](std::uint32_t next, const std::string& kind, std::uint32_t health,
-                                   std::uint32_t mana) {
-        // Exercise the unchanged 32-message/s policy without overflowing it.
+    observer.send(join, join_as("Observer"));
+    observer.receive<wire::join_accepted>(accepted);
+    roster other;
+    other.baseline(observer);
+    own.changes(owner);
+    const auto accept_action = [&](std::uint32_t sequence, wire::action_kind kind, std::uint32_t hp, std::uint32_t mp) {
         std::this_thread::sleep_for(35ms);
-        owner.send(action, {{"seq", next}, {"kind", kind}});
-        hp = health;
-        mp = mana;
-        sequence = next;
-        verify(owner.receive(snapshot));
-        verify(observer.receive(snapshot));
+        owner.send(action, act(sequence, kind));
+        const auto changed = own.changes(owner);
+        other.changes(observer);
+        require(changed.added_size() == 0 && changed.changed_size() == 1, "action sent a full/added baseline");
+        for (const auto* state : {&own, &other})
+        {
+            require(state->number(id, 104) == hp && state->number(id, 105) == mp && state->number(id, 108) == sequence,
+                "wrong authoritative attributes or acknowledgement");
+        }
+        return changed;
     };
-    const auto unchanged_after_error = [&] {
-        observer.send(move, {{"seq", ++observer_sequence}, {"x", 500}, {"y", 200}});
-        verify(owner.receive(snapshot));
-        verify(observer.receive(snapshot));
-    };
-    const auto reject_action = [&](const json& body, const std::string& code, std::uint32_t correlation) {
+    const auto reject_action = [&](std::uint32_t sequence, wire::action_kind kind, const std::string& code) {
         std::this_thread::sleep_for(35ms);
-        owner.send(action, body);
-        error_is(owner, code, correlation);
-        unchanged_after_error();
+        owner.send(action, act(sequence, kind));
+        error_is(owner, code, sequence);
+        owner.quiet();
+        observer.quiet();
     };
-    accept_action(1, "damage", 85, 100);
-    owner.send(move, {{"seq", ++move_sequence}, {"x", 120}, {"y", 100}});
-    verify(owner.receive(snapshot));
-    verify(observer.receive(snapshot));
-    accept_action(2, "skill", 85, 80);
-    reject_action({{"seq", 1}, {"kind", "rest"}}, "stale_sequence", 1);
-    for (const auto& value : {json(0), json(-1), json(4294967296ULL), json(1.0), json(true), json(nullptr), json("3")})
-    {
-        reject_action({{"seq", value}, {"kind", "damage"}}, "invalid_message", 0);
-    }
-    for (const auto& body : std::vector<json>{{{"seq", 3}, {"kind", "heal"}}, {{"seq", 3}, {"kind", 1}}, {{"seq", 3}},
-             {{"seq", 3}, {"kind", "damage"}, {"amount", 99}}, {{"seq", 3}, {"kind", "damage"}, {"target", "someone"}},
-             {{"seq", 3}, {"kind", "rest"}, {"hp", 1000}}, {{"seq", 3}, {"kind", "rest"}, {"mp", 1000}}})
-    {
-        reject_action(body, "invalid_message", 3);
-    }
-    reject_action({{"kind", "damage"}}, "invalid_message", 0);
-    reject_action(json::array(), "invalid_message", 0);
-    std::this_thread::sleep_for(35ms);
-    owner.write(client::encode(action, "{"));
-    error_is(owner, "invalid_message", 0);
-    unchanged_after_error();
-    accept_action(3, "rest", 100, 100);
-    accept_action(4, "rest", 100, 100); // Clamped no-op still acknowledges this sequence.
+    accept_action(1, wire::ACTION_DAMAGE, 85, 100);
+    accept_action(2, wire::ACTION_SKILL, 85, 80);
+    reject_action(1, wire::ACTION_REST, "stale_sequence");
+    reject_action(0, wire::ACTION_DAMAGE, "invalid_message");
+    reject_action(3, static_cast<wire::action_kind>(99), "invalid_message");
+    accept_action(3, wire::ACTION_REST, 100, 100);
+    const auto noop = accept_action(4, wire::ACTION_REST, 100, 100);
+    require(noop.changed(0).fields_size() == 1 && noop.changed(0).fields(0).index() == 108,
+        "clamped action must acknowledge only action_seq");
     for (std::uint32_t next = 5; next <= 9; ++next)
     {
-        accept_action(next, "skill", 100, 100 - (next - 4) * 20);
+        accept_action(next, wire::ACTION_SKILL, 100, 100 - (next - 4) * 20);
     }
-    reject_action({{"seq", 10}, {"kind", "skill"}}, "insufficient_resource", 10);
-    accept_action(10, "rest", 100, 20); // A rejected sequence remains available.
-    accept_action(11, "skill", 100, 0); // Exactly 20 MP succeeds.
+    reject_action(10, wire::ACTION_SKILL, "insufficient_resource");
+    accept_action(10, wire::ACTION_REST, 100, 20);
+    accept_action(11, wire::ACTION_SKILL, 100, 0);
     for (std::uint32_t next = 12; next <= 18; ++next)
     {
-        accept_action(next, "damage", next == 18 ? 0 : 100 - (next - 11) * 15, 0);
+        accept_action(next, wire::ACTION_DAMAGE, next == 18 ? 0 : 100 - (next - 11) * 15, 0);
     }
-    accept_action(19, "damage", 0, 0);
-    owner.send(move, {{"seq", ++move_sequence}, {"x", 200}, {"y", 150}});
-    verify(owner.receive(snapshot));
-    verify(observer.receive(snapshot));
-    accept_action(4294967295u, "rest", 20, 20);
-    reject_action({{"seq", 4294967295u}, {"kind", "damage"}}, "stale_sequence", 4294967295u);
+    accept_action(19, wire::ACTION_DAMAGE, 0, 0);
+    owner.send(move, move_to(1, 200, 150));
+    own.changes(owner);
+    other.changes(observer);
+    require(own.number(id, 103) == 1 && own.number(id, 104) == 0, "zero HP blocked movement");
+    accept_action(4294967295u, wire::ACTION_REST, 20, 20);
+    reject_action(4294967295u, wire::ACTION_DAMAGE, "stale_sequence");
     owner.close();
-    observer.receive(snapshot);
+    other.changes(observer);
     client fresh(port);
-    fresh.send(join, {{"name", "Attributes"}, {"room", "lobby"}});
-    const auto fresh_id = fresh.receive(accepted)["player_id"].get<std::string>();
-    require(fresh_id != id, "attribute reconnect reused the previous identity");
-    const auto state = fresh.receive(snapshot);
-    const auto& value = player(state, fresh_id);
-    require(value["hp"] == 100 && value["mp"] == 100 && value["hp_max"] == 100 && value["mp_max"] == 100 &&
-                value["action_seq"] == 0 && value["seq"] == 0,
-        "reconnect did not load a fresh configured attribute profile");
-    observer.receive(snapshot);
-    fresh.send(action, {{"seq", 1}, {"kind", "skill"}});
-    require(player(fresh.receive(snapshot), fresh_id)["mp"] == 80, "fresh action sequence did not reset");
-    observer.receive(snapshot);
+    fresh.send(join, join_as("Attributes"));
+    const auto new_id = fresh.receive<wire::join_accepted>(accepted).player_id();
+    roster reset;
+    reset.baseline(fresh);
+    require(new_id != id && reset.number(new_id, 104) == 100 && reset.number(new_id, 105) == 100 &&
+                reset.number(new_id, 108) == 0 && reset.number(new_id, 103) == 0,
+        "reconnect did not reset configured state");
+    other.changes(observer);
     fresh.close();
-    observer.receive(snapshot);
+    other.changes(observer);
     observer.close();
 }
 
 void exercise_configured_profile(unsigned short port) {
     client peer(port, true);
-    peer.send(join, {{"name", "Configured"}, {"room", "lobby"}});
-    const auto id = peer.receive(accepted)["player_id"].get<std::string>();
-    const auto state = peer.receive(snapshot);
-    const auto& initial = player(state, id);
-    require(initial["hp"] == 4294967290u && initial["mp"] == 4294967285u && initial["hp_max"] == 4294967295u &&
-                initial["mp_max"] == 4294967295u,
-        "Entity configuration profile was replaced with hardcoded attribute defaults");
-    peer.send(action, {{"seq", 1}, {"kind", "rest"}});
-    const auto recovered = peer.receive(snapshot);
-    require(player(recovered, id)["hp"] == 4294967295u && player(recovered, id)["mp"] == 4294967295u &&
-                player(recovered, id)["action_seq"] == 1,
-        "rest overflowed instead of clamping at configured uint32 maxima");
+    peer.send(join, join_as("Configured"));
+    const auto id = peer.receive<wire::join_accepted>(accepted).player_id();
+    roster state;
+    state.baseline(peer);
+    require(state.number(id, 104) == 4294967290u && state.number(id, 105) == 4294967285u &&
+                state.number(id, 106) == 4294967295u && state.number(id, 107) == 4294967295u,
+        "configured defaults replaced");
+    peer.send(action, act(1, wire::ACTION_REST));
+    state.changes(peer);
+    require(state.number(id, 104) == 4294967295u && state.number(id, 105) == 4294967295u && state.number(id, 108) == 1,
+        "rest overflowed instead of clamping");
     peer.close();
 }
 
 void exercise_resource_boundary(unsigned short port) {
     client peer(port, true);
-    peer.send(join, {{"name", "ResourceBoundary"}, {"room", "lobby"}});
-    const auto id = peer.receive(accepted)["player_id"].get<std::string>();
-    require(player(peer.receive(snapshot), id)["mp"] == 19, "19 MP profile was not loaded");
-    peer.send(action, {{"seq", 1}, {"kind", "skill"}});
+    peer.send(join, join_as("ResourceBoundary"));
+    const auto id = peer.receive<wire::join_accepted>(accepted).player_id();
+    roster state;
+    state.baseline(peer);
+    require(state.number(id, 105) == 19, "19 MP configuration missing");
+    peer.send(action, act(1, wire::ACTION_SKILL));
     error_is(peer, "insufficient_resource", 1);
-    peer.send(action, {{"seq", 1}, {"kind", "rest"}});
-    const auto state = peer.receive(snapshot);
-    require(player(state, id)["mp"] == 39 && player(state, id)["hp"] == 100 && player(state, id)["action_seq"] == 1,
-        "19 MP rejection mutated resources or advanced its sequence");
+    peer.send(action, act(1, wire::ACTION_REST));
+    state.changes(peer);
+    require(state.number(id, 105) == 39 && state.number(id, 104) == 100 && state.number(id, 108) == 1,
+        "rejected action mutated resources or sequence");
     peer.close();
 }
 } // namespace
@@ -531,10 +592,21 @@ int main(int argc, char** argv) {
         launcher resource_boundary(argv[1], argv[2], "launcher-resource-boundary.log");
         exercise_resource_boundary(port);
         resource_boundary.stop();
-        for (const auto* field : {"hp", "move_seq"})
+        for (const auto* field : {"hp", "move_seq", "hp_max", "mp_max"})
         {
             auto invalid = original;
-            invalid["configs"][0]["rows"][0][field] = std::string(field) == "hp" ? 101 : 1;
+            auto& invalid_profile = invalid["configs"][0]["rows"][0];
+            const auto name_of_field = std::string(field);
+            if (name_of_field == "hp_max" || name_of_field == "mp_max")
+            {
+                // Keep the current resource in bounds so only the zero maximum rejects startup.
+                invalid_profile[name_of_field] = 0;
+                invalid_profile[name_of_field == "hp_max" ? "hp" : "mp"] = 0;
+            }
+            else
+            {
+                invalid_profile[name_of_field] = name_of_field == "hp" ? 101 : 1;
+            }
             {
                 std::ofstream output(path);
                 output << invalid.dump(2);
@@ -547,9 +619,10 @@ int main(int argc, char** argv) {
             std::ofstream output(path);
             output << original.dump(2);
         }
-        std::cout << "guest_room: actual launcher, Kernel entities, two peers, authoritative moves, errors, "
-                     "attribute actions, configured defaults, uint32 clamp boundaries, split/coalesced frames, "
-                     "disconnect/rejoin, invalid framing and normal shutdown passed\n";
+        std::cout
+            << "guest_room: actual launcher, Kernel entities, two peers, authoritative moves, errors, "
+               "protobuf baselines/deltas/tombstones, attribute actions, configured defaults, uint32 clamp boundaries, "
+               "disconnect/rejoin, invalid framing and normal shutdown passed\n";
         return 0;
     }
     catch (const std::exception& exception)

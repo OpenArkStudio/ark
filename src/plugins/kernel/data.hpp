@@ -69,6 +69,13 @@ public:
         case data_type::dt_int64:
             success = (get_int64() == src.get_int64());
             break;
+        case data_type::dt_guid:
+#if defined(ARK_USE_GUID_32)
+            success = (get_int() == src.get_int());
+#else
+            success = (get_int64() == src.get_int64());
+#endif
+            break;
         case data_type::dt_uint32:
             success = (get_u_int() == src.get_u_int());
             break;

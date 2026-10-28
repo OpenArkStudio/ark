@@ -173,6 +173,10 @@ Defaults and argument values are ready before the first class event, `entity_evt
 
 Field access belongs to `entity`, using a field name or metadata index. The accessor type must match the schema. Do not use a numeric field value to determine whether an entity or field exists.
 
+`set_u_int64()` accepts declared `uint64` fields through either the name or index overload and preserves the full `UINT64_MAX` range. A changed value invokes the field callback with unsigned old/new values; setting the same value returns `false` without invoking that callback.
+
+GUID field callbacks retain the `dt_guid` tag. Read their native signed value with `data::get_int64()` in the default GUID64 build, or `data::get_int()` with `ARK_USE_GUID_32`. `data_impl::from_guid()` constructs an explicit tagged value; copying, assignment, node conversion and equality preserve its GUID type. The ordinary numeric constructors continue to require their matching numeric types.
+
 ```cpp
 #include <cstdint>
 #include <string>
@@ -262,6 +266,27 @@ This boundary fixes collection membership, not a point-in-time snapshot of value
 
 `check-kernel-initialization` exercises real container mutations through delayed collection, Kernel update, serialization and the existing delivery callback, with empty, scalar, table and mixed controls. Its test-only callback observer does not provide network delivery. The existing `send_to_self()` path remains a stub; these checks do not establish a client replication protocol, acknowledgements or AOI behavior.
 
+### Owning scalar snapshots
+
+`<ark/kernel/entity_snapshot.hpp>` defines the Entity-independent value types in `ark::entity_sync`: `guid_value`, `scalar_value`, `scalar_snapshot` and `snapshot_limits`. This value-only header does not include Entity or Protobuf. GUID values retain the configured `guid_t` width in a distinct variant alternative. A snapshot owns its entity ID, class name and a field-index map containing `bool`, signed/unsigned 32-bit and 64-bit integers, `float`, `double`, byte strings or GUIDs. Copies remain valid after source mutation or destruction.
+
+**Breaking vtable ABI change:** `kernel_module` adds the virtual `capture_scalar_snapshot()` method. Rebuild every plugin and host/consumer together before loading them; existing plugin binaries must not be mixed with the new interface. External source subclasses can retain the default implementation, which throws `std::logic_error`, or override it. The framework `kernel_module_impl` implements capture. No new module, free-function export or lifecycle phase is introduced.
+
+```cpp
+#include <array>
+#include <ark/kernel/kernel_module.hpp>
+
+const std::array<std::uint32_t, 2> authorized_fields{100, 104};
+ark::kernel_module* kernel = manager.find_module<ark::kernel_module>();
+auto snapshot = kernel->capture_scalar_snapshot(*entity, authorized_fields);
+```
+
+The caller must authorize and explicitly select every field. An empty selection captures the ID and class name with no fields; it never means all fields. Capture reads only selected schema/node entries, including fields without synchronization masks if the caller selects them. Declared lazy fields produce type-correct zero/empty values without creating nodes. Unknown, zero or duplicate indices, unsupported types (including wide strings, tables, containers and pointers), non-finite selected floating values and custom `entity` implementations throw `std::invalid_argument`. Capture currently supports the framework `entity_impl` only.
+
+`snapshot_limits` defaults to `max_fields = 1024` and `max_string_bytes = 1024 * 1024`. The byte limit sums the class name and selected string fields, including embedded NUL bytes; the class name is counted even with no selected fields. These are structural/text limits, not exact heap-memory or encoded-message limits. Capture checks selections, types, finite values and cumulative bytes before copying strings. Limit violations throw `std::length_error`; allocation failures propagate normally. Failure returns no partial snapshot and leaves the source unchanged.
+
+Capture requires stable schema/nodes on the source's owner thread for the duration of the call. It does not synchronize concurrent mutation. This API does not alter delayed-sync callbacks, authorize fields, define a wire format or provide transport/delivery guarantees. Its aggregate value types can also be constructed directly; capture validation does not validate arbitrary caller-constructed snapshots. Call capture through the existing `kernel_module` pointer returned by the plugin manager. The independent `check-kernel-plugin` host links only the public interface and calls the actual loaded Kernel DSO, including owning values retained after normal entity destruction and plugin stop. This does not certify arbitrary hot update or caller-retained Entity lifetimes after unloading.
+
 ## Maps and data conversion
 
 Each map is identified by `map_id` and can have multiple instances. `create_map_instance()` returns an instance ID on success or `-1` on failure. `switch_map()` moves an existing entity to a target instance; the target map and instance must already exist.
@@ -281,7 +306,7 @@ The map module exposes entity lists and online counts. It does not provide a com
 
 ## Kernel source layout
 
-Kernel keeps all 38 existing headers beside its cpp files in `src/plugins/kernel/`.
+Kernel keeps its public headers beside their cpp files in `src/plugins/kernel/`.
 The explicit `ark::kernel` mapping preserves every `<ark/kernel/...>` include,
 including `data_impl.hpp`, `data_list_impl.hpp` and `kernel_plugin.hpp`, even when
 the runtime plugin is disabled. Value/template definitions remain available to
@@ -289,10 +314,10 @@ business code. The four module implementations now inherit `module_base<their_in
 `kernel_plugin` inherits `plugin_base<kernel_plugin>`. Core source headers live under `src/core/`.
 
 The independent `tests/consumer/kernel` project links only `ark::kernel`, compiles
-the 38 headers separately with Protobuf enabled, and runs value/template usage.
+each public header separately with Protobuf enabled, and runs value/template usage.
 The unchanged `container_meta.hpp` requires `ark/define.hpp` and `ark/enum.hpp`
 to be included first; the consumer supplies those existing prerequisites.
-With `ARK_BUILD_PROTO=OFF` it checks the other 35 headers; `kernel_module.hpp`,
+With `ARK_BUILD_PROTO=OFF` it checks the remaining headers; `kernel_module.hpp`,
 `kernel_module_impl.hpp` and `map_module_impl.hpp` retain their existing Protobuf
 requirement. Use `check-core`, `check-kernel-initialization` and
 `check-typed-examples` for data/node, initialization/configuration and application
@@ -325,3 +350,51 @@ Installation retains the table order; uninstallation uses its reverse. Registrat
 `check-kernel-plugin` is a `check-core` dependency when Protobuf and the Kernel/Utility runtime targets are available. The independent runner links only the public `ark::kernel` target and loads both actual DSOs. It checks all four interface keys and manager ownership, metadata/static record loading, map/entity registration, public lifecycle callbacks, manager updates, normal plugin exit and repeated stop. It does not inspect the registry after unloading or certify arbitrary hot update. The public-header consumer also checks the typed bases and retained update overrides; existing initialization/entity-default regressions remain required.
 
 **Unsigned 64-bit getter migration:** `static_entity::get_u_int64()` and both `static_entity_impl` overrides now return `uint64_t`, preserving values through `UINT64_MAX`. Update custom overrides and variables that incorrectly used `int64_t`, and rebuild Kernel together with its C++ consumers. Signed fields continue to use `get_int64()`.
+
+## Scalar baselines and deltas
+
+`<ark/kernel/entity_stream.hpp>` provides a C++ state loop over owning snapshots. `scalar_publisher` compares the complete selected state at an explicit application flush point and returns only changed fields. `scalar_replica` installs a baseline, checks generation/revision continuity and applies a patch atomically. Retained replica states and delta handles are immutable shared values that remain valid after subsequent updates or destruction of their producer.
+
+```cpp
+#include <array>
+#include "ark/kernel/entity_stream.hpp"
+
+// kernel and player belong to the current module thread.
+const std::array visible{104U, 105U}; // GuestPlayer HP and MP
+using namespace ark::entity_sync;
+auto state = kernel->capture_scalar_snapshot(*player, visible);
+scalar_publisher sender({"guest-player/v1", 1, 1, state});
+scalar_replica receiver("guest-player/v1", state.entity_id, state.class_name);
+receiver.apply(sender.baseline());
+
+player->set_u_int32(104, 90);
+player->set_u_int32(104, 80);
+// Flush once after the business mutations; HP is emitted as 80.
+if (auto delta = sender.update(kernel->capture_scalar_snapshot(*player, visible)))
+{
+    receiver.apply(*delta);
+}
+```
+
+This example passes C++ values in one process. For network encoding, connection-bound baselines and Godot application, see the [guest-room Protobuf adapter](../../examples/guest_room/protocol.md). Tables, containers and application events are outside this scalar loop. The existing borrowed delayed-sync path is separate.
+
+| Condition | Behavior |
+| --- | --- |
+| State unchanged | No delta or revision increment |
+| Repeated writes before one capture | The captured final value is compared |
+| Duplicate frame in the same generation | Ignore without regressing the current state |
+| Gap, wrong binding/schema/type, malformed or oversized frame | Reject and invalidate the replica; no partial state is exposed |
+| Recovery on the same replica | Install a baseline with a strictly greater generation; replace the entire selected state |
+| Field selection/type changes | Establish a new publisher/generation and baseline |
+| Removal | Apply an ordered tombstone; old duplicates cannot revive the entity |
+| Revision exhaustion | Publisher throws `std::overflow_error` without advancing |
+
+A generation identifies a rebuilt state stream; a revision identifies its state version. Shared handles do not make dynamic-library unloading safe; release plugin-created handles before unloading their code.
+
+The application supplies an opaque `schema_id`, bound entity ID/class and authorized field selection. ID matching does not validate the complete schema definition or authenticate a session. A new connection may create a new replica. An existing replica retains its generation after invalidation/removal, so stale baselines cannot reset it. Publisher input/limit errors throw standard exceptions; invalid receiver envelopes return `scalar_apply_result::rejected`. Allocation failures propagate with the previously committed state intact.
+
+`snapshot_limits` also bounds each complete reconstructed state; checking only the patch is insufficient. The schema ID has a separate string check using the same limit. These limits cover field count and text bytes, not encoded length or exact process memory. There is no outbound queue, acknowledgement, replay history or transport implementation here. The adapter must bound encoded payloads and pending work, close/reset on enqueue failure, and bind the active session and authorization before accepting state. Strings are C++ byte strings; a wire codec must enforce its text rules. Never serialize these structs or variant indices as a binary ABI.
+
+Use each publisher/replica on one owner thread. Transfer the returned owning values/immutable handles, not the publisher, replica or Entity, to other threads. Callers bound the number of retained historical handles. No throughput or bandwidth result is claimed for this component.
+
+`check-entity-stream` runs permanent state-machine regressions even with Protobuf disabled. `check-kernel-initialization` additionally exercises a real Entity through capture, baseline, coalesced HP/MP changes, receiver application, source destruction, removal and a new baseline. These checks cover the native C++ state loop; `check-guest-room` and the matching Godot client's tests cover their separate transport and presentation boundaries.

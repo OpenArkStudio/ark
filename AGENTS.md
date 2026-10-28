@@ -156,6 +156,14 @@ branch or worktree when the existing checkout contains uncommitted changes.
 - Keep raw measurements and build logs outside the source repository. Published
   performance claims must identify the machine, workload, units and tested
   revision; local tests do not establish production PCU capacity.
+- Guest-room client/server message bodies use the canonical
+  `src/proto/proto/guest_room.proto`; Entity definitions and profiles remain JSON.
+  Synchronize the Godot schema, generated C# and golden vectors with wire changes,
+  verify cross-repository parity and run the real two-client integration before
+  claiming acceptance. Preserve owning scalar capture, explicit authorized
+  fields, owner-thread flush, revision checks and bounded pending messages.
+  Incompatible wire changes require coordinated server/client upgrades and a
+  migration notice; never hand-edit generated Protobuf output.
 
 ## Task execution and CI admission
 
