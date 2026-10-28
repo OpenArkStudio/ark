@@ -51,20 +51,28 @@ cmake -S . -B out/server-construction -G Ninja \
 cmake --build out/server-construction --target check-server-plugins --parallel 2
 ```
 
-`check-server-plugins` 对七个启用的服务动态库分别检查真实工厂与装配、原有源码包含路径和关闭更新的注册方式，并加载实际动态库检查两个导出入口符号。每个角色先在仅链接核心的最小进程中检查导出，再在独立进程中检查真实工厂，避免宿主与动态库在同一进程内重复注册静态链接的 AFProto 描述符。真实 Login 装配另以计数替身检查被拒绝候选对象的析构、原有注册的保留以及重试成功。应用构建中的 `check-core` 包含这些定向检查。另一个动态库夹具通过管理器加载器运行真实 Login 入口与退出函数，并使用受控模块。动态库导出检查进程不调用业务生命周期。真实工厂进程还使用受控依赖检查下文所述的启动结果传播。工厂与导出检查不启动网络服务，也不代表部署就绪；下文的独立启动器检查覆盖本地监听器。
+`check-server-plugins` 对七个启用的服务动态库分别检查真实工厂与装配、原有源码包含路径和关闭更新的注册方式，并加载实际动态库检查两个导出入口符号。每个角色先在仅链接核心的最小进程中检查导出，再在独立进程中检查真实工厂，避免宿主与动态库在同一进程内重复注册静态链接的 AFProto 描述符。真实 Login 装配另以计数替身检查被拒绝候选对象的析构、原有注册的保留以及重试成功。应用构建中的 `check-core` 包含这些定向检查。另一个测试动态库通过管理器加载器运行真实 Login 入口与退出函数，并使用受控模块。动态库导出检查进程不调用业务生命周期。真实工厂进程还使用受控依赖检查下文所述的启动结果传播。工厂与导出检查不启动网络服务，也不代表部署就绪；下文的独立启动器检查覆盖本地监听器。
 
 `node --test tests/ci/server-construction.test.mjs` 在不编译原生代码的情况下检查兼容转发映射与创建约束。Simulate 只参与源码策略检查，其未受支持的 PhysX 3／MessagePack 集成不在这些原生目标中。
 
 ### 角色启动错误
 
-Login、Proxy、Router、Master、World 和 Dir 的网络启动路径先检查 Bus 与 Net。Game 还会在注册现有回调前检查 Kernel。缺少启动必需的模块时，`init()` 返回 `false`；创建监听器失败或找不到服务端网络服务时，`post_init()` 返回 `false`。管理器保留失败的角色与生命周期阶段并停止启动，启动器输出诊断后以退出码 1 结束。监听器设置成功时返回 `true`。这些路径不再以退出码 0 终止进程。本次变更不定义回滚或部分启动后的清理顺序。
+Login、Proxy、Router、Master、World 和 Dir 的网络启动路径先检查 Bus 与 Net。Game 还会在 `init()` 检查 Kernel，供后续阶段使用。缺少启动必需的模块时，`init()` 返回 `false`；创建监听器失败或找不到服务端网络服务时，`post_init()` 返回 `false`。管理器保留失败的角色与生命周期阶段并停止启动，启动器输出诊断后以退出码 1 结束。监听器设置成功时返回 `true`。这些路径不再以退出码 0 终止进程。启动失败后的回滚和部分启动资源清理顺序尚未定义。
 
-真实工厂测试还会通过公共角色装配和管理器运行受控的 Bus/Net 场景：缺少依赖、创建失败、服务缺失，以及六条仅设置监听器的启动路径成功。Game 覆盖缺少依赖的场景，包括缺少 Kernel；测试不模拟 Kernel，也不声称 Game 生命周期正常。在 macOS 和 Linux 上，`check-server-startup` 另以独立 Bus 夹具运行六个角色各自的真实 Utility、Bus、Net 和角色动态库，检查健康回环启动，以及测试持有的端口被占用时的失败角色、阶段与启动器退出码 1。该夹具不验收仓库内的角色预设或业务处理器。
+真实工厂测试还会通过公共角色装配和管理器运行受控的 Bus/Net 场景：缺少依赖、创建失败、服务缺失，以及六条仅设置监听器的启动路径成功。Game 的创建测试进程覆盖缺少依赖的场景，包括缺少 Kernel；健康监听器的生命周期由下文的真实组合检查。在 macOS 和 Linux 上，`check-server-startup` 另使用独立的最小 Bus 测试配置运行六个角色各自的真实 Utility、Bus、Net 和角色动态库，检查健康回环启动，以及测试持有的端口被占用时的失败角色、阶段与启动器退出码 1。这些检查不验收仓库内的角色预设或业务处理器。
+
+Kernel 插件目标可用时，POSIX 平台的 `check-server-startup` 还包含 Game。`check-server-startup-game` 只选择这两个场景：使用真实 Utility、Bus、Net、Kernel 和 Game 动态库，配备私有 Bus 身份 `1.1.31.1` 和最小 `Player` JSON 结构。健康启动必须接受回环连接，配合 `SIGTERM` 完成停服，关闭客户端连接和监听器，并以退出码 0 结束。测试持有端口时，必须输出 Game 的 `post_init` 失败诊断，并以退出码 1 结束。现有启动与停服观察时限保持不变。测试不创建 Entity，也不发送玩法消息。
+
+Game 在 `init()` 获取并验证依赖，在所有模块完成 `init()` 后，于 `post_init()` 注册既有 Player 回调，不要求 Kernel 自身的 `post_init()` 先执行。注册前检查 Player 元数据，并逐项检查注册结果；只有四次调用全部成功，才创建监听器。缺少 Player 元数据或注册被拒绝时返回 `false`，不创建监听器。部分完成的注册不会回滚。
+
+`check-game-initialization` 在真实 Metadata、Map、Config 和 Guid 已注册时，强制真实 Game 装配先于真实 Kernel 实现执行初始化。测试覆盖 Game／Kernel `post_init()` 的两种顺序，通过元数据事件分发观察真实 Player 类回调，并验证缺少 Player 元数据时拒绝创建监听器。定向测试只控制监听器返回值，独立 DSO 场景覆盖真实网络栈。这些检查不验收其他类／场景回调行为或玩法。
 
 未启用的 Simulate 源码采用相同的失败传播方式，并在注册回调前检查模拟模块。其 PhysX 3/MessagePack 集成仍不受当前构建支持，因此没有本套测试的原生运行验收。依赖检查只覆盖现有启动代码实际解引用的模块，不能证明尚未完成的角色操作已经就绪。
 
 ```sh
 cmake --build out/server-construction --target check-server-startup --parallel 1
+# POSIX 平台启用 ARK_BUILD_PLUGIN_KERNEL=ON 后，可只选择 Game。
+cmake --build out/server-construction --target check-server-startup-game --parallel 1
 ```
 
 ## 验证本地启动器组合
@@ -80,3 +88,5 @@ cmake --build out/server-construction --target check-server-launcher --parallel 
 此测试验收启动器和传输边界。Login 当前只创建监听器，没有注册账号登录处理器。Proxy 的服务器选择和消息转发回调尚不完整。Router 清单未选择 Router 角色动态库，World 预设的插件路径和配置为空；将这些预设用于部署前，需要应用提供经过审阅的清单。连接成功不能证明认证、访客或会话流程、集群路由、重连恢复或持久化已经可用。
 
 验证现有的有限业务操作时，可启用示例及 Kernel、Utility 后运行 `check-typed-examples`。其中真实 EntityOperations 动态库使用仓库内的清单和元数据，创建并检查玩家数据、表格和自定义值，再于退出时销毁实体。此进程内业务示例与独立的 Login 传输组合分别验证不同边界，两者尚未组成网络游戏登录流程。
+
+启动控制器在失败时输出子进程退出码或信号，以及该测试子进程日志的最后 16 KiB。永久早退用例验证启动诊断不会丢失；现有启动与停服时限保持不变。

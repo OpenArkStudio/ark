@@ -19,6 +19,7 @@
  */
 
 #include "ark/event_define.hpp"
+#include "ark/kernel/class_meta_module.hpp"
 #include "ark/kernel/data_list_impl.hpp"
 #include "game_module_factory.hpp"
 #include "game_net_module_impl.hpp"
@@ -43,22 +44,31 @@ bool game_net_module_impl::init() {
         return false;
     }
 
-    kernel_module_->add_common_class_event(this, &game_net_module_impl::on_common_class_event);
-
-    //m_pKernelModule->AddNodeCallBack(AFEntityMetaPlayer::self_name(), AFEntityMetaBaseEntity::map_inst_id(), this,
-    //    &AFCGameNetModule::OnMapInstanceEvent);
-    //m_pKernelModule->AddNodeCallBack(
-    //    AFEntityMetaPlayer::self_name(), AFEntityMetaBaseEntity::map_id(), this, &AFCGameNetModule::OnContainerEvent);
-
-    kernel_module_->add_leave_scene_event(entity_meta_player::self_name(), this, &game_net_module_impl::on_leave_scene);
-    kernel_module_->add_enter_scene_event(entity_meta_player::self_name(), this, &game_net_module_impl::on_enter_scene);
-
-    kernel_module_->add_class_call_back(entity_meta_player::self_name(), this, &game_net_module_impl::on_entity_event);
-
     return true;
 }
 
 bool game_net_module_impl::post_init() {
+    // Metadata and Kernel finish init before any post_init callback. No order
+    // between modules within the init stage is required for these registrations.
+    auto* metadata = get_plugin_manager()->try_find_module<class_meta_module>();
+    if (metadata == nullptr || metadata->find_meta(entity_meta_player::self_name()) == nullptr)
+    {
+        ARK_LOG_ERROR("game network startup requires Player metadata");
+        return false;
+    }
+
+    if (!kernel_module_->add_common_class_event(this, &game_net_module_impl::on_common_class_event) ||
+        !kernel_module_->add_leave_scene_event(
+            entity_meta_player::self_name(), this, &game_net_module_impl::on_leave_scene) ||
+        !kernel_module_->add_enter_scene_event(
+            entity_meta_player::self_name(), this, &game_net_module_impl::on_enter_scene) ||
+        !kernel_module_->add_class_call_back(
+            entity_meta_player::self_name(), this, &game_net_module_impl::on_entity_event))
+    {
+        ARK_LOG_ERROR("Cannot register game Player callbacks");
+        return false;
+    }
+
     return start_server();
 }
 
