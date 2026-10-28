@@ -1,42 +1,24 @@
 # Roadmap
 
-This page distinguishes supported source behavior from remaining design and deployment acceptance. C++20 is the build baseline; it does not mean every modernization or optional integration is complete. The [historical roadmap](roadmap-history.md) preserves the previous planning list and its checkbox states.
+Use this index to find supported capabilities and remaining work. C++20 is the build baseline. The [historical roadmap](roadmap-history.md) preserves earlier plans; unchecked ideas are not scheduled work.
 
-## Supported behavior
+## Capabilities and remaining work
 
-- Core code lives in `src/core/`, the launcher in `src/application/`, shared manifest/configuration reading in `src/config/`, and official plugin headers and implementation together in `src/plugins/<name>/`. Explicit CMake public-header mappings preserve `<ark/...>` include paths. See [project layout and public interfaces](../reference/directory-structure.md) for targets, rebuild requirements and optional plugin boundaries.
-- Public [MySQL](../reference/mysql.md) and [Redis](../reference/redis.md) modules use arknet native clients through Asio coroutine entry points. Inputs and results own their storage; manager-owned task groups resume on the module owner thread. MySQL includes prepared statements and transactions; Redis includes commands and pipelines. Legacy database drivers are no longer the public plugin interface.
-- The native C++20 [Entity configuration exporter](../guides/tools.md) reads CSV, XLSX or canonical JSON and exports validated Entity definitions, static business profiles and C++/C# field-index constants. [Kernel JSON loading](../reference/kernel.md#json-entity-schema-and-business-data) uses the selected schema and profile snapshot at startup; malformed selected JSON fails startup, while absence preserves the legacy XML path. Export does not reload running servers, migrate databases or filter separate client/server distributions.
-- The [guest-room example](../guides/examples.md) uses JSON-defined Kernel Entities and the real Net transport for server-authoritative movement and HP/MP actions through Protobuf room messages and explicit scalar baselines/deltas. The matching official [C# Godot demo](https://github.com/OpenArkStudio/ark-client-godot) has passed local manual testing. Restart/rejoin creates fresh state; the example provides no account service or persistence. Its bounded native checks and local manual testing do not establish production capacity, comprehensive hostile-client hardening or public deployment acceptance.
-- Startup callbacks propagate the first failure. The launcher reports the failed phase and exits with code `1` before the update loop. Shutdown stops managed task admission, drains accepted tasks and waits for module readiness. A configured cooperative wait timeout retains the process/resources and disables unloading. These behaviors do not provide partial-startup rollback or a hard process-stop deadline. See [application startup and shutdown](../guides/applications.md) and [managed tasks](../guides/tasks.md).
+| Area | Available · details | Remaining work |
+| --- | --- | --- |
+| Project layout | Co-located plugin sources and explicit `<ark/...>` public-header mappings · [layout and interfaces](../reference/directory-structure.md) | Review remaining modules and optional integrations individually; C++20 and header layout do not establish complete modernization |
+| Databases | Owner-thread Asio coroutine APIs, owning values, MySQL prepared statements/transactions and Redis commands/pipelines · [MySQL](../reference/mysql.md), [Redis](../reference/redis.md) | Target-environment recovery, persistence, cancellation/fault and TLS acceptance · [tested operations and exclusions](../guides/database-validation.md#acceptance-boundaries) |
+| Entity configuration | Native CSV/XLSX/JSON export, C++/C# field constants and startup JSON loading · [tools](../guides/tools.md), [Kernel loading](../reference/kernel.md#json-entity-schema-and-business-data) | No live reload, database migration or client/server distribution filtering |
+| Scalar synchronization | Owning captures, revisioned publisher/replica and explicit room v1 Protobuf/Godot integration · [synchronization](../concepts/entity-sync.md), [guest room](../guides/examples.md) | General subscriptions/authorization and nested table/container replication remain proposals |
+| Startup and shutdown | First-failure propagation, managed-task admission/drain and cooperative shutdown waiting · [launcher](../guides/applications.md), [tasks](../guides/tasks.md) | Partial-startup rollback and common dependency-aware shutdown; task drain does not establish completion of arbitrary background work |
+| Optional plugins | Kafka construction/export checks; OSS SDK scaffold; explicit unsupported PhysX 3 configuration · [plugin boundaries](../reference/directory-structure.md) | Kafka broker/driver acceptance and OSS client/request functionality |
 
-Public database service/failure checks, [real-plugin DSO positive workflows](../guides/database-validation.md#real-plugin-dsos-against-real-services), [bounded request cancellation](../guides/database-validation.md#real-plugin-request-cancellation), [observed read-only server termination](../guides/database-validation.md#real-plugin-server-termination) and [Redis TLS command/pipeline and certificate rejection](../guides/database-validation.md#real-plugin-redis-tls) passed against isolated Redis and MySQL servers on macOS. The [database service acceptance record](../guides/database-validation.md) keeps their distinct tested revisions, environments and scope; those results do not cover every deployment or source revision.
+Database real-service acceptance records identify the tested macOS revisions and operations. The guest-room demo has bounded native checks and local Godot testing. Neither establishes production capacity or acceptance in every deployment.
 
-## Priority design: Entity incremental synchronization
+## Priority design
 
-General-purpose Entity incremental synchronization is a core ark capability to design, with the same discussion priority as startup/shutdown lifecycle work. The current guest-room example explicitly broadcasts full snapshots from business code; it is a functional baseline, not an implementation of automatic framework replication.
-
-The design agenda covers:
-
-- **Change collection:** scalar fields, table/container changes, entity creation/destruction and mutation ownership; define how ordinary Entity APIs record changes without business code constructing each synchronization message.
-- **Snapshots and deltas:** initial state, changed fields, batching, repeated updates, stable field IDs and synchronization versions. Distinguish replicated state from business events so coalescing state cannot silently discard events.
-- **Recipients and authority:** server-owned state, owner/public/server-only fields, subscriptions and the boundary with interest-management or AOI systems.
-- **Recovery and limits:** reconnect baselines, stale/duplicate updates, slow consumers, bounded queues and full-state recovery. Select delivery and acknowledgement rules before fixing a wire format.
-- **Client integration and evidence:** shared schema/codec requirements for C++ and C#, with the two-client Godot room as the first end-to-end consumer. Acceptance should show full state on initial visibility and deltas for later movement/HP/MP changes, including ordering, visibility and recovery checks; measure encoded bytes against the full-snapshot baseline.
-
-These are design topics and acceptance goals, not finalized APIs, protocols or completed capabilities. Agree on the model and compatibility boundaries before implementation.
-
-## Remaining acceptance and design
-
-| Area | Remaining work and acceptance boundary |
-| --- | --- |
-| Database deployment | Restart/recovery, persistence and write effects, transaction cancellation, mutual TLS/certificate rotation, Redis TLS cancellation/fault recovery, other cancellation/fault races, other platforms and OS library image removal still need acceptance. Add target-environment and cross-machine capacity evidence before making deployment or capacity claims. Local protocol endpoints and construction checks do not replace these runs. |
-| Startup and shutdown | Partial-startup rollback is not provided. A common dependency-aware shutdown protocol remains design work; managed task drain alone does not prove that arbitrary callbacks, native workers or background cleanup have ended. Define ownership and admission phases before extending unload guarantees. |
-| Optional plugins | Kafka construction/export checks do not test broker delivery, flush behavior or service interoperability; its driver build needs independent platform acceptance. OSS SDK remains a scaffold without client/request functionality. Physic retains the explicit unsupported legacy PhysX 3 configuration failure. See [optional plugin boundaries](../reference/directory-structure.md). |
-| C++20 modernization | Review each remaining module and optional integration against its own API, build and runtime requirements. The language baseline, header layout and focused construction checks do not establish completion of the whole modernization. |
+General Entity subscriptions and nested replication share discussion priority with startup/shutdown lifecycle work. [Synchronization design boundaries](../concepts/entity-sync.md) cover authorization, nested identity/order, events and recovery; room v1 already fixes the scalar wire contract. Performance claims require measured payload and owner-thread cost.
 
 ## Deferred directions
 
-Registry design and business-plugin hot update remain paused. In-flight work, state ownership, dependency order and compatibility need an agreed design before implementation or broader unload claims.
-
-Historical ideas in the archive are not automatically scheduled work. Future scope should name the affected API or deployment, its prerequisites and concrete acceptance evidence before it is promoted into this roadmap.
+Registry and business-plugin hot update remain paused pending ownership, in-flight work, dependency and compatibility design. New scope needs a named API/deployment, prerequisites and acceptance evidence before entering this roadmap.
