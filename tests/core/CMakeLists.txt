@@ -280,6 +280,8 @@ add_custom_target(check-native-unload
     DEPENDS ark_native_unload_tests ark_oss_sdk_entry_probe
     USES_TERMINAL VERBATIM)
 add_dependencies(check-core check-native-unload)
+add_subdirectory(native_loader)
+add_dependencies(check-native-unload check-native-loader)
 
 if(ARK_BUILD_PROTO AND ARK_BUILD_CONFIG)
     add_subdirectory(../consul "${CMAKE_CURRENT_BINARY_DIR}/consul")
