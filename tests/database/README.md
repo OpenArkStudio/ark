@@ -274,6 +274,33 @@ close, plus transaction queries followed by confirmed commit and rollback. These
 workflows perform no writes and create no tables; they do not test transaction
 persistence or isolation.
 
+The separate opt-in `mysql-transactions` mode writes only to an owned, disposable
+IPv4 loopback MySQL service. Use a fresh private data directory and dedicated
+schema/account with CREATE, DROP, SELECT and INSERT privileges, required TLS and
+a trusted CA. It uses the same MySQL environment variables and rejects hosts
+other than `127.0.0.1` before connecting:
+
+```sh
+./database-build/tests/database/ark_database_public_plugin_service_tests mysql-transactions
+```
+
+This mode creates a unique `ark_dso_transaction_...` InnoDB table. Parameterized
+autocommit and transaction inserts preserve binary values containing NUL, quotes
+and a backslash. Two configured public connections have distinct server connection
+IDs; the observer runs in autocommit mode. Each transaction reads its own write,
+while the observer sees no row before completion. The observer then sees the
+committed row and no rolled-back row. Both terminal outcomes must be confirmed;
+cancellation is not used. Owning query/transaction results survive later operations,
+table removal and module/manager/runtime destruction. The accepted workflow runs
+during natural manager drain, with owner-thread/shared-executor checks at every
+continuation. Successful workflows drop their table. Assertion failures attempt
+explicit rollback of an unfinished scope and table cleanup while the connection
+remains usable; a service failure can leave the table for disposable-schema cleanup.
+The program never starts/stops a server.
+This verifies two-connection commit visibility, not every isolation level,
+crash durability, restart recovery or deployment capacity. `check-database` only
+builds this mode; it is not included in `all`.
+
 A registered consumer's accepted task is pending when stop seals admission,
 before the first owner poll. All operations then finish during natural drain;
 every continuation and completion must use the owner thread/shared executor.

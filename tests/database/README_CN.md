@@ -218,6 +218,25 @@ cmake --build database-build --target ark_database_public_plugin_service_tests -
 MySQL 检查有符号整数、文本、NULL 查询字段，二进制预处理结果与语句关闭，
 以及事务查询后确认的 commit 和 rollback。流程不写入数据或创建表，不验证事务持久性或隔离性。
 
+另设显式选择的 `mysql-transactions` 模式，仅向自有、可丢弃的 IPv4 loopback MySQL
+服务写入。使用全新私有数据目录、专用 schema／账户，以及 CREATE、DROP、SELECT 和
+INSERT 权限、强制 TLS 与可信 CA。该模式使用相同的 MySQL 环境变量，在连接前拒绝
+`127.0.0.1` 以外的主机：
+
+```sh
+./database-build/tests/database/ark_database_public_plugin_service_tests mysql-transactions
+```
+
+该模式创建唯一的 `ark_dso_transaction_...` InnoDB 表，通过参数化 autocommit 和事务
+插入保存含 NUL、引号和反斜杠的二进制值。两个公开连接配置对应不同的服务端连接 ID，
+观察连接处于 autocommit 模式。每个事务均可读取自身写入，观察连接在事务结束前看不到
+对应行；事务结束后，观察连接能读取已提交行，不能读取已回滚行。两种终态均须确认，
+不使用取消代替回滚。拥有型查询／事务结果在后续操作、删除测试表和模块／管理器／运行时
+销毁后仍有效。已受理流程在管理器自然排空期间执行，每次恢复均检查所属线程／共享执行器。
+成功流程会删除测试表；断言失败时，在连接仍可用的情况下尝试显式回滚未结束的事务及删表。
+服务故障可能留下测试表，需清理可丢弃 schema。程序不启动或停止服务。本模式验证两连接提交可见性，不代表全部隔离级别、
+崩溃持久性、重启恢复或部署容量。`check-database` 仅构建该模式，`all` 不运行该模式。
+
 管理器在首次所属线程轮询前，关闭新任务入口；此时已注册使用方的任务已受理且仍待完成。
 所有操作随后在自然排空期间完成，每次协程恢复及完成回调都必须使用所属线程与共享执行器。
 成功且幂等的 stop 会执行插件正常的模块销毁；宿主作用域销毁管理器及运行时后，再检查保留结果。
