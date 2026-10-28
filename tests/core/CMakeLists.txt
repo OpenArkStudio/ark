@@ -17,6 +17,30 @@ add_dependencies(ark_core_tests ark_construction_header_checks)
 if(ARK_BUILD_PROTO)
     target_sources(ark_core_tests PRIVATE protobuf_messages.cpp)
     target_link_libraries(ark_core_tests PRIVATE ark::bus ark::proto)
+    file(GLOB_RECURSE ark_proto_contract_files CONFIGURE_DEPENDS
+        "${PROJECT_SOURCE_DIR}/src/proto/proto/*.proto"
+        "${PROJECT_SOURCE_DIR}/resources/photon/proto/*.proto")
+    list(LENGTH ark_proto_contract_files ark_proto_source_count)
+    set(ark_proto_descriptor_set "${CMAKE_CURRENT_BINARY_DIR}/project-protocol-descriptors.pb")
+    add_custom_command(OUTPUT "${ark_proto_descriptor_set}"
+        COMMAND ${PROTOBUF_PROTOC_EXECUTABLE}
+            "--proto_path=${PROJECT_SOURCE_DIR}/src/proto/proto"
+            "--proto_path=${PROJECT_SOURCE_DIR}/resources/photon/proto"
+            "--descriptor_set_out=${ark_proto_descriptor_set}"
+            --include_imports ${ark_proto_contract_files}
+        DEPENDS ${ark_proto_contract_files}
+        COMMENT "Generate project Protobuf descriptors for naming and compatibility checks"
+        VERBATIM)
+    add_custom_target(ark_proto_contract_descriptors DEPENDS "${ark_proto_descriptor_set}")
+    add_executable(ark_proto_naming_tests main.cpp protobuf_messages.cpp ../proto/naming.cpp)
+    set_property(TARGET ark_proto_naming_tests PROPERTY LINK_LIBRARIES ark::bus ark::proto)
+    target_compile_definitions(ark_proto_naming_tests PRIVATE
+        ARK_PROTO_DESCRIPTOR_SET="${ark_proto_descriptor_set}"
+        ARK_PROTO_SOURCE_COUNT=${ark_proto_source_count})
+    add_dependencies(ark_proto_naming_tests ark_proto_contract_descriptors)
+    add_custom_target(check-proto-naming
+        COMMAND $<TARGET_FILE:ark_proto_naming_tests>
+        DEPENDS ark_proto_naming_tests USES_TERMINAL VERBATIM)
     add_custom_target(check-proto-configuration
         COMMAND ${CMAKE_COMMAND} "-DARK_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
             "-DPROTOC=${PROTOBUF_PROTOC_EXECUTABLE}"
@@ -29,7 +53,7 @@ add_custom_target(check-core
     DEPENDS ark_core_tests
     USES_TERMINAL)
 if(TARGET check-proto-configuration)
-    add_dependencies(check-core check-proto-configuration)
+    add_dependencies(check-core check-proto-configuration check-proto-naming)
 endif()
 
 add_executable(ark_entity_stream_tests main.cpp entity_stream.cpp)

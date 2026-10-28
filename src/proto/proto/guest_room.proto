@@ -26,10 +26,10 @@ message move_request {
 }
 
 enum action_kind {
-  ACTION_UNSPECIFIED = 0;
-  ACTION_DAMAGE = 1;
-  ACTION_SKILL = 2;
-  ACTION_REST = 3;
+  action_unspecified = 0;
+  action_damage = 1;
+  action_skill = 2;
+  action_rest = 3;
 }
 
 message action_request {

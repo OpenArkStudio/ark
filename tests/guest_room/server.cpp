@@ -482,33 +482,33 @@ void exercise_attributes(unsigned short port) {
         owner.quiet();
         observer.quiet();
     };
-    accept_action(1, wire::ACTION_DAMAGE, 85, 100);
-    accept_action(2, wire::ACTION_SKILL, 85, 80);
-    reject_action(1, wire::ACTION_REST, "stale_sequence");
-    reject_action(0, wire::ACTION_DAMAGE, "invalid_message");
+    accept_action(1, wire::action_damage, 85, 100);
+    accept_action(2, wire::action_skill, 85, 80);
+    reject_action(1, wire::action_rest, "stale_sequence");
+    reject_action(0, wire::action_damage, "invalid_message");
     reject_action(3, static_cast<wire::action_kind>(99), "invalid_message");
-    accept_action(3, wire::ACTION_REST, 100, 100);
-    const auto noop = accept_action(4, wire::ACTION_REST, 100, 100);
+    accept_action(3, wire::action_rest, 100, 100);
+    const auto noop = accept_action(4, wire::action_rest, 100, 100);
     require(noop.changed(0).fields_size() == 1 && noop.changed(0).fields(0).index() == 108,
         "clamped action must acknowledge only action_seq");
     for (std::uint32_t next = 5; next <= 9; ++next)
     {
-        accept_action(next, wire::ACTION_SKILL, 100, 100 - (next - 4) * 20);
+        accept_action(next, wire::action_skill, 100, 100 - (next - 4) * 20);
     }
-    reject_action(10, wire::ACTION_SKILL, "insufficient_resource");
-    accept_action(10, wire::ACTION_REST, 100, 20);
-    accept_action(11, wire::ACTION_SKILL, 100, 0);
+    reject_action(10, wire::action_skill, "insufficient_resource");
+    accept_action(10, wire::action_rest, 100, 20);
+    accept_action(11, wire::action_skill, 100, 0);
     for (std::uint32_t next = 12; next <= 18; ++next)
     {
-        accept_action(next, wire::ACTION_DAMAGE, next == 18 ? 0 : 100 - (next - 11) * 15, 0);
+        accept_action(next, wire::action_damage, next == 18 ? 0 : 100 - (next - 11) * 15, 0);
     }
-    accept_action(19, wire::ACTION_DAMAGE, 0, 0);
+    accept_action(19, wire::action_damage, 0, 0);
     owner.send(move, move_to(1, 200, 150));
     own.changes(owner);
     other.changes(observer);
     require(own.number(id, 103) == 1 && own.number(id, 104) == 0, "zero HP blocked movement");
-    accept_action(4294967295u, wire::ACTION_REST, 20, 20);
-    reject_action(4294967295u, wire::ACTION_DAMAGE, "stale_sequence");
+    accept_action(4294967295u, wire::action_rest, 20, 20);
+    reject_action(4294967295u, wire::action_damage, "stale_sequence");
     owner.close();
     other.changes(observer);
     client fresh(port);
@@ -534,7 +534,7 @@ void exercise_configured_profile(unsigned short port) {
     require(state.number(id, 104) == 4294967290u && state.number(id, 105) == 4294967285u &&
                 state.number(id, 106) == 4294967295u && state.number(id, 107) == 4294967295u,
         "configured defaults replaced");
-    peer.send(action, act(1, wire::ACTION_REST));
+    peer.send(action, act(1, wire::action_rest));
     state.changes(peer);
     require(state.number(id, 104) == 4294967295u && state.number(id, 105) == 4294967295u && state.number(id, 108) == 1,
         "rest overflowed instead of clamping");
@@ -548,9 +548,9 @@ void exercise_resource_boundary(unsigned short port) {
     roster state;
     state.baseline(peer);
     require(state.number(id, 105) == 19, "19 MP configuration missing");
-    peer.send(action, act(1, wire::ACTION_SKILL));
+    peer.send(action, act(1, wire::action_skill));
     error_is(peer, "insufficient_resource", 1);
-    peer.send(action, act(1, wire::ACTION_REST));
+    peer.send(action, act(1, wire::action_rest));
     state.changes(peer);
     require(state.number(id, 105) == 39 && state.number(id, 104) == 100 && state.number(id, 108) == 1,
         "rejected action mutated resources or sequence");

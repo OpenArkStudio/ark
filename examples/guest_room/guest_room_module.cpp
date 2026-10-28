@@ -276,7 +276,7 @@ void room_module::act_player(peer& connection, const wire::action_request& body)
         return;
     }
     const auto kind = body.kind();
-    if (sequence == 0 || kind < wire::ACTION_DAMAGE || kind > wire::ACTION_REST)
+    if (sequence == 0 || kind < wire::action_damage || kind > wire::action_rest)
     {
         fail("invalid_message", "Expected sequence >= 1 and action damage, skill or rest");
         return;
@@ -289,11 +289,11 @@ void room_module::act_player(peer& connection, const wire::action_request& body)
     }
     auto hp = player.get_u_int32("hp");
     auto mp = player.get_u_int32("mp");
-    if (kind == wire::ACTION_DAMAGE)
+    if (kind == wire::action_damage)
     {
         hp = hp > 15 ? hp - 15 : 0;
     }
-    else if (kind == wire::ACTION_SKILL)
+    else if (kind == wire::action_skill)
     {
         if (mp < 20)
         {
