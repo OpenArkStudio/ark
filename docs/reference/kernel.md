@@ -181,6 +181,8 @@ Field access belongs to `entity`, using a field name or metadata index. The acce
 
 GUID field callbacks retain the `dt_guid` tag. Read their native signed value with `data::get_int64()` in the default GUID64 build, or `data::get_int()` with `ARK_USE_GUID_32`. `data_impl::from_guid()` constructs an explicit tagged value; copying, assignment, node conversion and equality preserve its GUID type. The ordinary numeric constructors continue to require their matching numeric types.
 
+`data_impl`/`data_base` report null string or user-data allocations as `std::bad_alloc`. Failed assignment and setters preserve the destination; copies preserve the source. Setters accept valid input that refers to their own storage.
+
 ```cpp
 #include <cstdint>
 #include <string>

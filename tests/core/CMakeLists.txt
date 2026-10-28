@@ -78,6 +78,21 @@ add_custom_target(check-node-copy
     DEPENDS ark_node_copy_tests ark_node_copy_hook_tests USES_TERMINAL VERBATIM)
 add_dependencies(check-core check-node-copy)
 
+# Default nothrow new[] failure injection stays isolated from ordinary Core tests.
+add_executable(ark_data_allocation_tests main.cpp data_allocation_failure.cpp)
+set_property(TARGET ark_data_allocation_tests PROPERTY LINK_LIBRARIES ark::kernel)
+add_executable(ark_data_allocation_hook_tests main.cpp data_allocation_hooks.cpp)
+set_property(TARGET ark_data_allocation_hook_tests PROPERTY LINK_LIBRARIES ark::kernel)
+add_executable(ark_data_guid32_tests main.cpp data_allocation_failure.cpp data_strings.cpp node_data_storage.cpp)
+set_property(TARGET ark_data_guid32_tests PROPERTY LINK_LIBRARIES ark::kernel)
+target_compile_definitions(ark_data_guid32_tests PRIVATE ARK_USE_GUID_32)
+add_custom_target(check-data-allocation
+    COMMAND $<TARGET_FILE:ark_data_allocation_tests>
+    COMMAND $<TARGET_FILE:ark_data_allocation_hook_tests>
+    COMMAND $<TARGET_FILE:ark_data_guid32_tests>
+    DEPENDS ark_data_allocation_tests ark_data_allocation_hook_tests ark_data_guid32_tests USES_TERMINAL VERBATIM)
+add_dependencies(check-core check-data-allocation)
+
 add_executable(ark_entity_stream_tests main.cpp entity_stream.cpp)
 set_property(TARGET ark_entity_stream_tests PROPERTY LINK_LIBRARIES ark::kernel)
 add_custom_target(check-entity-stream
