@@ -262,7 +262,29 @@ void class_call_back_manager::add_delay_sync_call_back(const data_mask mask_valu
 }
 
 bool class_call_back_manager::on_delay_sync() {
-    for (auto& iter : delay_sync_data_list_)
+    static bool flushing = false;
+    if (flushing)
+    {
+        return false;
+    }
+
+    struct flush_guard
+    {
+        bool& active;
+
+        ~flush_guard() {
+            active = false;
+        }
+    };
+
+    flushing = true;
+    flush_guard guard{flushing};
+
+    // Newly collected entries remain pending for the next flush, even on throw.
+    // Borrowed node values are not frozen. The detached batch is not replayed.
+    delay_sync_data_list batch;
+    batch.swap(delay_sync_data_list_);
+    for (auto& iter : batch)
     {
         auto& guid = iter.first;
         auto& mask_data_map = iter.second;
@@ -279,7 +301,6 @@ bool class_call_back_manager::on_delay_sync() {
         }
     }
 
-    delay_sync_data_list_.clear();
     return true;
 }
 

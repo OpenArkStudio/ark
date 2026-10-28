@@ -254,6 +254,12 @@ Use `add_node_call_back()` and `add_table_call_back()` for field and table chang
 
 Changes with `sync_view` or `sync_self` and without `real_time` are collected until `kernel_module::update()`. A container-only batch follows the same `protobuf_delay_entity` serialization and mask callback dispatch as scalar, table and mixed batches; only a batch with no scalar, table or container entries is skipped. Existing container payloads retain full entity data or entity references, empty-slot markers and destruction markers according to the current sent state.
 
+Each `class_call_back_manager::on_delay_sync()` call detaches its current collection before invoking callbacks. Entries collected during a callback remain pending for the next flush instead of being discarded by an end-of-flush clear. A recursive flush returns `false` without consuming pending changes. If a callback throws, the exception propagates, the flush guard resets and newly collected entries remain pending; the detached batch is not automatically replayed.
+
+`kernel_module_impl::update()` retains its existing behavior of ignoring the collector's boolean result and returning `true` when no exception escapes. A nested Kernel update therefore does not report the recursive-flush rejection to the application.
+
+This boundary fixes collection membership, not a point-in-time snapshot of values. Delayed scalar and table entries still borrow `node*` pointers, and serialization reads their current values. If one mask callback changes a scalar already in the detached batch, a later mask can read that new value in the same flush; the newly collected entry remains pending for the next flush as well. Keep referenced nodes and their owning entities/rows alive until all relevant pending and active batches finish. Do not destroy or replace them from a delivery callback. The collector remains single-threaded and does not provide ownership, retry, rollback or delivery acknowledgement.
+
 `check-kernel-initialization` exercises real container mutations through delayed collection, Kernel update, serialization and the existing delivery callback, with empty, scalar, table and mixed controls. Its test-only callback observer does not provide network delivery. The existing `send_to_self()` path remains a stub; these checks do not establish a client replication protocol, acknowledgements or AOI behavior.
 
 ## Maps and data conversion

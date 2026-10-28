@@ -4,6 +4,7 @@
 #include <fstream>
 #include <functional>
 #include <map>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -110,6 +111,10 @@ public:
                 const auto* delayed = dynamic_cast<const ark::protobuf::protobuf_delay_entity*>(&message);
                 REQUIRE(delayed != nullptr);
                 deliveries.push_back({mask, target, *delayed});
+                if (on_delivery)
+                {
+                    on_delivery(mask);
+                }
                 return true;
             };
         }
@@ -118,6 +123,7 @@ public:
     }
 
     ~delayed_sync_world() {
+        on_delivery = {};
         // Retire pending raw-node batches before destroying their entities.
         kernel.update();
         for (const auto id : children_)
@@ -160,6 +166,7 @@ public:
     ark::kernel_module_impl kernel;
     std::shared_ptr<ark::entity> owner;
     std::vector<delivery> deliveries;
+    std::function<void(ark::data_mask)> on_delivery;
 
 private:
     template<class Interface, class Implementation>
@@ -298,4 +305,96 @@ TEST_CASE("Kernel delayed scalar table mixed and empty controls retain existing 
         }
         CHECK(event.message.data().datas_container().count(201) == (container ? 1 : 0));
     }
+}
+
+TEST_CASE("Kernel delayed callback mutations remain pending until the next flush") {
+    delayed_sync_world world;
+    world.create_child();
+    bool changed = false;
+    world.on_delivery = [&](ark::data_mask) {
+        if (changed)
+        {
+            return;
+        }
+        changed = true;
+        REQUIRE(world.owner->set_u_int32(100, 42));
+        const auto inventory = world.owner->find_table(200);
+        REQUIRE(inventory != nullptr);
+        inventory->clear();
+        world.create_child(202);
+    };
+
+    world.flush();
+    CHECK(changed);
+    for (const auto& event : world.deliveries)
+    {
+        CHECK(event.message.data().datas_container().count(201) == 1);
+        CHECK(event.message.data().datas_container().count(202) == 0);
+        CHECK(event.message.data().datas_uint32().empty());
+        CHECK(event.message.clear_tables().empty());
+    }
+    world.on_delivery = {};
+    world.deliveries.clear();
+    world.flush();
+    for (const auto& event : world.deliveries)
+    {
+        CHECK(event.message.data().datas_uint32().at(100) == 42);
+        REQUIRE(event.message.clear_tables_size() == 1);
+        CHECK(event.message.clear_tables(0) == 200);
+        CHECK(event.message.data().datas_container().count(201) == 0);
+        CHECK(
+            event.message.data().datas_container().count(202) == (event.mask == ark::data_mask::pf_sync_self ? 1 : 0));
+    }
+    world.deliveries.clear();
+    REQUIRE(world.kernel.update());
+    CHECK(world.deliveries.empty());
+}
+
+TEST_CASE("Kernel rejects recursive delayed flushes and retains their new changes") {
+    delayed_sync_world world;
+    world.create_child();
+    bool attempted = false;
+    world.on_delivery = [&](ark::data_mask) {
+        if (attempted)
+        {
+            return;
+        }
+        attempted = true;
+        REQUIRE(world.owner->set_u_int32(100, 27));
+        CHECK_FALSE(ark::class_call_back_manager::on_delay_sync());
+        // Kernel keeps its existing update result rather than propagating the
+        // collector's recursive-flush rejection to the application.
+        CHECK(world.kernel.update());
+    };
+    world.flush();
+    CHECK(attempted);
+    world.on_delivery = {};
+    world.deliveries.clear();
+    world.flush();
+    for (const auto& event : world.deliveries)
+    {
+        CHECK(event.message.data().datas_uint32().at(100) == 27);
+    }
+}
+
+TEST_CASE("Kernel delayed flush guard resets after callback exceptions") {
+    delayed_sync_world world;
+    world.create_child();
+    world.on_delivery = [&](ark::data_mask) {
+        REQUIRE(world.owner->set_u_int32(100, 63));
+        throw std::runtime_error("controlled delayed delivery failure");
+    };
+    CHECK_THROWS_WITH_AS(world.kernel.update(), "controlled delayed delivery failure", std::runtime_error);
+    REQUIRE(world.deliveries.size() == 1);
+    world.on_delivery = {};
+    world.deliveries.clear();
+    world.flush();
+    for (const auto& event : world.deliveries)
+    {
+        CHECK(event.message.data().datas_uint32().at(100) == 63);
+        CHECK(event.message.data().datas_container().empty());
+    }
+    world.deliveries.clear();
+    REQUIRE(world.kernel.update());
+    CHECK(world.deliveries.empty());
 }
