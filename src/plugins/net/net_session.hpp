@@ -168,6 +168,10 @@ public:
             if (msg_head == nullptr)
             {
                 msg_head.reset(req_header_->create());
+                if (!msg_head)
+                {
+                    return false;
+                }
                 msg_head->parse_from_array(get_buffer() + pos);
             }
             const size_t msg_len = msg_head->message_length();
@@ -182,6 +186,10 @@ public:
             }
 
             net_msg* msg = net_msg::alloc_msg(msg_head.release());
+            if (msg == nullptr)
+            {
+                return false;
+            }
             pos += head_len;
             if (msg_len > 0)
             {
