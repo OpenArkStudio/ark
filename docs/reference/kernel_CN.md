@@ -177,6 +177,12 @@ std::shared_ptr<ark::entity> create_configured_player(
 
 GUID 字段回调保留 `dt_guid` 标签。默认 GUID64 构建使用 `data::get_int64()` 读取其原生有符号值，`ARK_USE_GUID_32` 构建使用 `data::get_int()`。`data_impl::from_guid()` 显式构造带标签的值；复制、赋值、节点转换和相等比较均保留 GUID 类型。普通数字构造函数继续要求匹配的数字类型。
 
+`data_impl`/`data_base` 的字符串和用户数据分配在分配器返回空指针时抛出
+`std::bad_alloc`。分配失败时，复制和赋值会保留源值，setter 和赋值会保留目标原有
+类型、值和存储。字符串与用户数据 setter 也支持引用自身有效存储的输入，包括子字符串和
+用户数据切片。内联字符串容量保持不变，继续保留 `ARK_NEW_ARRAY_RET`/`ARK_DELETE_ARRAY`
+覆盖和分配器 swap 语义。公开接口与对象布局不变。
+
 ```cpp
 #include <cstdint>
 #include <string>

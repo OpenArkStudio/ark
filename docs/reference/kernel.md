@@ -177,6 +177,14 @@ Field access belongs to `entity`, using a field name or metadata index. The acce
 
 GUID field callbacks retain the `dt_guid` tag. Read their native signed value with `data::get_int64()` in the default GUID64 build, or `data::get_int()` with `ARK_USE_GUID_32`. `data_impl::from_guid()` constructs an explicit tagged value; copying, assignment, node conversion and equality preserve its GUID type. The ordinary numeric constructors continue to require their matching numeric types.
 
+String and user-data allocation in `data_impl`/`data_base` reports a null allocator
+result as `std::bad_alloc`. On allocation failure, copies and assignments preserve
+their source, and setters and assignments preserve the destination's previous
+type, value and owned storage. String and user-data setters also accept input from their own live
+storage, including a substring or user-data slice. Inline strings retain their
+existing capacity. `ARK_NEW_ARRAY_RET`/`ARK_DELETE_ARRAY` overrides and allocator
+swap semantics remain available; public interfaces and object layouts are unchanged.
+
 ```cpp
 #include <cstdint>
 #include <string>
