@@ -77,6 +77,9 @@ and destruction pass through delayed collection, Kernel update, Protobuf seriali
 and the existing mask delivery callback. It covers full payloads, entity references,
 empty-slot/destruction markers, self-only masks and empty/scalar/table/mixed controls.
 A narrow test-only friend observes that callback; no transport or client is supplied.
+The delayed-delivery cases also collect scalar/table/container changes inside a
+delivery callback, reject recursive flushing, and verify guard reset plus retained
+new changes after a callback exception. Borrowed nodes remain alive throughout.
 
 `check-logging` runs the independent C++ logging path regressions and is included
 in `check-core`. It checks relative and nested filenames, extensions and hidden
