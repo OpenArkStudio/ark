@@ -17,11 +17,27 @@ add_dependencies(ark_core_tests ark_construction_header_checks)
 if(ARK_BUILD_PROTO)
     target_sources(ark_core_tests PRIVATE protobuf_messages.cpp)
     target_link_libraries(ark_core_tests PRIVATE ark::bus ark::proto)
+    add_custom_target(check-proto-configuration
+        COMMAND ${CMAKE_COMMAND} "-DARK_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+            "-DPROTOC=${PROTOBUF_PROTOC_EXECUTABLE}"
+            "-DTEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/proto configuration"
+            -P "${PROJECT_SOURCE_DIR}/tests/proto/check_configuration.cmake"
+        USES_TERMINAL VERBATIM)
 endif()
 add_custom_target(check-core
     COMMAND $<TARGET_FILE:ark_core_tests>
     DEPENDS ark_core_tests
     USES_TERMINAL)
+if(TARGET check-proto-configuration)
+    add_dependencies(check-core check-proto-configuration)
+endif()
+
+add_executable(ark_entity_stream_tests main.cpp entity_stream.cpp)
+set_property(TARGET ark_entity_stream_tests PROPERTY LINK_LIBRARIES ark::kernel)
+add_custom_target(check-entity-stream
+    COMMAND $<TARGET_FILE:ark_entity_stream_tests>
+    DEPENDS ark_entity_stream_tests USES_TERMINAL)
+add_dependencies(check-core check-entity-stream)
 
 add_executable(ark_entity_stream_tests main.cpp entity_stream.cpp)
 set_property(TARGET ark_entity_stream_tests PROPERTY LINK_LIBRARIES ark::kernel)

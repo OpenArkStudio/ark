@@ -2,8 +2,18 @@ set(project_name AFProto)
 
 set(ark_proto_generated "${CMAKE_CURRENT_BINARY_DIR}/generated")
 file(GLOB PROTO_DEFINITION CONFIGURE_DEPENDS proto/*.proto)
-MY_PROTOBUF_GENERATE_CPP("${ark_proto_generated}/ark/proto" PROTO_SRC PROTO_HEADER ${PROTO_DEFINITION})
-add_library(${project_name} STATIC ${PROTO_HEADER} ${PROTO_SRC})
+if(WIN32)
+    # A host and its loaded plugins must share generated message descriptors.
+    MY_PROTOBUF_GENERATE_CPP("${ark_proto_generated}/ark/proto" PROTO_SRC PROTO_HEADER
+        EXPORT_DECL ARK_PROTO_EXPORT ${PROTO_DEFINITION})
+    add_library(${project_name} SHARED ${PROTO_HEADER} ${PROTO_SRC})
+    target_compile_definitions(${project_name}
+        PRIVATE "ARK_PROTO_EXPORT=__declspec(dllexport)"
+        INTERFACE "ARK_PROTO_EXPORT=__declspec(dllimport)")
+else()
+    MY_PROTOBUF_GENERATE_CPP("${ark_proto_generated}/ark/proto" PROTO_SRC PROTO_HEADER ${PROTO_DEFINITION})
+    add_library(${project_name} STATIC ${PROTO_HEADER} ${PROTO_SRC})
+endif()
 add_library(ark::proto ALIAS ${project_name})
 target_include_directories(${project_name} PUBLIC
     "$<BUILD_INTERFACE:${ark_proto_generated}>"

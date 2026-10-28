@@ -50,6 +50,14 @@ identity, binary messages, legacy wire payloads and external JSON field names.
 They also exercise the new `ark::protobuf` descriptor and enum names.
 Initialize Protobuf as described for application builds.
 
+With Protobuf enabled, `check-proto-configuration` is included in `check-core`.
+It executes the production target configuration for both platform branches,
+checks transitive DLL import definitions/runtime directories, and uses real protoc
+outputs to validate message/descriptor exports and the legacy unannotated path.
+The fixture uses Ninja for generation only; it does not compile Windows binaries.
+The actual Kernel DSO test keeps its host-owned generated Protobuf message and
+cross-DSO conversion, so the test continues to cover the public DLL boundary.
+
 The C++20 language regressions check the exact six built-in integer classifications, qualifier and reference handling, constant values, exception contracts and fixed UID allocation outputs. The standalone array-map header check also rejects reintroduced legacy language macros.
 
 UID regressions also check compile-time allocation, invalid/extreme widths, field overflow and the three 63/0/0 width permutations. `ark_core_tests --test-case="UID*"` selects them. Invalid layouts throw `std::invalid_argument`; invalid field values throw `std::out_of_range`, independently of assertion settings. See [UID bit allocation](../../docs/reference/utility.md#core-uid-bit-allocation).

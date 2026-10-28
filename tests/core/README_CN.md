@@ -59,6 +59,8 @@ cmake --build hash-header-build --target check-murmur-hash-header
 
 `check-app-startup-failures` 使用真实启动器和测试动态库，覆盖四个启动阶段各自返回 false 或抛出异常，并分别读取 TOML 和 XML 清单；还验证非标准异常、插件入口抛出异常、库文件缺失，以及可加载但没有 `DllEntryPlugin` 的动态库。每次受控模块失败或插件入口异常前，已注册的测试模块都会启动并保留一个真实的 owned loopback TCP 监听端点，使用系统分配的端口。缺少入口的测试库会记录自身初始化，确认库已加载后才发生失败。24 个子进程均须输出一次准确的阶段、模块或插件诊断，保留可用异常信息，以正常退出码 1 结束，且不执行后续启动调用、update、正常关闭或卸载。核心用例检查失败上下文、原始异常传播、多模块中的首次失败停止及所属线程访问。若失败启动后仍保留模块所有权，该端点会使普通静态清理等待，因此退出检查覆盖真实的活动 IO 池。这些测试证明失败报告与进程终止，不证明部分启动资源清理或同进程恢复。
 
+启用 Protobuf 时，`check-core` 还包含 `check-proto-configuration`。该检查执行两个平台分支的生产 target 配置，核对传递给消费者的 DLL 导入定义和运行时目录，并通过真实 protoc 输出验证消息／描述符导出及原有无导出标注路径。生成 fixture 使用 Ninja，不编译 Windows 二进制。真实 Kernel DSO 测试保留宿主持有的生成 Protobuf 消息和跨 DSO 转换，继续覆盖公开 DLL 边界。
+
 `check-kernel-initialization` 从 `resource/meta/` 加载真实元数据和静态数据，
 分别使用资源相对路径及以 `/` 开头的旧路径，验证内核与配置模块的四种初始化顺序，共八种组合。
 
