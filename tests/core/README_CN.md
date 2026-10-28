@@ -131,6 +131,8 @@ cmake --build core-build --target check-business-runtime
 
 在 POSIX 平台启用应用、Bus、Net、Utility 和 Kernel 后，`check-server-startup-game` 使用私有 `Player` JSON 结构和 Bus 身份 `1.1.31.1`，启动真实 Utility、Bus、Net、Kernel 和 Game 动态库。健康场景要求真实 TCP 连接、配合信号停服、客户端连接关闭、新连接被拒绝，以及退出码 0。端口占用场景要求完整的 Game／`post_init` 启动失败诊断和退出码 1。Kernel 目标存在时，这两个场景纳入 `check-server-startup`、`check-server-plugins` 和 `check-core`。测试沿用现有有限等待，只拥有自己创建的子进程与回环端点，不检查 Game 回调注册、Entity、玩法、随仓库提供的预设、服务发现或生产就绪状态。Windows 保留独立的创建测试。详见[服务端架构](../../docs/concepts/server-architecture_CN.md#角色启动错误)。
 
+启用 Game、Kernel、Bus 和 Utility 目标后，`check-game-initialization` 运行生产 Game 工厂／装配，以及真实 Kernel、Metadata、Map、Config、Guid 和 Bus 实现。测试先调用 Game `init()`，再调用 Kernel `init()`，覆盖 Game／Kernel `post_init()` 的两种顺序，并通过元数据事件分发观察真实 Player 类回调。另一份不含 Player 的合法结构必须在创建监听器前失败。测试只控制监听器创建，不替换 Kernel 接口。这些用例纳入 `check-kernel-initialization`、`check-server-plugins` 和 `check-core`。真实套接字启动与停服由上文的 POSIX DSO 场景覆盖；玩法和部分启动回滚不在测试范围内。
+
 同一 `check-typed-examples` 还通过仓库清单和示例元数据加载实体操作 DSO，验证四个 Player 实体、原有字段／自定义值与物品行、没有计时循环输出的有界启动、编译期模块／update 契约、bag 回调分发、四次销毁事件、更新及正常／重复停机。显式的 `check-entity-benchmark-smoke` 是独立可选 target，不作为 `check-core` 的依赖。
 
 启用 `ARK_BUILD_PLUGIN_HTTP=ON` 时，`check-http-plugin` 加载真实 HTTP 动态库并发送真实回环请求，覆盖所属线程停服期间的受控活动处理器退出与端点复用。可选 HTTP 目标存在时，`check-core` 包含该检查。独立的 `tests/consumer/http` 工程仅链接 `ark::http`，关闭应用与 Protobuf。

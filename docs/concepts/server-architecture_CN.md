@@ -57,13 +57,15 @@ cmake --build out/server-construction --target check-server-plugins --parallel 2
 
 ### 角色启动错误
 
-Login、Proxy、Router、Master、World 和 Dir 的网络启动路径先检查 Bus 与 Net。Game 还会在注册现有回调前检查 Kernel。缺少启动必需的模块时，`init()` 返回 `false`；创建监听器失败或找不到服务端网络服务时，`post_init()` 返回 `false`。管理器保留失败的角色与生命周期阶段并停止启动，启动器输出诊断后以退出码 1 结束。监听器设置成功时返回 `true`。这些路径不再以退出码 0 终止进程。启动失败后的回滚和部分启动资源清理顺序尚未定义。
+Login、Proxy、Router、Master、World 和 Dir 的网络启动路径先检查 Bus 与 Net。Game 还会在 `init()` 检查 Kernel，供后续阶段使用。缺少启动必需的模块时，`init()` 返回 `false`；创建监听器失败或找不到服务端网络服务时，`post_init()` 返回 `false`。管理器保留失败的角色与生命周期阶段并停止启动，启动器输出诊断后以退出码 1 结束。监听器设置成功时返回 `true`。这些路径不再以退出码 0 终止进程。启动失败后的回滚和部分启动资源清理顺序尚未定义。
 
 真实工厂测试还会通过公共角色装配和管理器运行受控的 Bus/Net 场景：缺少依赖、创建失败、服务缺失，以及六条仅设置监听器的启动路径成功。Game 的创建测试进程覆盖缺少依赖的场景，包括缺少 Kernel；健康监听器的生命周期由下文的真实组合检查。在 macOS 和 Linux 上，`check-server-startup` 另使用独立的最小 Bus 测试配置运行六个角色各自的真实 Utility、Bus、Net 和角色动态库，检查健康回环启动，以及测试持有的端口被占用时的失败角色、阶段与启动器退出码 1。这些检查不验收仓库内的角色预设或业务处理器。
 
 Kernel 插件目标可用时，POSIX 平台的 `check-server-startup` 还包含 Game。`check-server-startup-game` 只选择这两个场景：使用真实 Utility、Bus、Net、Kernel 和 Game 动态库，配备私有 Bus 身份 `1.1.31.1` 和最小 `Player` JSON 结构。健康启动必须接受回环连接，配合 `SIGTERM` 完成停服，关闭客户端连接和监听器，并以退出码 0 结束。测试持有端口时，必须输出 Game 的 `post_init` 失败诊断，并以退出码 1 结束。现有启动与停服观察时限保持不变。测试不创建 Entity，也不发送玩法消息。
 
-Game 仍在 `init()` 注册既有 Player 回调，并忽略注册返回值。注册失败处理，以及注册相对于 Kernel 元数据初始化的顺序，仍需单独的回调回归测试。监听器测试不观察回调注册结果，也不验证业务行为。
+Game 在 `init()` 获取并验证依赖，在所有模块完成 `init()` 后，于 `post_init()` 注册既有 Player 回调，不要求 Kernel 自身的 `post_init()` 先执行。注册前检查 Player 元数据，并逐项检查注册结果；只有四次调用全部成功，才创建监听器。缺少 Player 元数据或注册被拒绝时返回 `false`，不创建监听器。部分完成的注册不会回滚。
+
+`check-game-initialization` 在真实 Metadata、Map、Config 和 Guid 已注册时，强制真实 Game 装配先于真实 Kernel 实现执行初始化。测试覆盖 Game／Kernel `post_init()` 的两种顺序，通过元数据事件分发观察真实 Player 类回调，并验证缺少 Player 元数据时拒绝创建监听器。定向测试只控制监听器返回值，独立 DSO 场景覆盖真实网络栈。这些检查不验收其他类／场景回调行为或玩法。
 
 未启用的 Simulate 源码采用相同的失败传播方式，并在注册回调前检查模拟模块。其 PhysX 3/MessagePack 集成仍不受当前构建支持，因此没有本套测试的原生运行验收。依赖检查只覆盖现有启动代码实际解引用的模块，不能证明尚未完成的角色操作已经就绪。
 
