@@ -360,6 +360,7 @@ protected:
         check_registration();
         if (!candidate)
         {
+            startup_failure_ = "allocate_plugin: " + plugin_name;
             return;
         }
         // The library stem selects configuration; the runtime name identifies
@@ -569,7 +570,8 @@ protected:
             }
             func(this, plugin_name, logger::instance());
 
-            return true;
+            // The void entrypoint cannot return a nullable allocation failure.
+            return !startup_failure_.starts_with("allocate_plugin: ");
         }
         else
         {

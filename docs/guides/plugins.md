@@ -207,7 +207,9 @@ or retry.
 
 `plugin_manager::register_plugin<T>()` keeps `ARK_NEW`/`ARK_DELETE` allocation
 hooks, including nullable nothrow allocation. A null allocation returns without
-installation. Before `install()` starts, a metadata exception destroys the plugin
+installation and records `allocate_plugin: <library stem>` as the startup failure.
+The manager then returns false from `start()` before later libraries or module phases.
+Before `install()` starts, a metadata exception destroys the plugin
 candidate once; once installation starts, the existing process-exit policy above
 applies. Dynamic-library wrappers also have scoped ownership until published to
 the manager. Failed native loads retire the wrapper even if logging throws;

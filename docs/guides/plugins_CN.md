@@ -195,7 +195,9 @@ module_update::enabled)` 启用 update；`disabled` 则不参与 update，即使
 此前资源按现有启动失败退出进程策略保留，不支持同进程回滚或重试。
 
 `plugin_manager::register_plugin<T>()` 保留 `ARK_NEW`/`ARK_DELETE` 分配和释放钩子，
-包括可返回空指针的 nothrow 分配。空分配直接返回，不执行安装。进入 `install()`
+包括可返回空指针的 nothrow 分配。空分配直接返回，不执行安装，并记录启动失败信息
+`allocate_plugin: <library stem>`。管理器随后从 `start()` 返回 false，不再加载后续库，
+也不进入模块启动阶段。进入 `install()`
 之前，元数据异常会使插件候选对象只析构一次；开始安装后，仍遵循上述退出进程策略。
 动态库包装器在写入管理器前也由局部作用域持有。原生加载失败时，即使日志抛出异常，
 也会释放包装器；已加载句柄仍按现有显式卸载规则处理。调用方无需迁移。

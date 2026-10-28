@@ -147,6 +147,13 @@ public:
     }
 };
 
+unsigned allocation_entry_calls{};
+
+void allocate_entry_plugin(ark::plugin_manager* manager, const std::string& name) {
+    ++allocation_entry_calls;
+    manager->register_plugin<ownership_plugin>(name);
+}
+
 constexpr const char* probe = "ark_oss_sdk_entry_probe";
 #ifdef ARK_PLATFORM_WIN
 constexpr int native_failure = 0;
@@ -227,6 +234,8 @@ TEST_CASE("Plugin candidates retain nothrow allocation and retire failed metadat
             events.destroyed ==
             (failure == plugin_failure::manager_metadata || failure == plugin_failure::configuration_metadata ? 1 : 0));
         CHECK(events.deallocated == events.destroyed);
+        CHECK(manager.get_startup_failure() ==
+              (failure == plugin_failure::allocation ? "allocate_plugin: ownership-probe" : ""));
         if (failure == plugin_failure::none)
         {
             // A distinct library stem still unregisters through the RTTI key.
@@ -276,6 +285,53 @@ TEST_CASE("Failed library loading retires unpublished wrappers even when diagnos
         CHECK(manager.get_startup_failure() == "load_plugin: ark_missing_ownership_probe");
         CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::running);
     }
+}
+
+TEST_CASE("A null plugin allocation fails its real entrypoint before later libraries and module startup") {
+    quiet_logger logger;
+    plugin_events events{plugin_failure::allocation};
+    ownership_plugin::events = &events;
+    allocation_entry_calls = 0;
+    ark::dynamic_library first("ark_plugin_allocation_first");
+    ark::dynamic_library second("ark_plugin_allocation_second");
+    REQUIRE(first.load(ARK_ALLOCATION_PROBE_DIR));
+    REQUIRE(second.load(ARK_ALLOCATION_PROBE_DIR));
+    using set_entry = void (*)(void (*)(ark::plugin_manager*, const std::string&));
+    for (auto* library : {&first, &second})
+    {
+        const auto set = reinterpret_cast<set_entry>(library->get_symbol("allocation_probe_set_entry"));
+        REQUIRE(set != nullptr);
+        set(allocate_entry_plugin);
+    }
+
+    struct startup_module final : ark::module
+    {
+        bool init() override {
+            ++calls;
+            return true;
+        }
+
+        unsigned calls{};
+    } module;
+
+    {
+        retained_manager owner;
+        REQUIRE(owner.manager.add_module("allocation-startup-observer", &module));
+        CHECK_FALSE(owner.manager.start(0, ARK_ALLOCATION_PROBE_DIR, {},
+            {{"ark_plugin_allocation_first", ""}, {"ark_plugin_allocation_second", ""}}));
+        CHECK(allocation_entry_calls == 1);
+        CHECK(module.calls == 0);
+        CHECK(events.installs == 0);
+        CHECK(events.uninstalls == 0);
+        CHECK(events.destroyed == 0);
+        const auto retained = manager_access::libraries(owner.manager);
+        REQUIRE(retained.size() == 1);
+        CHECK(owner.manager.get_startup_failure() == "allocate_plugin: " + retained.front().first);
+        CHECK(retained.front().second->get_symbol("DllEntryPlugin") != nullptr);
+        CHECK(owner.manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::running);
+    }
+    CHECK(first.unload());
+    CHECK(second.unload());
 }
 
 TEST_CASE("Native unload results follow the platform success convention") {
