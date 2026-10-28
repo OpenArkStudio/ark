@@ -203,6 +203,15 @@ bool set_int32_field(ark::kernel_module& kernel, const ark::guid_t& id, const st
 
 `table*` and `row*` are borrowed pointers, with no independent ownership of entity data. Do not retain them after removing the row, clearing the table or destroying the owning entity.
 
+### Custom scalar ownership
+
+The seven supported custom scalar adders retain ownership until their named value
+is inserted. Exceptions from value construction or map allocation propagate and
+release the unpublished candidate through `ARK_DELETE`; no named value is added.
+Successful insertion keeps the owning map's existing destruction path. Allocation
+hooks, duplicate/null checks, public signatures and class layouts are unchanged.
+`check-entity-custom-ownership` exercises failures with isolated allocation hooks.
+
 ### Custom unsigned values
 
 `entity::add_custom_u_int32(name, value)` creates a named runtime `uint32_t` value separate from schema fields. After creation, `set_custom_u_int32(name, value)` updates that value across the full range from `0` to `UINT32_MAX`; read it with `get_custom_u_int32(name)`. Setting a missing name or a name containing another scalar type returns `false` without creating data, converting its type or changing the existing value, in both Debug and Release builds. Use `find_custom_data()` to check existence; a stored zero is a valid value.

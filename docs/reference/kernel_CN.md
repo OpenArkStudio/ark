@@ -203,6 +203,13 @@ bool set_int32_field(ark::kernel_module& kernel, const ark::guid_t& id, const st
 
 `table*` 和 `row*` 是借用指针，不独立拥有实体数据。表格删除行、清空表格或销毁所属实体后，不要继续使用相关指针。
 
+### 自定义标量的所有权
+
+七个已支持的自定义标量创建方法在按名称插入成功前持有候选对象。值构造或映射分配
+抛出异常时，异常继续向上传播，未发布的候选对象通过 `ARK_DELETE` 释放，不新增名称记录。
+插入成功后沿用拥有型映射的销毁路径。分配钩子、重复名称和空指针检查、公开签名及类布局
+均保持不变。`check-entity-custom-ownership` 使用独立的分配钩子验证异常路径。
+
 ### 自定义无符号值
 
 `entity::add_custom_u_int32(name, value)` 创建按名称访问的运行时 `uint32_t` 值，与元数据字段分开。创建后，`set_custom_u_int32(name, value)` 可在 `0` 到 `UINT32_MAX` 的完整范围内更新值，使用 `get_custom_u_int32(name)` 读取。名称不存在或对应其他标量类型时，设置操作在 Debug 和 Release 构建中均返回 `false`，不会创建数据、转换类型或修改已有值。使用 `find_custom_data()` 检查是否存在；已存储的零是有效值。

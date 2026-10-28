@@ -18,6 +18,8 @@
  *
  */
 
+#include <memory>
+
 #include "ark/kernel/container_impl.hpp"
 #include "ark/kernel/container_manager_impl.hpp"
 #include "ark/kernel/data_impl.hpp"
@@ -621,112 +623,119 @@ int entity_impl::on_table_call_back(const mask_type mask, node* node_ptr, const 
 bool entity_impl::add_custom_bool(const std::string& name, bool value) {
     ARK_ASSERT_RET_VAL(custom_data_list_.find(name) == custom_data_list_.end(), false);
 
-    data* data_ptr = ARK_NEW data_impl;
+    const auto destroy = [](data* value) { ARK_DELETE(value); };
+    std::unique_ptr<data, decltype(destroy)> data_ptr(ARK_NEW data_impl, destroy);
     ARK_ASSERT_RET_VAL(data_ptr != nullptr, false);
 
     data_ptr->set_bool(value);
-    if (!custom_data_list_.insert(name, data_ptr).second)
+    if (!custom_data_list_.insert(name, data_ptr.get()).second)
     {
-        ARK_DELETE(data_ptr);
         return false;
     }
 
+    data_ptr.release();
     return true;
 }
 
 bool entity_impl::add_custom_int32(const std::string& name, const int32_t value) {
     ARK_ASSERT_RET_VAL(custom_data_list_.find(name) == custom_data_list_.end(), false);
 
-    data* data_ptr = ARK_NEW data_impl;
+    const auto destroy = [](data* value) { ARK_DELETE(value); };
+    std::unique_ptr<data, decltype(destroy)> data_ptr(ARK_NEW data_impl, destroy);
     ARK_ASSERT_RET_VAL(data_ptr != nullptr, false);
 
     data_ptr->set_int(value);
-    if (!custom_data_list_.insert(name, data_ptr).second)
+    if (!custom_data_list_.insert(name, data_ptr.get()).second)
     {
-        ARK_DELETE(data_ptr);
         return false;
     }
 
+    data_ptr.release();
     return true;
 }
 
 bool entity_impl::add_custom_u_int32(const std::string& name, const uint32_t value) {
     ARK_ASSERT_RET_VAL(custom_data_list_.find(name) == custom_data_list_.end(), false);
 
-    data* data_ptr = ARK_NEW data_impl;
+    const auto destroy = [](data* value) { ARK_DELETE(value); };
+    std::unique_ptr<data, decltype(destroy)> data_ptr(ARK_NEW data_impl, destroy);
     ARK_ASSERT_RET_VAL(data_ptr != nullptr, false);
 
     data_ptr->set_u_int(value);
-    if (!custom_data_list_.insert(name, data_ptr).second)
+    if (!custom_data_list_.insert(name, data_ptr.get()).second)
     {
-        ARK_DELETE(data_ptr);
         return false;
     }
 
+    data_ptr.release();
     return true;
 }
 
 bool entity_impl::add_custom_int64(const std::string& name, const int64_t value) {
     ARK_ASSERT_RET_VAL(custom_data_list_.find(name) == custom_data_list_.end(), false);
 
-    data* data_ptr = ARK_NEW data_impl;
+    const auto destroy = [](data* value) { ARK_DELETE(value); };
+    std::unique_ptr<data, decltype(destroy)> data_ptr(ARK_NEW data_impl, destroy);
     ARK_ASSERT_RET_VAL(data_ptr != nullptr, false);
 
     data_ptr->set_int64(value);
-    if (!custom_data_list_.insert(name, data_ptr).second)
+    if (!custom_data_list_.insert(name, data_ptr.get()).second)
     {
-        ARK_DELETE(data_ptr);
         return false;
     }
 
+    data_ptr.release();
     return true;
 }
 
 bool entity_impl::add_custom_float(const std::string& name, const float value) {
     ARK_ASSERT_RET_VAL(custom_data_list_.find(name) == custom_data_list_.end(), false);
 
-    data* data_ptr = ARK_NEW data_impl;
+    const auto destroy = [](data* value) { ARK_DELETE(value); };
+    std::unique_ptr<data, decltype(destroy)> data_ptr(ARK_NEW data_impl, destroy);
     ARK_ASSERT_RET_VAL(data_ptr != nullptr, false);
 
     data_ptr->set_float(value);
-    if (!custom_data_list_.insert(name, data_ptr).second)
+    if (!custom_data_list_.insert(name, data_ptr.get()).second)
     {
-        ARK_DELETE(data_ptr);
         return false;
     }
 
+    data_ptr.release();
     return true;
 }
 
 bool entity_impl::add_custom_double(const std::string& name, const double value) {
     ARK_ASSERT_RET_VAL(custom_data_list_.find(name) == custom_data_list_.end(), false);
 
-    data* data_ptr = ARK_NEW data_impl;
+    const auto destroy = [](data* value) { ARK_DELETE(value); };
+    std::unique_ptr<data, decltype(destroy)> data_ptr(ARK_NEW data_impl, destroy);
     ARK_ASSERT_RET_VAL(data_ptr != nullptr, false);
 
     data_ptr->set_double(value);
-    if (!custom_data_list_.insert(name, data_ptr).second)
+    if (!custom_data_list_.insert(name, data_ptr.get()).second)
     {
-        ARK_DELETE(data_ptr);
         return false;
     }
 
+    data_ptr.release();
     return true;
 }
 
 bool entity_impl::add_custom_string(const std::string& name, const std::string& value) {
     ARK_ASSERT_RET_VAL(custom_data_list_.find(name) == custom_data_list_.end(), false);
 
-    data* data_ptr = ARK_NEW data_impl;
+    const auto destroy = [](data* value) { ARK_DELETE(value); };
+    std::unique_ptr<data, decltype(destroy)> data_ptr(ARK_NEW data_impl, destroy);
     ARK_ASSERT_RET_VAL(data_ptr != nullptr, false);
 
     data_ptr->set_string(value.c_str());
-    if (!custom_data_list_.insert(name, data_ptr).second)
+    if (!custom_data_list_.insert(name, data_ptr.get()).second)
     {
-        ARK_DELETE(data_ptr);
         return false;
     }
 
+    data_ptr.release();
     return true;
 }
 
