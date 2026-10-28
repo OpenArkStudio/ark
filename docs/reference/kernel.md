@@ -203,7 +203,7 @@ bool set_int32_field(ark::kernel_module& kernel, const ark::guid_t& id, const st
 
 `table*` and `row*` are borrowed pointers, with no independent ownership of entity data. Do not retain them after removing the row, clearing the table or destroying the owning entity.
 
-With assertions disabled, a null row allocation makes `add_row()` return `nullptr` without changing the row count, next automatic index or existing records, and without emitting `table_add`. The same index can be retried after allocation recovers. Debug builds retain the existing assertion on a failed add. `check-table-row-allocation`, included in `check-kernel-initialization`, exercises the production implementation with NDEBUG; ordinary Kernel regressions also cover successful automatic and explicit row indices.
+With assertions disabled, a failed row allocation returns `nullptr`, preserves existing rows and the next automatic index, and emits no `table_add` event. Retry after memory recovers; Debug builds retain the existing failed-add assertion.
 
 ### Custom unsigned values
 
