@@ -20,8 +20,13 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
+#include <cstring>
 #include <limits>
+#include <memory>
+#include <new>
+#include <stdexcept>
 
 #include "ark/net/net_define.hpp"
 #include "ark/noncopyable.hpp"
@@ -138,12 +143,12 @@ public:
 
     // 新建包头对象
     virtual msg_header* create() const override {
-        return ARK_NEW s_msg_header();
+        return new (std::nothrow) s_msg_header();
     }
 
     // 包头深拷贝
     virtual msg_header* clone() const override {
-        return ARK_NEW s_msg_header(*this);
+        return new (std::nothrow) s_msg_header(*this);
     }
 
     virtual bool is_compressed() const override {
@@ -207,12 +212,12 @@ public:
 
     // 新建包头对象
     virtual msg_header* create() const override {
-        return ARK_NEW ss_msg_header();
+        return new (std::nothrow) ss_msg_header();
     }
 
     // 包头深拷贝
     virtual msg_header* clone() const override {
-        return ARK_NEW ss_msg_header(*this);
+        return new (std::nothrow) ss_msg_header(*this);
     }
 
     virtual bool is_compressed() const override {
@@ -269,10 +274,12 @@ private:
 class net_msg final : private noncopyable
 {
 protected:
-    net_msg(msg_header* head) {
-        head_ = head;
-        msg_data_ = nullptr;
-        alloc_data(head_->message_length());
+    net_msg(msg_header* head)
+        : head_(head) {
+        const auto length = head_->message_length();
+        auto data = allocate_data(length);
+        msg_data_ = data.release();
+        capacity_ = length;
     }
 
     ~net_msg() {
@@ -281,27 +288,84 @@ protected:
     }
 
 public:
+    // Consumes head, including when allocation fails.
     static net_msg* alloc_msg(msg_header* head) {
-        return ARK_NEW net_msg(head);
+        std::unique_ptr<msg_header> owner(head);
+        if (!owner)
+        {
+            return nullptr;
+        }
+        try
+        {
+            auto* msg = new (std::nothrow) net_msg(head);
+            if (msg != nullptr)
+            {
+                owner.release();
+            }
+            return msg;
+        }
+        catch (const std::bad_alloc&)
+        { return nullptr; }
     }
 
     static void release(net_msg*& msg) {
-        ARK_DELETE(msg);
+        delete msg;
+        msg = nullptr;
     }
 
     void copy_data(const char* data, const uint32_t len) {
-        ARK_ASSERT_RET_NONE(data != nullptr);
-
-        set_msg_length(len);
-        memcpy(this->msg_data_, data, len);
+        if (data == nullptr && len != 0)
+        {
+            throw std::invalid_argument("net_msg body is null");
+        }
+        if (len > capacity_)
+        {
+            auto replacement = allocate_data(len);
+            std::memcpy(replacement.get(), data, len);
+            head_->set_message_length(len);
+            delete[] msg_data_;
+            msg_data_ = replacement.release();
+            capacity_ = len;
+        }
+        else
+        {
+            if (len != 0)
+            {
+                std::memmove(msg_data_, data, len);
+            }
+            head_->set_message_length(len);
+        }
     }
 
     void copy_from(net_msg* msg) {
-        ARK_ASSERT_RET_NONE(msg != nullptr);
-
+        if (msg == nullptr)
+        {
+            throw std::invalid_argument("net_msg source is null");
+        }
+        if (msg == this)
+        {
+            return;
+        }
+        const auto length = msg->get_msg_length();
+        if (length > msg->capacity_)
+        {
+            throw std::length_error("net_msg source body exceeds its allocation");
+        }
+        std::unique_ptr<msg_header> head(msg->head_->clone());
+        if (!head)
+        {
+            throw std::bad_alloc{};
+        }
+        auto data = allocate_data(length);
+        if (length != 0)
+        {
+            std::memcpy(data.get(), msg->msg_data_, length);
+        }
         delete head_;
-        head_ = msg->head_->clone();
-        copy_data(msg->msg_data_, msg->get_msg_length());
+        delete[] msg_data_;
+        head_ = head.release();
+        msg_data_ = data.release();
+        capacity_ = length;
     }
 
     msg_id_t get_msg_id() const {
@@ -333,7 +397,23 @@ public:
     }
 
     void set_msg_length(uint32_t value) {
-        head_->set_message_length(value);
+        if (value > capacity_)
+        {
+            auto data = allocate_data(value);
+            const auto preserved = std::min(get_msg_length(), capacity_);
+            if (preserved != 0)
+            {
+                std::memcpy(data.get(), msg_data_, preserved);
+            }
+            head_->set_message_length(value);
+            delete[] msg_data_;
+            msg_data_ = data.release();
+            capacity_ = value;
+        }
+        else
+        {
+            head_->set_message_length(value);
+        }
     }
 
     void set_actor_id(guid_t value) {
@@ -361,25 +441,14 @@ public:
     }
 
 private:
-    void alloc_data(uint32_t len) {
-        if (len > 0)
-        {
-            msg_data_ = ARK_NEW char[len];
-        }
-    }
-
-    void dealloc_data() {
-        if (msg_data_ != nullptr)
-        {
-            ARK_DELETE_ARRAY(char, msg_data_);
-        }
-
-        head_->set_message_length(0);
+    static std::unique_ptr<char[]> allocate_data(uint32_t len) {
+        return len == 0 ? nullptr : std::make_unique_for_overwrite<char[]>(len);
     }
 
 private:
     msg_header* head_;
     char* msg_data_{nullptr};
+    uint32_t capacity_{0};
 };
 
 } // namespace ark

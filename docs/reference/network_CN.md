@@ -113,6 +113,26 @@ pending.write("next", 4);                 // 重新申请存储
 
 开启 `ARK_BUILD_CORE_TESTS=ON` 后，`check-buffer` 运行生命周期／移动、压缩／扩容、边界、默认分配确定性失败及独立自定义钩子回归，并纳入 `check-core`。分配失败测试只使一次小数组申请失败，不申请巨量内存。`check-network` 保留既有 Net 拆包与分片输入覆盖。这些检查不代表服务或容量验收。
 
+## 消息与事件所有权
+
+`net_msg` 拥有包头和消息体。存储容量与声明的消息体长度独立；回调指针仍为借用指针。
+
+| API | 行为与失败处理 |
+| --- | --- |
+| `net_msg::alloc_msg(head)` | 始终接管堆分配包头。包头为空或对象、消息体分配失败时返回空指针，使用前须检查。接收拆包在包头或消息分配失败时返回 `false`，不将不完整消息入队。 |
+| 原生 CS/SS `create()` / `clone()`、`net_event::alloc_event()` | 分配失败返回空指针。 |
+| 消息/事件 `release(pointer)` | 销毁对象并将调用方指针置空；允许空指针。 |
+| `copy_data(data, length)` | 输入须有 `length` 个可读字节，支持重叠复制；先扩容再修改长度。零长度允许空指针并清零长度；非零空输入抛出 `std::invalid_argument`。 |
+| `set_msg_length(length)` | 按需扩容并保留原有前缀；新增字节未初始化，须初始化后使用。 |
+| `copy_from(source)` | 深复制包头和消息体，自复制不变。空来源抛出 `std::invalid_argument`；空克隆抛出 `std::bad_alloc`；自定义 `clone()` 异常向上传播。来源声明长度超过容量时抛出 `std::length_error`。 |
+| `get_head()` / `get_msg_data()` | 直接修改包头长度不调整存储，应使用 `set_msg_length()` 或 `copy_data()`。消息体指针为借用指针：保持所属对象有效，扩容或复制替换后重新获取，释放后丢弃。 |
+
+扩容/复制分配失败抛出 `std::bad_alloc`；分配及克隆失败均保留目标原有包头、字节和长度。
+
+**升级要求：**容量记录改变 `net_msg` 布局，须同时重编译 Net、消费方及插件。这些消息、事件和原生包头工厂使用标准分配，`ARK_NEW` / `ARK_DELETE` 覆盖不再定制它们。公开签名、CS/SS 报文字节和平台类型不变。
+
+启用 `ARK_BUILD_NETWORK_TESTS=ON` 后，`check-net-message` 无需套接字即可验证所有权、拆包和确定性分配失败；`check-network` 包含该目标。本地检查不代表共享服务或容量验收。
+
 ## 成员回调与借用参数
 
 端点构造函数与客户端／服务端服务的注册接口通过 C++20 `std::bind_front`，

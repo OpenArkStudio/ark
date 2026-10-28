@@ -20,7 +20,8 @@
 
 #pragma once
 
-#include "ark/macros.hpp"
+#include <new>
+
 #include "ark/net/net_define.hpp"
 #include "ark/platform.hpp"
 
@@ -35,11 +36,12 @@ class net_event final
 
 public:
     static net_event* alloc_event() {
-        return ARK_NEW net_event();
+        return new (std::nothrow) net_event();
     }
 
     static void release(net_event*& event) {
-        ARK_DELETE(event);
+        delete event;
+        event = nullptr;
     }
 
     net_event_type get_type() const {

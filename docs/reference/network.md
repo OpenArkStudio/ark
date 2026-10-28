@@ -133,6 +133,26 @@ A zero-length write succeeds without dereferencing its pointer; a null source wi
 
 With `ARK_BUILD_CORE_TESTS=ON`, `check-buffer` runs the lifetime/move, compaction/growth, boundary, deterministic default-allocation failure and separate custom-hook regressions; it is also part of `check-core`. The allocation-failure test fails one small array request instead of requesting excessive memory. `check-network` retains the existing Net framing/fragmented-input coverage. These checks do not establish service or capacity acceptance.
 
+## Message and event ownership
+
+`net_msg` owns its header and body. Storage capacity is independent of the declared body length; callback pointers remain borrowed.
+
+| API | Behavior and failure |
+| --- | --- |
+| `net_msg::alloc_msg(head)` | Always consumes the heap-owned header. Null header or object/body allocation failure returns null; check before use. Receive parsing returns `false` on header/message allocation failure without queuing an incomplete message. |
+| Native CS/SS `create()` / `clone()`, `net_event::alloc_event()` | Allocation failure returns null. |
+| Message/event `release(pointer)` | Destroys and nulls the caller’s pointer; null is safe. |
+| `copy_data(data, length)` | Requires `length` readable input bytes; overlap is supported. Grows before changing length. Zero accepts null and clears length; nonzero null throws `std::invalid_argument`. |
+| `set_msg_length(length)` | Grows storage as needed, preserving the old prefix. Newly exposed bytes are uninitialized; initialize before use. |
+| `copy_from(source)` | Deep-copies header/body; self-copy is unchanged. Null source throws `std::invalid_argument`; null clone throws `std::bad_alloc`; custom `clone()` exceptions propagate. Declared source length above capacity throws `std::length_error`. |
+| `get_head()` / `get_msg_data()` | Direct header-length edits do not resize storage: use `set_msg_length()` or `copy_data()`. The body pointer is borrowed; keep its owner alive, reacquire after growth/copy replacement, and discard on release. |
+
+Growth/copy allocation failure throws `std::bad_alloc`; allocation and clone failures preserve the destination’s header, bytes and length.
+
+**Upgrade:** capacity tracking changes `net_msg` layout; rebuild Net and consumers/plugins together. These message/event and native-header factories use standard allocation; `ARK_NEW` / `ARK_DELETE` overrides no longer customize them. Public signatures, CS/SS wire bytes and platform types remain unchanged.
+
+With `ARK_BUILD_NETWORK_TESTS=ON`, `check-net-message` covers ownership, framing and deterministic allocation failures without sockets; `check-network` includes it. Local checks do not establish shared-service or capacity acceptance.
+
 ## Member callbacks and borrowed arguments
 
 Endpoint constructors and client/server service registration bind the supplied
