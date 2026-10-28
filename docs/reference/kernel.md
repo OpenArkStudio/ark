@@ -143,13 +143,7 @@ Holding a `shared_ptr<entity>` does not mean the entity remains registered with 
 
 When `config_id > 0`, the configuration record must exist and match the entity class. Configuration supplies defaults for unspecified fields; valid `args` override the same field, including an explicit `0` or empty string. If a field appears more than once in valid arguments, the last value wins. Entity data is independent of the configuration record, so modifying an entity does not modify the source configuration.
 
-`node_manager::create_data(node*)` retains a newly allocated node until its deep
-copy and owning-map insertion succeed. String-copy or map-allocation exceptions
-release that unpublished node and propagate to the caller. A duplicate index
-returns `false` and preserves the existing node. Metadata-based and lazy creation
-use the same temporary ownership boundary; `ARK_NEW`/`ARK_DELETE` overrides and
-nullable allocation assertions remain in effect. Public interfaces and object
-layouts are unchanged.
+Node creation releases an unpublished node if copying its value or inserting it fails, then propagates the exception. Deep copies remain independent; duplicate indices preserve the existing value.
 
 Arguments are `(value, uint32_t field_index)` pairs: add the value first, then add its index with `add_u_int()`. Indices must belong to the loaded entity schema, and each value type must exactly match its field type. Do not rely on implicit conversions.
 
