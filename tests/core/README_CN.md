@@ -59,8 +59,14 @@ cmake --build hash-header-build --target check-murmur-hash-header
 
 `check-app-startup-failures` 使用真实启动器和测试动态库，覆盖四个启动阶段各自返回 false 或抛出异常，并分别读取 TOML 和 XML 清单；还验证非标准异常、插件入口抛出异常、库文件缺失，以及可加载但没有 `DllEntryPlugin` 的动态库。每次受控模块失败或插件入口异常前，已注册的测试模块都会启动并保留一个真实的 owned loopback TCP 监听端点，使用系统分配的端口。缺少入口的测试库会记录自身初始化，确认库已加载后才发生失败。24 个子进程均须输出一次准确的阶段、模块或插件诊断，保留可用异常信息，以正常退出码 1 结束，且不执行后续启动调用、update、正常关闭或卸载。核心用例检查失败上下文、原始异常传播、多模块中的首次失败停止及所属线程访问。若失败启动后仍保留模块所有权，该端点会使普通静态清理等待，因此退出检查覆盖真实的活动 IO 池。这些测试证明失败报告与进程终止，不证明部分启动资源清理或同进程恢复。
 
+启用 Protobuf 时，`check-core` 还包含 `check-proto-configuration`。该检查执行两个平台分支的生产 target 配置，核对传递给消费者的 DLL 导入定义和运行时目录，并通过真实 protoc 输出验证消息／描述符导出及原有无导出标注路径。生成 fixture 使用 Ninja，不编译 Windows 二进制。真实 Kernel DSO 测试保留宿主持有的生成 Protobuf 消息和跨 DSO 转换，继续覆盖公开 DLL 边界。
+
 `check-kernel-initialization` 从 `resource/meta/` 加载真实元数据和静态数据，
 分别使用资源相对路径及以 `/` 开头的旧路径，验证内核与配置模块的四种初始化顺序，共八种组合。
+
+`entity_snapshot.cpp` 使用真实 Entity／定义对象，检查独立拥有的显式标量捕获、全部受支持原生类型、整数／GUID 边界、有限浮点值、二进制字符串、不创建节点的惰性零值、隐藏字段排除、源销毁、限额，以及失败后源保持不变。头文件消费者还在关闭 Protobuf 时编译独立的快照值契约。
+
+捕获测试通过 `kernel_module` 指针调用。`entity_snapshot_interface.cpp` 保留一份只实现原有纯虚接口的外部源码实现，检查它仍可实例化、默认方法抛出 `logic_error`、自定义覆写及框架覆写。
 
 同一 target 运行 `kernel_delayed_sync.cpp`：真实容器创建、移除和销毁经过延迟收集、Kernel 更新、Protobuf 序列化和既有掩码交付回调。用例覆盖完整载荷、实体引用、空槽／销毁标记、仅自身同步掩码，以及空批次、标量、表格和混合对照。范围受限的测试友元仅观察该回调，不提供传输层或客户端。
 
@@ -91,6 +97,8 @@ cmake --build core-build --target check-compression --parallel 2
 ```
 
 ## 原生动态库关闭结果
+
+`check-native-loader` 构建独立宿主和两个真实共享库。加载的库调用仅位于其自身目录的依赖；宿主和工作目录分别位于其他目录，插件目录不加入 PATH。测试分别加载正斜线绝对路径和相对路径，调用导出符号并对每个句柄重复关闭。Windows 还检查原生失败码和非法 UTF-8 诊断。配置检查确保宿主不链接 fixture 库，并保持输出目录分离。此 target 是 `check-native-unload` 的依赖，因此也纳入 `check-core`。非 Windows 运行验证真实共享库加载，不代表 Windows 依赖搜索验收。
 
 `check-native-unload` 纳入 `check-core`，复用现有 OSS SDK 入口探针，不需要 OSS 服务或运行时应用构建。确定性测试通过私有的单次调用适配器，对有效的已加载句柄注入原生失败结果，不增加生产全局钩子或公开虚拟模拟接口。检查覆盖平台成功约定、失败句柄／包装对象保留、停止后续关闭、插件出口仅执行一次与管理器失败状态保持。成功关闭后清空句柄；空对象或已成功关闭的对象重复卸载，不再调用操作系统。独立正常路径执行真实插件入口／出口和原生关闭 API。这些检查不证明操作系统已移除库映像、真实数据库验收或任意热更新安全。
 
@@ -141,7 +149,7 @@ cmake --build core-build --target check-business-runtime
 
 Applications CI 显式开启 `ARK_BUILD_PLUGIN_HTTP=ON` 并运行 `check-core`，因此既有源码检查与全矩阵均包含真实 HTTP 动态库回归。本地启用 HTTP 的原生验证已通过；本次变更的托管全矩阵仍待验收。永久 CI 策略测试检查配置到真实动态库回归的依赖链。
 
-Kernel 的 38 个既有头通过 `ark::kernel` 从 `src/plugins/kernel/` 映射；`check-core` 保留数据与节点回归，`check-kernel-initialization` 保留初始化与配置复制断言。独立工程 `tests/consumer/kernel` 在 Protobuf 开启/关闭时分别消费 38/35 个头，其中 `container_meta.hpp` 保留原有 `ark/define.hpp` 与 `ark/enum.hpp` 前置包含要求。详见 [Kernel 参考](../../docs/reference/kernel_CN.md)。
+Kernel 的公开头通过 `ark::kernel` 从 `src/plugins/kernel/` 映射；`check-core` 保留数据与节点回归，`check-kernel-initialization` 保留初始化与配置复制断言。独立工程 `tests/consumer/kernel` 在 Protobuf 开启／关闭时消费公开头，关闭时排除三个依赖 Protobuf 的模块头；其中 `container_meta.hpp` 保留原有 `ark/define.hpp` 与 `ark/enum.hpp` 前置包含要求。详见 [Kernel 参考](../../docs/reference/kernel_CN.md)。
 
 Net 注册的 HTTP 客户端现在由私有接口工厂创建。`check-net-plugin` 还验证无需管理器更新即可完成的 future，以及 DSO 仍加载时通过 `pre_shut()` 取消未完成请求；在正常插件退出前消费这些 future，不证明 future 可跨任意卸载继续使用。`check-network` 经由相同私有工厂和公开客户端接口保留请求、超时、回调与停机覆盖。
 
@@ -154,6 +162,8 @@ Net 注册的 HTTP 客户端现在由私有接口工厂创建。`check-net-plugi
 保留的固定演示端点与真实传输验证边界见 [HTTP 示例](../../docs/reference/http_CN.md#旧-http-示例的类型化创建)。
 
 开启 Protobuf 且存在 Kernel／Utility 运行时 target 时，`check-kernel-plugin` 通过独立公开接口 runner 加载真实 DSO，检查原有四个接口键与管理器指针、元数据／静态记录加载、地图／实体注册和回调、管理器更新、停机销毁与重复 stop。它与现有直接初始化／实体默认值测试一起纳入 `check-core`；不在卸载后检查注册表，也不证明任意热更新安全。Kernel 公开头消费者检查全部保留类型的基类和 update 声明。
+
+该独立 runner 还通过加载 DSO 的接口指针调用 `kernel_module::capture_scalar_snapshot()`，覆盖空选择、全部标量类型、惰性默认值、原生宽度、限额，以及源修改和正常插件停止后快照值仍有效。runner 不把捕获实现编入自身可执行文件。此虚方法改变 Kernel 虚函数表 ABI，加载新接口前必须一起重建所有插件和宿主／消费者。
 
 XXTEA 用例覆盖精确长度分配的短密钥、16 字节与内嵌零字节密钥、二进制往返及输出追加，参见[密钥约定](../../docs/reference/xxtea_CN.md)。
 

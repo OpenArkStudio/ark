@@ -1,6 +1,9 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
+#include <array>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
+#include <optional>
 #include <string>
 #include <typeinfo>
 
@@ -76,6 +79,7 @@ int main(int argc, char* argv[]) {
     require(maps->create_map(7) && maps->exist_map(7), "Kernel map module did not create a map");
     require(kernel->add_class_call_back("Player", &events, &entity_events::on_event),
         "Kernel entity observer registration failed");
+    std::optional<ark::entity_sync::scalar_snapshot> retained;
     {
         ark::data_list_impl args;
         if (json)
@@ -85,10 +89,51 @@ int main(int argc, char* argv[]) {
         auto entity = kernel->create_entity(1001, 7, 0, "Player", json ? 42 : 0, args);
         require(entity && entity->get_id() == 1001 && kernel->get_entity(1001) == entity && events.created == 1,
             "Kernel DSO entity creation or lifecycle callback changed");
+        const auto empty = kernel->capture_scalar_snapshot(*entity, {});
+        require(empty.entity_id == 1001 && empty.class_name == "Player" && empty.fields.empty(),
+            "Kernel DSO empty scalar selection changed");
         if (json)
         {
             require(entity->get_u_int32("hp") == 77 && entity->get_string("name") == "Configured",
                 "JSON profile and per-field argument precedence changed");
+            const std::array<std::uint32_t, 10> selection{100, 104, 105, 106, 107, 108, 109, 110, 111, 112};
+            retained = kernel->capture_scalar_snapshot(*entity, selection);
+            const auto& values = retained->fields;
+            require(values.size() == selection.size() && std::get<std::string>(values.at(100)) == "Configured" &&
+                        std::get<std::uint32_t>(values.at(104)) == 77 && std::get<bool>(values.at(105)) &&
+                        std::get<std::int32_t>(values.at(106)) == std::numeric_limits<std::int32_t>::min() &&
+                        std::get<std::uint64_t>(values.at(107)) == std::numeric_limits<std::uint64_t>::max() &&
+                        std::get<std::int64_t>(values.at(108)) == std::numeric_limits<std::int64_t>::min() &&
+                        std::get<float>(values.at(109)) == 1.25F && std::get<double>(values.at(110)) == 2.5 &&
+                        std::get<ark::entity_sync::guid_value>(values.at(111)).value == 42 &&
+                        std::get<std::uint32_t>(values.at(112)) == 0,
+                "Kernel DSO scalar capture types, widths or lazy defaults changed");
+            require(entity->set_u_int64("counter", 7) && entity->set_guid("owner", -7) &&
+                        entity->set_string("name", "Changed"),
+                "Kernel DSO scalar mutation failed");
+            const auto changed = kernel->capture_scalar_snapshot(*entity, selection);
+            require(std::get<std::uint64_t>(changed.fields.at(107)) == 7 &&
+                        std::get<ark::entity_sync::guid_value>(changed.fields.at(111)).value == -7 &&
+                        std::get<std::string>(changed.fields.at(100)) == "Changed" &&
+                        std::get<std::uint64_t>(values.at(107)) == std::numeric_limits<std::uint64_t>::max(),
+                "Kernel DSO snapshot retained borrowed scalar state");
+            bool limited = false;
+            try
+            { static_cast<void>(kernel->capture_scalar_snapshot(*entity, selection, {1, 0})); }
+            catch (const std::length_error&)
+            { limited = true; }
+            require(limited, "Kernel DSO capture did not enforce its limits");
+            auto lazy = kernel->create_entity(1002, 7, 0, "LazyOwner", 0, ark::data_list_impl{});
+            require(lazy != nullptr, "Kernel DSO lazy entity creation failed");
+            const std::array<std::uint32_t, 1> lazy_selection{112};
+            const auto lazy_snapshot = kernel->capture_scalar_snapshot(*lazy, lazy_selection);
+            ark::protobuf::protobuf_entity_data materialized;
+            require(std::get<std::uint32_t>(lazy_snapshot.fields.at(112)) == 0 &&
+                        kernel->entity_node_to_protobuf_data(lazy, &materialized) &&
+                        materialized.datas_uint32().count(112) == 0,
+                "Kernel DSO lazy capture materialized a node or lost its typed zero");
+            require(kernel->destroy_entity(1002), "Kernel DSO lazy entity destruction failed");
+            lazy.reset();
         }
         ark::data_list_impl ids;
         require(maps->get_inst_entity_list(7, 0, ids) && ids.get_count() == 1 && ids.int64(0) == 1001,
@@ -99,5 +144,12 @@ int main(int argc, char* argv[]) {
     require(stopped, "Kernel plugin exit failed: " + manager.get_shutdown_failure());
     require(events.destroyed == 1, "Kernel shutdown did not dispatch entity destruction exactly once");
     require(manager.stop(4), "Repeated Kernel stop failed");
-    std::cout << "Kernel actual DSO interfaces, metadata/configuration, entity lifecycle and shutdown passed\n";
+    if (retained)
+    {
+        require(std::get<std::string>(retained->fields.at(100)) == "Configured" &&
+                    std::get<ark::entity_sync::guid_value>(retained->fields.at(111)).value == 42,
+            "Kernel DSO unload invalidated an owning scalar snapshot");
+    }
+    std::cout << "Kernel actual DSO interfaces, scalar snapshots, metadata/configuration, entity lifecycle and "
+                 "shutdown passed\n";
 }

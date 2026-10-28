@@ -50,6 +50,14 @@ identity, binary messages, legacy wire payloads and external JSON field names.
 They also exercise the new `ark::protobuf` descriptor and enum names.
 Initialize Protobuf as described for application builds.
 
+With Protobuf enabled, `check-proto-configuration` is included in `check-core`.
+It executes the production target configuration for both platform branches,
+checks transitive DLL import definitions/runtime directories, and uses real protoc
+outputs to validate message/descriptor exports and the legacy unannotated path.
+The fixture uses Ninja for generation only; it does not compile Windows binaries.
+The actual Kernel DSO test keeps its host-owned generated Protobuf message and
+cross-DSO conversion, so the test continues to cover the public DLL boundary.
+
 The C++20 language regressions check the exact six built-in integer classifications, qualifier and reference handling, constant values, exception contracts and fixed UID allocation outputs. The standalone array-map header check also rejects reintroduced legacy language macros.
 
 UID regressions also check compile-time allocation, invalid/extreme widths, field overflow and the three 63/0/0 width permutations. `ark_core_tests --test-case="UID*"` selects them. Invalid layouts throw `std::invalid_argument`; invalid field values throw `std::out_of_range`, independently of assertion settings. See [UID bit allocation](../../docs/reference/utility.md#core-uid-bit-allocation).
@@ -71,6 +79,15 @@ exit code 1 with a manifest diagnostic, including on Windows, and is included in
 `check-kernel-initialization` loads real metadata and static data from
 `resource/meta/`. It checks four kernel/config initialization orders with both
 resource-relative paths and legacy paths beginning with `/`, for eight combinations.
+
+`entity_snapshot.cpp` uses real Entity/schema objects to check owning selected scalar
+capture, every supported native type, integer/GUID boundaries, finite floating values,
+binary strings, typed lazy zeroes without node creation, hidden-field exclusion,
+source destruction, limits and unchanged sources after errors. The header consumer
+also compiles the independent snapshot value contract with Protobuf disabled.
+Capture tests call through `kernel_module` pointers. `entity_snapshot_interface.cpp`
+keeps an external source implementation of the original pure interface concrete,
+checks the default `logic_error`, a custom override and the framework override.
 
 The same target runs `kernel_delayed_sync.cpp`: real container creation, removal
 and destruction pass through delayed collection, Kernel update, Protobuf serialization
@@ -111,6 +128,16 @@ cmake --build core-build --target check-compression --parallel 2
 ```
 
 ## Native library close results
+
+`check-native-loader` builds an independent host and two real shared libraries.
+The loaded library calls a dependency located only beside itself; the host and
+working directory are separate, and the plugin directory is not added to PATH.
+The test loads absolute forward-slash and relative paths, invokes the exported
+symbol and closes each handle twice. Windows also checks native failure codes
+and invalid UTF-8 diagnostics. Configuration checks keep the host unlinked from
+the fixture libraries and their output directories separate. This target is a
+dependency of `check-native-unload` and therefore `check-core`. A non-Windows run
+checks actual shared-library loading, not Windows dependency-search acceptance.
 
 `check-native-unload` is included in `check-core` and reuses the existing OSS SDK entry probe without an OSS service or runtime application build. Deterministic tests inject a failed native result using valid loaded handles through private per-call adapters; no production global hook or public virtual mock API is added. They verify the platform's success convention, retained failed handles/wrappers, stopping before later closes, exactly-once plugin exit and sticky manager failure. Successful close clears the handle, and repeated empty/successful unload does not call the OS again. A separate normal path runs the real plugin entry/exit and native close APIs. These checks do not establish OS image removal, real database acceptance or arbitrary hot-update safety.
 
@@ -164,7 +191,7 @@ With `ARK_BUILD_PLUGIN_HTTP=ON`, `check-http-plugin` loads the actual HTTP DSO a
 
 Applications CI explicitly enables `ARK_BUILD_PLUGIN_HTTP=ON` and runs `check-core`, so its existing source and full matrices include the real HTTP DSO fixture. Local HTTP-enabled native validation has passed; hosted full-matrix acceptance for this change remains pending. The permanent CI policy test guards this configuration-to-DSO dependency chain.
 
-Kernel maps its 38 existing headers from `src/plugins/kernel/` through `ark::kernel`. `check-core` retains data/node regressions; `check-kernel-initialization` retains initialization/configuration-copy assertions. The independent `tests/consumer/kernel` project consumes 38/35 headers with Protobuf enabled/disabled; `container_meta.hpp` retains its existing `ark/define.hpp` and `ark/enum.hpp` include prerequisites. See [Kernel reference](../../docs/reference/kernel.md).
+Kernel maps its public headers from `src/plugins/kernel/` through `ark::kernel`. `check-core` retains data/node regressions; `check-kernel-initialization` retains initialization/configuration-copy assertions. The independent `tests/consumer/kernel` project consumes public headers with Protobuf enabled/disabled, excluding the three Protobuf-dependent module headers when disabled; `container_meta.hpp` retains its existing `ark/define.hpp` and `ark/enum.hpp` include prerequisites. See [Kernel reference](../../docs/reference/kernel.md).
 
 The registered Net HTTP client now comes from a private interface factory. `check-net-plugin` additionally checks future completion without manager updates and pending-request cancellation through `pre_shut()` while the DSO remains loaded. It consumes those futures before normal plugin exit; no arbitrary post-unload future lifetime is established. `check-network` retains request/timeout/callback/shutdown coverage through the same private factory and public client interface.
 
@@ -181,6 +208,13 @@ No external HTTP/etcd request is made. See [HTTP examples](../../docs/reference/
 for the preserved fixed demonstration endpoints and the real-wire coverage boundary.
 
 With Protobuf and the Kernel/Utility runtime targets enabled, `check-kernel-plugin` loads their actual DSOs through an independent public-interface runner. It checks the four original interface keys and manager pointers, metadata/static record loading, map/entity registration and callbacks, manager updates, shutdown destruction and repeated stop. It is part of `check-core`, alongside the existing direct initialization/entity-default tests; no post-unload registry inspection or arbitrary hot-update safety is claimed. The Kernel public-header consumer checks all retained types and their typed bases/update declarations.
+
+That independent runner also calls `kernel_module::capture_scalar_snapshot()`
+through the loaded DSO's interface pointer, with empty and all-scalar selections,
+lazy defaults, native widths, limits and values retained after source mutation and
+normal plugin stop. The runner does not compile the capture implementation into
+its own executable. Adding this virtual method changes the Kernel vtable ABI;
+rebuild every plugin and host/consumer together before loading the new interface.
 
 The XXTEA cases cover exact-size short-key allocations, 16-byte and embedded-zero
 keys, binary round trips and output appending. See the [key contract](../../docs/reference/xxtea.md).

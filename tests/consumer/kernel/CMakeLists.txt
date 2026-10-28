@@ -32,6 +32,7 @@ set(kernel_headers
     entity.hpp
     entity_impl.hpp
     entity_json.hpp
+    entity_snapshot.hpp
     event_manager.hpp
     event_manager_impl.hpp
     kernel_module.hpp

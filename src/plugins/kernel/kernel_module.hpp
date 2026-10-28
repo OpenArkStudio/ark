@@ -20,7 +20,11 @@
 
 #pragma once
 
+#include <span>
+#include <stdexcept>
+
 #include "ark/kernel/entity.hpp"
+#include "ark/kernel/entity_snapshot.hpp"
 #include "ark/kernel/static_entity.hpp"
 #include "ark/module.hpp"
 #include "ark/proto.hpp"
@@ -194,6 +198,16 @@ public:
         ark::protobuf::protobuf_entity_data* protobuf_data, const mask_type mask = 0) = 0;
     virtual bool entity_table_to_protobuf_data(std::shared_ptr<entity> entity_ptr,
         ark::protobuf::protobuf_entity_data* protobuf_data, const mask_type mask = 0) = 0;
+
+    // The caller authorizes every selected index; empty selects no fields.
+    // Framework capture owns values, preserves lazy defaults without mutation,
+    // and throws invalid_argument/length_error on invalid input/limits. Capture
+    // requires a stable source on its owner thread. Legacy source subclasses may
+    // retain this default, which reports that capture is unsupported.
+    virtual entity_sync::scalar_snapshot capture_scalar_snapshot(
+        const entity&, std::span<const std::uint32_t>, const entity_sync::snapshot_limits& = {}) {
+        throw std::logic_error("scalar snapshot capture is not supported by this Kernel implementation");
+    }
 
 protected:
     virtual bool add_event_call_back(const guid_t& self, const int event_id, event_process_functor&& cb) = 0;
