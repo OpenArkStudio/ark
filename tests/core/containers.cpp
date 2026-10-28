@@ -35,20 +35,36 @@ using shared_object_hashmap = ark::shared_object_hashmap<int, counted_object>;
 
 static_assert(!std::is_copy_constructible_v<owned_object_map>);
 static_assert(!std::is_copy_assignable_v<owned_object_map>);
-static_assert(std::is_nothrow_move_constructible_v<owned_object_map>);
-static_assert(std::is_nothrow_move_assignable_v<owned_object_map>);
+static_assert(std::is_move_constructible_v<owned_object_map>);
+static_assert(std::is_move_assignable_v<owned_object_map>);
+static_assert(std::is_nothrow_move_constructible_v<owned_object_map> ==
+              std::is_nothrow_move_constructible_v<owned_object_map::map_type>);
+static_assert(std::is_nothrow_move_assignable_v<owned_object_map> ==
+              std::is_nothrow_move_assignable_v<owned_object_map::map_type>);
 static_assert(!std::is_copy_constructible_v<owned_object_hashmap>);
 static_assert(!std::is_copy_assignable_v<owned_object_hashmap>);
-static_assert(std::is_nothrow_move_constructible_v<owned_object_hashmap>);
-static_assert(std::is_nothrow_move_assignable_v<owned_object_hashmap>);
+static_assert(std::is_move_constructible_v<owned_object_hashmap>);
+static_assert(std::is_move_assignable_v<owned_object_hashmap>);
+static_assert(std::is_nothrow_move_constructible_v<owned_object_hashmap> ==
+              std::is_nothrow_move_constructible_v<owned_object_hashmap::map_type>);
+static_assert(std::is_nothrow_move_assignable_v<owned_object_hashmap> ==
+              std::is_nothrow_move_assignable_v<owned_object_hashmap::map_type>);
 static_assert(std::is_copy_constructible_v<shared_object_map>);
 static_assert(std::is_copy_assignable_v<shared_object_map>);
-static_assert(std::is_nothrow_move_constructible_v<shared_object_map>);
-static_assert(std::is_nothrow_move_assignable_v<shared_object_map>);
+static_assert(std::is_move_constructible_v<shared_object_map>);
+static_assert(std::is_move_assignable_v<shared_object_map>);
+static_assert(std::is_nothrow_move_constructible_v<shared_object_map> ==
+              std::is_nothrow_move_constructible_v<shared_object_map::map_type>);
+static_assert(std::is_nothrow_move_assignable_v<shared_object_map> ==
+              std::is_nothrow_move_assignable_v<shared_object_map::map_type>);
 static_assert(std::is_copy_constructible_v<shared_object_hashmap>);
 static_assert(std::is_copy_assignable_v<shared_object_hashmap>);
-static_assert(std::is_nothrow_move_constructible_v<shared_object_hashmap>);
-static_assert(std::is_nothrow_move_assignable_v<shared_object_hashmap>);
+static_assert(std::is_move_constructible_v<shared_object_hashmap>);
+static_assert(std::is_move_assignable_v<shared_object_hashmap>);
+static_assert(std::is_nothrow_move_constructible_v<shared_object_hashmap> ==
+              std::is_nothrow_move_constructible_v<shared_object_hashmap::map_type>);
+static_assert(std::is_nothrow_move_assignable_v<shared_object_hashmap> ==
+              std::is_nothrow_move_assignable_v<shared_object_hashmap::map_type>);
 
 } // namespace
 
