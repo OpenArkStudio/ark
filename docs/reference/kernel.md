@@ -19,6 +19,8 @@ Schemas and configuration values are separate data: a schema defines field names
 
 When no JSON schema is selected, the metadata module loads `resource/meta/config_class.config` and `resource/meta/entity_class.config` during `init()`. These files reference individual schema files; configuration schemas may also specify data resources. During `post_init()`, `config_module` loads static records using this metadata.
 
+XML configuration loading releases its temporary ID node on normal return or C++ exception unwinding. Debug assertions and process exit do not guarantee stack unwinding. A rejected later row does not roll back records already added to the configuration manager; normal `shut()` still releases the manager. Shared configuration records held by callers remain valid until their last owner releases them. Failures after plugin installation retain the existing application exit policy.
+
 Query configuration after the framework has completed the relevant initialization. Creating a runtime entity requires its class schema, map and map instance to exist. Register class event callbacks before creating entities of that class. See [Create a module](../guides/modules.md) for module integration.
 
 ## JSON Entity schema and business data
