@@ -117,6 +117,30 @@ add_custom_target(check-pod-array-failure
     DEPENDS ark_pod_array_failure_tests USES_TERMINAL VERBATIM)
 add_dependencies(check-core check-pod-array-failure)
 
+if(ARK_BUILD_PROTO)
+    # Every TU uses the same allocation/delete hooks; ordinary Kernel binaries remain independent.
+    add_executable(ark_entity_custom_ownership_tests main.cpp entity_custom_ownership.cpp
+        ../../src/plugins/kernel/class_call_back_manager.cpp
+        ../../src/plugins/kernel/class_meta.cpp
+        ../../src/plugins/kernel/container_impl.cpp
+        ../../src/plugins/kernel/container_manager_impl.cpp
+        ../../src/plugins/kernel/entity_impl.cpp
+        ../../src/plugins/kernel/node_manager.cpp
+        ../../src/plugins/kernel/row.cpp
+        ../../src/plugins/kernel/table_impl.cpp
+        ../../src/plugins/kernel/table_meta.cpp)
+    target_link_libraries(ark_entity_custom_ownership_tests PRIVATE ark::kernel)
+    target_compile_definitions(ark_entity_custom_ownership_tests PRIVATE NDEBUG)
+    set(entity_custom_hooks "${CMAKE_CURRENT_SOURCE_DIR}/entity_custom_hooks.hpp")
+    target_compile_options(ark_entity_custom_ownership_tests PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/FI${entity_custom_hooks}>"
+        "$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-include${entity_custom_hooks}>")
+    add_custom_target(check-entity-custom-ownership
+        COMMAND $<TARGET_FILE:ark_entity_custom_ownership_tests>
+        DEPENDS ark_entity_custom_ownership_tests USES_TERMINAL)
+    add_dependencies(check-core check-entity-custom-ownership)
+endif()
+
 find_package(Threads REQUIRED)
 add_library(ark_task_header_checks OBJECT headers/task.cpp)
 # This SDK consumer uses the public core target without aggregate plugin APIs.

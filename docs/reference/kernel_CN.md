@@ -209,6 +209,10 @@ bool set_int32_field(ark::kernel_module& kernel, const ark::guid_t& id, const st
 
 禁用断言时，行分配失败返回 `nullptr`，保留现有行及下一个自动索引，不触发 `table_add`。内存恢复后可以重试；Debug 构建保留添加失败时的既有断言。插入 map 时若抛出异常，会在向上传播前回收尚未发布的行；既有行仍由表格持有。
 
+### 自定义标量的所有权
+
+创建自定义标量时，值构造或插入抛出异常会释放尚未发布的值，向调用方传播异常，不新增名称记录。插入成功的值仍由实体持有。
+
 ### 自定义无符号值
 
 `entity::add_custom_u_int32(name, value)` 创建按名称访问的运行时 `uint32_t` 值，与元数据字段分开。创建后，`set_custom_u_int32(name, value)` 可在 `0` 到 `UINT32_MAX` 的完整范围内更新值，使用 `get_custom_u_int32(name)` 读取。名称不存在或对应其他标量类型时，设置操作在 Debug 和 Release 构建中均返回 `false`，不会创建数据、转换类型或修改已有值。使用 `find_custom_data()` 检查是否存在；已存储的零是有效值。

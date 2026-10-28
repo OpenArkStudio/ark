@@ -209,6 +209,10 @@ bool set_int32_field(ark::kernel_module& kernel, const ark::guid_t& id, const st
 
 With assertions disabled, a failed row allocation returns `nullptr`, preserves existing rows and the next automatic index, and emits no `table_add` event. Retry after memory recovers; Debug builds retain the existing failed-add assertion. A map insertion exception reclaims the unpublished row before propagating; existing rows remain owned by the table.
 
+### Custom scalar ownership
+
+Custom scalar creation releases an unpublished value if value construction or map insertion throws; the exception propagates without adding the name. Successful values remain owned by the entity.
+
 ### Custom unsigned values
 
 `entity::add_custom_u_int32(name, value)` creates a named runtime `uint32_t` value separate from schema fields. After creation, `set_custom_u_int32(name, value)` updates that value across the full range from `0` to `UINT32_MAX`; read it with `get_custom_u_int32(name)`. Setting a missing name or a name containing another scalar type returns `false` without creating data, converting its type or changing the existing value, in both Debug and Release builds. Use `find_custom_data()` to check existence; a stored zero is a valid value.
