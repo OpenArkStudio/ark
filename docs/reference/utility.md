@@ -37,8 +37,9 @@ callback ordering, repeat counts and cancellation timing are unchanged.
 `ARK_NEW` and `ARK_DELETE` overrides remain the allocation boundary. A null
 allocation retains the debug assertion; with assertions disabled, initialization
 leaves the existing wheel intact and `add_timer()` returns `0` if the wheel or a
-new timer is unavailable. Standard container allocation exceptions can still
-propagate. **Breaking source change:** `time_wheel_manager` explicitly rejects
+new timer is unavailable. The timer module reports failed wheel initialization
+as `false` to the normal startup path. Standard container allocation exceptions
+can still propagate. **Breaking source change:** `time_wheel_manager` explicitly rejects
 copying and moving. Direct consumers must keep it at a stable location under one
 owner, for example behind a `std::unique_ptr`, rather than copy or move the wheel.
 The public low-level type's object layout also changes: rebuild the library and
@@ -191,4 +192,6 @@ acceptance evidence.
 
 `check-timer`, included in `check-core`, verifies wheel order, repeats, cancellation,
 resource cleanup and allocation-failure recovery. Run it separately with
-`cmake --build <build-dir> --target check-timer`.
+`cmake --build <build-dir> --target check-timer`. It also runs an isolated
+`NDEBUG` build of the production timer module to check allocation-failure reporting
+through its public interface.

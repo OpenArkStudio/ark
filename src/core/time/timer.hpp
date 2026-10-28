@@ -108,6 +108,10 @@ public:
         last_update_time_ = now_time;
     }
 
+    bool initialized() const noexcept {
+        return tw_vecs_[0] != nullptr;
+    }
+
     void update(int64_t now_time) {
         if (tw_vecs_[0])
         {

@@ -48,7 +48,7 @@ bool timer_module_impl::init() {
     timer_manager_ = std::make_shared<time_wheel_manager>();
     timer_manager_->init(get_plugin_manager()->get_now_time());
 
-    return true;
+    return timer_manager_->initialized();
 }
 
 bool timer_module_impl::pre_shut() {

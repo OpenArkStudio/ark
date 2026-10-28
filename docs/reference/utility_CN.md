@@ -35,7 +35,8 @@ const auto entity = guids->create_guid();
 
 `ARK_NEW` 和 `ARK_DELETE` 覆盖仍是分配边界。分配返回空指针时保留 Debug 断言；
 关闭断言后，初始化失败会保留原有时间轮，时间轮或新定时器不可用时 `add_timer()`
-返回 `0`。标准容器的分配异常仍可能向外传播。**源码不兼容变更：**
+返回 `0`。定时器模块会向正常启动流程返回 `false`，报告时间轮初始化失败。
+标准容器的分配异常仍可能向外传播。**源码不兼容变更：**
 `time_wheel_manager` 显式禁止复制和移动。直接使用该类型的调用方须通过单一所有者
 将其保持在固定位置，例如由 `std::unique_ptr` 持有，不能复制或移动时间轮。
 该公开低层类型的对象布局也有变化，库与所有直接使用 `time_wheel_manager` 的代码
@@ -158,4 +159,5 @@ UndefinedBehaviorSanitizer 可检查无效对齐。固定值验证哈希行为�
 `check-core` 还包含随机数头文件的独立编译，以及极值、异号、逆序和相等端点的确定性随机范围回归。构建命令见[核心回归](../../tests/core/README_CN.md)。
 
 `check-timer`（`check-core` 的依赖）验证时间轮顺序、重复、取消、资源回收与分配失败恢复。
-可单独执行 `cmake --build <build-dir> --target check-timer`。
+可单独执行 `cmake --build <build-dir> --target check-timer`。该目标还以 `NDEBUG`
+独立编译生产定时器模块，通过公开接口验证分配失败的上报。

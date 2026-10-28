@@ -97,6 +97,16 @@ add_custom_target(check-timer
     COMMAND $<TARGET_FILE:ark_timer_tests>
     COMMAND $<TARGET_FILE:ark_timer_hook_tests>
     DEPENDS ark_timer_tests ark_timer_hook_tests USES_TERMINAL VERBATIM)
+add_executable(ark_timer_module_init_tests main.cpp timer_module_init.cpp
+    "${PROJECT_SOURCE_DIR}/src/plugins/utility/timer_module_impl.cpp")
+set_property(TARGET ark_timer_module_init_tests PROPERTY LINK_LIBRARIES ark::core ark::utility)
+target_include_directories(ark_timer_module_init_tests PRIVATE "${PROJECT_SOURCE_DIR}/src/plugins")
+# Apply NDEBUG to the real production cpp as well as the isolated test harness.
+target_compile_definitions(ark_timer_module_init_tests PRIVATE NDEBUG)
+add_custom_target(check-timer-module-init
+    COMMAND $<TARGET_FILE:ark_timer_module_init_tests>
+    DEPENDS ark_timer_module_init_tests USES_TERMINAL VERBATIM)
+add_dependencies(check-timer check-timer-module-init)
 add_dependencies(check-core check-timer)
 
 # Isolate global new[] failure injection from the ordinary Core executables.
