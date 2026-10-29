@@ -52,6 +52,14 @@ add_custom_target(check-core
     COMMAND $<TARGET_FILE:ark_core_tests>
     DEPENDS ark_core_tests
     USES_TERMINAL)
+
+# Keep singleton shutdown terminal within its own process, including the logger specialization.
+add_executable(ark_singleton_tests ../test_singleton.cpp)
+set_property(TARGET ark_singleton_tests PROPERTY LINK_LIBRARIES ark::core)
+add_custom_target(check-singleton
+    COMMAND $<TARGET_FILE:ark_singleton_tests>
+    DEPENDS ark_singleton_tests USES_TERMINAL VERBATIM)
+add_dependencies(check-core check-singleton)
 if(TARGET check-proto-configuration)
     add_dependencies(check-core check-proto-configuration check-proto-naming)
 endif()
