@@ -384,35 +384,47 @@ int main(int argc, char* argv[]) {
         main_loop();
     }
 
-    // Normal shutdown closes only managed top-level task admission. Accepted
-    // tasks still need module updates and the shared owner executor to finish.
-    // A configured deadline latches resource retention; it never authorizes
-    // cancellation, unloading or process exit, even if work completes later.
+    // Normal shutdown seals business roots before draining accepted tasks.
+    // Deadline checks retain remaining resources at synchronous hook boundaries;
+    // they cannot preempt a hook or undo cleanup already performed by that call.
     const auto shutdown_started = std::chrono::steady_clock::now();
+    auto shutdown_deadline = std::chrono::steady_clock::time_point::max();
+    if (shutdown_timeout.count() > 0 && shutdown_timeout < std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                               std::chrono::steady_clock::duration::max()))
+    {
+        const auto delay = std::chrono::duration_cast<std::chrono::steady_clock::duration>(shutdown_timeout);
+        if (shutdown_started <= shutdown_deadline - delay)
+        {
+            shutdown_deadline = shutdown_started + delay;
+        }
+    }
     bool shutdown_retained = false;
     bool shutdown_failure_reported = false;
     bool shutdown_update_error_reported = false;
     for (;;)
     {
-        const auto elapsed =
-            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - shutdown_started);
-        const auto shutdown_state = plugin_manager::instance()->get_shutdown_state();
-        if (!shutdown_retained && shutdown_timeout.count() > 0 && elapsed >= shutdown_timeout &&
-            (shutdown_state == plugin_manager::shutdown_state::draining ||
-                shutdown_state == plugin_manager::shutdown_state::stopping_acceptance))
+        if (!shutdown_retained)
         {
-            shutdown_retained = true;
-            const auto pending = plugin_manager::instance()->pending_tasks();
-            ARK_LOG_ERROR("Shutdown wait timed out after {} ms (limit={} ms, pending={}, phase={}); "
-                          "process and resources are retained",
-                elapsed.count(), shutdown_timeout.count(), pending,
-                shutdown_state == plugin_manager::shutdown_state::stopping_acceptance ? "stop_accepting"
-                : pending                                                             ? "managed_tasks"
-                                                                                      : "ready_to_shut");
-        }
-        if (!shutdown_retained && plugin_manager::instance()->stop(date_time::get_now_time()))
-        {
-            break;
+            const auto stopped =
+                shutdown_timeout.count() > 0
+                    ? plugin_manager::instance()->stop_until(date_time::get_now_time(), shutdown_deadline)
+                    : plugin_manager::instance()->stop(date_time::get_now_time());
+            if (stopped)
+            {
+                break;
+            }
+            const auto state = plugin_manager::instance()->get_shutdown_state();
+            if (state == plugin_manager::shutdown_state::timed_out ||
+                state == plugin_manager::shutdown_state::cleanup_timed_out)
+            {
+                shutdown_retained = true;
+                const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - shutdown_started);
+                ARK_LOG_ERROR("Shutdown wait timed out after {} ms (limit={} ms, pending={}, phase={}); "
+                              "process and resources are retained",
+                    elapsed.count(), shutdown_timeout.count(), plugin_manager::instance()->pending_tasks(),
+                    plugin_manager::instance()->get_shutdown_failure());
+            }
         }
         if (plugin_manager::instance()->get_shutdown_state() == plugin_manager::shutdown_state::failed)
         {
@@ -440,7 +452,7 @@ int main(int argc, char* argv[]) {
                 shutdown_failure_reported = true;
             }
         }
-        else
+        else if (plugin_manager::instance()->get_shutdown_state() != plugin_manager::shutdown_state::cleanup_timed_out)
         {
             try
             {

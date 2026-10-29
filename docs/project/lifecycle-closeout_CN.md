@@ -44,7 +44,7 @@
 
 共享 manual runtime 在 owner 线程运行用户处理器；原生 IO 池保留自己的线程。对应回调返回、所属原生资源回收屏障完成之前，不得销毁所有者或卸载其代码。`dlclose`／`FreeLibrary` 成功不证明库映像已从内存移除。
 
-默认停机无限等待。正数 `--shutdown_timeout_ms` 使用单调时钟计量 owner 循环等待，包括受管任务和模块就绪等待；它不能中断阻塞的 update、就绪检查、钩子或原生关闭。超时后，启动器锁定保留状态：即使任务或原生工作随后完成，也不再调用 `stop()` 或尝试卸载，但仍在可能的情况下继续 owner 更新。排空期间的 update 失败同样锁定保留状态。钩子／库关闭失败则让管理器进入不可恢复的 `failed`，停止更新和后续清理。此前已成功的钩子和库关闭不会回滚。任何超时都不授权强制取消、删除资源或按成功退出。
+默认停机无限等待。正数 `--shutdown_timeout_ms` 通过 `stop_until()` 传入单调时钟截止时间，并在后续 stop 调用中保留。停止接收／就绪钩子返回后及 `pre_shut()` 前检查时间，慢钩子成功且没有待完成任务时，也不能跳过保留。清理前超时进入不可恢复的 `timed_out`，允许 owner 更新，但后续完成不能恢复清理。清理开始后，钩子／关闭调用返回边界检查到超限，进入 `cleanup_timed_out`，保留剩余资源，停止后续更新和清理。检查不能中断阻塞的 update、钩子或原生关闭，也不能回滚调用返回前已经执行的动作。排空期间的 update 失败同样锁定启动器保留状态。钩子／关闭失败进入不可恢复的 `failed`，停止更新和后续清理。任何超时都不授权强制取消、销毁待完成帧或按成功退出。
 
 ## 已选路线与后续实施
 
@@ -82,6 +82,8 @@
 测试用观察超时终止自己创建的保留进程，不代表框架正常停机。测试还检查四个无效截止时间参数。[启动失败测试](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/tests/app/startup_failures.cmake) 分别用 TOML 和 XML 检查 12 种失败模式，包括失败前已启动的真实监听器。[Core 启动测试](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/tests/core/plugin_manager_startup.cpp) 和[业务 runtime 测试](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/tests/core/business_runtime.cpp) 覆盖首个失败、回调／重入限制和全部模块就绪检查。
 
 Core 停止接收测试覆盖缓存反向顺序、一次性／重入、手动 stop、合法 idle 新增／移除、同键替换、无效图，以及元数据／钩子失败。[模块指南](../guides/modules_CN.md#停止接收新业务根请求)记录固定版本 arknet 缺少独立停止接收 API 的边界；stop 服务端或修改 acceptor 都不能安全替代。
+
+独立的 `check-app-shutdown-deadlines` 包含三个慢钩子成功返回场景，不依赖受管任务或原生线程等待：停止接收／就绪钩子超过截止时间后不能进入 `pre_shut()`；慢 `pre_shut()` 返回后不能执行 `shut()`／卸载或后续模块更新。进程持续保留，由测试终止自己创建的子进程。检查覆盖钩子返回边界，不代表抢占或回滚。
 
 永久 Core 依赖测试覆盖 provider 缺失／自依赖／成环、传递／菱形图、重复边、独立节点稳定排序、元数据异常，以及每个启动阶段的首个失败终止。`check-app-module-dependencies` 用真实 Timers DSO 加载缺少 Utility 的应用，要求在 `init()` 前发生依赖失败，并由启动器以退出码 `1` 结束；已有类型化示例／预设测试验证完整应用。本地记录与托管验收继续分开。后续阶段仍须永久测试每个已进入阶段／获取点的补偿、跨插件回调生命周期，以及已接收工作后续调用期间 provider 持续存活；有序启动本身不提供这些停机保证。
 

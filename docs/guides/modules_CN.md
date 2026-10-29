@@ -146,6 +146,8 @@ class dependent_module final
 
 全部钩子成功后进入 `draining`：继续启用的模块更新和共享 owner poll，直到已接收任务及活跃栈结束，再通过现有的全部模块就绪检查并清理。本阶段不改变 `pre_shut()`、`shut()`、插件出口或库关闭顺序，也不增加启动失败补偿。
 
+通过 `stop_until(timestamp, deadline)` 传入截止时间后，管理器在停止接收／就绪钩子返回后及清理前检查时间；后续 `stop()` 不能绕过超时保留。清理前的 `timed_out` 保留资源并允许更新；清理开始后的 `cleanup_timed_out` 保留剩余资源并停止更新。检查不能抢占钩子，也不能回滚已经执行的动作。详见[超时状态](tasks_CN.md#模块共用业务执行器)。
+
 **迁移边界：** 本阶段只有受控业务 runtime 测试插件实现了新的外部根请求入口。官方 Net／HTTP 监听器和其他官方业务入口仍使用默认钩子。固定版本 arknet 的 [TCP 服务端](https://github.com/OpenArkStudio/arknet/blob/a0dfe09cd543e75cfb5996e537ce2fa49f2a758f/include/arknet/tcp/tcp_server.hpp) 提供 stop／wait 和原始 acceptor，但没有承诺保留已接收会话与流程的独立停止接收 API；HTTP 使用同一传输生命周期。直接 stop 或操作 acceptor 不能替代这一合同。因此，Core 钩子测试通过不代表真实网络应用已停止接收新业务请求。
 
 ## 保证回调不超出对象生命周期

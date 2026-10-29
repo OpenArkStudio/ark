@@ -47,6 +47,11 @@ public:
     }
 
     bool init() override {
+        if (mode_.starts_with("boundary_"))
+        {
+            // No task, native thread or later poll can delay these hooks.
+            return true;
+        }
         native_ = std::thread([this] {
             while (!native_release_.load(std::memory_order_acquire))
             {
@@ -81,6 +86,15 @@ public:
     bool stop_accepting() override {
         trace("stop-accepting");
         external_accepting_ = false;
+        if (mode_.starts_with("boundary_"))
+        {
+            if (mode_ == "boundary_admission")
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+            trace("admission-return");
+            return true;
+        }
         if (manager_.get_tasks(*this).start(rejected_root(), [](std::exception_ptr) {}) != 0)
         {
             throw std::runtime_error("Admission hook accepted a managed root");
@@ -107,7 +121,25 @@ public:
     }
 
     bool update() override {
-        const auto draining = manager_.get_shutdown_state() == ark::plugin_manager::shutdown_state::draining;
+        if (mode_.starts_with("boundary_"))
+        {
+            if (cleanup_started_)
+            {
+                trace("update-after-cleanup");
+            }
+            if (!stop_requested_)
+            {
+                stop_requested_ = true;
+                trace("request-stop");
+#if !defined(_WIN32)
+                std::raise(SIGTERM);
+#endif
+            }
+            return true;
+        }
+        const auto state = manager_.get_shutdown_state();
+        const auto draining = state == ark::plugin_manager::shutdown_state::draining ||
+                              state == ark::plugin_manager::shutdown_state::timed_out;
         if (draining && !drain_observed_)
         {
             drain_observed_ = true;
@@ -155,9 +187,7 @@ public:
         }
         if (pending_)
         {
-            const auto state = manager_.get_shutdown_state();
-            if (state == ark::plugin_manager::shutdown_state::draining && mode_ != "timeout_stalled" &&
-                (mode_ != "timeout_task" || !delayed))
+            if (draining && mode_ != "timeout_stalled" && (mode_ != "timeout_task" || !delayed))
             {
                 trace("reply-" + std::to_string(started_));
                 auto complete = std::move(pending_);
@@ -169,6 +199,16 @@ public:
     }
 
     bool ready_to_shut() const override {
+        if (mode_.starts_with("boundary_"))
+        {
+            trace("ready");
+            if (mode_ == "boundary_readiness")
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+            trace("ready-return");
+            return true;
+        }
         if (!owner_stopped_ || !native_exited_.load(std::memory_order_acquire))
         {
             return false;
@@ -192,6 +232,16 @@ public:
 
     bool pre_shut() override {
         trace("pre-shut");
+        if (mode_.starts_with("boundary_"))
+        {
+            cleanup_started_ = true;
+            if (mode_ == "boundary_pre_shut")
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+            trace("pre-shut-return");
+            return true;
+        }
         if (!sequence_finished_ || !completion_returned_ || pending_ || bridge_.pending() || native_.joinable())
         {
             throw std::runtime_error("Teardown preceded accepted business completion");
@@ -259,6 +309,7 @@ private:
     unsigned started_{};
     bool stop_requested_{};
     bool external_accepting_{true};
+    bool cleanup_started_{};
     bool sequence_finished_{};
     bool completion_returned_{};
     bool drain_observed_{};

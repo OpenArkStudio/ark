@@ -21,10 +21,12 @@
 #pragma once
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <exception>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -90,7 +92,9 @@ public:
         draining,
         failed,
         stopped,
-        stopping_acceptance
+        stopping_acceptance,
+        timed_out,
+        cleanup_timed_out
     };
 
     plugin_manager() = default;
@@ -153,13 +157,21 @@ public:
         return stop_with(timestamp, [](dynamic_library& library) { return library.unload(); });
     }
 
+    // The earliest supplied deadline remains in force for all later stop calls.
+    // Expiry is sticky; user hooks are checked only at synchronous boundaries.
+    // Keep updates before cleanup, but disable them after cleanup has begun.
+    auto stop_until(const int64_t timestamp, std::chrono::steady_clock::time_point deadline) -> bool {
+        return stop_with(timestamp, [](dynamic_library& library) { return library.unload(); }, deadline);
+    }
+
     auto update(const int64_t timestamp, std::size_t maximum_handlers = 64) -> bool {
         check_owner();
         if (execution_active())
         {
             throw std::logic_error("Plugin manager update does not permit reentrant lifecycle calls");
         }
-        if (shutdown_state_ == shutdown_state::failed || shutdown_state_ == shutdown_state::stopped)
+        if (shutdown_state_ == shutdown_state::failed || shutdown_state_ == shutdown_state::stopped ||
+            shutdown_state_ == shutdown_state::cleanup_timed_out)
         {
             return false;
         }
@@ -605,7 +617,16 @@ protected:
             ARK_ASSERT_CONTINUE(module_ptr != nullptr);
 
             shutdown_failure_ = "ready_to_shut: " + iter.first;
-            if (!module_ptr->ready_to_shut())
+            if (shutdown_deadline_expired())
+            {
+                return false;
+            }
+            const auto module_ready = module_ptr->ready_to_shut();
+            if (shutdown_deadline_expired())
+            {
+                return false;
+            }
+            if (!module_ready)
             {
                 ready = false;
             }
@@ -622,7 +643,7 @@ protected:
             ARK_ASSERT_CONTINUE(module_ptr != nullptr);
 
             shutdown_failure_ = "pre_shut: " + iter.first;
-            if (!module_ptr->pre_shut())
+            if (!module_ptr->pre_shut() || shutdown_deadline_expired(true))
             {
                 return false;
             }
@@ -690,16 +711,22 @@ private:
     friend struct detail::plugin_manager_test_access;
 
     template<typename unload_type>
-    auto stop_with(const int64_t timestamp, unload_type unload) -> bool {
+    auto stop_with(const int64_t timestamp, unload_type unload,
+        std::optional<std::chrono::steady_clock::time_point> deadline = std::nullopt) -> bool {
         check_owner();
         timestamp_ = timestamp;
         if (shutdown_state_ == shutdown_state::stopped)
         {
             return true;
         }
-        if (shutdown_state_ == shutdown_state::failed)
+        if (shutdown_state_ == shutdown_state::failed || shutdown_state_ == shutdown_state::timed_out ||
+            shutdown_state_ == shutdown_state::cleanup_timed_out)
         {
             return false;
+        }
+        if (deadline && (!shutdown_deadline_ || *deadline < *shutdown_deadline_))
+        {
+            shutdown_deadline_ = deadline;
         }
         if (shutdown_state_ == shutdown_state::running)
         {
@@ -720,6 +747,11 @@ private:
             if (shutdown_state_ == shutdown_state::stopping_acceptance)
             {
                 phase_guard stopping(*this, call_phase::stopping_acceptance);
+                shutdown_failure_ = "stop_accepting";
+                if (shutdown_deadline_expired())
+                {
+                    return false;
+                }
                 // Idle registry changes invalidate old pointers. Rebuild only
                 // here, before the one-shot hook sequence, never during drain.
                 if (!lifecycle_order_valid_)
@@ -732,6 +764,11 @@ private:
                     }
                     lifecycle_order_ = std::move(order);
                     lifecycle_order_valid_ = true;
+                    shutdown_failure_ = "stop_accepting";
+                    if (shutdown_deadline_expired())
+                    {
+                        return false;
+                    }
                 }
                 for (auto iter = lifecycle_order_.rbegin(); iter != lifecycle_order_.rend(); ++iter)
                 {
@@ -741,12 +778,20 @@ private:
                         shutdown_state_ = shutdown_state::failed;
                         return false;
                     }
+                    if (shutdown_deadline_expired())
+                    {
+                        return false;
+                    }
                 }
                 shutdown_failure_.clear();
                 shutdown_state_ = shutdown_state::draining;
             }
             if (pending_tasks_unchecked())
             {
+                if (shutdown_deadline_expired())
+                {
+                    shutdown_failure_ = "managed_tasks";
+                }
                 return false;
             }
             phase_guard active(*this, call_phase::tearing_down);
@@ -754,9 +799,18 @@ private:
             {
                 return false;
             }
+            // Readiness may be empty, or its final return may reach the limit.
+            shutdown_failure_ = "ready_to_shut";
+            if (shutdown_deadline_expired())
+            {
+                return false;
+            }
             if (!pre_shut() || !shut(unload))
             {
-                shutdown_state_ = shutdown_state::failed;
+                if (shutdown_state_ != shutdown_state::cleanup_timed_out)
+                {
+                    shutdown_state_ = shutdown_state::failed;
+                }
                 return false;
             }
         }
@@ -770,6 +824,15 @@ private:
         return true;
     }
 
+    bool shutdown_deadline_expired(bool cleanup_started = false) {
+        if (!shutdown_deadline_ || std::chrono::steady_clock::now() < *shutdown_deadline_)
+        {
+            return false;
+        }
+        shutdown_state_ = cleanup_started ? shutdown_state::cleanup_timed_out : shutdown_state::timed_out;
+        return true;
+    }
+
     template<typename unload_type>
     auto shut(unload_type unload) -> bool {
         for (auto const& iter : module_instances_)
@@ -778,7 +841,7 @@ private:
             ARK_ASSERT_CONTINUE(module_ptr != nullptr);
 
             shutdown_failure_ = "shut: " + iter.first;
-            if (!module_ptr->shut())
+            if (!module_ptr->shut() || shutdown_deadline_expired(true))
             {
                 return false;
             }
@@ -788,7 +851,7 @@ private:
         for (auto& it : plugins_)
         {
             shutdown_failure_ = "uninstall: " + it.first;
-            if (!unload_plugin_library(it.first))
+            if (!unload_plugin_library(it.first) || shutdown_deadline_expired(true))
             {
                 return false;
             }
@@ -802,6 +865,10 @@ private:
                 return false;
             }
             ARK_DELETE(iter.second);
+            if (shutdown_deadline_expired(true))
+            {
+                return false;
+            }
         }
 
         shutdown_failure_.clear();
@@ -909,6 +976,7 @@ private:
     startup_modules lifecycle_order_;
     bool lifecycle_order_valid_{};
     shutdown_state shutdown_state_{shutdown_state::running};
+    std::optional<std::chrono::steady_clock::time_point> shutdown_deadline_;
     std::exception_ptr shutdown_exception_;
     std::string shutdown_failure_;
     std::string startup_failure_;
