@@ -316,3 +316,11 @@ cmake --build database-build --target check-database-samples --parallel 2
 可选的[重启操作手册](restart_CN.md)说明私有服务配置、故障协调与清理步骤。
 [简短指南](../../docs/guides/database-restart_CN.md)汇总原池恢复行为与本地结果。
 常规检查只编译该程序。
+
+## MySQL 一致性读隔离
+
+仅在启用 SSL 时构建的 `ark_database_public_plugin_isolation_tests` 验证公共 `begin()`
+事务遵守服务端显式配置的默认隔离级别 `REPEATABLE-READ` 和 `READ-COMMITTED`，并检查查询租约
+会话重置、相互独立的固定连接以及已提交变更的快照可见性。运行需要自有、经过认证且校验 TLS
+的 loopback 服务和可丢弃的 schema。`check-database` 只编译程序，不运行真实服务用例。
+两种运行方式、权限、清理要求和验证范围见[隔离级别指南](../../docs/guides/database-isolation_CN.md)。

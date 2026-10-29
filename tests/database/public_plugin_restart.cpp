@@ -16,6 +16,9 @@
 #include <thread>
 #include <utility>
 
+#if defined(ARKNET_ENABLE_SSL)
+#include "ark/mysql/mysql_module.hpp"
+#endif
 #include "ark/plugin_manager.hpp"
 #include "ark/redis/redis_module.hpp"
 #include "ark/task.hpp"
@@ -409,18 +412,165 @@ void check_redis() {
                  "owner completions once; natural idempotent drain; retained results\n";
 }
 
+#if defined(ARKNET_ENABLE_SSL)
+ark::task<> mysql_preflight(plugin_host& host, ark::mysql_module& database) {
+    for (const auto* name : {"primary", "observer"})
+    {
+        auto ready = co_await database.query(name, "SELECT 1", 5s);
+        host.check_executor();
+        require(bool(ready), "MySQL restart preflight failed");
+    }
+}
+
+ark::task<> mysql_request(
+    plugin_host& host, ark::mysql_module& database, std::string tag, std::optional<ark::mysql_reply>& result) {
+    result = co_await database.query("primary", "SELECT SLEEP(60) /*" + tag + "*/", 20s);
+    host.check_executor();
+}
+
+ark::task<> mysql_observe(plugin_host& host, ark::mysql_module& database, fault_barrier& barrier,
+    const completion& request, const std::optional<ark::mysql_reply>& result, std::string tag) {
+    const auto deadline = std::chrono::steady_clock::now() + 10s;
+    const auto sql = "SELECT CAST(ID AS SIGNED), STATE FROM information_schema.processlist "
+                     "WHERE ID <> CONNECTION_ID() AND INFO LIKE '%" +
+                     tag + "%'";
+    for (;;)
+    {
+        require(!request.count && !result && std::chrono::steady_clock::now() < deadline,
+            "MySQL request retired before server-active observation or observation exceeded bound");
+        auto listing = co_await database.query("observer", sql, 3s);
+        host.check_executor();
+        require(bool(listing) && listing.result.rows.size() <= 1, "MySQL independent active observer failed");
+        if (!listing.result.rows.empty())
+        {
+            require(listing.result.rows[0].size() == 2, "MySQL observer lost its ID/state fields");
+            const auto* phase = std::get_if<std::string>(&listing.result.rows[0][1]);
+            if (phase && *phase == "User sleep")
+            {
+                const auto id = std::get<std::int64_t>(listing.result.rows[0][0]);
+                require(!request.count && !result, "MySQL request completed before fault readiness");
+                barrier.observed(std::to_string(id));
+                co_return;
+            }
+        }
+        co_await observer_interval();
+        host.check_executor();
+    }
+}
+
+void mysql_failure(const ark::mysql_reply& result) {
+    const auto& status = result.result.status;
+    require(status.code == arknet::mysql::connection_errc::transport && status.outcome_unknown &&
+                status.transport_error && status.transport_error != asio::error::operation_aborted &&
+                status.transport_error != asio::error::timed_out && !status.server_code && result.result.rows.empty(),
+        "MySQL server restart did not preserve transport/unknown native failure");
+}
+
+void mysql_unavailable(const ark::mysql_reply& result) {
+    const auto& status = result.result.status;
+    require(status.code == arknet::mysql::connection_errc::transport &&
+                status.transport_error == asio::error::connection_refused && !status.outcome_unknown &&
+                !status.server_code && result.result.rows.empty(),
+        "MySQL outage did not return a known-unsent native connection refusal");
+}
+
+ark::task<> mysql_down(plugin_host& host, ark::mysql_module& database, std::optional<ark::mysql_reply>& result) {
+    result = co_await database.query("primary", "SELECT 1", 3s);
+    host.check_executor();
+    mysql_unavailable(*result);
+}
+
+void mysql_recovered(const ark::mysql_reply& result, const std::string& payload) {
+    require(bool(result) && result.result.rows.size() == 1 && result.result.rows[0].size() == 2 &&
+                std::get<std::int64_t>(result.result.rows[0][0]) == 42 &&
+                std::get<std::string>(result.result.rows[0][1]) == payload,
+        "Explicit MySQL recovery query lost its owning scalar/binary result");
+}
+
+ark::task<> mysql_recover(
+    plugin_host& host, ark::mysql_module& database, std::optional<ark::mysql_reply>& result, std::string payload) {
+    result = co_await database.query("primary", "SELECT CAST(42 AS SIGNED), CONCAT('restart', CHAR(0), 'binary')", 5s);
+    host.check_executor();
+    mysql_recovered(*result, payload);
+}
+
+void check_mysql() {
+    fault_barrier barrier("mysql");
+    ark::mysql_options options;
+    options.pool.connection.host = environment("ARK_DATABASE_MYSQL_HOST");
+    require(options.pool.connection.host == "127.0.0.1", "MySQL restart requires an owned IPv4 loopback service");
+    options.pool.connection.port = port("ARK_DATABASE_MYSQL_PORT");
+    options.pool.connection.username = environment("ARK_DATABASE_MYSQL_USER");
+    options.pool.connection.password = environment("ARK_DATABASE_MYSQL_PASSWORD");
+    options.pool.connection.database = environment("ARK_DATABASE_MYSQL_DATABASE");
+    options.pool.connection.ca_file = environment("ARK_DATABASE_MYSQL_CA");
+    options.pool.connection.tls = arknet::mysql::tls_mode::required;
+    options.pool.connection.timeout = 5s;
+    options.pool.max_connections = 1;
+    const auto tag = "ark_dso_restart_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    completion request, observer, recovery;
+    std::optional<ark::mysql_reply> interrupted, unavailable, recovered;
+    const std::string payload("restart\0binary", 14);
+    {
+        plugin_host host("ark_database_mysql_plugin");
+        auto* database = host.manager.find_module<ark::mysql_module>();
+        require(database && database->configure("primary", options), "Cannot configure MySQL restart primary");
+        require(database->configure("observer", options), "Cannot configure MySQL restart observer");
+        host.preflight(mysql_preflight(host, *database));
+        const auto request_id = host.start(mysql_request(host, *database, tag, interrupted), request);
+        host.start(mysql_observe(host, *database, barrier, request, interrupted, tag), observer);
+        host.pump_until([&] { return request.count && observer.count && barrier.fired(); });
+        plugin_host::check_completion(observer);
+        plugin_host::check_completion(request);
+        require(interrupted.has_value(), "MySQL interrupted read lost native result");
+        mysql_failure(*interrupted);
+        require(!host.tasks->cancel(request_id), "Retired MySQL read still accepted cancellation");
+        host.preflight(mysql_down(host, *database, unavailable));
+        barrier.outage_observed();
+        host.pump_until([&] { return barrier.restarted(); });
+        // Same public connection name and pool; explicitly new query, no replay.
+        host.start(mysql_recover(host, *database, recovered, payload), recovery);
+        require(host.tasks->pending() == 1, "MySQL recovery was not accepted before natural drain");
+        host.stop();
+        plugin_host::check_completion(recovery);
+        require(request.count == 1 && observer.count == 1, "MySQL interrupted completion repeated during drain");
+    }
+    mysql_failure(*interrupted);
+    require(unavailable && !unavailable->result.status.outcome_unknown && recovered,
+        "MySQL restart failure results changed after teardown");
+    mysql_unavailable(*unavailable);
+    mysql_recovered(*recovered, payload);
+    std::cout << "mysql restart PASS: transport/unknown sent read; known-unsent outage; explicit same-pool query; "
+                 "owner completions once; natural idempotent drain; retained results\n";
+}
+#endif
+
 } // namespace
 
-int main(int argc, char**) {
+int main(int argc, char** argv) {
     try
     {
-        require(argc == 1, "Usage: ark_database_public_plugin_restart_tests");
-        check_redis();
+        require(argc <= 2, "Usage: ark_database_public_plugin_restart_tests [redis|mysql]");
+        const std::string_view protocol(argc == 1 ? "redis" : argv[1]);
+        if (protocol == "redis")
+        {
+            check_redis();
+        }
+#if defined(ARKNET_ENABLE_SSL)
+        else if (protocol == "mysql")
+        {
+            check_mysql();
+        }
+#endif
+        else
+        {
+            throw acceptance_failure("Unsupported database restart protocol");
+        }
         return 0;
     }
     catch (const acceptance_failure& error)
     { std::cerr << error.what() << '\n'; }
     catch (...)
-    { std::cerr << "Redis restart acceptance failed with an unexpected exception\n"; }
+    { std::cerr << "Database restart acceptance failed with an unexpected exception\n"; }
     return 1;
 }

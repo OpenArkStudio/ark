@@ -1,8 +1,8 @@
-# Redis 重启恢复操作手册
+# 数据库重启恢复操作手册
 
 [English](restart.md)
 
-此可选 C++ 程序通过公开 API 加载真实 Redis 插件 DSO。`check-database` 只编译
+此可选 C++ 程序通过公开 API 加载真实 Redis 或 MySQL 插件 DSO。`check-database` 只编译
 程序，不启动程序或连接服务。测试全程保留原具名连接池，恢复时显式提交新的只读命令，
 不重放已中断的操作。恢复行为和本地结果见[简短指南](../../docs/guides/database-restart_CN.md)。
 
@@ -13,7 +13,9 @@
 ```sh
 cmake --build database-build \
   --target ark_database_public_plugin_restart_tests --parallel 1
-./database-build/tests/database/ark_database_public_plugin_restart_tests
+./database-build/tests/database/ark_database_public_plugin_restart_tests redis
+# 启用 ARKNET_ENABLE_SSL=ON 时：
+./database-build/tests/database/ark_database_public_plugin_restart_tests mysql
 ```
 
 为新建的私有认证服务设置 `ARK_DATABASE_REDIS_HOST=127.0.0.1`、显式的
@@ -53,3 +55,35 @@ cmake --build database-build \
 C++ 程序中的等待均有界。观察轮询仅用于限速。shell 拥有服务重启和进程操作权限；
 程序只发布观察结果并读取私有协调标记。禁止复用标记。程序不创建 key 或 stream，
 不写入应用数据。
+
+## 使用可信 TLS 验证 MySQL 重启
+
+可选的 `mysql` 模式要求 `ARKNET_ENABLE_SSL=ON`；不传参数时仍运行 Redis 模式。
+设置 `ARK_DATABASE_MYSQL_HOST=127.0.0.1`、显式的 `ARK_DATABASE_MYSQL_PORT`、
+`ARK_DATABASE_MYSQL_USER`、非空的 `ARK_DATABASE_MYSQL_PASSWORD`、
+`ARK_DATABASE_MYSQL_DATABASE` 和 `ARK_DATABASE_MYSQL_CA`。使用新建的 MySQL 8.4
+数据目录、私有 schema，以及强制 TLS 的只读 SELECT 账号。可信证书必须包含 loopback IP。
+关闭 MySQL X Protocol，仅绑定自有 IPv4 loopback 监听端口。沿用上述故障注入脚本的私有
+所有权与进程身份检查，使用 `mysql` 标记，并遵守故障指南中的 MySQL 配置要求。
+
+1. 验证认证 TLS 就绪状态。C++ 程序先在 `primary` 和 `observer` 上执行 `SELECT 1`，
+   再提交 `SELECT SLEEP(60) /*<unique-tag>*/`，客户端期限为 20 秒。独立的公开观察池必须
+   在 `information_schema.processlist` 中看到标记、连接 ID 和 `User sleep` 状态，
+   才发布 `mysql.ready`。
+2. 故障注入脚本再次检查自有 PID，仅向该 PID 发送 `SIGKILL`。回收原服务子进程，确认退出码为
+   137，并验证 PID 和监听端口均不存在。中断结果必须包含原生 `transport`、
+   `outcome_unknown=true`、传输错误，且无行或服务端错误。超时和取消均不通过验收。
+3. 停服时新提交的 `SELECT 1` 必须返回 `transport`、原生 `connection_refused`、
+   `outcome_unknown=false`，且无行或服务端错误。程序仅在这些断言通过后发布 `mysql.down`。
+4. 验证 token 和空监听端口。使用同一私有数据目录与配置在同一端点重启。确认替换进程与原
+   PID 不同，验证自有进程身份和认证 TLS 就绪状态，再原子发布 `mysql.restarted`。
+5. 调用方通过原 `primary` 池提交新的
+   `SELECT CAST(42 AS SIGNED), CONCAT('restart', CHAR(0), 'binary')`。
+   验证整数与包含 NUL 的字符串、已接收任务的自然排空、所有者 executor 上恰好一次的完成，
+   以及重复 stop 成功。DSO 销毁后，再次校验两个原生错误结果和拥有存储的恢复结果行。
+6. 确认程序退出零，正常关闭并回收替换服务，验证两个 PID 和监听端口均不存在，再删除全部
+   私有凭据、数据和标记。失败路径的清理也必须有界，并校验进程身份。
+
+C++ 程序使用公开 `mysql_module` 协程，全程保留原具名连接池，不重新配置。
+恢复请求是调用方显式提交的新只读查询，不会自动重放写入。本验收验证重新连接行为，
+不验证崩溃持久性、事务恢复或高可用。

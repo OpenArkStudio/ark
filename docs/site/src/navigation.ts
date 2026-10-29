@@ -234,8 +234,13 @@ const tree: Entry[] = [
       ],
       [
         "guides/database-restart",
-        "Redis restart recovery",
-        "Redis 重启恢复"
+        "Database restart recovery",
+        "数据库重启恢复"
+      ],
+      [
+        "guides/database-isolation",
+        "MySQL consistent-read isolation",
+        "MySQL 一致性读隔离"
       ]
     ]
   },
