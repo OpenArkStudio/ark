@@ -17,6 +17,7 @@ and scenario; the table does not combine them into a broader acceptance claim.
 | <a id="mysql-dso-writes-and-two-connection-commit-visibility"></a>MySQL DSO writes | Binary inserts, own-write reads, independent commit/rollback visibility and retained results passed | `ark_database_public_plugin_service_tests mysql-transactions` | [Write record](../reports/database-services.md#mysql-dso-writes-and-two-connection-commit-visibility) |
 | <a id="real-plugin-request-cancellation"></a>Server-observed request cancellation | Both modes passed; native cancellation outcomes and finite counter observations are retained | [C++ cancellation runner](../../tests/database/cancellation.md) | [Cancellation records](../reports/database-services.md#real-plugin-request-cancellation) |
 | MySQL sent transaction-query cancellation | `cancelled`/`outcome_unknown`; transaction `unconfirmed`, `discard_requested=true`, no rollback reply; observer read `n=0` after the original session disappeared | [C++ `mysql-transaction` mode](../../tests/database/cancellation.md#mysql-transaction-operation-cancellation) | [Transaction cancellation record](../reports/database-services.md#mysql-sent-transaction-operation-cancellation) |
+| MySQL prepared execute cancellation | Exact session observed in Execute before cancellation; unknown/discarded result and fresh-connection recovery passed | [C++ `mysql-statement` mode](../../tests/database/cancellation.md#mysql-prepared-execute-cancellation) | [Prepared cancellation record](../reports/database-services.md#mysql-prepared-execute-cancellation) |
 | <a id="real-plugin-server-termination"></a>Owned-server termination | Both modes passed with sent/unknown native errors after a PID-specific fault; actor guards also passed | [C++ runner and shell actor](../../tests/database/server_termination.md) | [Termination records](../reports/database-services.md#real-plugin-server-termination) |
 | <a id="real-plugin-redis-tls"></a>Redis TLS | Authenticated binary operations passed; unrelated CA and wrong-host controls rejected the connection | [Redis TLS modes](../../tests/database/redis_tls.md) | [TLS record](../reports/database-services.md#real-plugin-redis-tls) |
 | Explicit same-pool restart recovery | Redis and MySQL passed new read-only requests after an owned service restarted at the same endpoint | [C++ restart runner and actor](../../tests/database/restart.md) | [Restart record](database-restart.md) |
@@ -50,7 +51,7 @@ or arbitrary hot-update safety. `manager.stop()` is cooperative and cannot
 interrupt blocking hooks; test bounds add no hard production shutdown deadline.
 
 Crash durability, persistence, complete isolation-level coverage, transaction
-recovery, cancellation during acquire/BEGIN/prepare/execute/statement close/commit/rollback,
+recovery, cancellation during acquire/BEGIN/prepare/statement close/commit/rollback and other execute races,
 mutual TLS, certificate rotation/revocation, Redis TLS cancellation and fault
 recovery, and other cancellation/fault races remain outside these records. Request
 cancellation does not establish rollback or global exactly-once execution. The sent transaction-query result remains unconfirmed despite the

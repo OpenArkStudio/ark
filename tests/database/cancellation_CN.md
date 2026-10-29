@@ -72,3 +72,25 @@ Apple Clang 21.0.0、Boost.Asio 1.90.0、OpenSSL 3.6.4；私有 MySQL Community 
 未启用 SSL 的构建在真实服务操作前拒绝两个 MySQL 模式。独立查询确认剩余表和键均为零；
 两个自有服务正常退出，精确 PID、监听端口、私有数据、凭据和密钥均已清理。
 本记录只证明本机 macOS Boost Debug 验收，不代表托管或跨平台检查。
+
+## MySQL 预处理执行取消
+
+仅在启用 SSL 时可用的 `mysql-statement` 模式使用已有公开
+`execute(transaction, sql, parameters)` API，由实现管理 prepare／execute／close
+生命周期。使用前文相同的私有 MySQL 配置：
+
+```sh
+database-build/tests/database/ark_database_public_plugin_cancellation_tests mysql-statement
+```
+
+本模式沿用事务模式的前置写入、保留自身写入读取结果、独立可见性、取消诊断、新连接恢复、
+原会话退出、500 ms 观察窗口及自然停机检查。慢 UPDATE 通过参数绑定增量和行 ID。
+取消前，观察者必须同时确认精确原会话、唯一 SQL 标记、`STATE='User sleep'` 和
+`COMMAND='Execute'`，证明 execute 阶段已经运行，而非仍在 prepare 阶段。
+取消回复不得含语句关闭回复／异常或回滚回复／状态码。最终计数零仅表示本次丢弃连接后
+观察到的效果，不代表 API 已确认回滚，也不证明全局恰好执行一次。
+
+本模式只覆盖事务内一次已发送预处理执行的取消。acquire、BEGIN、prepare、statement close、
+commit、rollback 阶段的取消及其他 execute 竞争仍未覆盖。未启用 SSL 的构建在真实服务操作前
+拒绝此模式。[预处理取消记录](../../docs/reports/database-services_CN.md#mysql-预处理执行取消)
+保留本次本地运行的精确源码标识及对照结果；较早记录保留各自的测试版本和限制。

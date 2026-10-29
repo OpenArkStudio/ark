@@ -2,7 +2,7 @@
 
 [Acceptance index](../guides/database-validation.md)
 
-This record separates public-module service/failure checks, positive plugin-DSO workflows, MySQL DSO write transactions, server-observed request cancellation, sent MySQL transaction-query cancellation, owned-server termination and verified Redis TLS. Each scope has its own tested revisions and environment; a passing result applies only to that scope.
+This record separates public-module service/failure checks, positive plugin-DSO workflows, MySQL DSO write transactions, server-observed request cancellation, sent MySQL transaction-query and prepared-execute cancellation, owned-server termination and verified Redis TLS. Each scope has its own tested revisions and environment; a passing result applies only to that scope.
 
 ## Public modules against real services
 
@@ -117,8 +117,8 @@ cmake --build database-build --target ark_database_public_plugin_cancellation_te
 
 On **2026-10-29**, the `mysql-transaction` mode of
 `ark_database_public_plugin_cancellation_tests` passed with exit code `0`.
-The program source is byte-identical at the executed revision, delivery head and
-this combined tree; documentation integration is not another service run.
+The program source was byte-identical at the executed revision, delivery head and
+original integration tree; that documentation integration was not another service run.
 
 | Identity / environment | Value |
 | --- | --- |
@@ -174,6 +174,57 @@ BEGIN, prepare/execute/statement close, commit or rollback, other races,
 transaction recovery, crash durability, high availability and capacity remain
 outside it. Earlier query-only cancellation and commit-visibility records retain
 their own tested identities and exclusions.
+
+## MySQL prepared execute cancellation
+
+On **2026-10-29**, the public DSO C++ runner's `mysql-statement` mode passed
+with exit code `0`. The executed program source was
+`30f963cade5162d8b3b474646dc8c123b987a5be` (Git blob
+`2a880b3fd0476f045928082a29f01560e4a66803`); the subsequent documentation
+change did not alter the program. The base was
+`988dfbc048425cdb56cbe5f14314320fe698d07d`, with arknet CI pin
+`a0dfe09cd543e75cfb5996e537ce2fa49f2a758f`.
+
+The local macOS 27.0.1 arm64 C++20 Debug build used Apple Clang 21.0.0,
+Boost.Asio 1.90.0 and OpenSSL 3.6.4. The exclusively owned MySQL Community
+Server 8.4.13 at `127.0.0.1:29891` required authentication and trusted TLS with
+IP identity verification. CREATE, DROP, SELECT, INSERT and UPDATE privileges
+were confined to a fresh private schema.
+
+The host loaded the real hidden-symbol plugin and called only public coroutine
+APIs. A transaction completed a pre-write and retained its read of `n=1`, while
+the independent observer read `n=0`. Only after session `10` was observed from
+session `11` with the tagged parameterized UPDATE, `User sleep` and
+`COMMAND='Execute'` did the host cancel the task, twice while pending.
+The original result retained `connection_errc::cancelled`, `outcome_unknown=true`
+and `operation_aborted`; transaction status remained `unconfirmed` and
+`discard_requested=true`, without statement-close or rollback replies/codes or
+initiation, statement-close, cleanup, cancellation or lease-return exceptions.
+
+An explicit query through the original pool succeeded on a different connection.
+The whole original session disappeared and neither it nor the tagged SQL returned
+through another 500 ms; only then did the observer require final `n=0` and drop
+the table. A separate general-log query counted one Prepare, one Execute and one
+pre-write for this unique tag. These finite observations do not confirm rollback
+through the API, durability or global exactly-once execution. No automatic retry
+or transaction replacement was introduced.
+
+Both roots completed once on the owner thread/shared executor, retired naturally
+and passed idempotent stop. The retained read and original cancelled diagnostics
+survived later operations, table removal and host destruction. The existing
+`mysql-transaction` mode passed again (sessions `13`/`14`, final `n=0`).
+Wrong-password and untrusted-CA controls rejected the request. SSL-disabled builds
+rejected the new mode before service work; seven configuration/build-mode
+rejection controls passed. Focused native regressions passed 23 cases and 1157
+assertions, plus the public MySQL DSO lifecycle check. Independent queries
+found zero remaining tables. Authenticated shutdown reaped exact owned PID
+`17059` with exit `0`; its listener, private data, credentials and keys were removed.
+
+Run the [existing C++ mode](../../tests/database/cancellation.md#mysql-prepared-execute-cancellation).
+This covers one sent transaction prepared execution, not acquire, BEGIN, prepare,
+statement close, commit or rollback cancellation, other execute races, crash
+recovery, high availability or capacity. It is local macOS Boost Debug evidence;
+other platforms, sanitizers, hosted CI and publication require separate acceptance.
 
 ## Real plugin server termination
 
@@ -245,6 +296,6 @@ This record does not cover mutual TLS, certificate rotation/revocation or TLS ca
 
 ## Acceptance boundaries
 
-The DSO workflows exercise normal plugin teardown and native close calls. Successful `FreeLibrary` or `dlclose` does not prove that the operating system physically removed the library image. Request cancellation, server termination and MySQL write/commit-visibility acceptance are limited to the recorded operations on this host. Crash durability, complete isolation-level coverage, transaction recovery, cancellation during acquire/BEGIN/prepare/execute/statement close/commit/rollback, mutual TLS and certificate rotation/revocation, Redis TLS cancellation/fault recovery, other cancellation/fault races, OS image removal, other platforms/deployment environments and cross-machine capacity remain unverified. These records do not establish arbitrary hot-update safety or production capacity.
+The DSO workflows exercise normal plugin teardown and native close calls. Successful `FreeLibrary` or `dlclose` does not prove that the operating system physically removed the library image. Request cancellation, server termination and MySQL write/commit-visibility acceptance are limited to the recorded operations on this host. Crash durability, complete isolation-level coverage, transaction recovery, cancellation during acquire/BEGIN/prepare/statement close/commit/rollback and other prepared execute races, mutual TLS and certificate rotation/revocation, Redis TLS cancellation/fault recovery, other cancellation/fault races, OS image removal, other platforms/deployment environments and cross-machine capacity remain unverified. These records do not establish arbitrary hot-update safety or production capacity.
 
 [Explicit restart recovery](../guides/database-restart.md) and [two server-default isolation levels](../guides/database-isolation.md) have separate local acceptance records. Their tested revisions and scopes do not extend the earlier scenarios above.
