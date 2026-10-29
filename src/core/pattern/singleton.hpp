@@ -40,24 +40,32 @@ public:
     }
 
     static void shutdown() {
-        ARK_DELETE(instance_);
+        stopped_ = true;
+        instance_ = nullptr;
+        auto* owned = owned_instance_;
+        owned_instance_ = nullptr;
+        ARK_DELETE(owned);
     }
 
-    // We can pass a pointer to init it manually.
+    // Borrow single without transferring ownership. Retain an internally created
+    // instance until shutdown so temporary injection can restore its pointer.
     static void set_instance(element_type* single) {
         instance_ = single;
     }
 
 private:
     static void init() {
-        if (instance_ == nullptr)
+        if (!stopped_ && instance_ == nullptr)
         {
-            instance_ = ARK_NEW element_type();
+            owned_instance_ = ARK_NEW element_type();
+            instance_ = owned_instance_;
         }
     }
 
     static std::once_flag once_;
     static element_type* instance_;
+    static element_type* owned_instance_;
+    static bool stopped_;
 };
 
 template<typename element_type>
@@ -65,5 +73,11 @@ std::once_flag singleton<element_type>::once_;
 
 template<typename element_type>
 element_type* singleton<element_type>::instance_ = nullptr;
+
+template<typename element_type>
+element_type* singleton<element_type>::owned_instance_ = nullptr;
+
+template<typename element_type>
+bool singleton<element_type>::stopped_ = false;
 
 } // namespace ark

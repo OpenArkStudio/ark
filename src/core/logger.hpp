@@ -241,10 +241,11 @@ public:
     static void init(logger* instance) {
         if (instance == nullptr)
         {
-            instance = ARK_NEW logger();
+            singleton<logger>::instance();
+            return;
         }
 
-        // init singleton
+        // Borrow the host logger; its creator controls its lifetime.
         singleton<logger>::set_instance(instance);
     }
 
