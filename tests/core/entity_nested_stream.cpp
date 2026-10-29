@@ -390,3 +390,37 @@ TEST_CASE("Nested schema and state reject repeated identities nonfinite values a
     CHECK(replica.apply(baseline) == nested_apply_result::rejected);
     CHECK_THROWS_AS(nested_publisher(binding(), baseline), std::invalid_argument);
 }
+
+TEST_CASE("Nested owning copies preserve every scalar alternative across baseline delta and source mutation") {
+    auto baseline = initial();
+    auto trusted = binding();
+    baseline.snapshot.root.scalars.fields = {{1, true}, {2, std::int32_t{-2}}, {3, std::uint32_t{3}},
+        {4, std::int64_t{-4}}, {5, std::uint64_t{5}}, {6, 1.25f}, {7, 2.5}, {8, std::string(256, 's')},
+        {9, guid_value{99}}};
+    trusted.root.fields.clear();
+    for (const auto& [index, value] : baseline.snapshot.root.scalars.fields)
+    {
+        trusted.root.fields.emplace(index, static_cast<nested_scalar_type>(value.index()));
+    }
+    nested_publisher publisher(trusted, baseline);
+    nested_replica replica(trusted);
+    REQUIRE(replica.apply(*publisher.baseline()) == nested_apply_result::applied);
+    CHECK(*replica.state() == baseline.snapshot);
+    auto next = baseline.snapshot;
+    next.root.scalars.fields.at(1) = false;
+    next.root.scalars.fields.at(8) = std::string(300, 'n');
+    const auto expected = next;
+    const auto packet = publisher.update(next);
+    REQUIRE(packet != nullptr);
+    REQUIRE(replica.apply(*packet) == nested_apply_result::applied);
+    for (const auto& [index, value] : expected.root.scalars.fields)
+    {
+        CHECK(replica.state()->root.scalars.fields.at(index).index() == value.index());
+        CHECK(replica.state()->root.scalars.fields.at(index) == value);
+    }
+    std::get<std::string>(next.root.scalars.fields.at(8)).at(0) = 'x';
+    std::get<std::string>(baseline.snapshot.root.scalars.fields.at(8)).at(0) = 'x';
+    CHECK(publisher.baseline()->snapshot == expected);
+    CHECK(*replica.state() == expected);
+    CHECK(std::get<std::string>(packet->root.fields.at(8)) == std::string(300, 'n'));
+}

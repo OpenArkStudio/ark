@@ -127,6 +127,41 @@ enum class nested_apply_result
 
 namespace nested_detail {
 
+inline nested_entity_snapshot copy_entity(const nested_entity_snapshot& input);
+
+inline std::map<std::uint32_t, nested_entity_snapshot> copy_children(
+    const std::map<std::uint32_t, nested_entity_snapshot>& input) {
+    std::map<std::uint32_t, nested_entity_snapshot> result;
+    for (const auto& [slot, child] : input)
+    {
+        result.emplace(slot, copy_entity(child));
+    }
+    return result;
+}
+
+inline nested_entity_snapshot copy_entity(const nested_entity_snapshot& input) {
+    nested_entity_snapshot result{input.incarnation, detail::copy_scalar_snapshot(input.scalars), {}, {}};
+    for (const auto& [index, table] : input.tables)
+    {
+        nested_table_snapshot replacement{table.class_name, {}};
+        for (const auto& [number, row] : table.rows)
+        {
+            replacement.rows.emplace(
+                number, nested_row_snapshot{row.incarnation, detail::copy_scalar_fields(row.fields)});
+        }
+        result.tables.emplace(index, std::move(replacement));
+    }
+    for (const auto& [index, children] : input.containers)
+    {
+        result.containers.emplace(index, copy_children(children));
+    }
+    return result;
+}
+
+inline nested_snapshot copy_snapshot(const nested_snapshot& input) {
+    return {input.schema_id, copy_entity(input.root)};
+}
+
 inline void require(bool condition) {
     if (!condition)
     {
@@ -463,7 +498,7 @@ inline void patch_fields(const std::map<std::uint32_t, scalar_value>& before,
         {
             consume(1, budget.values);
             value(item, static_cast<nested_scalar_type>(item.index()), budget.strings);
-            output.emplace(index, item);
+            output.emplace(index, detail::copy_scalar_value(item));
         }
     }
 }
@@ -512,7 +547,7 @@ inline nested_entity_delta difference(
                 consume(1, budget.operations);
                 count_values(row.fields, budget);
                 changes.emplace(number, nested_row_delta{previous == old.rows.end() ? 0 : previous->second.incarnation,
-                                            row.incarnation, row.fields});
+                                            row.incarnation, detail::copy_scalar_fields(row.fields)});
             }
             else
             {
@@ -543,7 +578,7 @@ inline nested_entity_delta difference(
                 count_entity(child, budget);
             }
             update.replace = true;
-            update.slots = children;
+            update.slots = copy_children(children);
             result.containers.emplace(index, std::move(update));
         }
         else
@@ -641,7 +676,7 @@ inline void apply_patch(nested_entity_snapshot& candidate, const nested_entity_d
     require(candidate.scalars.entity_id == patch.entity_id && candidate.incarnation == patch.incarnation);
     for (const auto& [index, value] : patch.fields)
     {
-        candidate.scalars.fields.at(index) = value;
+        candidate.scalars.fields.at(index) = detail::copy_scalar_value(value);
     }
     for (const auto& [index, rows] : patch.tables)
     {
@@ -658,13 +693,14 @@ inline void apply_patch(nested_entity_snapshot& candidate, const nested_entity_d
             }
             else if (change.incarnation != change.required_incarnation)
             {
-                table.rows.insert_or_assign(number, nested_row_snapshot{change.incarnation, change.fields});
+                table.rows.insert_or_assign(
+                    number, nested_row_snapshot{change.incarnation, detail::copy_scalar_fields(change.fields)});
             }
             else
             {
                 for (const auto& [column, value] : change.fields)
                 {
-                    old->second.fields.at(column) = value;
+                    old->second.fields.at(column) = detail::copy_scalar_value(value);
                 }
             }
         }
@@ -674,7 +710,7 @@ inline void apply_patch(nested_entity_snapshot& candidate, const nested_entity_d
         auto& children = candidate.containers.at(index);
         if (change.replace)
         {
-            children = change.slots;
+            children = copy_children(change.slots);
         }
         else
         {
@@ -702,7 +738,8 @@ public:
         nested_detail::snapshot(initial.snapshot, trusted, limits_);
         binding_ = trusted;
         nested_detail::remember(initial.snapshot.root, history_, limits_.max_lifetime_entries);
-        current_ = std::make_shared<const nested_baseline>(initial);
+        current_ = std::make_shared<const nested_baseline>(
+            nested_baseline{initial.generation, initial.revision, nested_detail::copy_snapshot(initial.snapshot)});
     }
 
     std::shared_ptr<const nested_baseline> baseline() const {
@@ -727,8 +764,8 @@ public:
             std::move(change), false};
         nested_detail::delta(envelope, binding_, limits_);
         auto packet = std::make_shared<const nested_delta>(std::move(envelope));
-        auto baseline =
-            std::make_shared<const nested_baseline>(nested_baseline{binding_.generation, current_->revision + 1, next});
+        auto baseline = std::make_shared<const nested_baseline>(
+            nested_baseline{binding_.generation, current_->revision + 1, nested_detail::copy_snapshot(next)});
         current_.swap(baseline);
         history_.swap(history);
         return packet;
@@ -795,7 +832,7 @@ public:
             }
             nested_detail::lifetime_history history;
             nested_detail::remember(input.snapshot.root, history, limits_.max_lifetime_entries);
-            auto replacement = std::make_shared<const nested_snapshot>(input.snapshot);
+            auto replacement = std::make_shared<const nested_snapshot>(nested_detail::copy_snapshot(input.snapshot));
             state_.swap(replacement);
             history_.swap(history);
             revision_ = input.revision;
@@ -828,7 +865,7 @@ public:
                 revision_ = input.revision;
                 return nested_apply_result::applied;
             }
-            auto candidate = *state_;
+            auto candidate = nested_detail::copy_snapshot(*state_);
             nested_detail::apply_patch(candidate.root, input.root);
             nested_detail::snapshot(candidate, binding_, limits_);
             auto history = history_;
