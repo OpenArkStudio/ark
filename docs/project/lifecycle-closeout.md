@@ -1,6 +1,6 @@
 # Startup and shutdown closeout proposal
 
-This page records the selected lifecycle route and its delivery stages. Stage 1 adds required-provider metadata, graph validation and ordered startup; independent ingress quiescence, reverse dependency cleanup and opt-in startup-failure compensation remain subsequent work. The pre-stage-1 source review used baseline: [988dfbc0](https://github.com/OpenArkStudio/ark/tree/988dfbc048425cdb56cbe5f14314320fe698d07d). Start with the [launcher guide](../guides/applications.md) for operating instructions.
+This page records the selected lifecycle route and its delivery stages. Stage 1 adds required-provider metadata, graph validation and ordered startup. Stage 2 adds one-shot consumer-first `stop_accepting()` hooks with a compatibility default; only the controlled business fixture has migrated its root gate. Official ingress migration, reverse complete cleanup and opt-in startup-failure compensation remain subsequent work. The pre-stage-1 source review used baseline: [988dfbc0](https://github.com/OpenArkStudio/ark/tree/988dfbc048425cdb56cbe5f14314320fe698d07d). Start with the [launcher guide](../guides/applications.md) for operating instructions.
 
 ## Current startup and resource ownership
 
@@ -23,14 +23,15 @@ On startup failure the launcher flushes the phase/owner diagnostic and exits `1`
 
 | Step | Gate and action | Resources that must remain available |
 | --- | --- | --- |
-| Request stop | The owner loop calls `stop()`, enters `draining` and seals every managed group's top-level admission | Providers, services, bridges and the shared owner runtime |
+| Request stop | Seal managed roots and enter `stopping_acceptance`; defer hooks while a callback stack is active | Providers, services, bridges and the shared owner runtime |
+| Stop new external roots | On an outer owner frame, call reached `stop_accepting()` hooks once in reverse cached topology, then enter `draining` | Accepted workflows retain provider operations and completions; this is not pool/transport retirement |
 | Complete accepted tasks | Continue enabled module updates, then one bounded owner-runtime poll; do not cancel accepted work | Later awaits in an accepted task may submit additional provider operations |
 | Return from active stacks | Zero pending tasks is insufficient while update/poll/final-completion code is active | The final completion removes group membership before calling user code |
 | Check all modules | Every `ready_to_shut()` must return true before any `pre_shut()` | A false result waits and permits owner updates; an exception enters sticky `failed` |
 | Tear down | Run every `pre_shut()`, then every `shut()`, plugin exits/uninstallation, then native library closes | Each called hook must preserve dependencies until it returns |
 | Finish | All stages succeed; repeated `stop()` returns true | Emit the synchronous stop message and exit `0` |
 
-`ready_to_shut()` is the current module hook; this proposal adds no `drain_ready()` API. The default hook returns true and cannot certify unmanaged work. There is no common ingress-stop phase. The startup dependency graph is not yet used to order readiness, shutdown hooks or plugin/library release. The teardown loops do not establish provider-before/after-consumer order; explicit unregistration order inside one plugin does not order separate plugins.
+`ready_to_shut()` is the current module hook; this proposal adds no `drain_ready()` API. The default hook returns true and cannot certify unmanaged work. The new `stop_accepting()` phase defaults to true and does not itself migrate official ingress. It uses reverse cached topology; readiness, `pre_shut()`/`shut()` and plugin/library release retain their previous order. The teardown loops do not establish provider-before/after-consumer order; explicit unregistration order inside one plugin does not order separate plugins.
 
 ### Native work and retention
 
@@ -49,7 +50,7 @@ The default shutdown wait is unlimited. A positive `--shutdown_timeout_ms` measu
 
 1. **Record acquisitions before adding cleanup.** Add an internal ledger for loaded handles, entered/completed installation and module phases, and acquired-resource compensation records. Capture both entered and completed phases: a failing hook may have acquired resources. Keep the original startup failure primary and report cleanup failures separately. An opt-in module may register cleanup for a resource at acquisition; absent a proven cleanup action, retain the current failure-exit policy. Do not call all normal shutdown hooks on partially initialized modules or add same-process restart.
 2. **Declare providers at module granularity.** Stage 1 provides `module::get_dependencies()` and `module_base<interface, providers...>`, validates all declared keys/cycles after installation and before `init()`, then orders each startup phase provider-first. Timers plus Utility is the first migrated application; other official modules have not been assigned guessed dependencies. The graph validates registration keys, not the dynamic type of arbitrary raw `add_module()` entries. Extend declarations from actual retained pointers/callbacks before using them for teardown. For example, Game retains Kernel/Guid/Bus/Msg/Net/Map providers; Net's service manager retains Bus/Timer; Kernel retains Map/metadata/config/Guid. Installation can already acquire resources, so validation cannot replace acquisition cleanup. Callback ownership, missing lifetime edges and phase cycles still need explicit treatment before safe teardown can be claimed.
-3. **Separate ingress quiescence from provider retirement.** The selected next contract is an explicit, opt-in action that stops new external business roots while preserving completions and follow-up provider calls for accepted tasks. Keep the existing global task/active-stack and all-module readiness gates in the first migration, then order `pre_shut()`/`shut()` consumers before providers using declared edges. If one readiness check requires another module to tear down first, that is a cycle between phases: resolve it in the earlier ingress-quiescence action or bring a separate phase change back for approval. Include callback receivers, timer registrations and cross-plugin captures in the lifetime inventory. Uninstall a plugin and close its library only after all objects/callables depending on its code are retired. Preserve the current sticky retention behavior on any failure or wait-limit expiry. Introduce this as an opt-in migrated set; do not silently reinterpret legacy hooks.
+3. **Separate ingress quiescence from provider retirement.** Stage 2 implements the explicit module action that stops new external business roots while preserving completions and follow-up provider calls for accepted tasks. Hooks run consumer-first once, with default compatibility and sticky failure. Successful startup caches topology; a manual manager or legal idle registry mutation triggers one validated rebuild before the first hook, never during poll/reentry. Keep declarations stable while registered. The existing task/active-stack and all-module readiness gates remain. Ordering `pre_shut()`/`shut()` consumers before providers is a subsequent stage. If one readiness check requires another module to tear down first, that is a cycle between phases: resolve it in the earlier ingress-quiescence action or bring a separate phase change back for approval. Include callback receivers, timer registrations and cross-plugin captures in the lifetime inventory. Uninstall a plugin and close its library only after all objects/callables depending on its code are retired. Preserve the current sticky retention behavior on any failure or wait-limit expiry. Introduce this as an opt-in migrated set; do not silently reinterpret legacy hooks.
 
 These are internal lifecycle changes, not Registry, hot-update, service-discovery or network-protocol work.
 
@@ -60,23 +61,27 @@ The route has been selected; these are implementation boundaries, not pending po
 | Selected direction | Current delivery |
 | --- | --- |
 | Required module-level provider declarations, with missing/cycle validation and ordered startup | Stage 1; Timers/Utility migrated, undeclared modules remain independent nodes |
-| Separate ingress quiescence while accepted tasks retain provider access | Subsequent stage; the current readiness and task-drain rules remain in force |
+| Separate ingress quiescence while accepted tasks retain provider access | Stage 2 Core contract and controlled fixture; official Net/HTTP ingress still requires a suitable native API |
 | Gradual acquisition/phase records and opt-in compensation after startup failure, then exit `1` | Subsequent stage; immediate failure exit and no automatic rollback remain the default |
 | Consumer-before-provider complete cleanup, after all active/task/readiness gates | Subsequent stage; no new general shutdown or unload guarantee is provided |
 
 ## Existing tests and remaining acceptance
 
-The existing [launcher suite](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/tests/app/business_runtime.cmake) contains these **13 scenarios**. It loads the real launcher/test DSO and uses controlled protocol completions plus a real native thread; it is not a real database-service or general plugin-combination test.
+The [launcher suite](https://github.com/OpenArkStudio/ark/blob/main/tests/app/business_runtime.cmake) retains the original **13 scenarios** below and adds four admission-phase cases, **17 in total**. It loads the real launcher/test DSO and uses controlled protocol completions plus a real native thread; it is not a real database-service or general plugin-combination test.
 
 | Scenarios | Required observation |
 | --- | --- |
 | `drain`, `drain_deadline`, `drain_max_deadline` | Accepted sequential awaits and final callback return, then native thread exit/join, hooks, uninstall/destruction and exit `0` |
+| `drain_admission` | The accepted root makes two further awaits after the root gate closes, then final completion/native retirement/teardown succeed; hook/reentrant-stop/rejected-root events occur once |
+| `stop_accepting_false`, `stop_accepting_throw`, `stop_accepting_throw_unknown` | One phase/owner diagnostic; pending frames/process/resources remain; no provider shutdown or later hook/unload |
 | `pre_shut_false`, `shut_false`, `shut_throw` | First failing teardown phase is diagnosed once; no later unload/destruction or repeated teardown |
 | `ready_throw`, `ready_throw_unknown` | Native exit can occur, but readiness failure prevents join/teardown and remains diagnosed once |
 | `timeout_task`, `timeout_native`, `timeout_stalled` | Distinguish managed-task/readiness waits; retain process and objects even after late completion; stalled work never permits unload |
 | `update_throw`, `update_throw_unknown` | Updates can later resume, but the earlier drain failure still prevents teardown |
 
 The suite's owned-child observation timeout terminates retained test processes; that is not successful framework shutdown. It also checks four invalid deadline values. [Startup-failure tests](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/tests/app/startup_failures.cmake) separately cover 12 failure modes in TOML and XML, including a real listener started before failure. [Core startup](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/tests/core/plugin_manager_startup.cpp) and [business-runtime](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/tests/core/business_runtime.cpp) cases cover first failure, callback/reentrancy guards and all-module readiness.
+
+Core admission tests cover cached reverse order, one-shot/reentrant behavior, manual stop, legal idle additions/removals, same-key replacement, invalid graphs and metadata/hook failures. The [module guide](../guides/modules.md#stop-new-business-roots) records the pinned arknet ingress-only API gap; server stop/acceptor mutation is not a safe substitute.
 
 Permanent Core dependency tests cover missing/self/cyclic providers, transitive/diamond graphs, duplicate edges, stable independent ordering, metadata exceptions and first-failure termination in every startup phase. `check-app-module-dependencies` checks the real Timers DSO without Utility and requires dependency failure before `init()` and launcher exit `1`; existing typed-example/preset tests exercise the complete application. Local receipts and hosted acceptance remain separate. Later stages still need permanent compensation tests at every entered/acquired boundary, cross-plugin callback-lifetime checks and provider survival through accepted follow-up work; startup ordering alone establishes none of those shutdown guarantees.
 

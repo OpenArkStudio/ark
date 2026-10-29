@@ -33,13 +33,13 @@ The returned pointer is borrowed; keep the owning plugin loaded while using it. 
 
 ## Lifecycle and execution
 
-Startup runs `init()` for modules, then `post_init()`, `check_config()` and `pre_update()`. The first `false` result stops startup; the launcher reports the failure and terminates with exit code `1`, without rolling back partially started plugins. The launcher repeatedly calls the manager's `update()`; only registered update modules participate in that loop. Shutdown first stops managed task admission and waits for accepted tasks and module readiness, then runs `pre_shut()` and `shut()` before unloading plugin libraries. See the [application guide](../guides/applications.md) for timeout and resource-retention behavior.
+Startup runs `init()` for modules, then `post_init()`, `check_config()` and `pre_update()`. The first `false` result stops startup; the launcher reports the failure and terminates with exit code `1`, without rolling back partially started plugins. The launcher repeatedly calls the manager's `update()`; only registered update modules participate in that loop. Shutdown first seals managed roots and runs one-shot `stop_accepting()` hooks consumer-first, then waits for accepted tasks and module readiness, then runs `pre_shut()` and `shut()` before unloading plugin libraries. See the [application guide](../guides/applications.md) for timeout and resource-retention behavior.
 
 Use `init()` to obtain dependencies and initialize local resources; use later stages for work that requires other modules' initialization. Stop timers, subscriptions and asynchronous producers before releasing the state their callbacks reference. Network business delivery is advanced through the application's update calls; network IO still runs on arknet workers.
 
 Current limits matter when composing modules:
 
-- Required module provider keys are validated after installation; all four startup phases run in provider-first order, with stable registration-key ordering for independent ready nodes. Declare same-phase requirements through [module dependencies](../guides/modules.md#declare-startup-dependencies). Manifest order, update order and shutdown order are separate contracts.
+- Required module provider keys are validated after installation; all four startup phases run in provider-first order, with stable registration-key ordering for independent ready nodes. Declare same-phase requirements through [module dependencies](../guides/modules.md#declare-startup-dependencies). The reverse cached graph controls admission-stop hooks only; manifest, update and remaining teardown order are separate contracts. The default hook does not migrate official Net/HTTP ingress.
 - Startup failure propagation is immediate; transactional rollback of partially started plugins is not provided.
 - Lifecycle stages do not establish that arbitrary business tasks have drained. Compatible hot replacement and plugin-unload coordination remain separate design work.
 

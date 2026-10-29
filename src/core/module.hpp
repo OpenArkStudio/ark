@@ -36,8 +36,8 @@ public:
     module() = default;
     virtual ~module() = default;
 
-    // Required provider registration keys. Read once after installation, before
-    // startup hooks. This metadata does not change update or shutdown order.
+    // Required provider registration keys. Keep these stable while registered.
+    // Startup and the first ingress-stop phase use a validated snapshot.
     virtual std::vector<std::string> get_dependencies() const {
         return {};
     }
@@ -59,6 +59,12 @@ public:
     }
 
     virtual bool update() {
+        return true;
+    }
+
+    // Close only new external business roots. Accepted tasks must keep access
+    // to provider operations and completion delivery. Called once by the owner.
+    virtual bool stop_accepting() {
         return true;
     }
 

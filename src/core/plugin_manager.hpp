@@ -60,6 +60,7 @@ class plugin_manager final : private noncopyable
         starting,
         installing,
         updating,
+        stopping_acceptance,
         tearing_down,
         uninstalling
     };
@@ -88,7 +89,8 @@ public:
         running,
         draining,
         failed,
-        stopped
+        stopped,
+        stopping_acceptance
     };
 
     plugin_manager() = default;
@@ -127,20 +129,19 @@ public:
         plugin_conf_dir_ = conf_dir;
         plugins_ = plugins;
 
-        startup_modules order;
-        if (!init(order))
+        if (!init())
         {
             return false;
         }
-        if (!post_init(order))
+        if (!post_init(lifecycle_order_))
         {
             return false;
         }
-        if (!check_config(order))
+        if (!check_config(lifecycle_order_))
         {
             return false;
         }
-        if (!pre_update(order))
+        if (!pre_update(lifecycle_order_))
         {
             return false;
         }
@@ -279,7 +280,12 @@ public:
         }
         ARK_ASSERT_RET_VAL(!module_name.empty(), false);
         ARK_ASSERT_RET_VAL(find_module(module_name) == nullptr, false);
-        return module_instances_.insert(std::make_pair(module_name, module_ptr)).second;
+        const auto inserted = module_instances_.insert(std::make_pair(module_name, module_ptr)).second;
+        if (inserted)
+        {
+            lifecycle_order_valid_ = false;
+        }
+        return inserted;
     }
 
     void remove_module(const std::string& module_name) {
@@ -302,6 +308,7 @@ public:
             task_groups_.erase(tasks);
         }
         module_instances_.erase(iter);
+        lifecycle_order_valid_ = false;
     }
 
     auto add_update_module(module* module_ptr) -> bool {
@@ -439,7 +446,7 @@ protected:
         return ((iter != module_instances_.end()) ? iter->second : nullptr);
     }
 
-    bool order_startup_modules(startup_modules& order) {
+    bool order_modules(startup_modules& order, std::string& failure, const char* phase) {
         // Lexicographic registration keys break ties independently of unordered
         // registry insertion and declaration order. Duplicate edges count once.
         std::map<std::string, std::size_t> pending;
@@ -450,7 +457,7 @@ protected:
         }
         for (auto& [name, count] : pending)
         {
-            startup_failure_ = "dependencies: " + name;
+            failure = std::string(phase) + ": " + name;
             auto dependencies = module_instances_.at(name)->get_dependencies();
             std::sort(dependencies.begin(), dependencies.end());
             dependencies.erase(std::unique(dependencies.begin(), dependencies.end()), dependencies.end());
@@ -458,7 +465,7 @@ protected:
             {
                 if (!pending.contains(provider))
                 {
-                    startup_failure_ += " requires missing module '" + provider + "'";
+                    failure += " requires missing module '" + provider + "'";
                     return false;
                 }
                 ++count;
@@ -488,23 +495,25 @@ protected:
         }
         if (order.size() != pending.size())
         {
-            startup_failure_ = "dependencies: cycle prevents startup; blocked modules: ";
+            failure = std::string(phase) + (std::string(phase) == "dependencies"
+                                                   ? ": cycle prevents startup; blocked modules: "
+                                                   : ": cycle prevents admission stop; blocked modules: ");
             bool first = true;
             for (const auto& [name, count] : pending)
             {
                 if (count != 0)
                 {
-                    startup_failure_ += (first ? "" : ", ") + name;
+                    failure += (first ? "" : ", ") + name;
                     first = false;
                 }
             }
             return false;
         }
-        startup_failure_.clear();
+        failure.clear();
         return true;
     }
 
-    auto init(startup_modules& order) -> bool {
+    auto init() -> bool {
         // load plugin dynamic libraries
         for (auto const& iter : plugins_)
         {
@@ -516,13 +525,16 @@ protected:
             }
         }
 
-        if (!order_startup_modules(order))
+        startup_modules order;
+        if (!order_modules(order, startup_failure_, "dependencies"))
         {
             return false;
         }
+        lifecycle_order_ = std::move(order);
+        lifecycle_order_valid_ = true;
 
         // Initialize providers before their declared consumers in every phase.
-        for (const auto& [name, module_ptr] : order)
+        for (const auto& [name, module_ptr] : lifecycle_order_)
         {
             ARK_ASSERT_CONTINUE(module_ptr != nullptr);
 
@@ -689,20 +701,55 @@ private:
         {
             return false;
         }
-        shutdown_state_ = shutdown_state::draining;
-        for (const auto& [owner, tasks] : task_groups_)
+        if (shutdown_state_ == shutdown_state::running)
         {
-            tasks->stop_accepting();
+            shutdown_state_ = shutdown_state::stopping_acceptance;
+            for (const auto& [owner, tasks] : task_groups_)
+            {
+                tasks->stop_accepting();
+            }
         }
         // The last task is removed before its completion is called. Even zero
         // pending tasks cannot permit teardown while that callback is active.
-        if (execution_active() || pending_tasks_unchecked())
+        if (execution_active())
         {
             return false;
         }
-        phase_guard active(*this, call_phase::tearing_down);
         try
         {
+            if (shutdown_state_ == shutdown_state::stopping_acceptance)
+            {
+                phase_guard stopping(*this, call_phase::stopping_acceptance);
+                // Idle registry changes invalidate old pointers. Rebuild only
+                // here, before the one-shot hook sequence, never during drain.
+                if (!lifecycle_order_valid_)
+                {
+                    startup_modules order;
+                    if (!order_modules(order, shutdown_failure_, "stop_accepting"))
+                    {
+                        shutdown_state_ = shutdown_state::failed;
+                        return false;
+                    }
+                    lifecycle_order_ = std::move(order);
+                    lifecycle_order_valid_ = true;
+                }
+                for (auto iter = lifecycle_order_.rbegin(); iter != lifecycle_order_.rend(); ++iter)
+                {
+                    shutdown_failure_ = "stop_accepting: " + iter->first;
+                    if (!iter->second->stop_accepting())
+                    {
+                        shutdown_state_ = shutdown_state::failed;
+                        return false;
+                    }
+                }
+                shutdown_failure_.clear();
+                shutdown_state_ = shutdown_state::draining;
+            }
+            if (pending_tasks_unchecked())
+            {
+                return false;
+            }
+            phase_guard active(*this, call_phase::tearing_down);
             if (!ready_to_shut())
             {
                 return false;
@@ -784,6 +831,7 @@ private:
             module_instances_.erase(entry);
             throw;
         }
+        lifecycle_order_valid_ = false;
         return true;
     }
 
@@ -858,6 +906,8 @@ private:
     std::shared_ptr<arknet::manual_runtime> task_runtime_ = std::make_shared<arknet::manual_runtime>();
     std::unordered_map<module*, std::unique_ptr<task_group>> task_groups_;
     call_phase phase_{call_phase::idle};
+    startup_modules lifecycle_order_;
+    bool lifecycle_order_valid_{};
     shutdown_state shutdown_state_{shutdown_state::running};
     std::exception_ptr shutdown_exception_;
     std::string shutdown_failure_;

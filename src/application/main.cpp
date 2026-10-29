@@ -396,14 +396,19 @@ int main(int argc, char* argv[]) {
     {
         const auto elapsed =
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - shutdown_started);
+        const auto shutdown_state = plugin_manager::instance()->get_shutdown_state();
         if (!shutdown_retained && shutdown_timeout.count() > 0 && elapsed >= shutdown_timeout &&
-            plugin_manager::instance()->get_shutdown_state() == plugin_manager::shutdown_state::draining)
+            (shutdown_state == plugin_manager::shutdown_state::draining ||
+                shutdown_state == plugin_manager::shutdown_state::stopping_acceptance))
         {
             shutdown_retained = true;
             const auto pending = plugin_manager::instance()->pending_tasks();
             ARK_LOG_ERROR("Shutdown wait timed out after {} ms (limit={} ms, pending={}, phase={}); "
                           "process and resources are retained",
-                elapsed.count(), shutdown_timeout.count(), pending, pending ? "managed_tasks" : "ready_to_shut");
+                elapsed.count(), shutdown_timeout.count(), pending,
+                shutdown_state == plugin_manager::shutdown_state::stopping_acceptance ? "stop_accepting"
+                : pending                                                             ? "managed_tasks"
+                                                                                      : "ready_to_shut");
         }
         if (!shutdown_retained && plugin_manager::instance()->stop(date_time::get_now_time()))
         {

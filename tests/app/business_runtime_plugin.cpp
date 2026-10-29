@@ -61,7 +61,7 @@ public:
             trace("native-pending");
             return true;
         }
-        return tasks.start(sequence(this), [this](std::exception_ptr error) {
+        return start_external_root(sequence(this), [this](std::exception_ptr error) {
             if (error)
             {
                 trace("task-error");
@@ -76,6 +76,34 @@ public:
             completion_returned_ = true;
             trace("complete-end");
         }) != 0;
+    }
+
+    bool stop_accepting() override {
+        trace("stop-accepting");
+        external_accepting_ = false;
+        if (manager_.get_tasks(*this).start(rejected_root(), [](std::exception_ptr) {}) != 0)
+        {
+            throw std::runtime_error("Admission hook accepted a managed root");
+        }
+        trace("hook-root-rejected");
+        if (start_external_root(rejected_root(), {}) != 0)
+        {
+            throw std::runtime_error("Admission hook left its external root gate open");
+        }
+        if (manager_.stop(manager_.get_now_time()))
+        {
+            throw std::runtime_error("Admission hook entered reentrant teardown");
+        }
+        trace("admission-stop-pending");
+        if (mode_ == "stop_accepting_throw")
+        {
+            throw std::runtime_error("test stop-accepting exception");
+        }
+        if (mode_ == "stop_accepting_throw_unknown")
+        {
+            throw 7;
+        }
+        return mode_ != "stop_accepting_false";
     }
 
     bool update() override {
@@ -133,7 +161,7 @@ public:
             {
                 trace("reply-" + std::to_string(started_));
                 auto complete = std::move(pending_);
-                complete({}, started_ == 1 ? "first" : "second");
+                complete({}, started_ == 1 ? "first" : started_ == 2 ? "second" : "third");
             }
         }
         bridge_.dispatch();
@@ -183,6 +211,15 @@ public:
 private:
     using callback = std::function<void(std::exception_ptr, std::string)>;
 
+    ark::task_group::task_id start_external_root(ark::task<> work, ark::task_group::completion_handler complete) {
+        if (!external_accepting_)
+        {
+            trace("external-root-rejected");
+            return 0;
+        }
+        return manager_.get_tasks(*this).start(std::move(work), std::move(complete));
+    }
+
     std::uint64_t start(callback complete) {
         if (pending_)
         {
@@ -199,12 +236,13 @@ private:
     }
 
     static ark::task<> sequence(probe_module* self) {
-        for (unsigned step = 1; step <= 2; ++step)
+        const auto steps = self->mode_ == "drain_admission" ? 3u : 2u;
+        for (unsigned step = 1; step <= steps; ++step)
         {
             const auto response =
                 co_await self->bridge_.wait([self](auto complete) { return self->start(std::move(complete)); },
                     [](std::uint64_t) { trace("cancel"); });
-            if (response != (step == 1 ? "first" : "second"))
+            if (response != (step == 1 ? "first" : step == 2 ? "second" : "third"))
             {
                 throw std::runtime_error("Controlled operation lost its owning response");
             }
@@ -220,6 +258,7 @@ private:
     callback pending_;
     unsigned started_{};
     bool stop_requested_{};
+    bool external_accepting_{true};
     bool sequence_finished_{};
     bool completion_returned_{};
     bool drain_observed_{};

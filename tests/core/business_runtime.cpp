@@ -27,6 +27,20 @@ public:
         return name_;
     }
 
+    std::vector<std::string> get_dependencies() const override {
+        ++dependency_reads;
+        if (dependency_metadata_throws)
+        {
+            throw std::runtime_error("dependency metadata must not be read again");
+        }
+        return dependencies;
+    }
+
+    bool stop_accepting() override {
+        ++stop_accepting_calls;
+        return on_stop_accepting ? on_stop_accepting() : stop_accepting_result;
+    }
+
     bool update() override {
         if (on_update)
         {
@@ -59,13 +73,19 @@ public:
     }
 
     std::function<void()> on_update;
+    std::function<bool()> on_stop_accepting;
     std::function<bool()> on_readiness;
     std::function<void()> on_pre_shut;
     std::function<void()> on_shut;
     bool pre_shut_result{true};
+    bool stop_accepting_result{true};
+    bool dependency_metadata_throws{};
     bool readiness_result{true};
     bool shut_result{true};
     unsigned pre_shut_calls{};
+    unsigned stop_accepting_calls{};
+    mutable unsigned dependency_reads{};
+    std::vector<std::string> dependencies;
     mutable unsigned readiness_calls{};
     unsigned shut_calls{};
 
@@ -588,4 +608,236 @@ TEST_CASE("Shutdown hook failure is observable and retains modules without repea
     ark::plugin_manager empty;
     CHECK(empty.stop(1));
     CHECK(empty.stop(2));
+}
+
+TEST_CASE("Admission stop uses cached reverse dependencies once before pending tasks drain") {
+    ark::plugin_manager manager;
+    observed_module provider("provider"), consumer("consumer");
+    consumer.dependencies = {"provider"};
+    REQUIRE(manager.add_module(provider.get_name(), &provider));
+    REQUIRE(manager.add_module(consumer.get_name(), &consumer));
+    REQUIRE(manager.start(0, {}, {}, {}));
+    auto& tasks = manager.create_task_group(consumer);
+    REQUIRE(tasks.start(ready_task()) != 0);
+    std::vector<std::string> events;
+    consumer.on_stop_accepting = [&] {
+        CHECK(tasks.start(ready_task()) == 0);
+        CHECK(manager.pending_tasks() == 1);
+        events.emplace_back("consumer");
+        return true;
+    };
+    provider.on_stop_accepting = [&] {
+        events.emplace_back("provider");
+        return true;
+    };
+    CHECK_FALSE(manager.stop(1));
+    CHECK(events == std::vector<std::string>{"consumer", "provider"});
+    CHECK(provider.readiness_calls == 0);
+    CHECK(consumer.readiness_calls == 0);
+    CHECK(manager.update(2));
+    CHECK(manager.stop(3));
+    CHECK(manager.stop(4));
+    CHECK(provider.stop_accepting_calls == 1);
+    CHECK(consumer.stop_accepting_calls == 1);
+    CHECK(provider.dependency_reads == 1);
+    CHECK(consumer.dependency_reads == 1);
+}
+
+TEST_CASE("Admission stop hooks share lifecycle reentry and registry guards") {
+    ark::plugin_manager manager;
+    observed_module module("admission"), other("other");
+    REQUIRE(manager.add_module(module.get_name(), &module));
+    auto& tasks = manager.create_task_group(module);
+    module.on_stop_accepting = [&] {
+        CHECK_FALSE(manager.stop(2));
+        CHECK_THROWS_AS(manager.update(2), std::logic_error);
+        CHECK_THROWS_AS(manager.start(2, {}, {}, {}), std::logic_error);
+        CHECK_THROWS_AS(manager.add_module(other.get_name(), &other), std::logic_error);
+        CHECK_THROWS_AS(manager.remove_module(module.get_name()), std::logic_error);
+        CHECK(tasks.start(ready_task()) == 0);
+        CHECK(module.readiness_calls == 0);
+        CHECK(module.pre_shut_calls == 0);
+        return true;
+    };
+    CHECK(manager.stop(1));
+    CHECK(module.stop_accepting_calls == 1);
+}
+
+TEST_CASE("Admission stop waits for the outer owner frame instead of entering an update callback") {
+    ark::plugin_manager manager;
+    observed_module module("active-admission");
+    REQUIRE(manager.add_module(module.get_name(), &module));
+    REQUIRE(manager.add_update_module(&module));
+    module.on_update = [&] {
+        CHECK_FALSE(manager.stop(1));
+        CHECK(module.stop_accepting_calls == 0);
+        CHECK(module.pre_shut_calls == 0);
+        CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopping_acceptance);
+    };
+    CHECK(manager.update(0));
+    CHECK(module.stop_accepting_calls == 0);
+    CHECK(manager.stop(2));
+    CHECK(module.stop_accepting_calls == 1);
+}
+
+TEST_CASE("Admission stop false and exceptions retain owners without later hooks or retries") {
+    for (unsigned failure = 0; failure < 3; ++failure)
+    {
+        ark::plugin_manager manager;
+        observed_module provider("provider"), consumer("consumer");
+        consumer.dependencies = {"provider"};
+        REQUIRE(manager.add_module(provider.get_name(), &provider));
+        REQUIRE(manager.add_module(consumer.get_name(), &consumer));
+        REQUIRE(manager.start(0, {}, {}, {}));
+        consumer.on_stop_accepting = [failure] {
+            if (failure == 1)
+            {
+                throw std::runtime_error("admission failed");
+            }
+            if (failure == 2)
+            {
+                throw 7;
+            }
+            return false;
+        };
+        CHECK_FALSE(manager.stop(1));
+        CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::failed);
+        CHECK(manager.get_shutdown_failure() == "stop_accepting: consumer");
+        CHECK(bool(manager.get_shutdown_exception()) == (failure != 0));
+        CHECK_FALSE(manager.stop(2));
+        CHECK_FALSE(manager.update(3));
+        CHECK(consumer.stop_accepting_calls == 1);
+        CHECK(provider.stop_accepting_calls == 0);
+        CHECK(consumer.readiness_calls == 0);
+        CHECK(provider.readiness_calls == 0);
+        CHECK(consumer.pre_shut_calls == 0);
+        CHECK(provider.shut_calls == 0);
+    }
+}
+
+TEST_CASE("Admission stop builds one snapshot for a manual manager without startup") {
+    ark::plugin_manager manager;
+    observed_module module("manual");
+    REQUIRE(manager.add_module(module.get_name(), &module));
+    CHECK(module.dependency_reads == 0);
+    CHECK(manager.stop(1));
+    CHECK(manager.stop(2));
+    CHECK(module.dependency_reads == 1);
+    CHECK(module.stop_accepting_calls == 1);
+}
+
+TEST_CASE("Admission stop rebuilds after legal independent additions and removals") {
+    ark::plugin_manager manager;
+    observed_module retained("retained"), added("added");
+    auto removed = std::make_unique<observed_module>("removed");
+    REQUIRE(manager.add_module(removed->get_name(), removed.get()));
+    REQUIRE(manager.add_module(retained.get_name(), &retained));
+    REQUIRE(manager.start(0, {}, {}, {}));
+    manager.remove_module(removed->get_name());
+    removed.reset();
+    REQUIRE(manager.add_module(added.get_name(), &added));
+    std::vector<std::string> events;
+    retained.on_stop_accepting = [&] {
+        events.emplace_back("retained");
+        return true;
+    };
+    added.on_stop_accepting = [&] {
+        events.emplace_back("added");
+        return true;
+    };
+    CHECK(manager.stop(1));
+    CHECK(events == std::vector<std::string>{"retained", "added"});
+    CHECK(retained.dependency_reads == 2);
+    CHECK(added.dependency_reads == 1);
+    CHECK(retained.stop_accepting_calls == 1);
+    CHECK(added.stop_accepting_calls == 1);
+}
+
+TEST_CASE("Admission stop does not use the cached pointer after same-key replacement") {
+    ark::plugin_manager manager;
+    observed_module consumer("consumer"), replacement("provider");
+    consumer.dependencies = {"provider"};
+    auto original = std::make_unique<observed_module>("provider");
+    REQUIRE(manager.add_module(original->get_name(), original.get()));
+    REQUIRE(manager.add_module(consumer.get_name(), &consumer));
+    REQUIRE(manager.start(0, {}, {}, {}));
+    manager.remove_module(original->get_name());
+    original.reset();
+    REQUIRE(manager.add_module(replacement.get_name(), &replacement));
+    std::vector<std::string> events;
+    consumer.on_stop_accepting = [&] {
+        events.emplace_back("consumer");
+        return true;
+    };
+    replacement.on_stop_accepting = [&] {
+        events.emplace_back("replacement");
+        return true;
+    };
+    CHECK(manager.stop(1));
+    CHECK(events == std::vector<std::string>{"consumer", "replacement"});
+    CHECK(replacement.stop_accepting_calls == 1);
+    CHECK(replacement.dependency_reads == 1);
+    CHECK(consumer.dependency_reads == 2);
+}
+
+TEST_CASE("Admission stop retains resources after a required provider is removed") {
+    ark::plugin_manager manager;
+    observed_module consumer("consumer"), provider("provider");
+    consumer.dependencies = {"provider"};
+    REQUIRE(manager.add_module(consumer.get_name(), &consumer));
+    REQUIRE(manager.add_module(provider.get_name(), &provider));
+    REQUIRE(manager.start(0, {}, {}, {}));
+    manager.remove_module(provider.get_name());
+    CHECK_FALSE(manager.stop(1));
+    CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::failed);
+    CHECK(manager.get_shutdown_failure() == "stop_accepting: consumer requires missing module 'provider'");
+    CHECK(manager.get_startup_failure().empty());
+    CHECK_FALSE(manager.stop(2));
+    CHECK(consumer.dependency_reads == 2);
+    CHECK(consumer.stop_accepting_calls == 0);
+    CHECK(provider.stop_accepting_calls == 0);
+    CHECK(consumer.pre_shut_calls == 0);
+}
+
+TEST_CASE("Admission stop uses unchanged cached metadata but validates an invalidated graph once") {
+    for (const bool changed : {false, true})
+    {
+        ark::plugin_manager manager;
+        observed_module module("module"), added("added");
+        REQUIRE(manager.add_module(module.get_name(), &module));
+        REQUIRE(manager.start(0, {}, {}, {}));
+        module.dependency_metadata_throws = true;
+        if (changed)
+        {
+            REQUIRE(manager.add_module(added.get_name(), &added));
+            CHECK_FALSE(manager.stop(1));
+            CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::failed);
+            CHECK(manager.get_shutdown_failure() == "stop_accepting: module");
+            REQUIRE(manager.get_shutdown_exception());
+            CHECK_THROWS_WITH_AS(std::rethrow_exception(manager.get_shutdown_exception()),
+                "dependency metadata must not be read again", std::runtime_error);
+            CHECK_FALSE(manager.stop(2));
+            CHECK(module.dependency_reads == 2);
+            CHECK(module.stop_accepting_calls == 0);
+            CHECK(added.stop_accepting_calls == 0);
+        }
+        else
+        {
+            CHECK(manager.stop(1));
+            CHECK(module.dependency_reads == 1);
+            CHECK(module.stop_accepting_calls == 1);
+        }
+    }
+}
+
+TEST_CASE("Admission stop rejects a cyclic manual graph before calling any hook") {
+    ark::plugin_manager manager;
+    observed_module module("self");
+    module.dependencies = {"self"};
+    REQUIRE(manager.add_module(module.get_name(), &module));
+    CHECK_FALSE(manager.stop(1));
+    CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::failed);
+    CHECK(manager.get_shutdown_failure() == "stop_accepting: cycle prevents admission stop; blocked modules: self");
+    CHECK(module.stop_accepting_calls == 0);
+    CHECK(module.pre_shut_calls == 0);
 }
