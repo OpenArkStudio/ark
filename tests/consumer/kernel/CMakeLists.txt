@@ -35,6 +35,7 @@ set(kernel_headers
     entity_snapshot.hpp
     entity_nested_snapshot.hpp
     entity_stream.hpp
+    nested_stream.hpp
     event_manager.hpp
     event_manager_impl.hpp
     kernel_module.hpp

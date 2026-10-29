@@ -335,7 +335,7 @@ Entity incarnations are allocated monotonically within one loaded `entity_impl` 
 
 **Breaking ABI change:** the new virtual Kernel method and Entity/row/table implementation layout changes require rebuilding all plugins, hosts and consumers together. Do not load old binaries with these headers. Source subclasses may keep the default method, which throws `std::logic_error`. The independent `check-kernel-plugin` host exercises the actual loaded virtual method and retains nested values after child destruction, table clearing and normal stop.
 
-This stage provides capture only: no nested differ/replica, atomic nested commit, stream generation/revision, sender queue or codec. Existing scalar APIs and room v1 messages are unchanged. Applications must bind authorization and retain fixed projections for their stream. The [replication design](../project/entity-replication-design.md) records the selected later-stage consistency/recovery boundaries.
+Capture provides the owning source values used by the [nested publisher/replica](#nested-baselines-and-deltas). Existing scalar APIs and room v1 messages are unchanged; no nested sender queue or codec is provided. Applications bind authorization and retain fixed projections for their stream. The [replication design](../project/entity-replication-design.md) records the selected consistency/recovery boundaries.
 
 ## Maps and data conversion
 
@@ -448,3 +448,104 @@ The application supplies an opaque `schema_id`, bound entity ID/class and author
 Use each publisher/replica on one owner thread. Transfer the returned owning values/immutable handles, not the publisher, replica or Entity, to other threads. Callers bound the number of retained historical handles. No throughput or bandwidth result is claimed for this component.
 
 `check-entity-stream` runs permanent state-machine regressions even with Protobuf disabled. `check-kernel-initialization` additionally exercises a real Entity through capture, baseline, coalesced HP/MP changes, receiver application, source destruction, removal and a new baseline. These checks cover the native C++ state loop; `check-guest-room` and the matching Godot client's tests cover their separate transport and presentation boundaries.
+
+## Nested baselines and deltas
+
+`<ark/kernel/nested_stream.hpp>` adds a pure C++ publisher/differ/replica for the
+[owning nested capture](#owning-nested-snapshots). It does not add a Kernel virtual
+method or change the existing scalar stream. Supply a fixed
+`nested_stream_binding` independently of the first received baseline: application
+schema ID, nonzero root GUID/incarnation and stream generation, plus a
+`nested_entity_layout` with class-local field types, table row classes/column types
+and individual authorized child GUID layouts. Empty tables still have trusted
+column types. Reusing a class/index with a contradictory kind, type or referenced
+class rejects the binding. A packet cannot define or expand its own authorization.
+
+`nested_scalar_type` names Boolean, signed/unsigned 32-bit and 64-bit integers,
+finite 32/64-bit reals, byte strings and GUIDs. Complete snapshots contain exactly
+the selected scalar/table/container members; a selected container may be empty.
+Child slots are positive, GUIDs are unique across one root, and every child is
+validated against its own location's allowed layout. The application authenticates
+the recipient and selects the capture projection; these checks do not authenticate
+a session or turn an arbitrary schema ID into a schema definition.
+
+```cpp
+#include <ark/kernel/nested_stream.hpp>
+using namespace ark::entity_sync;
+
+// authorized_binding comes from trusted application schema/session policy and
+// the known root lifetime, not from a remote baseline. Capture on the owner thread.
+nested_publisher sender(authorized_binding,
+    {authorized_binding.generation, 1, captured_state});
+nested_replica receiver(authorized_binding);
+receiver.apply(*sender.baseline());
+if (auto delta = sender.update(next_authorized_capture))
+{
+    receiver.apply(*delta);
+}
+```
+
+![Nested C++ publication and candidate commit](../assets/entity-nested-stream.svg)
+
+Call `update()` once at the explicit flush after business mutations. It compares
+complete authorized state, coalesces repeated writes and returns an immutable
+`shared_ptr<const nested_delta>`. An unchanged projection returns an empty handle
+without advancing its revision, including changes hidden by that recipient's
+capture projection. `baseline()` returns the current complete immutable baseline
+for late installation. Returned handles move without throwing; all packet,
+replacement-state and lifetime-history allocations finish before publisher commit.
+Retained values survive subsequent operations and source/publisher destruction.
+
+| Operation / condition | Contract |
+| --- | --- |
+| Scalar/column change within one lifetime | Sparse typed field patch |
+| Row add / delete / same-number reuse | Complete add / lifetime-checked removal / complete replacement with a newer incarnation |
+| Clear then re-add | Retired row incarnations cannot return, even with identical values |
+| Slot move/swap, detach, child destruction or replacement | Replace that container's complete final authorized membership; otherwise recursively patch unchanged child identities |
+| Receiver commit | Validate envelope/patch bounds, reconstruct and validate the complete candidate and lifetime history, then replace the entire root once |
+| Duplicate | Structurally valid delta revisions at or below the current revision and older baselines are ignored; a same-revision baseline must equal the active state. No packet replay/history is retained |
+| Gap, wrong binding/type, malformed or oversized input | Return `rejected`, invalidate and hide state; no partial candidate is exposed |
+| Root removal | An ordered tombstone removes the root; later duplicate traffic cannot revive it |
+| Recovery / permission change | Create a new independently bound publisher/replica/stream; an existing nested replica accepts no reset baseline or generation change |
+| Revision exhaustion | Throw `std::overflow_error` without changing publisher state; counters never wrap |
+
+A first baseline is validated against the trusted binding before installation.
+Invalidation is terminal for that replica. Previously returned immutable state
+handles remain readable, but `state()` returns null after rejection or a root
+tombstone. A tombstoned replica remains valid for duplicate handling; an invalidated
+replica rejects everything. Publishers throw on input/limit errors. Receiver
+allocation failures propagate with the prior installed/valid state and revision
+unchanged, allowing the caller to retry that exact operation; malformed-input
+rejection is a different, terminal result. This is local state retry, not a
+transport retransmission policy. A failed publisher allocation similarly preserves
+its state/revision/source; no revision is committed before a throwing return copy.
+
+`nested_stream_limits` bounds the complete binding and reconstructed snapshot
+using `nested_snapshot_limits`. Separately, a patch defaults to 65536 operations,
+65536 scalar values and 1 MiB of schema/class/byte-string data. Operations count
+visited Entity deltas/replacement Entities and table/container/row entries; values
+count selected scalar/column values. These work bounds include replacement child
+trees. `max_lifetime_entries` defaults to 132096 and counts remembered Entity
+records, table records and last-visible row identities. Each table retains a
+monotonic incarnation watermark after rows disappear; detached authorized Entity
+records retain their newest known incarnation, so older lifetimes cannot return.
+A newer Entity incarnation retires its old table history.
+
+Limits bound individual complete states, patches and retained history, not encoded
+size or exact heap use. Preparation can hold old committed state plus candidate,
+packet and copied history at once; the application must budget their combined
+peak and bound its own retained handles/queues. Use each publisher/replica on one
+owner thread. Release plugin-created shared handles before unloading their code;
+these handles do not certify arbitrary DSO unloading.
+
+The header requires no Protobuf or transport. There is no nested codec, sender
+queue, ACK/replay log, in-place reset, dynamic permission change, cross-root commit
+or room v1 change. A returned publication acknowledges no delivery; an adapter
+must separately bind sessions, bound encoded/pending work and close the affected
+stream on admission/send failure. `check-entity-stream` covers typed binding,
+recursive patches, row/Entity reuse, duplicates, gaps, atomic invalidation and
+limits. Its `check-nested-stream-allocation` dependency injects allocation failure
+at every visited allocation point. `check-kernel-initialization` additionally
+uses real JSON-backed Kernel captures, two fixed projections, row reuse/clear,
+child moves/destruction and owning values after the world is destroyed. These
+are local C++ correctness checks, separate from hosted and client/network acceptance.

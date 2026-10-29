@@ -78,6 +78,7 @@ set(ark_kernel_public_headers
     "${CMAKE_CURRENT_SOURCE_DIR}/kernel/entity_snapshot.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernel/entity_nested_snapshot.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernel/entity_stream.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernel/nested_stream.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernel/class_call_back_manager.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernel/class_meta.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/kernel/class_meta_manager.hpp"
