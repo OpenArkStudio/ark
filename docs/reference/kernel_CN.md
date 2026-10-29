@@ -183,6 +183,8 @@ GUID 字段回调保留 `dt_guid` 标签。默认 GUID64 构建使用 `data::get
 
 `data_impl`/`data_base` 的字符串或用户数据分配返回空指针时，抛出 `std::bad_alloc`。赋值或设置失败保留目标原值，复制保留源值。设置操作支持引用自身有效存储的输入。
 
+`data_impl`/`data_base` 的堆存储大小须能用 32 位长度表示，包含字符串末尾零字符或用户数据长度头。超出范围时，在调用存储分配器前抛出 `std::length_error`，原值保持不变。
+
 ```cpp
 #include <cstdint>
 #include <string>
