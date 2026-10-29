@@ -92,7 +92,7 @@ keeps an external source implementation of the original pure interface concrete,
 checks the default `logic_error`, a custom override and the framework override.
 
 `check-entity-stream`, included in `check-core`, runs the scalar publisher/replica
-without Protobuf. It covers immutable retained states, coalescing, duplicate and
+without Protobuf. `entity_nested_stream.cpp` adds fixed trusted per-class/column/child bindings, recursive atomic root patches, row/Entity reuse and bounded lifetime history. `entity_nested_stream_allocation.cpp` injects failures across publisher update/removal and receiver baseline/candidate construction; throwing allocations preserve the old state/revision and allow one retry. Real nested Kernel captures exercise two fixed projections, row reuse/clear and child moves/destruction. It also covers immutable retained states, coalescing, duplicate and
 gap handling, identity/type checks, removal, newer-generation recovery and limits.
 The Entity tests also capture real HP/MP/name fields, apply baseline and deltas,
 destroy the source and recover after a tombstone. These are C++ state checks, not
