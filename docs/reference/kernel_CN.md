@@ -448,6 +448,8 @@ if (auto delta = sender.update(kernel->capture_scalar_snapshot(*player, visible)
 
 `check-entity-stream` 提供永久状态机回归，关闭 Protobuf 后也能运行。`check-kernel-initialization` 另从真实 Entity 验证捕获、基线、合并后的 HP／MP 变更、接收状态、源销毁、删除与新基线。这些检查覆盖原生 C++ 状态闭环；`check-guest-room` 与配套 Godot 客户端测试分别覆盖传输与表现边界。
 
+`check-entity-stream` 包含 `check-scalar-stream-allocation`，逐个注入发布端构造、基线复制、更新和接收端提交中的分配失败。用例覆盖长二进制字符串、保留值、修订不变和一次成功重试，无需数据库或传输。
+
 ## 嵌套基线与增量
 
 `<ark/kernel/nested_stream.hpp>` 为[拥有型嵌套捕获](#拥有型嵌套快照)增加纯 C++

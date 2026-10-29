@@ -108,6 +108,12 @@ add_custom_target(check-entity-stream
     COMMAND $<TARGET_FILE:ark_entity_stream_tests>
     DEPENDS ark_entity_stream_tests USES_TERMINAL)
 add_dependencies(check-core check-entity-stream)
+add_executable(ark_scalar_stream_allocation_tests main.cpp entity_scalar_stream_allocation.cpp)
+set_property(TARGET ark_scalar_stream_allocation_tests PROPERTY LINK_LIBRARIES ark::kernel)
+add_custom_target(check-scalar-stream-allocation
+    COMMAND $<TARGET_FILE:ark_scalar_stream_allocation_tests>
+    DEPENDS ark_scalar_stream_allocation_tests USES_TERMINAL)
+add_dependencies(check-entity-stream check-scalar-stream-allocation)
 add_executable(ark_nested_stream_allocation_tests main.cpp entity_nested_stream_allocation.cpp)
 set_property(TARGET ark_nested_stream_allocation_tests PROPERTY LINK_LIBRARIES ark::kernel)
 add_custom_target(check-nested-stream-allocation

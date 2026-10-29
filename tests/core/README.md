@@ -237,3 +237,5 @@ inspect exports. They create no producer or broker connection. Kafka stays off b
 disabled-plugin core builds do not discover its dependencies. See the
 [construction migration](../../docs/reference/directory-structure.md#typed-kafka-construction)
 for the public-layout rebuild requirement and service-validation limits.
+
+`check-scalar-stream-allocation` isolates global allocation failure from ordinary tests and visits every allocation in scalar publisher construction, baseline copying, updates, first/replacement baseline reception and delta reception. Each failure preserves the committed state and retained values; retry advances exactly one revision. It is included in `check-entity-stream` and exercises long/binary strings plus all scalar alternatives.

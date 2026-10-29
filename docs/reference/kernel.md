@@ -451,6 +451,8 @@ Use each publisher/replica on one owner thread. Transfer the returned owning val
 
 `check-entity-stream` runs permanent state-machine regressions even with Protobuf disabled. `check-kernel-initialization` additionally exercises a real Entity through capture, baseline, coalesced HP/MP changes, receiver application, source destruction, removal and a new baseline. These checks cover the native C++ state loop; `check-guest-room` and the matching Godot client's tests cover their separate transport and presentation boundaries.
 
+`check-scalar-stream-allocation`, included in `check-entity-stream`, injects failures at every allocation during publisher construction, baseline copies, updates and receiver commits. Long binary string fields, retained values, unchanged revisions and one successful retry remain covered without a database or transport.
+
 ## Nested baselines and deltas
 
 `<ark/kernel/nested_stream.hpp>` adds a pure C++ publisher/differ/replica for the
