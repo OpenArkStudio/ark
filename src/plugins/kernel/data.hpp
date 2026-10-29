@@ -21,6 +21,8 @@
 #pragma once
 
 #include <cstring>
+#include <limits>
+#include <stdexcept>
 
 #include "ark/define.hpp"
 #include "ark/enum.hpp"
@@ -43,6 +45,10 @@ public:
     }
 
     inline static size_t get_raw_user_data_size(size_t size) {
+        if (size > std::numeric_limits<size_t>::max() - sizeof(size_t))
+        {
+            throw std::length_error("Kernel user data size exceeds its header storage");
+        }
         return sizeof(size_t) + size;
     }
 

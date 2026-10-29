@@ -10,6 +10,7 @@
 #include "../network/doctest.h"
 
 #include <ark/kernel/data_impl.hpp>
+#include <ark/kernel/data_list_impl.hpp>
 #include <ark/kernel/node_impl.hpp>
 
 namespace {
@@ -96,11 +97,13 @@ public:
         exception
     };
     static inline failure next{failure::none};
+    static inline std::size_t successful_before_failure{};
     static inline std::size_t next_id{};
     static inline std::map<void*, std::pair<std::size_t, std::size_t>> live;
 
     void* alloc(std::size_t size) {
-        const auto mode = std::exchange(next, failure::none);
+        const auto mode = successful_before_failure ? (--successful_before_failure, failure::none)
+                                                    : std::exchange(next, failure::none);
         if (mode == failure::null)
         {
             return nullptr;
@@ -413,4 +416,158 @@ TEST_CASE("Zero length user data retains its allocation header and replacement g
     size = 1;
     CHECK(value.get_user_data(size) != nullptr);
     CHECK(size == 0);
+}
+
+TEST_CASE("Raw user data length rejects a size_t header overflow") {
+    constexpr auto maximum = std::numeric_limits<std::size_t>::max();
+    CHECK(ark::data::get_raw_user_data_size(0) == sizeof(std::size_t));
+    CHECK(ark::data::get_raw_user_data_size(maximum - sizeof(std::size_t)) == maximum);
+    CHECK_THROWS_AS(ark::data::get_raw_user_data_size(maximum), std::length_error);
+    CHECK_THROWS_AS(ark::data::get_raw_user_data_size(maximum - sizeof(std::size_t) + 1), std::length_error);
+}
+
+TEST_CASE("DataList excessive user data is rejected before allocating or publishing an index") {
+    constexpr auto maximum = std::numeric_limits<std::size_t>::max();
+    for (const auto size : {maximum, maximum - sizeof(std::size_t) + 1, maximum - sizeof(std::size_t)})
+    {
+        ark::base_data_list<1, 16, tracked_allocator> values;
+        REQUIRE(values.add_string("1234567"));
+        // Old code attempts index growth first. Refuse that allocation so even
+        // overflowing lengths cannot reach a huge allocation or payload copy.
+        tracked_allocator::next = tracked_allocator::failure::exception;
+        CHECK_THROWS_AS(values.add_user_data(bytes, size), std::length_error);
+        CHECK(tracked_allocator::next == tracked_allocator::failure::exception);
+        tracked_allocator::next = tracked_allocator::failure::none;
+        CHECK(values.get_count() == 1);
+        CHECK(std::string(values.string(0)) == "1234567");
+    }
+}
+
+TEST_CASE("DataList buffer growth rejects a doubled size overflow before allocation") {
+    ark::base_data_list<2, 16, tracked_allocator> values;
+    REQUIRE(values.add_int(17));
+    // The old doubled request wraps but still reaches the refusing allocator;
+    // the test never allocates or copies the advertised payload size.
+    tracked_allocator::next = tracked_allocator::failure::exception;
+    CHECK_THROWS_AS(values.add_user_data(bytes, std::numeric_limits<std::size_t>::max() / 2), std::length_error);
+    CHECK(tracked_allocator::next == tracked_allocator::failure::exception);
+    tracked_allocator::next = tracked_allocator::failure::none;
+    CHECK(values.get_count() == 1);
+    CHECK(values.get_int(0) == 17);
+}
+
+namespace {
+
+template<std::size_t capacity>
+void failed_list_append(tracked_allocator::failure mode, bool fail_buffer_after_index) {
+    for (int kind = 0; kind < 3; ++kind)
+    {
+        ark::base_data_list<capacity, 16, tracked_allocator> values;
+        REQUIRE(values.add_int(17));
+        const auto previous_memory = values.get_mem_usage();
+        tracked_allocator::next = mode;
+        tracked_allocator::successful_before_failure = fail_buffer_after_index ? 1 : 0;
+        const auto append = [&] {
+            if (kind == 0)
+            {
+                return values.add_user_data(text, sizeof(text));
+            }
+            return kind == 1 ? values.add_string(text) : values.add_string(text, sizeof(text));
+        };
+        CHECK_THROWS_AS(append(), std::bad_alloc);
+        CHECK(tracked_allocator::next == tracked_allocator::failure::none);
+        tracked_allocator::next = tracked_allocator::failure::none;
+        tracked_allocator::successful_before_failure = 0;
+        CHECK(values.get_count() == 1);
+        CHECK(values.get_int(0) == 17);
+        if (fail_buffer_after_index)
+        {
+            CHECK(values.get_mem_usage() > previous_memory);
+        }
+        // Avoid inspecting an incomplete old-code record in the red regression.
+        if (values.get_count() == 1)
+        {
+            REQUIRE(append());
+            CHECK(values.get_count() == 2);
+            if (kind == 0)
+            {
+                std::size_t size{};
+                const auto* result = values.user_data(1, size);
+                CHECK(size == sizeof(text));
+                CHECK(std::memcmp(result, text, size) == 0);
+            }
+            else
+            {
+                CHECK(std::string(values.string(1)) == text);
+            }
+        }
+    }
+}
+
+} // namespace
+
+TEST_CASE("DataList throwing allocations preserve existing entries at both append allocation points") {
+    failed_list_append<1>(tracked_allocator::failure::exception, false);
+    failed_list_append<4>(tracked_allocator::failure::exception, false);
+    failed_list_append<1>(tracked_allocator::failure::exception, true);
+}
+
+TEST_CASE("DataList null allocations report bad_alloc without publishing append entries") {
+    failed_list_append<1>(tracked_allocator::failure::null, false);
+    failed_list_append<4>(tracked_allocator::failure::null, false);
+    failed_list_append<1>(tracked_allocator::failure::null, true);
+}
+
+TEST_CASE("DataList growing string replacement preserves the original on a throwing allocation") {
+    ark::base_data_list<2, 16, tracked_allocator> values;
+    REQUIRE(values.add_string("1234567"));
+    tracked_allocator::next = tracked_allocator::failure::exception;
+    CHECK_THROWS_AS(values.set_string(0, text), std::bad_alloc);
+    CHECK(values.get_count() == 1);
+    CHECK(std::string(values.string(0)) == "1234567");
+    REQUIRE(values.set_string(0, text));
+    CHECK(std::string(values.string(0)) == text);
+}
+
+TEST_CASE("Default DataList null array allocations preserve entries and string replacements") {
+    ark::base_data_list<1, 16> full;
+    REQUIRE(full.add_int(17));
+    CHECK(default_failure([&] { full.add_int(42); }));
+    CHECK(full.get_count() == 1);
+    CHECK(full.get_int(0) == 17);
+    ark::base_data_list<4, 16> values;
+    REQUIRE(values.add_string("1234567"));
+    CHECK(default_failure([&] { values.add_string(text); }));
+    CHECK(values.get_count() == 1);
+    CHECK(std::string(values.string(0)) == "1234567");
+    CHECK(default_failure([&] { values.set_string(0, text); }));
+    CHECK(values.get_count() == 1);
+    CHECK(std::string(values.string(0)) == "1234567");
+}
+
+TEST_CASE("DataList copies own their string and binary buffers and retain empty payload semantics") {
+    using list = ark::base_data_list<2, 16, tracked_allocator>;
+    const auto initial_live = tracked_allocator::live.size();
+    {
+        list source;
+        REQUIRE(source.add_string("1234567"));
+        REQUIRE(source.add_user_data(bytes, sizeof(bytes)));
+        list copied(source);
+        CHECK(copied.string(0) != source.string(0));
+        REQUIRE(source.set_string(0, "changed"));
+        CHECK(std::string(copied.string(0)) == "1234567");
+        std::size_t size{};
+        const auto* result = copied.user_data(1, size);
+        CHECK(size == sizeof(bytes));
+        CHECK(std::memcmp(result, bytes, size) == 0);
+        CHECK(copied.raw_user_data(1) != source.raw_user_data(1));
+        list empty;
+        REQUIRE(empty.add_user_data(bytes, 0));
+        CHECK(empty.user_data(0, size) != nullptr);
+        CHECK(size == 0);
+        CHECK(empty.get_count() == 1);
+        REQUIRE(empty.add_string(""));
+        CHECK(std::string(empty.string(1)).empty());
+    }
+    CHECK(tracked_allocator::live.size() == initial_live);
 }

@@ -149,6 +149,8 @@ std::shared_ptr<ark::entity> create_player(ark::plugin_manager& manager, int map
 
 参数按 `(value, uint32_t field_index)` 成对排列：先加入值，再用 `add_u_int()` 加入字段索引。索引必须来自已加载的实体结构，值类型必须与字段类型完全一致；不要依赖隐式转换。
 
+DataList 对无法表示的追加长度抛出 `std::length_error`，分配失败时抛出 `std::bad_alloc`。单项追加或字符串扩容失败保留已有值和项数，但内部容量可能已经增长。
+
 下面使用声明为 int32 的 `Player.level` 和 string 的 `Player.name`，显式将等级设为 `0`、名称设为空字符串，其余字段保留配置默认值。调用前，目标地图、实例和对应的 Player 配置记录必须存在。
 
 ```cpp

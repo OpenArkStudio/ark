@@ -49,6 +49,7 @@ void hook_free(void*& pointer) {
 #define ARK_NEW_ARRAY_RET(element_type, size) return hook_allocate(size)
 #define ARK_DELETE_ARRAY(element_type, pointer) hook_free(pointer)
 #include <ark/kernel/data_impl.hpp>
+#include <ark/kernel/data_list_impl.hpp>
 
 TEST_CASE("Data values retain matching custom array allocation hooks through failed and successful replacement") {
     REQUIRE(live.empty());
@@ -83,6 +84,38 @@ TEST_CASE("Data values retain matching custom array allocation hooks through fai
         value.set_string("abc");
         CHECK(live.size() == 1);
         CHECK(std::string(value.get_string()) == "abc");
+    }
+    CHECK(live.empty());
+    CHECK(allocations - initial_allocations == releases - initial_releases);
+}
+
+TEST_CASE("DataList retains matching array hooks across failed buffer and index growth") {
+    REQUIRE(live.empty());
+    const auto initial_allocations = allocations;
+    const auto initial_releases = releases;
+    {
+        ark::base_data_list<2, 16> values;
+        REQUIRE(values.add_string("1234567"));
+        const char payload[] = "binary\0payload";
+        fail_next = true;
+        CHECK_THROWS_AS(values.add_user_data(payload, sizeof(payload)), std::bad_alloc);
+        CHECK_FALSE(fail_next);
+        CHECK(values.get_count() == 1);
+        CHECK(std::string(values.string(0)) == "1234567");
+        CHECK(live.empty());
+        REQUIRE(values.add_user_data(payload, sizeof(payload)));
+        CHECK(live.size() == 1);
+        fail_next = true;
+        CHECK_THROWS_AS(values.add_int(42), std::bad_alloc);
+        CHECK_FALSE(fail_next);
+        CHECK(values.get_count() == 2);
+        std::size_t size{};
+        const auto* result = values.user_data(1, size);
+        CHECK(size == sizeof(payload));
+        CHECK(std::memcmp(result, payload, size) == 0);
+        REQUIRE(values.add_int(42));
+        CHECK(values.get_int(2) == 42);
+        CHECK(live.size() == 2);
     }
     CHECK(live.empty());
     CHECK(allocations - initial_allocations == releases - initial_releases);

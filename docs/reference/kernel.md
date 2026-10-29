@@ -149,6 +149,8 @@ Node creation releases an unpublished node if copying its value or inserting it 
 
 Arguments are `(value, uint32_t field_index)` pairs: add the value first, then add its index with `add_u_int()`. Indices must belong to the loaded entity schema, and each value type must exactly match its field type. Do not rely on implicit conversions.
 
+DataList rejects unrepresentable append sizes with `std::length_error` and allocation failures with `std::bad_alloc`. A failed single-value append or growing string replacement preserves existing values and the item count, although internal capacity may have grown.
+
 The following example uses `Player.level` declared as int32 and `Player.name` declared as string. It explicitly sets the level to `0` and the name to an empty string, while retaining configuration defaults for the other fields. The target map, instance and matching Player configuration record must already exist.
 
 ```cpp
