@@ -113,16 +113,8 @@ class scalar_publisher final
 {
 public:
     explicit scalar_publisher(const scalar_baseline& initial, snapshot_limits limits = {})
-        : limits_(limits) {
-        detail::validate_scalar_schema(initial.schema_id, limits_);
-        detail::validate_scalar_state(
-            initial.snapshot.entity_id, initial.snapshot.class_name, initial.snapshot.fields, limits_);
-        if (initial.generation == 0 || initial.revision == 0)
-        {
-            throw std::invalid_argument("Scalar generation and revision must be positive");
-        }
-        current_ = {
-            initial.schema_id, initial.generation, initial.revision, detail::copy_scalar_snapshot(initial.snapshot)};
+        : limits_(limits)
+        , current_(prepare_initial(initial, limits)) {
     }
 
     scalar_baseline baseline() const {
@@ -149,7 +141,7 @@ public:
             }
             if (before->second != value)
             {
-                delta.fields.emplace(index, detail::copy_scalar_value(value));
+                delta.fields.emplace(index, detail::direct_value{[&] { return detail::copy_scalar_value(value); }});
             }
         }
         if (delta.fields.empty())
@@ -158,7 +150,7 @@ public:
         }
         advance(delta);
         auto replacement = detail::copy_scalar_snapshot(next);
-        auto result = std::make_shared<const scalar_delta>(std::move(delta));
+        auto result = share_delta(delta);
         detail::swap_scalar_snapshots(current_.snapshot, replacement);
         ++current_.revision;
         return result;
@@ -169,13 +161,32 @@ public:
         auto delta = envelope();
         advance(delta);
         delta.removed = true;
-        auto result = std::make_shared<const scalar_delta>(std::move(delta));
+        auto result = share_delta(delta);
         ++current_.revision;
         removed_ = true;
         return result;
     }
 
 private:
+    static scalar_baseline prepare_initial(const scalar_baseline& initial, const snapshot_limits& limits) {
+        detail::validate_scalar_schema(initial.schema_id, limits);
+        detail::validate_scalar_state(
+            initial.snapshot.entity_id, initial.snapshot.class_name, initial.snapshot.fields, limits);
+        if (initial.generation == 0 || initial.revision == 0)
+        {
+            throw std::invalid_argument("Scalar generation and revision must be positive");
+        }
+        return {
+            initial.schema_id, initial.generation, initial.revision, detail::copy_scalar_snapshot(initial.snapshot)};
+    }
+
+    static std::shared_ptr<const scalar_delta> share_delta(scalar_delta& staged) {
+        return std::make_shared<const scalar_delta>(detail::direct_value{[&] {
+            return scalar_delta{staged.schema_id, staged.generation, staged.required_revision, staged.revision,
+                staged.entity_id, staged.class_name, std::move(staged.fields), staged.removed};
+        }});
+    }
+
     void require_active() const {
         if (removed_)
         {
@@ -240,7 +251,8 @@ public:
             }
             return reject();
         }
-        auto replacement = std::make_shared<const scalar_snapshot>(detail::copy_scalar_snapshot(input.snapshot));
+        auto replacement = std::make_shared<const scalar_snapshot>(
+            detail::direct_value{[&] { return detail::copy_scalar_snapshot(input.snapshot); }});
         state_ = std::move(replacement);
         generation_ = input.generation;
         revision_ = input.revision;
@@ -305,7 +317,9 @@ public:
             {
                 replacement.fields.at(index) = detail::copy_scalar_value(value);
             }
-            auto immutable = std::make_shared<const scalar_snapshot>(std::move(replacement));
+            auto immutable = std::make_shared<const scalar_snapshot>(detail::direct_value{[&] {
+                return scalar_snapshot{replacement.entity_id, replacement.class_name, std::move(replacement.fields)};
+            }});
             state_ = std::move(immutable);
         }
         revision_ = input.revision;

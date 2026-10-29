@@ -10,16 +10,19 @@
 #include "../network/doctest.h"
 
 #include "ark/kernel/entity_stream.hpp"
+#include "stream_allocation_diagnostics.hpp"
 
 namespace {
 
 bool armed{};
+const char* phase = "setup";
 std::size_t allocation_count{}, failure_position{};
 
 class allocation_failure final
 {
 public:
-    explicit allocation_failure(std::size_t position) {
+    allocation_failure(std::size_t position, const char* operation) {
+        phase = operation;
         allocation_count = 0;
         failure_position = position;
         armed = true;
@@ -28,6 +31,9 @@ public:
     ~allocation_failure() {
         armed = false;
     }
+
+private:
+    stream_test::allocation_diagnostic diagnostic_{phase, failure_position, allocation_count};
 };
 
 using namespace ark::entity_sync;
@@ -83,7 +89,8 @@ TEST_CASE("Scalar publisher construction and baseline copies preserve their sour
             std::optional<scalar_baseline> baseline;
             bool failed = false;
             {
-                allocation_failure failure(position);
+                allocation_failure failure(
+                    position, construct ? "scalar-publisher-construction" : "scalar-baseline-return");
                 try
                 {
                     if (construct)
@@ -92,7 +99,7 @@ TEST_CASE("Scalar publisher construction and baseline copies preserve their sour
                     }
                     else
                     {
-                        baseline.emplace(original.baseline());
+                        baseline.emplace(detail::direct_value{[&] { return original.baseline(); }});
                     }
                     completed = true;
                 }
@@ -127,7 +134,7 @@ TEST_CASE("Scalar publisher allocation failure preserves revision and permits on
         bool failed = false;
         std::shared_ptr<const scalar_delta> packet;
         {
-            allocation_failure failure(position);
+            allocation_failure failure(position, "scalar-publisher-update");
             try
             { packet = publisher.update(next); }
             catch (const std::bad_alloc&)
@@ -174,7 +181,8 @@ TEST_CASE("Scalar baseline allocation failures retain first-install and prior-ge
             const auto& incoming = installed ? replacement : source;
             bool failed = false;
             {
-                allocation_failure failure(position);
+                allocation_failure failure(
+                    position, installed ? "scalar-new-generation-baseline" : "scalar-first-baseline");
                 try
                 { completed = replica.apply(incoming) == scalar_apply_result::applied; }
                 catch (const std::bad_alloc&)
@@ -219,7 +227,7 @@ TEST_CASE("Scalar delta allocation failures preserve committed state and exactly
         const auto retained = replica.state();
         bool failed = false;
         {
-            allocation_failure failure(position);
+            allocation_failure failure(position, "scalar-replica-delta");
             try
             { completed = replica.apply(*packet) == scalar_apply_result::applied; }
             catch (const std::bad_alloc&)

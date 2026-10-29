@@ -134,32 +134,44 @@ inline std::map<std::uint32_t, nested_entity_snapshot> copy_children(
     std::map<std::uint32_t, nested_entity_snapshot> result;
     for (const auto& [slot, child] : input)
     {
-        result.emplace_hint(result.end(), slot, copy_entity(child));
+        result.emplace_hint(result.end(), slot, detail::direct_value{[&] { return copy_entity(child); }});
     }
     return result;
 }
 
 inline nested_entity_snapshot copy_entity(const nested_entity_snapshot& input) {
-    nested_entity_snapshot result{input.incarnation, detail::copy_scalar_snapshot(input.scalars), {}, {}};
+    std::map<std::uint32_t, nested_table_snapshot> tables;
     for (const auto& [index, table] : input.tables)
     {
-        nested_table_snapshot replacement{table.class_name, {}};
+        std::map<std::uint32_t, nested_row_snapshot> rows;
         for (const auto& [number, row] : table.rows)
         {
-            replacement.rows.emplace_hint(replacement.rows.end(), number,
-                nested_row_snapshot{row.incarnation, detail::copy_scalar_fields(row.fields)});
+            rows.emplace_hint(
+                rows.end(), number, nested_row_snapshot{row.incarnation, detail::copy_scalar_fields(row.fields)});
         }
-        result.tables.emplace_hint(result.tables.end(), index, std::move(replacement));
+        tables.emplace_hint(tables.end(), index,
+            detail::direct_value{[&] { return nested_table_snapshot{table.class_name, std::move(rows)}; }});
     }
+    std::map<std::uint32_t, std::map<std::uint32_t, nested_entity_snapshot>> containers;
     for (const auto& [index, children] : input.containers)
     {
-        result.containers.emplace_hint(result.containers.end(), index, copy_children(children));
+        containers.emplace_hint(containers.end(), index, copy_children(children));
     }
-    return result;
+    // A named owning result could move its strings when optional NRVO is absent.
+    return {input.incarnation, detail::copy_scalar_snapshot(input.scalars), std::move(tables), std::move(containers)};
 }
 
 inline nested_snapshot copy_snapshot(const nested_snapshot& input) {
     return {input.schema_id, copy_entity(input.root)};
+}
+
+// Only private, disposable candidates are consumed here. Copy the metadata
+// strings and transfer whole maps, avoiding noexcept string move construction.
+inline nested_snapshot take_snapshot(nested_snapshot& input) {
+    return {input.schema_id,
+        {input.root.incarnation,
+            {input.root.scalars.entity_id, input.root.scalars.class_name, std::move(input.root.scalars.fields)},
+            std::move(input.root.tables), std::move(input.root.containers)}};
 }
 
 inline void require(bool condition) {
@@ -382,7 +394,8 @@ inline void remember(const nested_entity_snapshot& input, lifetime_history& hist
     if (known == history.entities.end())
     {
         history_entry(history, limit);
-        history.entities.emplace(id, entity_lifetime{input.incarnation, input.scalars.class_name});
+        history.entities.emplace(
+            id, detail::direct_value{[&] { return entity_lifetime{input.incarnation, input.scalars.class_name}; }});
     }
     else
     {
@@ -498,7 +511,7 @@ inline void patch_fields(const std::map<std::uint32_t, scalar_value>& before,
         {
             consume(1, budget.values);
             value(item, static_cast<nested_scalar_type>(item.index()), budget.strings);
-            output.emplace(index, detail::copy_scalar_value(item));
+            output.emplace(index, detail::direct_value{[&] { return detail::copy_scalar_value(item); }});
         }
     }
 }
@@ -732,14 +745,13 @@ class nested_publisher final
 public:
     nested_publisher(
         const nested_stream_binding& trusted, const nested_baseline& initial, nested_stream_limits limits = {})
-        : limits_(limits) {
-        nested_detail::binding(trusted, limits_);
-        nested_detail::require(initial.generation == trusted.generation && initial.revision);
-        nested_detail::snapshot(initial.snapshot, trusted, limits_);
-        binding_ = trusted;
+        : limits_(limits)
+        , binding_(prepare_initial(trusted, initial, limits)) {
         nested_detail::remember(initial.snapshot.root, history_, limits_.max_lifetime_entries);
-        current_ = std::make_shared<const nested_baseline>(
-            nested_baseline{initial.generation, initial.revision, nested_detail::copy_snapshot(initial.snapshot)});
+        current_ = std::make_shared<const nested_baseline>(detail::direct_value{[&] {
+            return nested_baseline{
+                initial.generation, initial.revision, nested_detail::copy_snapshot(initial.snapshot)};
+        }});
     }
 
     std::shared_ptr<const nested_baseline> baseline() const {
@@ -763,9 +775,10 @@ public:
         nested_delta envelope{binding_.schema_id, binding_.generation, current_->revision, current_->revision + 1,
             std::move(change), false};
         nested_detail::delta(envelope, binding_, limits_);
-        auto packet = std::make_shared<const nested_delta>(std::move(envelope));
-        auto baseline = std::make_shared<const nested_baseline>(
-            nested_baseline{binding_.generation, current_->revision + 1, nested_detail::copy_snapshot(next)});
+        auto packet = share_delta(envelope);
+        auto baseline = std::make_shared<const nested_baseline>(detail::direct_value{[&] {
+            return nested_baseline{binding_.generation, current_->revision + 1, nested_detail::copy_snapshot(next)};
+        }});
         current_.swap(baseline);
         history_.swap(history);
         return packet;
@@ -777,12 +790,27 @@ public:
         nested_delta envelope{binding_.schema_id, binding_.generation, current_->revision, current_->revision + 1,
             {binding_.root_id, binding_.root_incarnation, {}, {}, {}}, true};
         nested_detail::delta(envelope, binding_, limits_);
-        auto packet = std::make_shared<const nested_delta>(std::move(envelope));
+        auto packet = share_delta(envelope);
         removed_ = true;
         return packet;
     }
 
 private:
+    static nested_stream_binding prepare_initial(
+        const nested_stream_binding& trusted, const nested_baseline& initial, const nested_stream_limits& limits) {
+        nested_detail::binding(trusted, limits);
+        nested_detail::require(initial.generation == trusted.generation && initial.revision);
+        nested_detail::snapshot(initial.snapshot, trusted, limits);
+        return trusted;
+    }
+
+    static std::shared_ptr<const nested_delta> share_delta(nested_delta& staged) {
+        return std::make_shared<const nested_delta>(detail::direct_value{[&] {
+            return nested_delta{staged.schema_id, staged.generation, staged.required_revision, staged.revision,
+                std::move(staged.root), staged.removed};
+        }});
+    }
+
     void active() const {
         if (removed_)
         {
@@ -808,9 +836,8 @@ class nested_replica final
 {
 public:
     explicit nested_replica(const nested_stream_binding& trusted, nested_stream_limits limits = {})
-        : limits_(limits) {
-        nested_detail::binding(trusted, limits_);
-        binding_ = trusted;
+        : limits_(limits)
+        , binding_(prepare_binding(trusted, limits)) {
     }
 
     nested_apply_result apply(const nested_baseline& input) {
@@ -832,7 +859,8 @@ public:
             }
             nested_detail::lifetime_history history;
             nested_detail::remember(input.snapshot.root, history, limits_.max_lifetime_entries);
-            auto replacement = std::make_shared<const nested_snapshot>(nested_detail::copy_snapshot(input.snapshot));
+            auto replacement = std::make_shared<const nested_snapshot>(
+                detail::direct_value{[&] { return nested_detail::copy_snapshot(input.snapshot); }});
             state_.swap(replacement);
             history_.swap(history);
             revision_ = input.revision;
@@ -870,7 +898,8 @@ public:
             nested_detail::snapshot(candidate, binding_, limits_);
             auto history = history_;
             nested_detail::remember(candidate.root, history, limits_.max_lifetime_entries);
-            auto replacement = std::make_shared<const nested_snapshot>(std::move(candidate));
+            auto replacement = std::make_shared<const nested_snapshot>(
+                detail::direct_value{[&] { return nested_detail::take_snapshot(candidate); }});
             state_.swap(replacement);
             history_.swap(history);
             revision_ = input.revision;
@@ -897,6 +926,12 @@ public:
     }
 
 private:
+    static nested_stream_binding prepare_binding(
+        const nested_stream_binding& trusted, const nested_stream_limits& limits) {
+        nested_detail::binding(trusted, limits);
+        return trusted;
+    }
+
     nested_apply_result reject() noexcept {
         state_.reset();
         failed_ = true;

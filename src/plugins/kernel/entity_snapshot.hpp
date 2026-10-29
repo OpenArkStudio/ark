@@ -38,8 +38,27 @@ struct snapshot_limits
 
 namespace detail {
 
+// Forward factories instead of owning temporaries through container/shared_ptr
+// APIs. C++20 constructs the conversion result directly in the destination;
+// even a deleted copy/move constructor is supported. The factory must return a
+// prvalue, and the adapter must be consumed synchronously within its captures.
+template<typename factory_type>
+struct direct_value
+{
+    factory_type create;
+    using value_type = std::invoke_result_t<const factory_type&>;
+
+    operator value_type() const {
+        return create();
+    }
+};
+
+template<typename factory_type>
+direct_value(factory_type) -> direct_value<factory_type>;
+
 // Construct the active alternative directly: a throwing string allocation must
-// not unwind a partially copied variant. Publish only complete values by move.
+// not unwind a partially copied variant. Do not move the result through another
+// constructor: MSVC Debug strings can allocate proxies even in noexcept moves.
 static_assert(std::is_nothrow_move_constructible_v<scalar_value>);
 static_assert(std::is_nothrow_move_assignable_v<scalar_value>);
 
@@ -55,7 +74,7 @@ inline std::map<std::uint32_t, scalar_value> copy_scalar_fields(const std::map<s
     std::map<std::uint32_t, scalar_value> result;
     for (const auto& [index, item] : input)
     {
-        result.emplace_hint(result.end(), index, copy_scalar_value(item));
+        result.emplace_hint(result.end(), index, direct_value{[&] { return copy_scalar_value(item); }});
     }
     return result;
 }
