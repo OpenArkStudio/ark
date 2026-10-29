@@ -1,5 +1,6 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
 #include <cstddef>
+#include <exception>
 #include <memory>
 #include <new>
 #include <stdexcept>
@@ -465,4 +466,108 @@ TEST_CASE("Normal plugin shutdown closes real DSO references once and remains st
     CHECK(events(1) == destroyed + 1);
     CHECK(observer.unload());
     CHECK(observer.unload());
+}
+
+namespace {
+
+unsigned failing_exit_calls{};
+bool unknown_exit_exception{};
+
+void failing_exit(ark::plugin_manager*) {
+    ++failing_exit_calls;
+    if (unknown_exit_exception)
+    {
+        throw 7;
+    }
+    throw std::runtime_error("test plugin exit exception");
+}
+
+} // namespace
+
+TEST_CASE("Plugin exit exceptions retain handles and never retry uninstall or native close") {
+    for (const bool unknown : {false, true})
+    {
+        quiet_logger logger;
+        constexpr const char* name = "ark_plugin_allocation_first";
+        ark::dynamic_library observer(name);
+
+        struct close_observer
+        {
+            ark::dynamic_library& library;
+
+            ~close_observer() {
+                CHECK(library.unload());
+            }
+        } closed{observer};
+
+        REQUIRE(observer.load(ARK_ALLOCATION_PROBE_DIR));
+        using entry = void (*)(ark::plugin_manager*, const std::string&);
+        using exit = void (*)(ark::plugin_manager*);
+        const auto set_entry = reinterpret_cast<void (*)(entry)>(observer.get_symbol("allocation_probe_set_entry"));
+        const auto set_exit = reinterpret_cast<void (*)(exit)>(observer.get_symbol("allocation_probe_set_exit"));
+        REQUIRE(set_entry != nullptr);
+        REQUIRE(set_exit != nullptr);
+
+        struct reset_callbacks
+        {
+            decltype(set_entry) reset_entry;
+            decltype(set_exit) reset_exit;
+
+            ~reset_callbacks() {
+                reset_entry(nullptr);
+                reset_exit(nullptr);
+            }
+        } reset{set_entry, set_exit};
+
+        set_entry(+[](ark::plugin_manager*, const std::string&) {});
+        set_exit(failing_exit);
+        failing_exit_calls = 0;
+        unknown_exit_exception = unknown;
+        retained_manager owner;
+        REQUIRE(owner.manager.start(0, ARK_ALLOCATION_PROBE_DIR, "", {{name, ""}}));
+        const auto before = manager_access::libraries(owner.manager);
+        REQUIRE(before.size() == 1);
+        const auto handle = library_access::handle(*before.front().second);
+        unsigned closes{};
+        const auto close = [&](ark::dynamic_library& library) {
+            ++closes;
+            return library.unload();
+        };
+        CHECK_FALSE(manager_access::stop(owner.manager, close));
+        CHECK(failing_exit_calls == 1);
+        CHECK(closes == 0);
+        CHECK(owner.manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::failed);
+        CHECK(owner.manager.get_shutdown_failure() == std::string("uninstall: ") + name);
+        const auto failure = owner.manager.get_shutdown_exception();
+        REQUIRE(failure);
+        bool observed{};
+        try
+        { std::rethrow_exception(failure); }
+        catch (const std::runtime_error& error)
+        {
+            CHECK_FALSE(unknown);
+            CHECK(std::string(error.what()) == "test plugin exit exception");
+            observed = true;
+        }
+        catch (int value)
+        {
+            CHECK(unknown);
+            CHECK(value == 7);
+            observed = true;
+        }
+        catch (...)
+        { FAIL("Plugin exit lost its exception type"); }
+        CHECK(observed);
+        const auto retained = manager_access::libraries(owner.manager);
+        REQUIRE(retained.size() == 1);
+        CHECK(retained.front().second == before.front().second);
+        CHECK(library_access::handle(*retained.front().second) == handle);
+        CHECK(retained.front().second->get_symbol("DllExitPlugin") != nullptr);
+        CHECK_FALSE(owner.manager.stop(1));
+        CHECK_FALSE(manager_access::stop(owner.manager, close));
+        CHECK(failing_exit_calls == 1);
+        CHECK(closes == 0);
+        CHECK(owner.manager.get_shutdown_exception() == failure);
+        CHECK(owner.manager.get_shutdown_failure() == std::string("uninstall: ") + name);
+    }
 }

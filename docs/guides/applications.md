@@ -101,6 +101,8 @@ Manifest loading or validation failures return exit code `1` before plugin start
 
 The launcher composes startup failure context before writing it to stderr, keeping the phase and module together instead of issuing separate stream insertions.
 
+Failure-path checks: `check-app-business-runtime` verifies readiness exceptions and retained launcher processes; `check-native-unload` verifies plugin exit exceptions and retained library handles.
+
 ## Run one application
 
 The shell and Windows helpers share one interface:

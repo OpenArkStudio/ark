@@ -145,6 +145,15 @@ public:
         {
             return false;
         }
+        if (mode_ == "ready_throw" || mode_ == "ready_throw_unknown")
+        {
+            trace("ready-throw");
+            if (mode_ == "ready_throw_unknown")
+            {
+                throw 7;
+            }
+            throw std::runtime_error("test readiness exception");
+        }
         if (native_.joinable())
         {
             native_.join();

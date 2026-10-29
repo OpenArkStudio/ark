@@ -101,6 +101,8 @@ macOS/Linux 可使用 Ctrl+C 或 `SIGTERM`，由应用主循环处理停止请�
 
 启动器先组成完整的启动失败诊断，再写入 stderr，使生命周期阶段与模块名保持在同一次应用输出中。
 
+失败路径验证：`check-app-business-runtime` 检查就绪异常与启动器进程保留；`check-native-unload` 检查插件出口异常与库句柄保留。
+
 ## 启动一个应用
 
 Shell 和 Windows 脚本使用相同参数：
