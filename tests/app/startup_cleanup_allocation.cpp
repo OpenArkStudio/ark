@@ -1,5 +1,6 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
 #include <array>
+#include <cstddef>
 #include <cstdlib>
 #include <exception>
 #include <memory>
@@ -13,6 +14,10 @@
 #include "../../src/application/startup_failure.hpp"
 
 namespace {
+// The exercised ARK_NEW allocations use ordinary new, not aligned new.
+static_assert(alignof(ark::time_wheel_data) <= __STDCPP_DEFAULT_NEW_ALIGNMENT__);
+static_assert(alignof(ark::time_wheel_vec) <= __STDCPP_DEFAULT_NEW_ALIGNMENT__);
+
 bool fail_allocations{};
 const char* active_mode = "setup";
 ark::plugin_manager* active_manager{};
@@ -81,6 +86,88 @@ void operator delete[](void* pointer, std::size_t) noexcept {
     std::free(pointer);
 }
 
+// Keep nothrow allocations in the same malloc/free family as throwing new.
+// Otherwise a sanitizer's nothrow interceptor can bypass this replacement and
+// hand memory from its operator-new family to our replacement delete/free.
+void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
+    try
+    { return ::operator new(size); }
+    catch (...)
+    { return nullptr; }
+}
+
+void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
+    try
+    { return ::operator new[](size); }
+    catch (...)
+    { return nullptr; }
+}
+
+void operator delete(void* pointer, const std::nothrow_t&) noexcept {
+    ::operator delete(pointer);
+}
+
+void operator delete[](void* pointer, const std::nothrow_t&) noexcept {
+    ::operator delete[](pointer);
+}
+
+namespace {
+
+int allocation_family_probe() {
+    void* single = ::operator new(sizeof(int), std::nothrow);
+    void* array = ::operator new[](3 * sizeof(int), std::nothrow);
+    const bool allocated = single && array;
+    ::operator delete(single);
+    ::operator delete[](array);
+    if (!allocated)
+    {
+        return 10;
+    }
+
+    // A constructor exception uses the matching nothrow placement-delete form.
+    struct construction_failure
+    {
+        construction_failure() {
+            throw 17;
+        }
+    };
+
+    bool single_threw = false, array_threw = false;
+    try
+    { (void)new (std::nothrow) construction_failure; }
+    catch (int error)
+    { single_threw = error == 17; }
+    try
+    { (void)new (std::nothrow) construction_failure[2]; }
+    catch (int error)
+    { array_threw = error == 17; }
+    if (!single_threw || !array_threw)
+    {
+        return 11;
+    }
+
+    fail_allocations = true;
+    single = ::operator new(sizeof(int), std::nothrow);
+    array = ::operator new[](3 * sizeof(int), std::nothrow);
+    const bool failed = !single && !array;
+    ::operator delete(single);
+    ::operator delete[](array);
+    bool throwing_failed = false;
+    try
+    { (void)::operator new(1); }
+    catch (const std::bad_alloc&)
+    { throwing_failed = true; }
+    if (!failed || !throwing_failed || !fail_allocations)
+    {
+        return 12;
+    }
+    ark::app_detail::write_native_stderr(
+        "Startup allocation family: success, constructor failure and persistent nullptr passed\n");
+    return 0;
+}
+
+} // namespace
+
 int main(int argc, char** argv) {
     if (argc != 2)
     {
@@ -106,6 +193,11 @@ int main(int argc, char** argv) {
         std::_Exit(86);
     });
     const std::string_view mode(argv[1]);
+    if (mode == "allocation-family")
+    {
+        // The failed allocation flag stays armed until this isolated exit.
+        std::_Exit(allocation_family_probe());
+    }
     // Call arguments belong to the setup, not the armed startup operation.
     // MSVC's empty containers may allocate before start() can enter its guard.
     const std::string library_directory;

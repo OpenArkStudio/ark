@@ -1,4 +1,12 @@
 # Copyright (c) 2026 OpenArkStudio. SPDX-License-Identifier: Apache-2.0
+execute_process(COMMAND "${PROGRAM}" allocation-family RESULT_VARIABLE result
+    OUTPUT_VARIABLE output ERROR_VARIABLE errors TIMEOUT 5)
+file(WRITE "${RUNTIME_DIR}-allocation-family.stderr.log" "${errors}")
+if(NOT result STREQUAL "0" OR NOT errors MATCHES "Startup allocation family:.*persistent nullptr passed")
+    message(FATAL_ERROR "Nothrow allocation family probe failed: ${result}\n${output}\n${errors}")
+endif()
+message(STATUS "allocation-family: scalar/array construction and persistent nothrow failures passed")
+
 foreach(mode capsule call-argument phase-record hook partial-wheel long-detail)
     execute_process(COMMAND "${PROGRAM}" "${mode}" RESULT_VARIABLE result
         OUTPUT_VARIABLE output ERROR_VARIABLE errors TIMEOUT 5)
