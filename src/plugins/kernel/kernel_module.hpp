@@ -24,6 +24,7 @@
 #include <stdexcept>
 
 #include "ark/kernel/entity.hpp"
+#include "ark/kernel/entity_nested_snapshot.hpp"
 #include "ark/kernel/entity_snapshot.hpp"
 #include "ark/kernel/static_entity.hpp"
 #include "ark/module.hpp"
@@ -207,6 +208,12 @@ public:
     virtual entity_sync::scalar_snapshot capture_scalar_snapshot(
         const entity&, std::span<const std::uint32_t>, const entity_sync::snapshot_limits& = {}) {
         throw std::logic_error("scalar snapshot capture is not supported by this Kernel implementation");
+    }
+
+    // Owner-thread capture with an explicit root/session-authorized projection.
+    virtual entity_sync::nested_snapshot capture_nested_snapshot(
+        const entity&, const entity_sync::nested_projection&, const entity_sync::nested_snapshot_limits& = {}) {
+        throw std::logic_error("Nested snapshots are not supported by this Kernel implementation");
     }
 
 protected:

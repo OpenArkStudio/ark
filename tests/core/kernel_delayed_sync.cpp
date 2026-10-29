@@ -16,6 +16,7 @@
 #include "ark/kernel/data_list_impl.hpp"
 #include "ark/kernel/kernel_module_impl.hpp"
 #include "ark/kernel/map_module_impl.hpp"
+#include "ark/kernel/nested_stream.hpp"
 
 namespace ark {
 
@@ -477,4 +478,91 @@ TEST_CASE("Kernel container swaps preserve child ownership parent bindings and c
     CHECK(first->get_u_int32(1) == 17);
     CHECK_FALSE(first_lifetime.expired());
     REQUIRE(world.kernel.update());
+}
+
+TEST_CASE("Real Kernel captures converge through trusted nested streams across rows child moves and destruction") {
+    using namespace ark::entity_sync;
+    std::shared_ptr<const nested_baseline> retained;
+    std::vector<std::shared_ptr<const nested_delta>> packets;
+    nested_stream_binding trusted;
+    nested_snapshot final_state;
+    {
+        delayed_sync_world world;
+        auto* table = world.owner->find_table(200);
+        auto* row = table->add_row(1);
+        REQUIRE(row != nullptr);
+        REQUIRE(row->set_u_int32(1, 3));
+        const auto child = world.create_child();
+        REQUIRE(child->set_u_int32(1, 9));
+        const auto id = child->get_id();
+        nested_projection selected{"owner/v1", world.owner->get_id(),
+            {"Owner", {100}, {{200, {1}}},
+                {{201, {{id, {"Item", {1}, {}, {}}}}}, {202, {{id, {"Item", {1}, {}, {}}}}}}}};
+        const auto initial = world.kernel.capture_nested_snapshot(*world.owner, selected);
+        trusted = {"owner/v1", world.owner->get_id(), initial.root.incarnation, 1,
+            {"Owner", {{100, nested_scalar_type::uint32}}, {{200, {"Item", {{1, nested_scalar_type::uint32}}}}},
+                {{201, {{id, {"Item", {{1, nested_scalar_type::uint32}}, {}, {}}}}},
+                    {202, {{id, {"Item", {{1, nested_scalar_type::uint32}}, {}, {}}}}}}}};
+        nested_publisher publisher(trusted, {1, 1, initial});
+        nested_replica replica(trusted);
+        retained = publisher.baseline();
+        REQUIRE(replica.apply(*retained) == nested_apply_result::applied);
+        auto advance = [&] {
+            auto snapshot = world.kernel.capture_nested_snapshot(*world.owner, selected);
+            const auto packet = publisher.update(snapshot);
+            REQUIRE(packet != nullptr);
+            REQUIRE(replica.apply(*packet) == nested_apply_result::applied);
+            CHECK(*replica.state() == snapshot);
+            packets.push_back(packet);
+        };
+        auto hidden_projection = selected;
+        hidden_projection.root.containers.at(201).clear();
+        hidden_projection.root.containers.at(202).clear();
+        auto restricted_binding = trusted;
+        restricted_binding.root.containers.at(201).clear();
+        restricted_binding.root.containers.at(202).clear();
+        nested_publisher restricted(
+            restricted_binding, {1, 1, world.kernel.capture_nested_snapshot(*world.owner, hidden_projection)});
+        REQUIRE(child->set_u_int32(1, 8));
+        CHECK_FALSE(restricted.update(world.kernel.capture_nested_snapshot(*world.owner, hidden_projection)));
+        CHECK(restricted.baseline()->revision == 1);
+        REQUIRE(world.owner->set_u_int32(100, 11));
+        REQUIRE(row->set_u_int32(1, 4));
+        advance();
+        REQUIRE(world.kernel.update());
+        REQUIRE(table->remove_row(1));
+        row = table->add_row(1);
+        REQUIRE(row != nullptr);
+        REQUIRE(row->set_u_int32(1, 4));
+        advance();
+        CHECK(packets.back()->root.tables.at(200).at(1).incarnation >
+              packets.back()->root.tables.at(200).at(1).required_incarnation);
+        REQUIRE(world.kernel.update());
+        table->clear();
+        row = table->add_row(2);
+        REQUIRE(row != nullptr);
+        REQUIRE(row->set_u_int32(1, 4));
+        advance();
+        const auto source = world.owner->find_container(201);
+        const auto destination = world.owner->find_container(202);
+        REQUIRE(source->remove(id));
+        REQUIRE(destination->place(7, child));
+        advance();
+        CHECK(packets.back()->root.fields.empty());
+        CHECK(packets.back()->root.tables.empty());
+        CHECK(packets.back()->root.containers.size() == 2);
+        REQUIRE(world.kernel.destroy_entity(id));
+        advance();
+        final_state = *replica.state();
+        CHECK(final_state.root.containers.at(202).empty());
+    }
+    nested_replica replay(trusted);
+    REQUIRE(replay.apply(*retained) == nested_apply_result::applied);
+    for (const auto& packet : packets)
+    {
+        REQUIRE(replay.apply(*packet) == nested_apply_result::applied);
+    }
+    CHECK(*replay.state() == final_state);
+    CHECK(
+        std::get<std::uint32_t>(retained->snapshot.root.containers.at(201).begin()->second.scalars.fields.at(1)) == 9);
 }

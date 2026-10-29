@@ -121,12 +121,14 @@ public:
         {
             throw std::invalid_argument("Scalar generation and revision must be positive");
         }
-        current_ = initial;
+        current_ = {
+            initial.schema_id, initial.generation, initial.revision, detail::copy_scalar_snapshot(initial.snapshot)};
     }
 
     scalar_baseline baseline() const {
         require_active();
-        return current_;
+        return {current_.schema_id, current_.generation, current_.revision,
+            detail::copy_scalar_snapshot(current_.snapshot)};
     }
 
     std::shared_ptr<const scalar_delta> update(const scalar_snapshot& next) {
@@ -147,7 +149,7 @@ public:
             }
             if (before->second != value)
             {
-                delta.fields.emplace(index, value);
+                delta.fields.emplace(index, detail::copy_scalar_value(value));
             }
         }
         if (delta.fields.empty())
@@ -155,7 +157,7 @@ public:
             return {};
         }
         advance(delta);
-        auto replacement = next;
+        auto replacement = detail::copy_scalar_snapshot(next);
         auto result = std::make_shared<const scalar_delta>(std::move(delta));
         detail::swap_scalar_snapshots(current_.snapshot, replacement);
         ++current_.revision;
@@ -238,7 +240,7 @@ public:
             }
             return reject();
         }
-        auto replacement = std::make_shared<const scalar_snapshot>(input.snapshot);
+        auto replacement = std::make_shared<const scalar_snapshot>(detail::copy_scalar_snapshot(input.snapshot));
         state_ = std::move(replacement);
         generation_ = input.generation;
         revision_ = input.revision;
@@ -298,10 +300,10 @@ public:
                     remaining -= text->size();
                 }
             }
-            auto replacement = *state_;
+            auto replacement = detail::copy_scalar_snapshot(*state_);
             for (const auto& [index, value] : input.fields)
             {
-                replacement.fields.at(index) = value;
+                replacement.fields.at(index) = detail::copy_scalar_value(value);
             }
             auto immutable = std::make_shared<const scalar_snapshot>(std::move(replacement));
             state_ = std::move(immutable);

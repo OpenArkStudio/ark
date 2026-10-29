@@ -30,13 +30,20 @@
 
 namespace ark {
 
+namespace entity_sync {
+class snapshot_access;
+}
+
 class row_impl final : public row
 {
 private:
     friend class kernel_module_impl;
+    friend class table_impl;
+    friend class entity_sync::snapshot_access;
 
     // row
     uint32_t row_{0};
+    std::uint64_t incarnation_{0};
 
     // table call back
     using row_callback_functor = std::function<int(const uint32_t, node*, const data&, const data&)>;

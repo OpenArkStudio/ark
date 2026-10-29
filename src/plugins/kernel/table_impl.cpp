@@ -18,7 +18,9 @@
  *
  */
 
+#include <limits>
 #include <memory>
+#include <stdexcept>
 
 #include "ark/kernel/data_impl.hpp"
 #include "ark/kernel/data_list_impl.hpp"
@@ -354,6 +356,11 @@ row* table_impl::create_row(uint32_t row, const data_list& args) {
     auto func = std::bind(&table_impl::on_row_changed, this, std::placeholders::_1, std::placeholders::_2,
         std::placeholders::_3, std::placeholders::_4);
 
+    if (last_incarnation_ == std::numeric_limits<std::uint64_t>::max())
+    {
+        throw std::overflow_error("Table row incarnation exhausted");
+    }
+
     const auto delete_row = [](row_impl* value) { ARK_DELETE(value); };
     std::unique_ptr<row_impl, decltype(delete_row)> row_ptr(
         ARK_NEW row_impl(class_meta_ptr, row, args, std::move(func)), delete_row);
@@ -365,6 +372,8 @@ row* table_impl::create_row(uint32_t row, const data_list& args) {
     {
         return nullptr;
     }
+    // No throwing work between successful insertion and identity publication.
+    row_ptr->incarnation_ = ++last_incarnation_;
     auto* published_row = row_ptr.release();
 
     if (current_row_ < row)

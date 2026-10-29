@@ -12,6 +12,7 @@
 #include "ark/kernel/class_meta.hpp"
 #include "ark/kernel/row.hpp"
 #include "ark/kernel/table_impl.hpp"
+#include "kernel_snapshot_test_access.hpp"
 
 #ifdef ARK_TABLE_ROW_FAILURE_TEST
 #ifndef NDEBUG
@@ -186,12 +187,14 @@ TEST_CASE("Kernel table null row allocation preserves records indices and succes
     REQUIRE(existing != nullptr);
     existing->set_int32(1, 17);
     fixture.events.clear();
+    const auto initial_incarnation = ark::kernel_nested_snapshot_test_access::row_counter(fixture.table);
     const auto initial_failures = failed_allocations;
     fail_next_nothrow = true;
     auto* failed = fixture.table.add_row(requested);
     CHECK_FALSE(fail_next_nothrow);
     CHECK(failed_allocations == initial_failures + 1);
     CHECK(failed == nullptr);
+    CHECK(ark::kernel_nested_snapshot_test_access::row_counter(fixture.table) == initial_incarnation);
     CHECK(fixture.table.get_row_count() == 1);
     CHECK(fixture.table.find_row(expected) == nullptr);
     CHECK(fixture.table.find_row(1) == existing);
@@ -201,6 +204,7 @@ TEST_CASE("Kernel table null row allocation preserves records indices and succes
     auto* retried = fixture.table.add_row(requested);
     REQUIRE(retried != nullptr);
     CHECK(retried->get_row() == expected);
+    CHECK(ark::kernel_nested_snapshot_test_access::row_counter(fixture.table) == initial_incarnation + 1);
     CHECK(fixture.table.get_row_count() == 2);
     REQUIRE(fixture.events.size() == 1);
     CHECK(fixture.events.front().row == expected);
@@ -240,6 +244,7 @@ TEST_CASE("Kernel table insertion exceptions release only the unpublished row an
     fixture.events.clear();
     const std::weak_ptr<ark::class_meta> schema = fixture.metadata->get_class_meta();
     const auto schema_owners = schema.use_count();
+    const auto initial_incarnation = ark::kernel_nested_snapshot_test_access::row_counter(fixture.table);
     const auto initial_releases = candidate_releases;
     bool threw = false;
     observe_allocations(fixture.table, insertion_site);
@@ -249,6 +254,7 @@ TEST_CASE("Kernel table insertion exceptions release only the unpublished row an
     { threw = true; }
     stop_observing_allocations();
     CHECK(threw);
+    CHECK(ark::kernel_nested_snapshot_test_access::row_counter(fixture.table) == initial_incarnation);
     CHECK(allocation_calls == insertion_site);
     CHECK(fixture.table.get_row_count() == 1);
     CHECK(fixture.table.find_row(expected) == nullptr);
@@ -268,6 +274,7 @@ TEST_CASE("Kernel table insertion exceptions release only the unpublished row an
     auto* retried = fixture.table.add_row(requested);
     REQUIRE(retried != nullptr);
     CHECK(retried->get_row() == expected);
+    CHECK(ark::kernel_nested_snapshot_test_access::row_counter(fixture.table) == initial_incarnation + 1);
     CHECK(fixture.table.get_row_count() == 2);
     REQUIRE(fixture.events.size() == 1);
     CHECK(fixture.events.front().row == expected);

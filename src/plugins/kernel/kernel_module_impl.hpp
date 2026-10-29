@@ -92,6 +92,9 @@ public:
 
     entity_sync::scalar_snapshot capture_scalar_snapshot(const entity& source,
         std::span<const std::uint32_t> allowed_indices, const entity_sync::snapshot_limits& limits = {}) override;
+    entity_sync::nested_snapshot capture_nested_snapshot(const entity& source,
+        const entity_sync::nested_projection& projection,
+        const entity_sync::nested_snapshot_limits& limits = {}) override;
 
 protected:
     bool destroy_self(const guid_t& self);
