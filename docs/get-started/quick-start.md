@@ -85,8 +85,7 @@ A failed plugin load or module startup callback stops later startup stages and u
 [`module_base<interface_type>`](../guides/modules.md#use-a-base-class-with-a-private-implementation)
 and [`plugin_base<derived_type>`](../guides/plugins.md#use-typed-registration-and-explicit-entries).
 The sample classes remain in their plugin's adjacent headers. They do
-not introduce a separate service interface: each inherits `module_base<module>`
-and registers under its capability-specific module RTTI key.
+not introduce a separate service interface and retain their capability-specific module RTTI keys. Timers now inherits `module_base<module, timer_module, guid_module>` to declare its actual required Utility providers; the other two samples retain `module_base<module>`. Dependency validation precedes startup hooks, and each startup phase initializes providers first. See [startup dependencies and rebuild requirements](../guides/modules.md#declare-startup-dependencies).
 
 `timers_plugin.hpp`, for example, declares a factory returning
 `std::unique_ptr<timers_module>`; `timers_module.cpp` defines it. The plugin

@@ -27,7 +27,7 @@
 
 namespace ark {
 
-class timers_module final : public module_base<module>
+class timers_module final : public module_base<module, timer_module, guid_module>
 {
 public:
     bool init() override;

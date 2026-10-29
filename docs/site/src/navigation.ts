@@ -295,6 +295,11 @@ const tree: Entry[] = [
     },
     "children": [
       [
+        "project/lifecycle-closeout",
+        "Startup and shutdown closeout",
+        "启动与停机闭环"
+      ],
+      [
         "project/plugin-organization",
         "Plugin organization",
         "插件与仓库组织"

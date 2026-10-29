@@ -84,8 +84,7 @@ macOS/Linux 使用 Ctrl+C 停止，Windows 在应用控制台输入 `exit`。Tim
 `examples/timers`、`examples/module_lifecycle` 和 `examples/entity_operations` 使用
 [`module_base<interface_type>`](../guides/modules_CN.md#用基类隐藏具体实现)
 及 [`plugin_base<derived_type>`](../guides/plugins_CN.md#用类型化注册和显式入口)。
-示例类仍放在插件同目录的头文件中，不额外引入服务接口；三者均继承
-`module_base<module>`，以对应的能力模块 RTTI 键注册。
+示例类仍放在插件同目录的头文件中，不额外引入服务接口，保留对应的能力模块 RTTI 注册键。Timers 改为继承 `module_base<module, timer_module, guid_module>`，声明实际必需的 Utility provider；另两个示例保留 `module_base<module>`。依赖验证发生在启动钩子前，每个启动阶段先执行 provider。见[启动依赖与重建要求](../guides/modules_CN.md#声明启动依赖)。
 
 以 `timers_plugin.hpp` 为例，它声明返回 `std::unique_ptr<timers_module>` 的工厂，
 由 `timers_module.cpp` 定义。插件注册工厂返回的对象，并显式导出

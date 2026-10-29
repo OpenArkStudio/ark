@@ -9,6 +9,8 @@ static_assert(
     std::same_as<decltype(&ark::module_base<ark::module>::check_config), decltype(&ark::module::check_config)>);
 static_assert(std::same_as<decltype(&ark::module_base<ark::module>::pre_update), decltype(&ark::module::pre_update)>);
 static_assert(
+    std::same_as<decltype(&ark::module_base<ark::module>::stop_accepting), decltype(&ark::module::stop_accepting)>);
+static_assert(
     std::same_as<decltype(&ark::module_base<ark::module>::ready_to_shut), decltype(&ark::module::ready_to_shut)>);
 static_assert(std::same_as<decltype(&ark::module_base<ark::module>::pre_shut), decltype(&ark::module::pre_shut)>);
 static_assert(std::same_as<decltype(&ark::module_base<ark::module>::shut), decltype(&ark::module::shut)>);
