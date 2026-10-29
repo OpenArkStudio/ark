@@ -321,6 +321,13 @@ The additional opt-in `redis-tls`, `redis-tls-untrusted-ca` and `redis-tls-wrong
 
 `ark_database_public_plugin_cancellation_tests` is a separate opt-in runner for real Redis/MySQL plugin DSOs and owned services. It observes tagged server work before `task_group::cancel(id)`, retains native cancellation/unknown results, and checks owner-thread completion and natural retirement. The evidence covers the observed IDs, effects and bounded observation window; MySQL's final zero-or-one counter is not proof of rollback or every possible retry race. `check-database` compiles this runner without starting services. See the [cancellation guide](cancellation.md) for build commands, trusted TLS, exclusive write data and precise limits.
 
+The same cancellation runner's SSL-only `mysql-transaction` mode cancels a sent
+query inside a public transaction after independent server observation. It retains
+an unconfirmed/discarded transaction result, separately checks the original
+session's disappearance and final uncommitted-write visibility, and recovers with
+an explicit new request through the existing pool. See the
+[transaction cancellation details](cancellation.md#mysql-transaction-operation-cancellation).
+
 ## Public real-service failure checks
 
 The separate `ark_database_public_failure_service_tests` executable checks wrong
@@ -409,10 +416,3 @@ owned authenticated loopback service with verified TLS and a disposable schema.
 `check-database` builds it without running service work. See the
 [isolation guide](../../docs/guides/database-isolation.md) for both invocations,
 privileges, cleanup and limits.
-
-The same cancellation runner's SSL-only `mysql-transaction` mode cancels a sent
-query inside a public transaction after independent server observation. It retains
-an unconfirmed/discarded transaction result, separately checks the original
-session's disappearance and final uncommitted-write visibility, and recovers with
-an explicit new request through the existing pool. See the
-[transaction cancellation details](cancellation.md#mysql-transaction-operation-cancellation).

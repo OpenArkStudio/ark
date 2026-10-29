@@ -252,6 +252,11 @@ INSERT 权限、强制 TLS 与可信 CA。该模式使用相同的 MySQL 环境�
 
 独立的 `ark_database_public_plugin_cancellation_tests` 手动启用模式使用真实 Redis／MySQL 插件 DSO 与自有服务，先观察带标记的服务端工作，再调用 `task_group::cancel(id)`，保留原生取消／未知结果，并检查所属线程完成和自然退出。证据仅覆盖观察到的 ID、影响及有限观察窗口；MySQL 最终计数为零或一，不证明回滚，也不覆盖全部重试竞争。`check-database` 只编译该程序，不启动服务。构建命令、可信 TLS、独占写入数据与准确边界见[取消验收指南](cancellation_CN.md)。
 
+同一取消验收程序中，仅在启用 SSL 时可用的 `mysql-transaction` 模式，先独立观察服务端工作，
+再取消公共事务内已发送的查询。程序保留未确认、要求丢弃连接的事务结果，另外检查原会话退出
+及未提交写入的最终可见性，并通过原连接池显式提交新请求验证恢复。详见
+[事务取消说明](cancellation_CN.md#mysql-事务内操作取消)。
+
 ## 公开模块真实服务负面验收
 
 独立的 `ark_database_public_failure_service_tests` 验证 Redis/MySQL 错误密码、
@@ -324,8 +329,3 @@ cmake --build database-build --target check-database-samples --parallel 2
 会话重置、相互独立的固定连接以及已提交变更的快照可见性。运行需要自有、经过认证且校验 TLS
 的 loopback 服务和可丢弃的 schema。`check-database` 只编译程序，不运行真实服务用例。
 两种运行方式、权限、清理要求和验证范围见[隔离级别指南](../../docs/guides/database-isolation_CN.md)。
-
-同一取消验收程序中，仅在启用 SSL 时可用的 `mysql-transaction` 模式，先独立观察服务端工作，
-再取消公共事务内已发送的查询。程序保留未确认、要求丢弃连接的事务结果，另外检查原会话退出
-及未提交写入的最终可见性，并通过原连接池显式提交新请求验证恢复。详见
-[事务取消说明](cancellation_CN.md#mysql-事务内操作取消)。

@@ -72,3 +72,19 @@ The independent observation window bounds its no-replay claim. The earlier
 `mysql` autocommit case retains its zero-or-one outcome rule; this mode does not
 change that contract. SSL-disabled builds reject `mysql-transaction` before
 service work.
+
+### Local transaction acceptance
+
+On **2026-10-29**, `mysql-transaction` passed with program source
+`28edd1a88c5e7179668aa387a9158d3db32a15f0` and pinned arknet
+`a0dfe09cd543e75cfb5996e537ce2fa49f2a758f`, using macOS 27.0.1 arm64,
+Apple Clang 21.0.0, Boost.Asio 1.90.0, OpenSSL 3.6.4 and a private authenticated,
+verified-TLS MySQL Community Server 8.4.13. The primary/observer IDs were `13`/`14`;
+the final counter was zero. A separate private-server general-log query counted
+exactly one pre-write and one tagged slow UPDATE. The original `mysql` and `redis`
+modes also passed, with final counters one; Redis used a separate authenticated
+7.4.2 instance. Wrong-password and untrusted-CA controls failed; SSL-disabled
+builds rejected both MySQL modes before service work. Independent queries found
+zero remaining tables/keys; both owned services exited normally and their exact
+PIDs/listeners, private data, credentials and keys were removed. This is local
+macOS Boost Debug acceptance, separate from hosted or cross-platform checks.
