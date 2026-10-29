@@ -20,6 +20,9 @@
 
 #pragma once
 
+#include <limits>
+#include <new>
+#include <stdexcept>
 #include <string>
 
 #include "ark/kernel/data.hpp"
@@ -317,14 +320,22 @@ public:
 
     bool add_string(const char* value) override {
         assert(value != nullptr);
-        dynamic_data_t* p = add_dynamic_data();
-        p->type = data_type::dt_string;
-        p->string_offset = buffer_size_;
-
-        const size_t value_size = strlen(value) + 1;
+        const size_t length = strlen(value);
+        if (length == std::numeric_limits<size_t>::max())
+        {
+            throw std::length_error("Kernel data list string exceeds its storage length");
+        }
+        const size_t value_size = length + 1;
+        buffer_capacity_for(value_size);
+        reserve_dynamic_data();
+        const size_t offset = buffer_size_;
         char* data = add_buffer(value_size);
         memcpy(data, value, value_size);
 
+        dynamic_data_t* p = data_ + data_size_;
+        p->type = data_type::dt_string;
+        p->string_offset = offset;
+        ++data_size_;
         return true;
     }
 
@@ -335,16 +346,6 @@ public:
         }
 
         assert(value != nullptr);
-        dynamic_data_t* p = add_dynamic_data();
-
-        if (nullptr == p)
-        {
-            return false;
-        }
-
-        p->type = data_type::dt_string;
-        p->string_offset = buffer_size_;
-
         size_t value_size = strlen(value);
 
         if (value_size > (size_t)length)
@@ -353,9 +354,16 @@ public:
         }
 
         value_size += 1;
+        buffer_capacity_for(value_size);
+        reserve_dynamic_data();
+        const size_t offset = buffer_size_;
         char* data = add_buffer(value_size);
         memcpy(data, value, value_size);
 
+        dynamic_data_t* p = data_ + data_size_;
+        p->type = data_type::dt_string;
+        p->string_offset = offset;
+        ++data_size_;
         return true;
     }
 
@@ -369,14 +377,17 @@ public:
     bool add_user_data(const void* data_ptr, size_t size) override {
         assert(data_ptr != nullptr);
 
-        dynamic_data_t* p = add_dynamic_data();
-        p->type = data_type::dt_userdata;
-        p->user_data_offset = buffer_size_;
-
         const size_t value_size = data::get_raw_user_data_size(size);
+        buffer_capacity_for(value_size);
+        reserve_dynamic_data();
+        const size_t offset = buffer_size_;
         char* value = add_buffer(value_size);
         data::init_raw_user_data(value, data_ptr, size);
 
+        dynamic_data_t* p = data_ + data_size_;
+        p->type = data_type::dt_userdata;
+        p->user_data_offset = offset;
+        ++data_size_;
         return true;
     }
 
@@ -698,7 +709,12 @@ public:
         }
 
         char* p = buffer_ + data_[index].string_offset;
-        const size_t size1 = strlen(value) + 1;
+        const size_t length = strlen(value);
+        if (length == std::numeric_limits<size_t>::max())
+        {
+            throw std::length_error("Kernel data list string exceeds its storage length");
+        }
+        const size_t size1 = length + 1;
 
         if (size1 <= (strlen(p) + 1))
         {
@@ -706,10 +722,10 @@ public:
             return true;
         }
 
-        data_[index].string_offset = data_size_;
-        const size_t value_size = strlen(value) + 1;
-        char* v = add_buffer(value_size);
-        memcpy(v, value, value_size);
+        const size_t offset = buffer_size_;
+        char* v = add_buffer(size1);
+        memcpy(v, value, size1);
+        data_[index].string_offset = offset;
 
         return true;
     }
@@ -793,11 +809,20 @@ public:
     }
 
 protected:
-    dynamic_data_t* add_dynamic_data() {
+    void reserve_dynamic_data() {
         if (data_size_ >= data_capacity_)
         {
+            constexpr size_t maximum = std::numeric_limits<size_t>::max() / sizeof(dynamic_data_t);
+            if (data_capacity_ > maximum / 2)
+            {
+                throw std::length_error("Kernel data list exceeds its index storage");
+            }
             size_t new_size = data_capacity_ * 2;
             dynamic_data_t* p = (dynamic_data_t*)allocator_.alloc(new_size * sizeof(dynamic_data_t));
+            if (p == nullptr)
+            {
+                throw std::bad_alloc{};
+            }
             memcpy(p, data_, data_size_ * sizeof(dynamic_data_t));
 
             if (data_capacity_ > data_size)
@@ -808,23 +833,50 @@ protected:
             data_ = p;
             data_capacity_ = new_size;
         }
+    }
 
+    dynamic_data_t* add_dynamic_data() {
+        reserve_dynamic_data();
         return data_ + data_size_++;
     }
 
-    char* add_buffer(size_t need_size) {
-        size_t new_used = buffer_size_ + need_size;
-
-        if (new_used > buffer_capacity_)
+    size_t buffer_capacity_for(size_t need_size) const {
+        constexpr size_t maximum = std::numeric_limits<size_t>::max();
+        if (need_size > maximum - buffer_size_)
         {
-            size_t new_size = buffer_capacity_ * 2;
-
-            if (new_used > new_size)
+            throw std::length_error("Kernel data list exceeds its buffer storage");
+        }
+        const size_t new_used = buffer_size_ + need_size;
+        if (new_used <= buffer_capacity_)
+        {
+            return buffer_capacity_;
+        }
+        if (buffer_capacity_ > maximum / 2)
+        {
+            throw std::length_error("Kernel data list buffer growth exceeds its storage length");
+        }
+        size_t new_size = buffer_capacity_ * 2;
+        if (new_used > new_size)
+        {
+            if (new_used > maximum / 2)
             {
-                new_size = new_used * 2;
+                throw std::length_error("Kernel data list buffer growth exceeds its storage length");
             }
+            new_size = new_used * 2;
+        }
+        return new_size;
+    }
 
+    char* add_buffer(size_t need_size) {
+        const size_t new_size = buffer_capacity_for(need_size);
+        const size_t new_used = buffer_size_ + need_size;
+        if (new_size > buffer_capacity_)
+        {
             char* p = (char*)allocator_.alloc(new_size);
+            if (p == nullptr)
+            {
+                throw std::bad_alloc{};
+            }
             memcpy(p, buffer_, buffer_size_);
 
             if (buffer_capacity_ > buffer_size)
