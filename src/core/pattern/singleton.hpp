@@ -31,7 +31,9 @@ class singleton : public noncopyable
 {
 public:
     static element_type* instance() {
-        std::call_once(once_, &singleton<element_type>::init);
+        // The C++ initialization guard serializes first access and retries if init throws.
+        static const bool initialized = (init(), true);
+        (void)initialized;
         return instance_;
     }
 
@@ -62,14 +64,10 @@ private:
         }
     }
 
-    static std::once_flag once_;
     static element_type* instance_;
     static element_type* owned_instance_;
     static bool stopped_;
 };
-
-template<typename element_type>
-std::once_flag singleton<element_type>::once_;
 
 template<typename element_type>
 element_type* singleton<element_type>::instance_ = nullptr;

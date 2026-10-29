@@ -250,9 +250,15 @@ an object is explicitly injected; `get_instance()` requires a valid active
 instance. `set_instance(nullptr)` detaches without stopping lazy initialization
 that has not yet run. Constructor exceptions still propagate and allow another
 initialization attempt. Allocation failure retains the existing null-return
-behavior. These APIs require externally serialized injection, access and
-shutdown; there is no automatic process-exit cleanup. Do not delete the internally
-owned object yourself or restore its pointer after shutdown.
+behavior. Concurrent lazy first access is synchronized; injection and shutdown
+require external serialization against access. There is no automatic process-exit
+cleanup. Do not delete the internally owned object yourself or restore its pointer after shutdown.
 
 With `ARK_BUILD_CORE_TESTS=ON`, `check-core` includes `check-singleton`, which runs
-the ownership, injection, shutdown and logger cases in a separate process.
+the ownership, injection, construction-retry, concurrent initialization, shutdown
+and logger cases in a separate process. A 30-second process guard reports failure
+with flushed case/last-completed-assertion diagnostics; the exception case also
+identifies each constructor call before entering it. An isolated 5-second
+`--probe-call-once` process first records the standard-library exception-retry
+control, including timeout or failure; that diagnostic never substitutes for
+the strict singleton suite.
