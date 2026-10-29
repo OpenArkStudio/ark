@@ -5,10 +5,12 @@
 #include "../network/doctest.h"
 
 #include "nested_stream_fixture.hpp"
+#include "stream_allocation_diagnostics.hpp"
 
 namespace {
 std::size_t fail_at{}, allocation_count{};
 bool armed{};
+const char* phase = "setup";
 } // namespace
 
 void* operator new(std::size_t size) {
@@ -34,6 +36,8 @@ void operator delete(void* memory, std::size_t) noexcept {
 using namespace ark::entity_sync;
 
 TEST_CASE("Every nested publisher allocation failure preserves its state revision and source for retry") {
+    phase = "nested-publisher-update";
+    stream_test::allocation_diagnostic diagnostic(phase, fail_at, allocation_count);
     bool completed = false;
     auto source = nested_test::changed();
     const auto structural = source.root.containers.at(201).at(1);
@@ -71,6 +75,8 @@ TEST_CASE("Every nested publisher allocation failure preserves its state revisio
 }
 
 TEST_CASE("Every nested replica allocation failure preserves its committed state and permits exactly one retry") {
+    phase = "nested-replica-delta";
+    stream_test::allocation_diagnostic diagnostic(phase, fail_at, allocation_count);
     bool completed = false;
     nested_publisher publisher(nested_test::binding(), nested_test::initial());
     auto source = nested_test::changed();
@@ -107,6 +113,8 @@ TEST_CASE("Every nested replica allocation failure preserves its committed state
 }
 
 TEST_CASE("Every first nested baseline allocation failure preserves an uninstalled receiver") {
+    phase = "nested-first-baseline";
+    stream_test::allocation_diagnostic diagnostic(phase, fail_at, allocation_count);
     bool completed = false;
     const auto baseline = nested_test::initial();
     for (std::size_t position = 1; position < 2048 && !completed; ++position)
@@ -134,6 +142,8 @@ TEST_CASE("Every first nested baseline allocation failure preserves an uninstall
 }
 
 TEST_CASE("Every nested tombstone allocation failure leaves publisher active at the old revision") {
+    phase = "nested-tombstone";
+    stream_test::allocation_diagnostic diagnostic(phase, fail_at, allocation_count);
     bool completed = false;
     for (std::size_t position = 1; position < 2048 && !completed; ++position)
     {
@@ -161,6 +171,8 @@ TEST_CASE("Every nested tombstone allocation failure leaves publisher active at 
 }
 
 TEST_CASE("A nested string patch copy fails without publishing a partial variant and can retry") {
+    phase = "nested-string-patch-copy";
+    stream_test::allocation_diagnostic diagnostic(phase, fail_at, allocation_count);
     const std::map<std::uint32_t, scalar_value> before{{7, std::string("old")}};
     const std::map<std::uint32_t, scalar_value> next{{7, std::string(256, 'x')}};
     const auto unchanged = next;
@@ -199,6 +211,8 @@ TEST_CASE("A nested string patch copy fails without publishing a partial variant
 }
 
 TEST_CASE("Every nested publisher construction allocation failure preserves the supplied owning baseline") {
+    phase = "nested-publisher-construction";
+    stream_test::allocation_diagnostic diagnostic(phase, fail_at, allocation_count);
     const auto trusted = nested_test::binding();
     auto baseline = nested_test::initial();
     baseline.snapshot.root.scalars.fields.at(2) = std::string(120, 's');
