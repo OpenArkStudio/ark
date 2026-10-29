@@ -232,3 +232,33 @@ Etcd Client also retains all five public headers and types while using typed bas
 OSS SDK uses the same typed bases and private interface-returning factory while retaining all three public headers/types, its interface RTTI key and disabled updates. Rebuild the plugin and consumers together for the public layout change. Typed unregistration replaces its undefined legacy deregistration call; the implementation remains a TODO scaffold. See [OSS SDK construction migration](../reference/directory-structure.md#typed-oss-sdk-construction) for build and test boundaries.
 
 Kafka retains all four public headers and both RdKafka callback bases while adopting typed construction and explicit entries. Its interface key and enabled frame updates remain unchanged, and the runtime plugin stays off by default. Rebuild Kafka and consumers together after the public layout change. See [Kafka construction migration](../reference/directory-structure.md#typed-kafka-construction) for driver requirements and tests without a broker connection.
+
+## Logger and singleton lifetime
+
+`logger::init(log)` borrows the host logger. Keep it alive while any plugin can
+log, and let its creator destroy it. `logger::init(nullptr)` uses the logger
+singleton's lazy creation path; repeated calls keep the current instance.
+
+For `singleton<T>`, `set_instance(pointer)` only changes the active pointer and
+never takes ownership. A lazy-created instance remains owned until explicit
+`shutdown()`, even while a borrowed pointer temporarily replaces it. Restore the
+saved pointer or detach it with `set_instance(nullptr)` before a borrowed object
+is destroyed. `shutdown()` clears the active pointer and destroys only the
+internally owned object, once. It also prevents automatic creation, including
+when called before the first `instance()`. Later `instance()` returns null unless
+an object is explicitly injected; `get_instance()` requires a valid active
+instance. `set_instance(nullptr)` detaches without stopping lazy initialization
+that has not yet run. Constructor exceptions still propagate and allow another
+initialization attempt. Allocation failure retains the existing null-return
+behavior. Concurrent lazy first access is synchronized; injection and shutdown
+require external serialization against access. There is no automatic process-exit
+cleanup. Do not delete the internally owned object yourself or restore its pointer after shutdown.
+
+With `ARK_BUILD_CORE_TESTS=ON`, `check-core` includes `check-singleton`, which runs
+the ownership, injection, construction-retry, concurrent initialization, shutdown
+and logger cases in a separate process. A 30-second process guard reports failure
+with flushed case/last-completed-assertion diagnostics; the exception case also
+identifies each constructor call before entering it. An isolated 5-second
+`--probe-call-once` process first records the standard-library exception-retry
+control, including timeout or failure; that diagnostic never substitutes for
+the strict singleton suite.
