@@ -235,3 +235,5 @@ inspect exports. They create no producer or broker connection. Kafka stays off b
 disabled-plugin core builds do not discover its dependencies. See the
 [construction migration](../../docs/reference/directory-structure.md#typed-kafka-construction)
 for the public-layout rebuild requirement and service-validation limits.
+
+`check-startup-cleanup` verifies one prepared owning capsule, a private wheel, four-stage failure, one-shot cleanup and emergency exit under persistent allocation failure. Application builds also run 14 actual-launcher/separate-DSO cases. Shared Utility/IO and business rollback remain outside this scope; see [startup-failure cleanup](../../docs/project/startup-failure-cleanup.md).

@@ -37,6 +37,7 @@
 #include "ark/plugin_manager.hpp"
 #include "ark/time/date_time.hpp"
 #include "shutdown_request.hpp"
+#include "startup_failure.hpp"
 
 using namespace ark;
 
@@ -306,32 +307,6 @@ bool main_loop(std::exception_ptr* error = nullptr) {
 #endif
 }
 
-[[noreturn]] void exit_startup_failure(const char* detail) {
-    std::string diagnostic{"Application startup failed"};
-    const auto& failure = plugin_manager::instance()->get_startup_failure();
-    if (!failure.empty())
-    {
-        diagnostic += " at ";
-        diagnostic += failure;
-    }
-    diagnostic += ": ";
-    diagnostic += detail;
-    diagnostic += '\n';
-    // Build the line before writing: separate stream insertions let concurrent
-    // console logs split the lifecycle phase from its module context.
-    std::fwrite(diagnostic.data(), 1, diagnostic.size(), stderr);
-    std::fflush(stderr);
-
-    // The diagnostic is flushed before exiting. Partially started plugins may
-    // retain live IO pools; normal static cleanup can wait for them forever.
-#ifdef ARK_PLATFORM_WIN
-    // Avoid DLL_PROCESS_DETACH and its static destructors as well as main's CRT
-    // cleanup. A failed startup has no safe plugin teardown order.
-    TerminateProcess(GetCurrentProcess(), 1);
-#endif
-    std::_Exit(1);
-}
-
 int main(int argc, char* argv[]) {
     std::chrono::milliseconds shutdown_timeout{};
     if (!parse_args(argc, argv, shutdown_timeout))
@@ -357,13 +332,13 @@ int main(int argc, char* argv[]) {
         if (!plugin_manager::instance()->start(
                 date_time::get_now_time(), manifest.plugin_library_dir, manifest.plugin_config_dir, manifest.plugins))
         {
-            exit_startup_failure("returned false");
+            app_detail::exit_startup_failure(*plugin_manager::instance(), "returned false");
         }
     }
     catch (const std::exception& error)
-    { exit_startup_failure(error.what()); }
+    { app_detail::exit_startup_failure(*plugin_manager::instance(), error.what()); }
     catch (...)
-    { exit_startup_failure("unknown exception"); }
+    { app_detail::exit_startup_failure(*plugin_manager::instance(), "unknown exception"); }
 
 #ifdef ARK_PLATFORM_WIN
     create_back_thread();

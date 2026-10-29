@@ -577,3 +577,33 @@ endif()
 if(TARGET check-entity-json)
     add_dependencies(check-core check-entity-json)
 endif()
+
+# Startup-failure cleanup is independent of ordinary stop/uninstall. Keep global
+# allocation replacement isolated, with hard process limits for emergency exit.
+add_executable(ark_startup_cleanup_tests main.cpp startup_cleanup.cpp plugin_manager_startup.cpp module_dependencies.cpp)
+set_property(TARGET ark_startup_cleanup_tests PROPERTY LINK_LIBRARIES ark::core)
+add_executable(ark_startup_cleanup_allocation_tests ../app/startup_cleanup_allocation.cpp)
+set_property(TARGET ark_startup_cleanup_allocation_tests PROPERTY LINK_LIBRARIES ark::core)
+add_custom_target(check-startup-cleanup
+    COMMAND $<TARGET_FILE:ark_startup_cleanup_tests>
+    COMMAND ${CMAKE_COMMAND} "-DPROGRAM=$<TARGET_FILE:ark_startup_cleanup_allocation_tests>"
+        "-DRUNTIME_DIR=${CMAKE_CURRENT_BINARY_DIR}/startup-cleanup-allocation"
+        -P "${PROJECT_SOURCE_DIR}/tests/app/startup_cleanup_allocation.cmake"
+    DEPENDS ark_startup_cleanup_tests ark_startup_cleanup_allocation_tests USES_TERMINAL VERBATIM)
+if(TARGET app)
+    add_library(ark_app_startup_cleanup_plugin SHARED ../app/startup_cleanup_plugin.cpp)
+    set_property(TARGET ark_app_startup_cleanup_plugin PROPERTY LINK_LIBRARIES ark::core)
+    set_target_properties(ark_app_startup_cleanup_plugin PROPERTIES PREFIX "")
+    add_custom_target(check-app-startup-cleanup
+        COMMAND ${CMAKE_COMMAND} "-DPROGRAM=$<TARGET_FILE:app>"
+            "-DPLUGIN_DIR=$<TARGET_FILE_DIR:ark_app_startup_cleanup_plugin>"
+            "-DSOURCE_ROOT=${PROJECT_SOURCE_DIR}"
+            "-DRUNTIME_DIR=${CMAKE_CURRENT_BINARY_DIR}/startup cleanup runtime"
+            -P "${PROJECT_SOURCE_DIR}/tests/app/startup_cleanup.cmake"
+        DEPENDS app ark_app_startup_cleanup_plugin USES_TERMINAL VERBATIM)
+    add_dependencies(check-startup-cleanup check-app-startup-cleanup)
+endif()
+add_dependencies(check-core check-startup-cleanup)
+add_library(ark_startup_cleanup_header_check OBJECT headers/startup_cleanup.cpp)
+set_property(TARGET ark_startup_cleanup_header_check PROPERTY LINK_LIBRARIES ark::core)
+add_dependencies(ark_startup_cleanup_tests ark_startup_cleanup_header_check)

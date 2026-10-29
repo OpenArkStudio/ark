@@ -1,12 +1,12 @@
 # Startup and shutdown closeout proposal
 
-This page records the selected lifecycle route and its delivery stages. Stage 1 adds required-provider metadata, graph validation and ordered startup. Stage 2 adds one-shot consumer-first `stop_accepting()` hooks with a compatibility default; only the controlled business fixture has migrated its root gate. Official ingress migration, reverse complete cleanup and opt-in startup-failure compensation remain subsequent work. The pre-stage-1 source review used baseline: [988dfbc0](https://github.com/OpenArkStudio/ark/tree/988dfbc048425cdb56cbe5f14314320fe698d07d). Start with the [launcher guide](../guides/applications.md) for operating instructions.
+This page records the selected lifecycle route and its delivery stages. Stage 1 adds required-provider metadata, graph validation and ordered startup. Stage 2 adds one-shot consumer-first `stop_accepting()` hooks with a compatibility default; only the controlled business fixture has migrated its root gate. Official ingress migration, reverse complete cleanup and IO startup-failure compensation remain subsequent work; independent private resources can use one prepared cleanup slot. The pre-stage-1 source review used baseline: [988dfbc0](https://github.com/OpenArkStudio/ark/tree/988dfbc048425cdb56cbe5f14314320fe698d07d). Start with the [launcher guide](../guides/applications.md) for operating instructions.
 
-The [startup-failure cleanup source map and minimum slice](startup-failure-cleanup.md) detail resource enrollment, constructor safety and IO prerequisites; this remains design work.
+The [startup-failure cleanup source map and minimum slice](startup-failure-cleanup.md) detail one-slot enrollment, constructor safety, one-shot release after failure and IO prerequisites.
 
 ## Current startup and resource ownership
 
-`plugin_manager` stores one current failure description, not a per-module startup ledger. Plugin and module storage remains unordered. After installation, the manager snapshots declared provider keys, rejects missing providers/cycles and uses a stable topological order for all four startup phases. Modules without declarations are independent; ready-node ties use lexicographic registration keys. Manifest order determines neither this order nor teardown dependencies. See [startup dependencies and rebuild requirements](../guides/modules.md#declare-startup-dependencies).
+`plugin_manager` stores the current failure description and a bounded latest-call record, not a full per-module startup ledger. Plugin and module storage remains unordered. After installation, the manager snapshots declared provider keys, rejects missing providers/cycles and uses a stable topological order for all four startup phases. Modules without declarations are independent; ready-node ties use lexicographic registration keys. Manifest order determines neither this order nor teardown dependencies. See [startup dependencies and rebuild requirements](../guides/modules.md#declare-startup-dependencies).
 
 | Boundary reached | Resources that may already exist | Failure behavior |
 | --- | --- | --- |
@@ -19,7 +19,7 @@ The [startup-failure cleanup source map and minimum slice](startup-failure-clean
 
 Concrete acquisition points matter: Net's HTTP client starts an IO pool in its constructor, Net queues clients and a health timer in `post_init()`, and Game registers Kernel callbacks and starts listeners in `post_init()`. Database connection configuration can construct native pools; its lifetime cannot be inferred from a module's last completed hook.
 
-On startup failure the launcher flushes the phase/owner diagnostic and exits `1` through `_Exit` (plus `TerminateProcess` on Windows), bypassing object/static destruction. It neither runs normal shutdown hooks nor retries. A library whose entry is missing remains loaded until process exit. `register_plugin` releases its local candidate before `install()` and records the plugin only after installation returns: recording only successful installation would miss resources published by a throwing installation. This is a cleanup-design constraint, not an existing rollback guarantee.
+On startup failure the launcher writes the phase/owner diagnostic, runs only explicitly prepared independent-resource cleanup and exits `1` through `_Exit` (plus `TerminateProcess` on Windows), bypassing object/static destruction. It neither runs normal shutdown hooks nor retries. A library whose entry is missing remains loaded until process exit. `register_plugin` releases its local candidate before `install()` and records the plugin only after installation returns: recording only successful installation would miss resources published by a throwing installation. This is a cleanup-design constraint, not an existing rollback guarantee.
 
 ## Current normal shutdown
 
@@ -64,7 +64,7 @@ The route has been selected; these are implementation boundaries, not pending po
 | --- | --- |
 | Required module-level provider declarations, with missing/cycle validation and ordered startup | Stage 1; Timers/Utility migrated, undeclared modules remain independent nodes |
 | Separate ingress quiescence while accepted tasks retain provider access | Stage 2 Core contract and controlled fixture; official Net/HTTP ingress still requires a suitable native API |
-| Gradual acquisition/phase records and opt-in compensation after startup failure, then exit `1` | Subsequent stage; immediate failure exit and no automatic rollback remain the default |
+| Gradual acquisition/phase records and opt-in compensation after startup failure, then exit `1` | One independent-resource slot and latest-call record; IO/full phase history remain later work, without automatic rollback |
 | Consumer-before-provider complete cleanup, after all active/task/readiness gates | Subsequent stage; no new general shutdown or unload guarantee is provided |
 
 ## Existing tests and remaining acceptance

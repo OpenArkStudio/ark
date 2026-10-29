@@ -1,6 +1,6 @@
 # 可选启动失败清理
 
-**仅设计，本次不实现清理 runtime。** 源码基准：[d9618a66](https://github.com/OpenArkStudio/ark/tree/d9618a663fc2069b734007812590c88736d17ed5)。[已选生命周期路线](lifecycle-closeout_CN.md)仍以启动失败立即退出 `1` 为默认；只有显式登记的自有资源先执行失败清理。不做同进程重启，不把正常 `stop()`／`pre_shut()`／`shut()` 当成回滚，不推断外部业务／事务回滚，不涉及 Registry 或热更新。
+启动失败默认立即退出 `1`；只有通过 `plugin_manager::prepare_startup_cleanup()` 预登记的独立自有资源，可先执行一次失败清理。首个切片固定一个槽位，以无业务回调的私有时间轮验证，不接入共享 Utility Timer 或 IO。原有获取点源码基准：[d9618a66](https://github.com/OpenArkStudio/ark/tree/d9618a663fc2069b734007812590c88736d17ed5)。不做同进程重试，不调用正常停服充当回滚，不推断外部业务／事务回滚；Registry 和热更新继续暂停。
 
 ## 启动失败时已经存在什么
 
@@ -27,35 +27,39 @@
 | HTTP [端点预约](https://github.com/OpenArkStudio/ark/blob/d9618a663fc2069b734007812590c88736d17ed5/src/plugins/http/http_server_module_impl.cpp#L111)先于原生构造／启动 | 后续异常会使预约缺少所有者；返回 false 分支也在释放前复制字符串。独立异常安全候选见下文。 |
 | MySQL [构造／init／configure](https://github.com/OpenArkStudio/ark/blob/d9618a663fc2069b734007812590c88736d17ed5/src/plugins/mysql/mysql_module.cpp#L218) | 构造持有状态，init 绑定所属 runtime；`configure()` 在写入具名连接表**之前**构造原生池，后续插入抛异常时线程可能已启动。固定版 arknet `a0dfe09c` 在池构造中启动 IO。 |
 
-## 最小可实施切片
+## 独立资源登记与执行
 
-首个受控模块独立持有**私有 `time_wheel_manager`**，不登记业务回调、不启动线程、不向外发布资源，也不借用 provider。这样可以验证真实 Timer 分配／部分初始化，但不声称已经能清理共享 Utility Timer 及其消费者。
-
-拟议的唯一所属线程登记操作为 `prepare_cleanup(owner_key, owning_context, release_function)`，名称只是设计占位，尚无此 API。管理器保留有界、仅属于本次启动尝试的槽位，以及强持有的 `shared_ptr<void>` 上下文；释放函数为普通函数指针，返回 `done`、`unsafe` 或 `failed`，异常由宿主捕获。不增加模块虚钩子或协程 promise；工厂显式传入上下文：
+所属线程在资源获取前创建完整的 owning capsule，并调用：
 
 ```cpp
-// 伪代码：在构造函数可能获取资源之前登记。
 auto capsule = std::make_shared<owned_timer_context>();
-prepare_cleanup(owner_key, capsule, release_timer_context);
-return std::make_unique<isolated_timer_module>(capsule, now);
+if (!manager.prepare_startup_cleanup(
+        "isolated-wheel", "my-plugin", capsule, release_timer_context)) {
+    throw std::runtime_error("startup cleanup enrollment rejected");
+}
+return std::make_unique<isolated_timer_module>(capsule);
 ```
 
-构造函数保存共享上下文，通过无异常移动把时间轮句柄写入其中，再初始化时间轮。构造抛异常时，清理不会访问未完成模块，宿主仍持有独立上下文。动作检查时间轮缺席／部分初始化状态，直接调用**自有资源的** `time_wheel_manager::shut()`，随后清空句柄并报告完成；不调用 `timer_module_impl::pre_shut()`，也不触发定时器回调。启动成功后，由完整模块继续持有资源，解除本次尝试的清理登记，不清理正常运行资源。
+API 接收 owner 键、代码所有者键、强持有的 `shared_ptr<void>` 和普通函数指针 `startup_cleanup_result (*)(void*)`。两个键均为非空、无 NUL、最多 95 字节；固定容量为 **1**，满槽、无效输入、错误线程、重入执行器或已结束启动均返回 false，登记本身 `noexcept` 且不分配。失败后不得获取本次资源。上下文分配失败发生在获取之前，走默认退出。
 
-![拟议启动清理与保留失败退出](../assets/startup-failure-cleanup_CN.svg)
+允许启动前 idle 或启动／安装阶段预登记，但只在一次 `start()` 已返回 false 或抛异常并展开后，才可执行失败清理。启动尝试结束后不能再次 start。同进程嵌入调用者必须在清理后退出 `1`；清理函数不会提供重试或恢复入口。启动前、尚未进入 start 的独立构造异常仍采用原有 RAII／默认退出。
 
-区分两类记录：
+构造函数保存 capsule，通过无异常移动把时间轮句柄交给它，再初始化。未完成模块的析构不参与清理；宿主在构造抛异常后仍持有 capsule。动作检查缺席／部分时间轮，调用**自有资源** `time_wheel_manager::shut()` 后清空句柄，返回 `done`。不调用模块 `pre_shut()`／`shut()`，不触发业务回调。永久测试的私有 wheel 不启动线程、不向外发布，也不借用 provider；它不授权共享 Utility Timer 的消费者清理。
 
-| 记录 | 最小字段／更新规则 |
+![启动失败清理与保留失败退出](../assets/startup-failure-cleanup_CN.svg)
+
+| 记录 | 有界范围与含义 |
 | --- | --- |
-| 对象／阶段 | 预先确定的 owner／DSO 键；构造、安装及四个钩子分别记录未进入、已进入、通过、返回 false 或异常。**调用用户代码前**记录进入，返回后记录结果；失败清理中不再调用虚命名方法。 |
-| 资源动作 | 获取前预留槽位，独立自有上下文、代码所有者、释放进入标记和释放结果。由上下文持有部分获取；缺少「已获取」标记不能证明资源不存在。 |
+| `get_startup_call()` | 仅保留最近进入的受宿主管理调用：插件构造／install、加载／依赖检查、四个模块钩子。owner 95 字节、phase 23 字节固定缓冲，调用前记录进入，返回后记录通过／false，异常时记录 exception；不是全部对象的阶段历史。依赖检查不会据此推断资源。 |
+| 自有资源槽 | 获取前固定键、strong capsule、代码所有者、action 进入标记及结果。由 capsule 表达真实部分获取；阶段和缺少 acquired 标记都不证明资源不存在。 |
 
-外层启动调用已经返回／展开后，先关闭继续登记／新根接收并保护生命周期／registry 重入，再在所属线程对符合条件的独立动作执行一次；即使全部成功，也退出 `1`。首个切片只需一个槽位；后续独立槽位可逆登记顺序访问，**不构成**通用反向依赖保证。遇到不安全结果／异常即停止，继续保留其余所有者并走相同失败退出。不运行普通更新循环、管理器 stop、卸载入口或 DSO close。**全部已加载代码和未回收所有者保留到退出**，包括动作函数、上下文／控制块析构代码及回调接收者；部分安装但未进入成功插件表的对象同样适用。
+启动器先保留主失败诊断，再在外层 start 已返回／展开后调用 `cleanup_failed_startup()`。管理器封闭新登记及 managed task root admission，不 cancel、不 poll；保护生命周期／registry 重入。动作最多调用一次，`unsafe`／`failed`／异常均保持失败；异常由宿主捕获。重复调用返回缓存结果，既不重复释放，也不调用正常 stop、uninstall 或 DSO close。成功启动只解除尝试登记，完整模块必须继续持有 capsule。
 
-槽位、标签和上下文须在获取资源前完成有界分配；容量耗尽或分配失败在本次获取前终止登记。原有上下文／DSO 继续保留，启动器走默认失败退出。获取后不得再依赖临时 `std::function` 捕获、vector 扩容或标签复制。未登记的获取保留原有 RAII／立即退出行为；登记表不会修复任意构造展开，也不改变原有 RAII 析构调用。
+清理后无论结果如何都退出 `1`。全部已加载代码、未回收所有者及 capsule／控制块析构代码保留到进程退出；即使动作返回 done，也不在失败路径销毁 capsule。普通未登记模块、部分安装但未进入成功插件表的对象和原有构造展开保持既有行为。动作必须独立、有限且不会阻塞；宿主不能抢占一个阻塞函数。
 
-**已有分配失败路径缺口，仅据源码推导：** `exit_startup_failure()` 在到达退出调用前构造／拼接 `std::string`。main 的异常处理分支调用它时，持续分配失败可能再次抛异常，从而在 `_Exit` 前逃出处理分支。专项子进程复现应在启动异常前启用持续全局分配失败，检查退出／状态／诊断；**本次文档任务未执行该复现**。runtime 实施前须补充无分配、有界的紧急诊断／退出路径，不需要改变生命周期顺序；本提交不修改源码。
+紧急诊断使用 1024 字节栈缓冲和原生 stderr 写入，保留 phase／owner 优先于异常详情，超长文本截断；不构造字符串、格式化日志或调用虚命名方法。若分配故障打断普通阶段诊断构建，使用固定调用记录。Windows 继续 `TerminateProcess`，其余平台继续 `_Exit(1)`，绕过正常析构。原生写失败也继续退出。
+
+**兼容性：** 不增加 module 虚方法，不改变正常停服顺序；`plugin_manager` 新增内联状态，改变公开类布局，宿主和全部插件／消费方须使用同一头文件重新构建。不得混用旧二进制。
 
 **独立 HTTP 候选，不等于框架失败清理：** 预约成功后，构造／绑定／启动或后续 `listen_key_ = endpoint` 复制抛异常，可使 `http_endpoints` 残留预约。可用 cpp 私有的局部预约所有者在 false／异常时只释放自己持有的键，原生启动成功后用无异常字符串 swap 转交。无需公开注入 API，也不改变生命周期。独立分配故障测试可在单独翻译单元编译生产 cpp，在内部集合已包含该键后的首个分配点、工作线程创建前注入失败，随后要求同端点可复用；保留既有重复所有者／重启检查，并证明最终提交不分配字符串。这里只给据源码推导的复现计划，未执行。
 
@@ -65,11 +69,13 @@ Net／HTTP／MySQL 接入前，先证明构造／成员展开不会丢失活跃�
 
 固定版 arknet 的 `io_pool::stop()` 可能等待／join；MySQL 的[回收](https://github.com/OpenArkStudio/ark/blob/d9618a663fc2069b734007812590c88736d17ed5/src/plugins/mysql/detail/mysql_service.hpp#L432)使用 `close_and_wait()`，服务 `stop()` 仅请求关闭／抑制回调。见[固定版原生池](https://github.com/OpenArkStudio/arknet/blob/a0dfe09cd543e75cfb5996e537ce2fa49f2a758f/include/arknet/mysql/pool.hpp#L972)。这些不是非阻塞启动失败清理契约。登记前必须有现成或单独评审的「请求／已回收」观察、有界宿主驱动及回调策略；不能用分离线程隐藏阻塞关闭，也不在这里增加 promise 或补偿事务。关闭本地池不证明 SQL／业务回滚，也不改写未知原生结果。
 
-## runtime 交付前验收
+## 有限验收
 
-扩展永久 C++ 工厂／启动器测试：时间轮获取前／后构造抛异常、部分登记后 install 抛异常、四阶段 false／异常、清理完成／不安全／抛异常／重复进入，以及上下文／槽位／阶段记录／紧急诊断处的分配失败。要求符合条件的释放在退出 `1` 前恰好执行一次，主启动失败保留，没有后续启动、正常停机、卸载或 DSO close，也不通过未完成 `this` 释放资源。已有[工厂拒绝测试](https://github.com/OpenArkStudio/ark/blob/d9618a663fc2069b734007812590c88736d17ed5/tests/core/plugin_construction.cpp#L263)与[真实监听器失败测试](https://github.com/OpenArkStudio/ark/blob/d9618a663fc2069b734007812590c88736d17ed5/tests/app/startup_failures.cmake)只验证较早的有限契约，不证明本提案的清理。此处不声称 runtime 或托管验收通过。
+`cmake --build <build> --target check-startup-cleanup --parallel 1` 运行常驻 C++ 测试：四阶段 false／异常、单槽拒绝／错误线程、成功解除登记、unsafe／异常／重复清理与重入；真实 launcher 加载独立 DSO，覆盖获取前／部分／完成后的构造异常、部分安装异常及四阶段失败，检查释放一次、exit1、没有后续 update／正常停服／uninstall／DSO 或 capsule 析构。隔离分配故障子进程保持 global new 持续失败直到真实紧急退出，验证 capsule 分配失败、无分配登记／记录、阶段诊断失败及部分 wheel 初始化失败。原有未登记真实监听器场景由 `check-app-startup-failures` 保留。
 
-两项 IO 决策确实需要应用信息，不阻塞私有时间轮切片：
+这些是本机有限模块／私有资源验收，不证明 IO 回收、业务回滚或托管平台通过；原始日志留在本地 receipt。HTTP 异常候选仍未修复或执行复现。
+
+以下两项 IO 决策保留 TODO，不阻塞私有时间轮切片：
 
 1. 哪个 IO 所有者首先接入；它已接收的启动操作中，哪些必须完成、哪些允许取消？源码不能替业务选择完成策略。
 2. 该部署允许启动失败清理等待多少绝对时间？超时仍保留所有者并退出 `1`；具体数值须来自运维要求，且不能抢占阻塞 API。

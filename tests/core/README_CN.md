@@ -176,3 +176,5 @@ XXTEA 用例覆盖精确长度分配的短密钥、16 字节与内嵌零字节�
 并加载真实生产动态库检查导出。测试不创建生产者、不连接 broker。Kafka 继续默认关闭；
 关闭插件的核心测试不发现其依赖。公开布局重建要求与服务验收边界见
 [构造迁移](../../docs/reference/directory-structure_CN.md#kafka-类型化构造)。
+
+`check-startup-cleanup` 验证一个预登记 owning capsule、私有时间轮、四阶段失败、一次性清理与持续分配故障紧急退出；启用应用时，还运行真实 launcher／独立测试 DSO 的 14 个场景。它不接入共享 Utility 或 IO，也不证明业务回滚；见[启动失败清理](../../docs/project/startup-failure-cleanup_CN.md)。

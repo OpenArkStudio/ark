@@ -101,7 +101,7 @@ Manifest loading or validation failures return exit code `1` before plugin start
 
 </Aside>
 
-The launcher composes startup failure context before writing it to stderr, keeping the phase and module together instead of issuing separate stream insertions.
+The launcher retains startup diagnostics in a 1024-byte stack buffer and writes native stderr, truncating long text and continuing to exit under persistent C++ allocation failure. Only an independent owning capsule explicitly prepared in the single cleanup slot may run one failure action first; exit remains `1` with no normal shutdown or unload. Shared Utility/IO are not enrolled; see [startup-failure cleanup](../project/startup-failure-cleanup.md).
 
 Failure-path checks: `check-app-business-runtime` covers the original 13 drain/readiness/retention scenarios plus `drain_admission` and three admission-hook failure cases (17 total) using the real launcher and a controlled test plugin; `check-native-unload` verifies plugin exit exceptions and retained library handles. These tests do not provide partial-startup rollback or dependency-ordered teardown. The [startup and shutdown closeout proposal](../project/lifecycle-closeout.md) records resource acquisition boundaries, current native-retirement limits and the selected route and stages that remain before adding those guarantees.
 

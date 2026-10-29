@@ -101,7 +101,7 @@ macOS/Linux 可使用 Ctrl+C 或 `SIGTERM`，由应用主循环处理停止请�
 
 </Aside>
 
-启动器先组成完整的启动失败诊断，再写入 stderr，使生命周期阶段与模块名保持在同一次应用输出中。
+启动器用 1024 字节栈缓冲和原生 stderr 写入保留启动失败诊断，超长文本截断，持续 C++ 分配失败也继续退出。只有通过单槽 API 预登记的独立 owning capsule 可先执行一次失败清理；随后仍退出 `1`，不调用正常停服或卸载。共享 Utility／IO 未接入，见[启动失败清理](../project/startup-failure-cleanup_CN.md)。
 
 失败路径验证：`check-app-business-runtime` 通过真实启动器与受控测试插件覆盖原有 13 个排空／就绪／保留场景，并增加 `drain_admission` 和三个停止接收钩子失败场景，共 17 个；`check-native-unload` 检查插件出口异常与库句柄保留。这些测试不提供部分启动回滚或按依赖顺序清理的保证。[启动与停机闭环提案](../project/lifecycle-closeout_CN.md) 记录资源获取边界、当前原生资源回收限制，以及已选路线中尚未实施的阶段。
 
