@@ -64,6 +64,8 @@ cmake --build hash-header-build --target check-murmur-hash-header
 `check-kernel-initialization` 从 `resource/meta/` 加载真实元数据和静态数据，
 分别使用资源相对路径及以 `/` 开头的旧路径，验证内核与配置模块的四种初始化顺序，共八种组合。
 
+`entity_nested_snapshot.cpp` 覆盖拥有型根／表格／容器捕获、显式子授权、Schema 局部索引、行号／GUID 复用、清空与回调异常、聚合上限、重复引用／环及存续期计数不回绕。行分配／插入失败测试同时检查失败添加不消耗标记。`check-kernel-plugin` 经真实已加载虚接口捕获嵌套状态，并在正常停止后保留值。
+
 `entity_snapshot.cpp` 使用真实 Entity／定义对象，检查独立拥有的显式标量捕获、全部受支持原生类型、整数／GUID 边界、有限浮点值、二进制字符串、不创建节点的惰性零值、隐藏字段排除、源销毁、限额，以及失败后源保持不变。头文件消费者还在关闭 Protobuf 时编译独立的快照值契约。
 
 捕获测试通过 `kernel_module` 指针调用。`entity_snapshot_interface.cpp` 保留一份只实现原有纯虚接口的外部源码实现，检查它仍可实例化、默认方法抛出 `logic_error`、自定义覆写及框架覆写。

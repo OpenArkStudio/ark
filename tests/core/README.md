@@ -80,6 +80,8 @@ exit code 1 with a manifest diagnostic, including on Windows, and is included in
 `resource/meta/`. It checks four kernel/config initialization orders with both
 resource-relative paths and legacy paths beginning with `/`, for eight combinations.
 
+`entity_nested_snapshot.cpp` checks owning root/table/container captures, explicit child authorization, schema-local indices, row/GUID reuse, clear and callback exceptions, aggregate limits, duplicate references/cycles and non-wrapping lifetime counters. Row allocation/insertion failure tests also verify that failed additions consume no incarnation. `check-kernel-plugin` captures nested state through the actual loaded virtual interface and retains values after normal stop.
+
 `entity_snapshot.cpp` uses real Entity/schema objects to check owning selected scalar
 capture, every supported native type, integer/GUID boundaries, finite floating values,
 binary strings, typed lazy zeroes without node creation, hidden-field exclusion,

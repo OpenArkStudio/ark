@@ -1,6 +1,6 @@
 # General Entity replication design
 
-**Proposal for discussion.** Owning scalar capture and revisioned scalar publication are available. This proposal adds a bounded root projection containing tables and container children; it does not change room v1, add public APIs or choose a wire representation. [Current capability](../concepts/entity-sync.md) remains the supported boundary.
+**Selected direction; staged delivery.** Owning scalar capture/publication and [owning nested capture](../reference/kernel.md#owning-nested-snapshots) are available. Nested differ/replica work follows separately. The target is a bounded root projection containing tables and container children; room v1 remains unchanged and no nested wire representation is selected. [Current capability](../concepts/entity-sync.md) remains the supported boundary.
 
 ## Existing constraints determine the design
 
@@ -82,7 +82,7 @@ stateDiagram-v2
     NeedBaseline --> Active: Authorized complete baseline
     Active --> Active: Matching delta or valid duplicate
     Active --> Invalid: Gap / invalid identity / overflow / revoked projection
-    Invalid --> NeedBaseline: Reconnect (initial recommendation)
+    Invalid --> NeedBaseline: Reconnect (selected recovery)
     Active --> Removed: Ordered root tombstone
     Removed --> NeedBaseline: New authorized lifetime / stream
 ```
@@ -93,19 +93,19 @@ Recheck authorization before sender admission. Expansion needs a replacement pro
 | --- | --- |
 | Captured root | Maximum depth, entities, rows, fields and total text/value bytes, including schema/identity metadata; reject before publishing an incomplete baseline. Iteration and copying must fit a per-flush work budget. |
 | Sender/receiver | Encoded baseline/delta bytes, pending batches/bytes/age, concurrent captures/encodes and candidate-state memory. Bound both the old committed tree and replacement candidate, not only patch size. |
-| Lifetime bookkeeping | Active row tokens, retired/tombstone identities and retained immutable handles; scope to a bounded session/generation, release on disconnect. Exhausted counters require a fresh generation or termination, never wrap. |
+| Lifetime bookkeeping | Active row tokens, retired/tombstone identities and retained immutable handles; scope to a bounded session/generation, release on disconnect. Exhausted lifetime counters require replacing the affected source lifetime or terminating; changing only a stream generation never resets a table counter. |
 | Delivery/recovery | Bound baseline/reset attempts and reconnect rate. Oversize, capture/encoding failure or enqueue/send rejection closes the affected stream/connection. No silent delta drop, implicit retry or ACK/replay history. |
 
 Copy selected scalars, row values and child/slot identities into owned immutable publications. Never hand borrowed Entity/table/row/node pointers to IO. Asynchronous encoding, if later selected, must preserve publication order and bound in-flight work. `snapshot_limits` bounds scalar field/text state, not exact process memory or encoded Protobuf size. Room v1's 8192-byte body and eight-frame pending limit remain sample-specific; do not inherit them as general replication defaults. Fragmentation would require bounded assembly and atomic install and is excluded from the initial scope.
 
-## Decisions before API or wire work
+## Selected decisions and delivery stages
 
-| Decision | Recommended starting point | Alternative and cost |
+| Decision | Selected boundary | Deferred alternative and cost |
 | --- | --- | --- |
 | 1. Stable rows | Preserve current row numbers and add a lifetime token in the replication layer; verify every successful insert/delete/clear path. | Start with a new table generation and complete table replacement on structural changes, with row-number patches only inside that generation. This avoids row-token hooks initially but increases copying/bandwidth. An opaque permanent row ID changes the identity model further. |
 | 2. Consistency across roots | Keep one root atomic; exclude cross-root transfer from incremental MVP and require explicit affected-root baselines. | A coordinated transfer across roots needs a new transaction/ordering contract and authorization failure semantics. Existing container swap callbacks do not supply it. |
 | 3. Subscription reset/recovery | Begin with reconnect-only recovery and fixed projections per connection, matching room v1's recovery scope. | In-place per-root resets avoid disconnecting unrelated roots but require generation negotiation, discard rules for queued old deltas, revocation handling and reset-rate bounds. |
 
-After these choices, the smallest useful implementation is an owning nested capture plus a root differ/replica, tested in-process before a separately reviewed codec. Reuse `capture_scalar_snapshot` for each authorized Entity's scalar leaf; reuse `scalar_value` for row columns. Keep existing scalar publishers for scalar-only roots. A nested coordinator needs one outer revision for scalar, table and relationship changes; feeding only scalar deltas through today's publisher cannot advance a table-only revision or atomically commit the tree. This does not require changing today's scalar API or room messages.
+Stage 1 provides owning nested capture, lifetime identities and bounded explicit projection input. Stage 2 delivers the root differ/replica separately; its atomic commits and recovery remain a design target here. Test that core in-process before a separately reviewed codec. Reuse `capture_scalar_snapshot` for each authorized Entity's scalar leaf; reuse `scalar_value` for row columns. Keep existing scalar publishers for scalar-only roots. A nested coordinator needs one outer revision for scalar, table and relationship changes; feeding only scalar deltas through today's publisher cannot advance a table-only revision or atomically commit the tree. This does not require changing today's scalar API or room messages.
 
 Acceptance must exercise `{1,2,3} → {1,3} → {1,2(new),3}`, identical-value row reuse, clear/re-add, slot reuse/swap/detach/destroy, container-only changes, two recipients with different permissions, revocation while queued, late join, duplicates/gaps, schema/type mismatch, GUID reuse, counter exhaustion, allocation/admission failure and shutdown with retained owning values. Compare final authorized projections from immediate/deferred paths. Wire work then needs C++/C# parity, malformed-input/golden tests and real two-client Godot integration; local correctness does not establish deployment or capacity.

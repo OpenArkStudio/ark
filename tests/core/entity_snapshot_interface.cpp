@@ -172,6 +172,7 @@ TEST_CASE("Kernel capture defaults preserve source subclasses and support virtua
     legacy_snapshot_kernel legacy;
     ark::kernel_module* kernel = &legacy;
     CHECK_THROWS_AS(kernel->capture_scalar_snapshot(source, {}), std::logic_error);
+    CHECK_THROWS_AS(kernel->capture_nested_snapshot(source, {}), std::logic_error);
     custom_snapshot_kernel custom;
     kernel = &custom;
     CHECK(kernel->capture_scalar_snapshot(source, {}).entity_id == 123);
@@ -181,4 +182,7 @@ TEST_CASE("Kernel capture defaults preserve source subclasses and support virtua
     CHECK(snapshot.entity_id == 7);
     CHECK(snapshot.class_name == "Source");
     CHECK(snapshot.fields.empty());
+    const auto nested = kernel->capture_nested_snapshot(source, {"source/v1", 7, {"Source", {}, {}, {}}});
+    CHECK(nested.root.scalars == snapshot);
+    CHECK(nested.root.incarnation != 0);
 }

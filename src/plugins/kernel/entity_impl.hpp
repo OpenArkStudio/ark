@@ -73,6 +73,7 @@ private:
 
     // object unique id
     guid_t guid_{null_guid};
+    std::uint64_t incarnation_{0};
 
     // config id
     id_type config_id_{0};

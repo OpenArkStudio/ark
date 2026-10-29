@@ -305,6 +305,38 @@ The caller must authorize and explicitly select every field. An empty selection 
 
 Capture requires stable schema/nodes on the source's owner thread for the duration of the call. It does not synchronize concurrent mutation. This API does not alter delayed-sync callbacks, authorize fields, define a wire format or provide transport/delivery guarantees. Its aggregate value types can also be constructed directly; capture validation does not validate arbitrary caller-constructed snapshots. Call capture through the existing `kernel_module` pointer returned by the plugin manager. The independent `check-kernel-plugin` host links only the public interface and calls the actual loaded Kernel DSO, including owning values retained after normal entity destruction and plugin stop. This does not certify arbitrary hot update or caller-retained Entity lifetimes after unloading.
 
+### Owning nested snapshots
+
+`<ark/kernel/entity_nested_snapshot.hpp>` adds value-only table/row/container-tree snapshots. Call `kernel_module::capture_nested_snapshot()` on the owner thread with a stable source and an explicitly authorized `nested_projection`. The projection binds a nonzero root GUID, application `schema_id`, class names, scalar indices, table-column selections and individual allowed child GUIDs. Missing members/children are denied; empty selections never mean all fields. A table selection covers all its rows. Child projections authorize their own fields and descendants; container access alone does not select children. Capture validates actual schema-local indices/types, not session credentials or the meaning of the application schema ID.
+
+```cpp
+ark::entity_sync::nested_projection projection{
+    "inventory/v1", player->get_id(),
+    {"GuestPlayer", {100, 104}, {{200, {1}}},
+        {{201, {{item->get_id(), {"Item", {1}, {}, {}}}}}}}};
+auto snapshot = kernel->capture_nested_snapshot(*player, projection);
+```
+
+Snapshots own every selected scalar value, row key/incarnation and child GUID/incarnation/slot relationship. A declared but unmaterialized table/container is captured as empty; lazy scalar/column values retain their type-correct zero without materialization. Tables use the referenced row class's indices. Container child class bindings are checked even for absent children; field/type checks apply when an authorized child is present. Selected duplicate GUIDs/references, cycles, zero slots, stale parent relationships, unsupported values and non-finite selected values are rejected. No custom fields or arbitrary entity implementations are captured.
+
+| Limit | Default / scope |
+| --- | --- |
+| `max_depth` | 8; root depth is zero; bounds projection input and captured tree |
+| `max_entities` | 1024; bounds projection nodes, captured entities and separately the total inspected container entries, including hidden entries in selected nonempty containers |
+| `max_rows` | 65536; total rows across captured tables |
+| `max_fields` | 65536; scalar values plus selected table/container members, aggregated separately for projection input and captured state |
+| `max_string_bytes` | 1 MiB; schema ID, class names and selected byte strings, including embedded NULs; checked separately for projection input and captured state |
+
+Invalid bindings/selections/values throw `std::invalid_argument`; exceeded limits throw `std::length_error`; allocation failures propagate. Capture returns no partial snapshot and leaves the source unchanged. These structural/text bounds do not measure encoded size or exact heap use. Results remain usable after source mutation/destruction and normal Kernel stop; no borrowed pointer or plugin-owned polymorphic handle is included.
+
+Each row's incarnation is committed after successful map insertion and before the add callback. Allocation/insertion failure consumes no row incarnation; an add callback exception leaves its already published row/incarnation present. Delete/clear callbacks precede erasure, so their exceptions preserve the rows when the callback does not mutate them. Structural table reentry from callbacks is not newly supported. Successful delete/re-add receives a new incarnation even for the same row number and values; clear never resets the counter. Row counters belong to one table lifetime and reject exhaustion with `std::overflow_error`, without wrapping.
+
+Entity incarnations are allocated monotonically within one loaded `entity_impl` implementation copy. They distinguish a new Entity with a reused GUID, but are not process-global across multiple implementation copies, durable across restart, or stable across DSO reload. Start a new replication stream across such boundaries. Failed construction may consume an Entity incarnation; it never permits reuse or wrapping. Counter exhaustion rejects creation with `std::overflow_error`.
+
+**Breaking ABI change:** the new virtual Kernel method and Entity/row/table implementation layout changes require rebuilding all plugins, hosts and consumers together. Do not load old binaries with these headers. Source subclasses may keep the default method, which throws `std::logic_error`. The independent `check-kernel-plugin` host exercises the actual loaded virtual method and retains nested values after child destruction, table clearing and normal stop.
+
+This stage provides capture only: no nested differ/replica, atomic nested commit, stream generation/revision, sender queue or codec. Existing scalar APIs and room v1 messages are unchanged. Applications must bind authorization and retain fixed projections for their stream. The [replication design](../project/entity-replication-design.md) records the selected later-stage consistency/recovery boundaries.
+
 ## Maps and data conversion
 
 Each map is identified by `map_id` and can have multiple instances. `create_map_instance()` returns an instance ID on success or `-1` on failure. `switch_map()` moves an existing entity to a target instance; the target map and instance must already exist.
