@@ -159,3 +159,75 @@ TEST_CASE("Every nested tombstone allocation failure leaves publisher active at 
     }
     CHECK(completed);
 }
+
+TEST_CASE("A nested string patch copy fails without publishing a partial variant and can retry") {
+    const std::map<std::uint32_t, scalar_value> before{{7, std::string("old")}};
+    const std::map<std::uint32_t, scalar_value> next{{7, std::string(256, 'x')}};
+    const auto unchanged = next;
+    const std::map<std::uint32_t, scalar_value> sentinel{{99, true}};
+    bool completed = false;
+    std::size_t failures{};
+    for (std::size_t position = 1; position < 16 && !completed; ++position)
+    {
+        auto output = sentinel;
+        nested_detail::patch_budget budget(nested_stream_limits{});
+        allocation_count = 0;
+        fail_at = position;
+        armed = true;
+        bool failed = false;
+        try
+        {
+            nested_detail::patch_fields(before, next, output, budget);
+            completed = true;
+        }
+        catch (const std::bad_alloc&)
+        { failed = true; }
+        armed = false;
+        CHECK(next == unchanged);
+        if (failed)
+        {
+            ++failures;
+            CHECK(output == sentinel);
+            nested_detail::patch_budget retry_budget(nested_stream_limits{});
+            nested_detail::patch_fields(before, next, output, retry_budget);
+        }
+        CHECK(output.at(7) == next.at(7));
+        CHECK(output.at(99) == scalar_value{true});
+    }
+    CHECK(completed);
+    CHECK(failures >= 2); // Both the map node and the owned string can fail.
+}
+
+TEST_CASE("Every nested publisher construction allocation failure preserves the supplied owning baseline") {
+    const auto trusted = nested_test::binding();
+    auto baseline = nested_test::initial();
+    baseline.snapshot.root.scalars.fields.at(2) = std::string(120, 's');
+    baseline.snapshot.root.tables.at(200).rows.at(1).fields.at(2) = std::string(80, 'r');
+    baseline.snapshot.root.containers.at(201).at(1).tables.at(200).rows.at(1).fields.at(2) = std::string(80, 'c');
+    const auto unchanged = baseline.snapshot;
+    bool completed = false;
+    for (std::size_t position = 1; position < 2048 && !completed; ++position)
+    {
+        allocation_count = 0;
+        fail_at = position;
+        armed = true;
+        bool failed = false;
+        try
+        {
+            nested_publisher publisher(trusted, baseline);
+            completed = publisher.baseline() != nullptr;
+        }
+        catch (const std::bad_alloc&)
+        { failed = true; }
+        armed = false;
+        CHECK(baseline.snapshot == unchanged);
+        CHECK(baseline.revision == 1);
+        if (failed)
+        {
+            nested_publisher retry(trusted, baseline);
+            CHECK(retry.baseline()->snapshot == unchanged);
+            CHECK(retry.baseline()->revision == 1);
+        }
+    }
+    CHECK(completed);
+}
