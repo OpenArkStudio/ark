@@ -233,6 +233,11 @@ const tree: Entry[] = [
         "数据库服务验收"
       ],
       [
+        "reports/database-services",
+        "Database acceptance records",
+        "数据库验收记录"
+      ],
+      [
         "guides/database-restart",
         "Database restart recovery",
         "数据库重启恢复"
