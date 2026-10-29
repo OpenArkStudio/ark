@@ -19,18 +19,7 @@ The initial nested scope is schema-declared scalar table columns and an explicit
 
 The notation below describes semantic keys, not proposed fields or C++ types. An application binds the recipient, root GUID, schema identity and allowed projection on the server. No gateway or account service is required.
 
-```mermaid
-flowchart TD
-    Session[Server-bound session and authorization] --> Root[Root GUID + incarnation]
-    Root --> Scalar[Authorized scalar member indices]
-    Root --> Table[Table member index]
-    Table --> Row[Row number + lifetime token]
-    Row --> Col[Column index in referenced row class]
-    Root --> Container[Container member index]
-    Container --> Slot[Slot number: relationship]
-    Slot --> Child[Child GUID + incarnation]
-    Child --> Fields[Child class + recursively authorized members]
-```
+![Identity and explicit authorization projection](../assets/entity-replication-projection.svg)
 
 | Identity | Proposed invariant |
 | --- | --- |
@@ -45,20 +34,7 @@ Authorize root access, each table/column, each relationship and each child field
 
 The proposed consistency boundary is one selected root tree per recipient. A baseline is its complete authorized state, including empty tables/slots and type-correct zero values. Freeze it at revision R on the owner thread after initialization and business mutations; later mutations belong to the next capture. Do not publish a partially initialized Entity or infer flush order from module registration order.
 
-```mermaid
-sequenceDiagram
-    participant K as Owner-thread Entity tree
-    participant P as Projection collector
-    participant Q as Bounded ordered sender
-    participant C as Client candidate state
-    K->>P: Finish mutations; capture at explicit flush
-    P->>P: Authorize; copy values; compare previous projection
-    P->>Q: Seal complete baseline R or delta R to R+1
-    Q->>C: One ordered owning publication
-    C->>C: Validate all identities, types, limits and base revision
-    C->>C: Commit whole root or invalidate root
-    Note over P,Q: Callback mutations enter the next batch
-```
+![One ordered root commit interaction sequence](../assets/entity-replication-commit.svg)
 
 A delta applies only to its matching schema, lifetime, projection generation and required revision. Valid duplicates do not regress state. A gap, unknown row lifetime/child binding or malformed operation invalidates the root; no prefix becomes visible. Validate a candidate before committing, as Godot's existing `RoomSession` does for a whole room envelope. This proposes root atomicity, not cross-root atomicity or rollback of server business mutations.
 
@@ -76,16 +52,7 @@ Use final-state capture for coalescing, plus successful lifecycle observations f
 
 ## Recovery, authorization changes and memory
 
-```mermaid
-stateDiagram-v2
-    [*] --> NeedBaseline
-    NeedBaseline --> Active: Authorized complete baseline
-    Active --> Active: Matching delta or valid duplicate
-    Active --> Invalid: Gap / invalid identity / overflow / revoked projection
-    Invalid --> NeedBaseline: Reconnect (selected recovery)
-    Active --> Removed: Ordered root tombstone
-    Removed --> NeedBaseline: New authorized lifetime / stream
-```
+![Root states and selected recovery](../assets/entity-replication-recovery.svg)
 
 Recheck authorization before sender admission. Expansion needs a replacement projection baseline before its deltas. Revocation removes omitted fields/rows/children from client state and cancels unadmitted unauthorized publications. If already admitted bytes cannot be withdrawn, close the affected connection and discard local state; bytes already transmitted cannot be recalled. A transport close cannot itself prove remote erasure. Reconnect obtains a fresh server binding and complete authorized state. In-place generation reset requires the separately chosen reset contract below.
 

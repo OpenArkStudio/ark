@@ -19,18 +19,7 @@
 
 下图表示语义键，不是拟新增的字段或 C++ 类型。应用在服务端绑定接收者、根 GUID、Schema 身份和允许的投影，无需网关或账号服务。
 
-```mermaid
-flowchart TD
-    Session[服务端绑定的会话与授权] --> Root[根 GUID + 实例代次]
-    Root --> Scalar[授权标量成员索引]
-    Root --> Table[表格成员索引]
-    Table --> Row[行号 + 存续期标记]
-    Row --> Col[引用行类中的列索引]
-    Root --> Container[容器成员索引]
-    Container --> Slot[槽位号：关系]
-    Slot --> Child[子 GUID + 实例代次]
-    Child --> Fields[子类 + 递归授权的成员]
-```
+![身份与显式授权投影](../assets/entity-replication-projection_CN.svg)
 
 | 身份 | 拟议不变量 |
 | --- | --- |
@@ -45,20 +34,7 @@ flowchart TD
 
 拟议一致性边界为每个接收者的一棵选定根树。基线是完整授权状态，包括空表格／槽位和类型正确的零值。在初始化和业务修改结束后，于所有者线程冻结修订 R；后续修改进入下一次捕获。不能发布部分初始化的 Entity，也不能通过模块注册顺序推断刷新顺序。
 
-```mermaid
-sequenceDiagram
-    participant K as 所有者线程 Entity 树
-    participant P as 投影收集器
-    participant Q as 有界有序发送端
-    participant C as 客户端候选状态
-    K->>P: 修改结束，在显式刷新点捕获
-    P->>P: 授权、复制值、比较前一投影
-    P->>Q: 封装完整基线 R 或增量 R 到 R+1
-    Q->>C: 一个有序的拥有型发布
-    C->>C: 校验全部身份、类型、上限和基准修订
-    C->>C: 整根提交或使整根失效
-    Note over P,Q: 回调修改进入下一批
-```
+![一个根的有序提交交互顺序](../assets/entity-replication-commit_CN.svg)
 
 增量仅应用到匹配的 Schema、存续期、投影流代次及基准修订。合法重复不能使状态回退。缺口、未知行存续期／子绑定或非法操作使根失效，不暴露已应用的前半部分。提交前先校验候选状态，与 Godot 现有 `RoomSession` 对整个房间消息的处理方式一致。本方案要求根原子性，不提供跨根原子性，也不回滚服务端业务修改。
 
@@ -76,16 +52,7 @@ sequenceDiagram
 
 ## 恢复、权限变化与内存
 
-```mermaid
-stateDiagram-v2
-    [*] --> NeedBaseline
-    NeedBaseline --> Active: 完整授权基线
-    Active --> Active: 匹配增量或合法重复
-    Active --> Invalid: 缺口／非法身份／溢出／投影撤权
-    Invalid --> NeedBaseline: 重连（已选方向）
-    Active --> Removed: 有序的根删除标记
-    Removed --> NeedBaseline: 新的授权存续期／流
-```
+![根状态与已选恢复路径](../assets/entity-replication-recovery_CN.svg)
 
 发送端入队前再次校验权限。扩权须先安装替代投影基线，再接收增量。撤权从客户端状态移除被省略的字段／行／子 Entity，并取消尚未入队的越权发布。已入队字节无法撤回时，关闭受影响连接并丢弃本地状态；已经传出的字节无法收回，传输关闭本身也不能证明远端已擦除。重连取得新服务端绑定与完整授权状态。原地流代次重置需要下表单独选择的重置契约。
 
