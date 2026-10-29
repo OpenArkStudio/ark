@@ -134,7 +134,7 @@ inline std::map<std::uint32_t, nested_entity_snapshot> copy_children(
     std::map<std::uint32_t, nested_entity_snapshot> result;
     for (const auto& [slot, child] : input)
     {
-        result.emplace(slot, copy_entity(child));
+        result.emplace_hint(result.end(), slot, copy_entity(child));
     }
     return result;
 }
@@ -146,14 +146,14 @@ inline nested_entity_snapshot copy_entity(const nested_entity_snapshot& input) {
         nested_table_snapshot replacement{table.class_name, {}};
         for (const auto& [number, row] : table.rows)
         {
-            replacement.rows.emplace(
-                number, nested_row_snapshot{row.incarnation, detail::copy_scalar_fields(row.fields)});
+            replacement.rows.emplace_hint(replacement.rows.end(), number,
+                nested_row_snapshot{row.incarnation, detail::copy_scalar_fields(row.fields)});
         }
-        result.tables.emplace(index, std::move(replacement));
+        result.tables.emplace_hint(result.tables.end(), index, std::move(replacement));
     }
     for (const auto& [index, children] : input.containers)
     {
-        result.containers.emplace(index, copy_children(children));
+        result.containers.emplace_hint(result.containers.end(), index, copy_children(children));
     }
     return result;
 }

@@ -55,7 +55,7 @@ inline std::map<std::uint32_t, scalar_value> copy_scalar_fields(const std::map<s
     std::map<std::uint32_t, scalar_value> result;
     for (const auto& [index, item] : input)
     {
-        result.emplace(index, copy_scalar_value(item));
+        result.emplace_hint(result.end(), index, copy_scalar_value(item));
     }
     return result;
 }
