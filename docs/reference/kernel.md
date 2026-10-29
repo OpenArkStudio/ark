@@ -151,6 +151,8 @@ Arguments are `(value, uint32_t field_index)` pairs: add the value first, then a
 
 DataList rejects unrepresentable append sizes with `std::length_error` and allocation failures with `std::bad_alloc`. A failed single-value append or growing string replacement preserves existing values and the item count, although internal capacity may have grown.
 
+DataList copy and tokenizing construction release partial storage on allocation failure and leave the source unchanged; self-assignment preserves the list. Other assignments may leave the target modified if allocation fails.
+
 The following example uses `Player.level` declared as int32 and `Player.name` declared as string. It explicitly sets the level to `0` and the name to an empty string, while retaining configuration defaults for the other fields. The target map, instance and matching Player configuration record must already exist.
 
 ```cpp

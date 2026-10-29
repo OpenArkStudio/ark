@@ -5,6 +5,7 @@
 #include <map>
 #include <new>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 #include "../network/doctest.h"
@@ -16,6 +17,7 @@
 namespace {
 
 bool fail_next_array{};
+std::size_t fail_array_after{};
 constexpr char text[] = "a payload longer than the inline buffer";
 constexpr char bytes[] = "binary\0payload";
 
@@ -146,7 +148,11 @@ using tracked_data = ark::data_base<8, tracked_allocator>;
 // Exercise the real default allocator and default ARK_NEW_ARRAY_RET expansion.
 // Only its standard nothrow new[] call fails; successful storage uses normal new[]/delete[].
 void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
-    if (fail_next_array)
+    if (fail_next_array && fail_array_after)
+    {
+        --fail_array_after;
+    }
+    else if (fail_next_array)
     {
         fail_next_array = false;
         return nullptr;
@@ -570,4 +576,252 @@ TEST_CASE("DataList copies own their string and binary buffers and retain empty 
         CHECK(std::string(empty.string(1)).empty());
     }
     CHECK(tracked_allocator::live.size() == initial_live);
+}
+
+namespace {
+
+using copy_list = ark::base_data_list<1, 16, tracked_allocator>;
+
+static_assert(std::is_same_v<decltype(std::declval<copy_list&>() = std::declval<const copy_list&>()), copy_list>);
+
+template<typename List>
+void fill_copy_list(List& values, int first = 17) {
+    REQUIRE(values.add_int(first));
+    REQUIRE(values.add_string(text));
+    REQUIRE(values.add_int(first + 1));
+}
+
+template<typename List>
+void check_copy_list(const List& values, int first = 17) {
+    CHECK(values.get_count() == 3);
+    if (values.get_count() == 3)
+    {
+        CHECK(values.get_int(0) == first);
+        CHECK(std::string(values.string(1)) == text);
+        CHECK(values.get_int(2) == first + 1);
+    }
+}
+
+void recover_failed_copy(std::size_t owner) {
+    // Red regressions recover only storage owned by the failed constructor;
+    // live source/target allocators keep their own allocations untouched.
+    for (auto it = tracked_allocator::live.begin(); it != tracked_allocator::live.end();)
+    {
+        if (it->second.first == owner)
+        {
+            auto* pointer = static_cast<char*>(it->first);
+            it = tracked_allocator::live.erase(it);
+            delete[] pointer;
+        }
+        else
+        {
+            ++it;
+        }
+    }
+}
+
+} // namespace
+
+TEST_CASE("DataList copy constructors release partial storage after null and throwing allocations") {
+    for (bool through_interface : {false, true})
+    {
+        for (auto mode : {tracked_allocator::failure::null, tracked_allocator::failure::exception})
+        {
+            for (std::size_t position : {1u, 2u})
+            {
+                CAPTURE(through_interface);
+                CAPTURE(position);
+                CAPTURE(static_cast<int>(mode));
+                copy_list source;
+                fill_copy_list(source);
+                const auto original = tracked_allocator::live;
+                const auto* storage = source.string(1);
+                tracked_allocator::next = mode;
+                tracked_allocator::successful_before_failure = position;
+                const auto copy = [&] {
+                    if (through_interface)
+                    {
+                        const ark::data_list& interface = source;
+                        copy_list destination(interface);
+                    }
+                    else
+                    {
+                        copy_list destination(source);
+                    }
+                };
+                CHECK_THROWS_AS(copy(), std::bad_alloc);
+                const auto failed_owner = tracked_allocator::next_id;
+                CHECK(tracked_allocator::next == tracked_allocator::failure::none);
+                tracked_allocator::next = tracked_allocator::failure::none;
+                tracked_allocator::successful_before_failure = 0;
+                CHECK(tracked_allocator::live == original);
+                check_copy_list(source);
+                if (source.get_count() == 3)
+                {
+                    CHECK(static_cast<const void*>(source.string(1)) == static_cast<const void*>(storage));
+                }
+                recover_failed_copy(failed_owner);
+            }
+        }
+    }
+}
+
+TEST_CASE("DataList self assignment preserves inline and allocated values and its by-value result") {
+    for (bool allocated : {false, true})
+    {
+        copy_list source;
+        REQUIRE(source.add_int(17));
+        if (allocated)
+        {
+            REQUIRE(source.add_string(text));
+            REQUIRE(source.add_int(18));
+        }
+        const auto original = tracked_allocator::live;
+        const auto count = source.get_count();
+        const auto* same = &source;
+        {
+            auto returned = (source = *same);
+            CHECK(source.get_count() == count);
+            CHECK(returned.get_count() == count);
+            if (source.get_count() == count && returned.get_count() == count)
+            {
+                CHECK(source.get_int(0) == 17);
+                CHECK(returned.get_int(0) == 17);
+                if (allocated)
+                {
+                    CHECK(returned.string(1) != source.string(1));
+                    REQUIRE(returned.set_string(1, "changed"));
+                    CHECK(std::string(source.string(1)) == text);
+                }
+            }
+        }
+        CHECK(tracked_allocator::live == original);
+    }
+}
+
+TEST_CASE("DataList self assignment return-copy failures preserve values and allocator ownership") {
+    for (auto mode : {tracked_allocator::failure::null, tracked_allocator::failure::exception})
+    {
+        for (std::size_t position : {1u, 2u})
+        {
+            copy_list source;
+            fill_copy_list(source);
+            const auto original = tracked_allocator::live;
+            const auto* storage = source.string(1);
+            const auto* same = &source;
+            tracked_allocator::next = mode;
+            tracked_allocator::successful_before_failure = position;
+            CHECK_THROWS_AS(source = *same, std::bad_alloc);
+            CHECK(tracked_allocator::next == tracked_allocator::failure::none);
+            tracked_allocator::next = tracked_allocator::failure::none;
+            tracked_allocator::successful_before_failure = 0;
+            CHECK(tracked_allocator::live == original);
+            check_copy_list(source);
+            if (source.get_count() == 3)
+            {
+                CHECK(static_cast<const void*>(source.string(1)) == static_cast<const void*>(storage));
+            }
+            recover_failed_copy(tracked_allocator::next_id);
+        }
+    }
+}
+
+TEST_CASE("Default DataList copies and self assignment preserve the source on null array allocations") {
+    for (bool through_interface : {false, true})
+    {
+        for (std::size_t position : {1u, 2u})
+        {
+            ark::base_data_list<1, 16> source;
+            fill_copy_list(source);
+            const auto* storage = source.string(1);
+            fail_next_array = true;
+            fail_array_after = position;
+            const auto copy = [&] {
+                if (through_interface)
+                {
+                    const ark::data_list& interface = source;
+                    ark::base_data_list<1, 16> destination(interface);
+                }
+                else
+                {
+                    ark::base_data_list<1, 16> destination(source);
+                }
+            };
+            CHECK_THROWS_AS(copy(), std::bad_alloc);
+            CHECK_FALSE(fail_next_array);
+            fail_next_array = false;
+            fail_array_after = 0;
+            check_copy_list(source);
+            if (source.get_count() == 3)
+            {
+                CHECK(static_cast<const void*>(source.string(1)) == static_cast<const void*>(storage));
+            }
+            fail_next_array = true;
+            fail_array_after = position;
+            const auto* same = &source;
+            CHECK_THROWS_AS(source = *same, std::bad_alloc);
+            CHECK_FALSE(fail_next_array);
+            fail_next_array = false;
+            fail_array_after = 0;
+            check_copy_list(source);
+            if (source.get_count() == 3)
+            {
+                CHECK(static_cast<const void*>(source.string(1)) == static_cast<const void*>(storage));
+            }
+        }
+    }
+}
+
+TEST_CASE("DataList tokenizing constructor releases partial storage after null and throwing allocations") {
+    constexpr char source[] = "abcdefghijklmnop,qrstuvwxyzabcdefgh,tail";
+    for (auto mode : {tracked_allocator::failure::null, tracked_allocator::failure::exception})
+    {
+        for (std::size_t position : {0u, 1u, 2u, 3u})
+        {
+            CAPTURE(position);
+            CAPTURE(static_cast<int>(mode));
+            const auto original = tracked_allocator::live;
+            tracked_allocator::next = mode;
+            tracked_allocator::successful_before_failure = position;
+            CHECK_THROWS_AS((copy_list(source, sizeof(source) - 1, ',')), std::bad_alloc);
+            CHECK(tracked_allocator::next == tracked_allocator::failure::none);
+            tracked_allocator::next = tracked_allocator::failure::none;
+            tracked_allocator::successful_before_failure = 0;
+            CHECK(tracked_allocator::live == original);
+            recover_failed_copy(tracked_allocator::next_id);
+            CHECK(std::memcmp(source, "abcdefghijklmnop,qrstuvwxyzabcdefgh,tail", sizeof(source)) == 0);
+        }
+    }
+}
+
+TEST_CASE("Default DataList tokenizing constructor reports null array allocations") {
+    constexpr char source[] = "abcdefghijklmnop,qrstuvwxyzabcdefgh,tail";
+    for (std::size_t position : {0u, 1u, 2u, 3u})
+    {
+        fail_next_array = true;
+        fail_array_after = position;
+        CHECK_THROWS_AS((ark::base_data_list<1, 16>(source, sizeof(source) - 1, ',')), std::bad_alloc);
+        CHECK_FALSE(fail_next_array);
+        fail_next_array = false;
+        fail_array_after = 0;
+    }
+}
+
+TEST_CASE("DataList tokenizing construction preserves existing length and empty input behavior") {
+    copy_list empty(nullptr, 0, ',');
+    CHECK(empty.get_count() == 0);
+    copy_list negative(nullptr, -1, ',');
+    CHECK(negative.get_count() == 0);
+    copy_list bounded("abcdef", 3, ',');
+    REQUIRE(bounded.get_count() == 1);
+    CHECK(std::memcmp(bounded.string(0), "abcd", 4) == 0);
+    copy_list tokens("abc,def", 7, ',');
+    REQUIRE(tokens.get_count() == 2);
+    // Preserve the length overload's existing copied bytes, including the separator.
+    CHECK(std::memcmp(tokens.string(0), "abc,", 4) == 0);
+    CHECK(std::string(tokens.string(1)) == "def");
+    copy_list trailing("abc,", 4, ',');
+    REQUIRE(trailing.get_count() == 2);
+    CHECK(std::memcmp(trailing.string(0), "abc,", 4) == 0);
+    CHECK(std::string(trailing.string(1)) == "abc,");
 }
