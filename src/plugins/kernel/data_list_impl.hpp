@@ -131,31 +131,14 @@ public:
         }
     }
 
-    base_data_list(const self_t& src) {
-        assert(data_size > 0);
-        assert(buffer_size > 0);
-
-        data_ = inline_data_;
-        data_capacity_ = data_size;
-        data_size_ = 0;
-
-        buffer_ = inline_buffer_;
-        buffer_capacity_ = buffer_size;
-        buffer_size_ = 0;
+    // A completed empty object destroys partial storage if copying throws.
+    base_data_list(const self_t& src)
+        : base_data_list() {
         inner_append(src, 0, src.get_count());
     }
 
-    base_data_list(const data_list& src) {
-        assert(data_size > 0);
-        assert(buffer_size > 0);
-
-        data_ = inline_data_;
-        data_capacity_ = data_size;
-        data_size_ = 0;
-
-        buffer_ = inline_buffer_;
-        buffer_capacity_ = buffer_size;
-        buffer_size_ = 0;
+    base_data_list(const data_list& src)
+        : base_data_list() {
         inner_append(src, 0, src.get_count());
     }
 
@@ -164,6 +147,10 @@ public:
     }
 
     self_t operator=(const self_t& src) {
+        if (this == &src)
+        {
+            return *this;
+        }
         release();
 
         data_ = inline_data_;

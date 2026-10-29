@@ -11,11 +11,16 @@ namespace {
 
 std::unordered_set<void*> live;
 bool fail_next{};
+std::size_t successful_before_failure{};
 std::size_t allocations{};
 std::size_t releases{};
 
 void* hook_allocate(std::size_t size) {
-    if (fail_next)
+    if (fail_next && successful_before_failure)
+    {
+        --successful_before_failure;
+    }
+    else if (fail_next)
     {
         fail_next = false;
         return nullptr;
@@ -116,6 +121,67 @@ TEST_CASE("DataList retains matching array hooks across failed buffer and index 
         REQUIRE(values.add_int(42));
         CHECK(values.get_int(2) == 42);
         CHECK(live.size() == 2);
+    }
+    CHECK(live.empty());
+    CHECK(allocations - initial_allocations == releases - initial_releases);
+}
+
+TEST_CASE("DataList array hooks release partial copies and preserve self assignment") {
+    REQUIRE(live.empty());
+    const auto initial_allocations = allocations;
+    const auto initial_releases = releases;
+    {
+        using list = ark::base_data_list<1, 16>;
+        list source;
+        REQUIRE(source.add_int(17));
+        REQUIRE(source.add_string("a copied value longer than the inline buffer"));
+        REQUIRE(source.add_int(18));
+        const auto original = live;
+        for (bool through_interface : {false, true})
+        {
+            for (std::size_t position : {1u, 2u})
+            {
+                fail_next = true;
+                successful_before_failure = position;
+                const auto copy = [&] {
+                    if (through_interface)
+                    {
+                        const ark::data_list& interface = source;
+                        list destination(interface);
+                    }
+                    else
+                    {
+                        list destination(source);
+                    }
+                };
+                CHECK_THROWS_AS(copy(), std::bad_alloc);
+                CHECK_FALSE(fail_next);
+                fail_next = false;
+                successful_before_failure = 0;
+                CHECK(live == original);
+                // Recover only a red-regression constructor's unpublished buffers.
+                for (auto it = live.begin(); it != live.end();)
+                {
+                    void* pointer = *it++;
+                    if (!original.contains(pointer))
+                    {
+                        hook_free(pointer);
+                    }
+                }
+            }
+        }
+        const auto* same = &source;
+        CHECK_NOTHROW(source = *same);
+        CHECK(source.get_count() == 3);
+        CHECK(live == original);
+        fail_next = true;
+        successful_before_failure = 1;
+        CHECK_THROWS_AS(source = *same, std::bad_alloc);
+        CHECK_FALSE(fail_next);
+        fail_next = false;
+        successful_before_failure = 0;
+        CHECK(source.get_count() == 3);
+        CHECK(live == original);
     }
     CHECK(live.empty());
     CHECK(allocations - initial_allocations == releases - initial_releases);

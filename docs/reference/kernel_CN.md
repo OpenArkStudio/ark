@@ -151,6 +151,8 @@ std::shared_ptr<ark::entity> create_player(ark::plugin_manager& manager, int map
 
 DataList 对无法表示的追加长度抛出 `std::length_error`，分配失败时抛出 `std::bad_alloc`。单项追加或字符串扩容失败保留已有值和项数，但内部容量可能已经增长。
 
+DataList 深拷贝构造在分配失败时释放部分存储，源值保持不变；自赋值保留列表内容。其他赋值在分配失败时仍可能改变目标值。
+
 下面使用声明为 int32 的 `Player.level` 和 string 的 `Player.name`，显式将等级设为 `0`、名称设为空字符串，其余字段保留配置默认值。调用前，目标地图、实例和对应的 Player 配置记录必须存在。
 
 ```cpp
