@@ -87,18 +87,9 @@ public:
         buffer_size_ = 0;
     }
 
-    base_data_list(const char* source, int length, char separator) {
-        assert(data_size > 0);
-        assert(buffer_size > 0);
-
-        data_ = inline_data_;
-        data_capacity_ = data_size;
-        data_size_ = 0;
-
-        buffer_ = inline_buffer_;
-        buffer_capacity_ = buffer_size;
-        buffer_size_ = 0;
-
+    // Complete an empty object so construction failures release partial storage.
+    base_data_list(const char* source, int length, char separator)
+        : base_data_list() {
         int begin = 0;
         int end = 0;
 

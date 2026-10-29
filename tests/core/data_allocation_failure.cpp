@@ -771,3 +771,57 @@ TEST_CASE("Default DataList copies and self assignment preserve the source on nu
         }
     }
 }
+
+TEST_CASE("DataList tokenizing constructor releases partial storage after null and throwing allocations") {
+    constexpr char source[] = "abcdefghijklmnop,qrstuvwxyzabcdefgh,tail";
+    for (auto mode : {tracked_allocator::failure::null, tracked_allocator::failure::exception})
+    {
+        for (std::size_t position : {0u, 1u, 2u, 3u})
+        {
+            CAPTURE(position);
+            CAPTURE(static_cast<int>(mode));
+            const auto original = tracked_allocator::live;
+            tracked_allocator::next = mode;
+            tracked_allocator::successful_before_failure = position;
+            CHECK_THROWS_AS((copy_list(source, sizeof(source) - 1, ',')), std::bad_alloc);
+            CHECK(tracked_allocator::next == tracked_allocator::failure::none);
+            tracked_allocator::next = tracked_allocator::failure::none;
+            tracked_allocator::successful_before_failure = 0;
+            CHECK(tracked_allocator::live == original);
+            recover_failed_copy(tracked_allocator::next_id);
+            CHECK(std::memcmp(source, "abcdefghijklmnop,qrstuvwxyzabcdefgh,tail", sizeof(source)) == 0);
+        }
+    }
+}
+
+TEST_CASE("Default DataList tokenizing constructor reports null array allocations") {
+    constexpr char source[] = "abcdefghijklmnop,qrstuvwxyzabcdefgh,tail";
+    for (std::size_t position : {0u, 1u, 2u, 3u})
+    {
+        fail_next_array = true;
+        fail_array_after = position;
+        CHECK_THROWS_AS((ark::base_data_list<1, 16>(source, sizeof(source) - 1, ',')), std::bad_alloc);
+        CHECK_FALSE(fail_next_array);
+        fail_next_array = false;
+        fail_array_after = 0;
+    }
+}
+
+TEST_CASE("DataList tokenizing construction preserves existing length and empty input behavior") {
+    copy_list empty(nullptr, 0, ',');
+    CHECK(empty.get_count() == 0);
+    copy_list negative(nullptr, -1, ',');
+    CHECK(negative.get_count() == 0);
+    copy_list bounded("abcdef", 3, ',');
+    REQUIRE(bounded.get_count() == 1);
+    CHECK(std::memcmp(bounded.string(0), "abcd", 4) == 0);
+    copy_list tokens("abc,def", 7, ',');
+    REQUIRE(tokens.get_count() == 2);
+    // Preserve the length overload's existing copied bytes, including the separator.
+    CHECK(std::memcmp(tokens.string(0), "abc,", 4) == 0);
+    CHECK(std::string(tokens.string(1)) == "def");
+    copy_list trailing("abc,", 4, ',');
+    REQUIRE(trailing.get_count() == 2);
+    CHECK(std::memcmp(trailing.string(0), "abc,", 4) == 0);
+    CHECK(std::string(trailing.string(1)) == "abc,");
+}

@@ -186,3 +186,34 @@ TEST_CASE("DataList array hooks release partial copies and preserve self assignm
     CHECK(live.empty());
     CHECK(allocations - initial_allocations == releases - initial_releases);
 }
+
+TEST_CASE("DataList tokenizing constructor retains matching array hooks on failure") {
+    REQUIRE(live.empty());
+    constexpr char source[] = "abcdefghijklmnop,qrstuvwxyzabcdefgh,tail";
+    const auto initial_allocations = allocations;
+    const auto initial_releases = releases;
+    for (std::size_t position : {0u, 1u, 2u, 3u})
+    {
+        fail_next = true;
+        successful_before_failure = position;
+        CHECK_THROWS_AS((ark::base_data_list<1, 16>(source, sizeof(source) - 1, ',')), std::bad_alloc);
+        CHECK_FALSE(fail_next);
+        fail_next = false;
+        successful_before_failure = 0;
+        CHECK(live.empty());
+        // Recover only unpublished storage left by the old constructor in a red run.
+        while (!live.empty())
+        {
+            void* pointer = *live.begin();
+            hook_free(pointer);
+        }
+    }
+    {
+        ark::base_data_list<1, 16> values(source, sizeof(source) - 1, ',');
+        CHECK(values.get_count() == 3);
+        CHECK(std::memcmp(values.string(0), source, 17) == 0);
+        CHECK(std::string(values.string(2)) == "tail");
+    }
+    CHECK(live.empty());
+    CHECK(allocations - initial_allocations == releases - initial_releases);
+}
