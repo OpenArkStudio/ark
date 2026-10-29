@@ -102,6 +102,16 @@ public:
         require(helper_ >= 0, "helper fork failed");
         if (helper_ == 0)
         {
+            // Trap handlers in a non-interactive shell require these signals
+            // to be catchable when the shell starts, regardless of its runner.
+            constexpr int signals[] = {SIGHUP, SIGINT, SIGTERM, SIGALRM, SIGPIPE};
+            for (const int number : signals)
+            {
+                if (std::signal(number, SIG_DFL) == SIG_ERR)
+                {
+                    _exit(126);
+                }
+            }
             close(identity[0]);
             if (broken_reader)
             {
@@ -168,6 +178,14 @@ int main(int argc, char* argv[]) {
         std::cerr << "Usage: application_preset_stop <helper-script>" << std::endl;
         return 2;
     }
+    // Build runners can ignore SIGINT. A non-interactive shell cannot install
+    // its trap if that ignored disposition survives exec; exercise it every run.
+    const auto previous_interrupt = std::signal(SIGINT, SIG_IGN);
+    if (previous_interrupt == SIG_ERR)
+    {
+        std::cerr << "could not prepare inherited SIGINT disposition" << std::endl;
+        return 1;
+    }
     const auto directory = std::filesystem::temp_directory_path() / ("ark-preset-stop-" + std::to_string(getpid()));
     if (!std::filesystem::create_directory(directory))
     {
@@ -207,5 +225,6 @@ int main(int argc, char* argv[]) {
         reap(unrelated);
     }
     std::filesystem::remove_all(directory);
+    std::signal(SIGINT, previous_interrupt);
     return result;
 }
