@@ -409,3 +409,10 @@ owned authenticated loopback service with verified TLS and a disposable schema.
 `check-database` builds it without running service work. See the
 [isolation guide](../../docs/guides/database-isolation.md) for both invocations,
 privileges, cleanup and limits.
+
+The same cancellation runner's SSL-only `mysql-transaction` mode cancels a sent
+query inside a public transaction after independent server observation. It retains
+an unconfirmed/discarded transaction result, separately checks the original
+session's disappearance and final uncommitted-write visibility, and recovers with
+an explicit new request through the existing pool. See the
+[transaction cancellation details](cancellation.md#mysql-transaction-operation-cancellation).

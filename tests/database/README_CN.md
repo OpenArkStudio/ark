@@ -324,3 +324,8 @@ cmake --build database-build --target check-database-samples --parallel 2
 会话重置、相互独立的固定连接以及已提交变更的快照可见性。运行需要自有、经过认证且校验 TLS
 的 loopback 服务和可丢弃的 schema。`check-database` 只编译程序，不运行真实服务用例。
 两种运行方式、权限、清理要求和验证范围见[隔离级别指南](../../docs/guides/database-isolation_CN.md)。
+
+同一取消验收程序中，仅在启用 SSL 时可用的 `mysql-transaction` 模式，先独立观察服务端工作，
+再取消公共事务内已发送的查询。程序保留未确认、要求丢弃连接的事务结果，另外检查原会话退出
+及未提交写入的最终可见性，并通过原连接池显式提交新请求验证恢复。详见
+[事务取消说明](cancellation_CN.md#mysql-事务内操作取消)。
