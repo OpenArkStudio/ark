@@ -33,7 +33,8 @@ declares an expectation; it does not configure the server or transaction. Inside
 both public transactions the program verifies connection IDs and the session and
 global isolation levels. Before `begin()`, it deliberately sets the reader's
 session to the opposite level through a named query. Returning that query lease
-uses `COM_RESET_CONNECTION`; the later transaction must again use the server
+uses [`COM_RESET_CONNECTION`](https://dev.mysql.com/doc/c-api/8.4/en/mysql-reset-connection.html);
+the later transaction must again use the server
 default on the same connection. Setting a session level with a standalone
 `query()` cannot configure a later public `begin()` across this reset boundary.
 This preserves the current API and pool behavior. See MySQL's
@@ -63,3 +64,25 @@ nonlocking reads; it does not exercise locking reads, `SERIALIZABLE`, transactio
 cancellation, crash durability, restart recovery, replication, high availability,
 other platforms or production capacity. No isolation API, pool policy or default
 isolation level is changed.
+
+## Local acceptance
+
+On **2026-10-29**, both invocations passed using ark source
+`093dfcb9a430beedcd86de19eb0d70c8aae9160e` and arknet
+`a0dfe09cd543e75cfb5996e537ce2fa49f2a758f`. The executed program source remained
+unchanged when this record was added. The environment was macOS 27.0.1 arm64,
+Apple Clang 21.0.0, C++20 Debug, Boost.Asio 1.90.0 and OpenSSL 3.6.4. Each case used
+a fresh MySQL Community Server 8.4.13 instance at `127.0.0.1:29879`, with its
+matching explicit server isolation setting, authentication and verified TLS/IP
+identity. In each case the independently observed reader/writer connection IDs
+were `11`/`10`.
+
+The opposite expected isolation argument failed at the session/global-level
+assertion against each real server. Missing host, nonloopback host, empty password,
+missing argument and unknown isolation arguments also failed as intended.
+Independent cleanup queries found zero remaining tables. Both owned servers
+shut down through authenticated shutdown and were reaped with exit code `0`;
+separate checks confirmed the exact PIDs, listener and private directories absent.
+Private data, credentials and TLS keys were removed. Raw logs and binary/source
+hashes remain local. This is macOS Boost Debug service acceptance; it does not
+establish hosted CI or cross-platform acceptance.

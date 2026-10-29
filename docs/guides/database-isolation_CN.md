@@ -26,7 +26,8 @@ cmake --build database-build --target ark_database_public_plugin_isolation_tests
 
 每条命令需连接匹配的私有服务配置。参数声明预期值，不修改服务端或事务配置。程序在两个公共
 事务内检查连接 ID、会话隔离级别和全局隔离级别。在 `begin()` 前，程序通过命名查询故意将读连接
-的会话隔离级别设为相反值。归还查询租约会执行 `COM_RESET_CONNECTION`；后续事务必须在同一连接
+的会话隔离级别设为相反值。归还查询租约会执行
+[`COM_RESET_CONNECTION`](https://dev.mysql.com/doc/c-api/8.4/en/mysql-reset-connection.html)；后续事务必须在同一连接
 上恢复服务端默认值。因此，单独调用 `query()` 设置会话隔离级别，不能跨越该重置边界配置后续的
 公共 `begin()`。本验收保留既有 API 和连接池行为。事务配置作用域见
 [MySQL 官方说明](https://dev.mysql.com/doc/refman/8.4/en/set-transaction.html)。
@@ -47,3 +48,20 @@ cmake --build database-build --target ark_database_public_plugin_isolation_tests
 说明：`REPEATABLE READ` 的一致性读使用事务快照；`READ COMMITTED` 的每次一致性读使用新快照。
 本程序只验证普通非锁定读取，不覆盖锁定读取、`SERIALIZABLE`、事务取消、崩溃持久性、
 重启恢复、复制、高可用、其他平台或生产容量。实现不新增隔离级别 API，也不修改连接池策略或默认隔离级别。
+
+## 本地验收
+
+**2026-10-29**，两种调用方式均通过。实际执行的 ark 源码为
+`093dfcb9a430beedcd86de19eb0d70c8aae9160e`，arknet 为
+`a0dfe09cd543e75cfb5996e537ce2fa49f2a758f`。补入本记录时，验收程序源码未再变化。
+环境为 macOS 27.0.1 arm64、Apple Clang 21.0.0、C++20 Debug、Boost.Asio 1.90.0 和
+OpenSSL 3.6.4。每种配置都使用全新的 MySQL Community Server 8.4.13 私有实例，监听
+`127.0.0.1:29879`，配置匹配的显式默认隔离级别，并启用认证及可信 TLS/IP 身份校验。
+两次验收独立确认的读/写连接 ID 均为 `11`/`10`。
+
+在每个真实服务上，传入相反的预期隔离级别均在会话/全局隔离级别断言处失败。
+缺少 host、非 loopback host、空密码、缺少参数和未知隔离级别参数的对照也均按预期失败。
+独立清理查询确认剩余测试表为 `0`。两个自有服务都经过认证正常关闭，并以退出码 `0` 回收；
+独立检查确认精确 PID、监听端口和私有目录均不存在。私有数据、凭据和 TLS 密钥已删除。
+原始日志以及程序和源码哈希仅保留在本地。本记录只证明 macOS Boost Debug 环境下的真实服务验收，
+不代表托管 CI 或跨平台验收。
