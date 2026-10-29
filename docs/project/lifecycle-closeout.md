@@ -2,6 +2,8 @@
 
 This page records the selected lifecycle route and its delivery stages. Stage 1 adds required-provider metadata, graph validation and ordered startup. Stage 2 adds one-shot consumer-first `stop_accepting()` hooks with a compatibility default; only the controlled business fixture has migrated its root gate. Official ingress migration, reverse complete cleanup and opt-in startup-failure compensation remain subsequent work. The pre-stage-1 source review used baseline: [988dfbc0](https://github.com/OpenArkStudio/ark/tree/988dfbc048425cdb56cbe5f14314320fe698d07d). Start with the [launcher guide](../guides/applications.md) for operating instructions.
 
+The [startup-failure cleanup source map and minimum slice](startup-failure-cleanup.md) detail resource enrollment, constructor safety and IO prerequisites; this remains design work.
+
 ## Current startup and resource ownership
 
 `plugin_manager` stores one current failure description, not a per-module startup ledger. Plugin and module storage remains unordered. After installation, the manager snapshots declared provider keys, rejects missing providers/cycles and uses a stable topological order for all four startup phases. Modules without declarations are independent; ready-node ties use lexicographic registration keys. Manifest order determines neither this order nor teardown dependencies. See [startup dependencies and rebuild requirements](../guides/modules.md#declare-startup-dependencies).

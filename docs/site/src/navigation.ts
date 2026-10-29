@@ -300,6 +300,11 @@ const tree: Entry[] = [
         "启动与停机闭环"
       ],
       [
+        "project/startup-failure-cleanup",
+        "Startup failure cleanup",
+        "启动失败清理"
+      ],
+      [
         "project/plugin-organization",
         "Plugin organization",
         "插件与仓库组织"
