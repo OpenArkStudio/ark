@@ -39,7 +39,7 @@ Use `init()` to obtain dependencies and initialize local resources; use later st
 
 Current limits matter when composing modules:
 
-- Modules are traversed through manager containers, without a declared dependency graph or guaranteed manifest order. Do not depend on one module being initialized first within the same stage.
+- Required module provider keys are validated after installation; all four startup phases run in provider-first order, with stable registration-key ordering for independent ready nodes. Declare same-phase requirements through [module dependencies](../guides/modules.md#declare-startup-dependencies). Manifest order, update order and shutdown order are separate contracts.
 - Startup failure propagation is immediate; transactional rollback of partially started plugins is not provided.
 - Lifecycle stages do not establish that arbitrary business tasks have drained. Compatible hot replacement and plugin-unload coordination remain separate design work.
 

@@ -1,15 +1,16 @@
 # 启动与停机闭环提案
 
-本文记录现有合同，并提出部分启动清理与依赖感知停机的最小方案。方案仍待确认，不改变运行时行为。源码基准为 [988dfbc0](https://github.com/OpenArkStudio/ark/tree/988dfbc048425cdb56cbe5f14314320fe698d07d)。操作步骤见[应用启动器](../guides/applications_CN.md)。
+本文记录已选生命周期路线及其交付阶段。阶段 1 增加必需 provider 元数据、依赖图验证和有序启动；独立停止接收、按依赖反向完整清理和可选的启动失败补偿仍是后续工作。阶段 1 之前的源码审阅基准为 [988dfbc0](https://github.com/OpenArkStudio/ark/tree/988dfbc048425cdb56cbe5f14314320fe698d07d)。操作步骤见[应用启动器](../guides/applications_CN.md)。
 
 ## 当前启动状态与资源所有权
 
-`plugin_manager` 只保存当前失败描述，没有逐模块的启动状态记录。插件和模块使用无序容器，清单顺序不构成初始化或停机依赖。
+`plugin_manager` 只保存当前失败描述，没有逐模块的启动状态记录。插件和模块仍使用无序容器。安装完成后，管理器对声明的 provider 注册键生成快照，拒绝缺失依赖／依赖环，并在四个启动阶段使用同一稳定拓扑顺序。无依赖声明的模块视为独立节点，当前可启动节点按注册键字典序选择。清单顺序既不决定这一顺序，也不决定停机依赖。见[启动依赖与重建要求](../guides/modules_CN.md#声明启动依赖)。
 
 | 已到达的边界 | 可能已存在的资源 | 失败行为 |
 | --- | --- | --- |
 | 参数解析与日志准备 | 管理器、共享 owner runtime 和默认日志对象；尚未加载应用插件 | 无效参数／帮助沿用退出码 `0`；清单错误返回 `1` |
 | 加载动态库并进入 `DllEntryPlugin` | 库句柄、插件对象、已注册模块；安装阶段就可能启动 IO | 缺少库／入口、启动返回 false 或入口异常会立即停止后续启动 |
+| 验证启动依赖 | 安装阶段资源继续存活；尚未运行模块启动钩子 | 缺少必需键／依赖成环时返回 false；元数据异常保留依赖上下文并向上传播 |
 | `init()` | 所有已成功安装的插件，以及已完成或执行了一部分的模块初始化 | 首个 false 或异常立即结束当前阶段，不再调用该阶段的后续模块 |
 | `post_init()`、`check_config()`、`pre_update()` | 已完成的前置阶段、回调、定时器、监听器、出站客户端和已提交工作 | 继续遵守首个失败即停止；不进入后续阶段 |
 | `start()` 成功 | 所选模块已完成四个阶段 | 进入 owner 更新；Windows 命令线程也只在此后创建 |
@@ -29,7 +30,7 @@
 | 释放资源 | 依次遍历全部 `pre_shut()`、全部 `shut()`、插件出口／卸载，最后关闭原生库句柄 | 每个钩子返回前，其依赖必须保持有效 |
 | 结束 | 全部成功，重复 `stop()` 返回 true | 同步输出停机消息，以退出码 `0` 结束 |
 
-当前模块钩子为 `ready_to_shut()`，本文不新增 `drain_ready()` API。默认钩子返回 true，不能证明未受管工作已经结束。当前没有统一的外部请求接收关闭阶段，也没有声明式依赖图。停机遍历不保证消费者与 provider 的先后关系；单个插件内显式注销的顺序也不能约束不同插件。
+当前模块钩子为 `ready_to_shut()`，本文不新增 `drain_ready()` API。默认钩子返回 true，不能证明未受管工作已经结束。当前没有统一的外部请求接收关闭阶段；启动依赖图尚未用于排列就绪检查、停机钩子或插件／库释放顺序。停机遍历不保证消费者与 provider 的先后关系；单个插件内显式注销的顺序也不能约束不同插件。
 
 ### 原生工作与保留规则
 
@@ -44,21 +45,24 @@
 
 默认停机无限等待。正数 `--shutdown_timeout_ms` 使用单调时钟计量 owner 循环等待，包括受管任务和模块就绪等待；它不能中断阻塞的 update、就绪检查、钩子或原生关闭。超时后，启动器锁定保留状态：即使任务或原生工作随后完成，也不再调用 `stop()` 或尝试卸载，但仍在可能的情况下继续 owner 更新。排空期间的 update 失败同样锁定保留状态。钩子／库关闭失败则让管理器进入不可恢复的 `failed`，停止更新和后续清理。此前已成功的钩子和库关闭不会回滚。任何超时都不授权强制取消、删除资源或按成功退出。
 
-## 最小方案建议
+## 已选路线与后续实施
 
 1. **先记录资源获取，再增加清理。** 内部记录已加载库、安装及模块阶段的进入／完成状态，以及资源补偿动作。阶段必须同时记录「已进入」和「已完成」，因为失败的钩子也可能获取资源。保留首个启动失败为主要诊断，清理失败单独报告。显式接入的模块在获取资源时登记补偿动作；没有可验证的清理动作时，继续使用现有失败退出策略。不得对未完整初始化的模块统一调用正常停机钩子，也不增加同进程重启。
-2. **按模块声明生命周期依赖。** 先清点实际保留的指针和回调，再通过构造元数据声明必需 provider。例如，Game 保留 Kernel／Guid／Bus／Msg／Net／Map；Net 服务管理器保留 Bus／Timer；Kernel 保留 Map／元数据／配置／Guid。在显式迁移的应用中，模块初始化前验证缺失的必需 provider 和依赖环。安装阶段已经可能获取资源，所以依赖验证不能替代获取点清理。清单顺序与 RTTI 名称本身不能表达回调所有权。独立节点只需稳定的遍历顺序；存在环或未知生命周期依赖时，必须先确定处理策略，才能声明安全停机。
-3. **分离外部请求停止接收与 provider 回收。** 建议增加显式接入的停止接收动作，阻止新的外部业务根任务，同时保留已接收任务所需的完成通知和后续 provider 调用。首批迁移保留现有全局任务／活跃栈和全部模块就绪检查，再按声明依赖排列 `pre_shut()`／`shut()`，先消费者、后 provider。如果一个模块的就绪依赖另一个模块先清理，就出现了阶段间依赖环；应在更早的停止接收动作中解除，或将阶段变更另行提交确认。清点回调接收者、定时器注册和跨插件捕获；依赖插件代码的对象与 callable 全部退出后，才能卸载插件并关闭库。失败或等待超时后，保留现有不可恢复的资源保留规则。按完整迁移集合显式启用，不静默改变旧钩子的含义。
+2. **按模块声明 provider。** 阶段 1 提供 `module::get_dependencies()` 和 `module_base<interface, providers...>`，在安装完成、`init()` 开始前验证全部声明键和依赖环，并让每个启动阶段先执行 provider。首个迁移应用为 Timers 加 Utility；没有凭猜测给其他官方模块批量添加依赖。依赖图验证注册键，不验证任意原始 `add_module()` 条目的动态类型。用于停机前，仍须根据实际保留的指针／回调补齐声明。例如，Game 保留 Kernel／Guid／Bus／Msg／Net／Map；Net 服务管理器保留 Bus／Timer；Kernel 保留 Map／元数据／配置／Guid。安装阶段已经可能获取资源，所以依赖验证不能替代获取点清理。声明安全停机之前，还须显式处理回调所有权、缺失的生命周期依赖和阶段间依赖环。
+3. **分离外部请求停止接收与 provider 回收。** 已选后续合同为显式接入的停止接收动作，阻止新的外部业务根任务，同时保留已接收任务所需的完成通知和后续 provider 调用。首批迁移保留现有全局任务／活跃栈和全部模块就绪检查，再按声明依赖排列 `pre_shut()`／`shut()`，先消费者、后 provider。如果一个模块的就绪依赖另一个模块先清理，就出现了阶段间依赖环；应在更早的停止接收动作中解除，或将阶段变更另行提交确认。清点回调接收者、定时器注册和跨插件捕获；依赖插件代码的对象与 callable 全部退出后，才能卸载插件并关闭库。失败或等待超时后，保留现有不可恢复的资源保留规则。按完整迁移集合显式启用，不静默改变旧钩子的含义。
 
 这些是内部生命周期改进，不涉及 Registry、热更新、服务发现或网络协议。
 
-## 需要确认的决策
+## 交付阶段
 
-| 决策 | 建议起点 | 其他选择与代价 |
-| --- | --- | --- |
-| 启动失败策略 | 默认继续立即退出 `1`；仅对有显式清理记录的模块启用协作补偿，补偿后仍退出 `1` | 先要求全部旧插件支持回滚；每个构造／安装副作用都需要经过验证的补偿动作 |
-| 依赖声明与迁移范围 | 在类型化构造元数据中声明必需的模块生命周期依赖；迁移完整应用集合，并拒绝其中无法解析或成环的声明 | 只按插件清单排序更简单，但不能表示跨插件的模块／回调生命周期 |
-| 排空期间的新外部工作 | 确认独立的停止接收合同，provider 继续供已接收工作使用 | 复用 `ready_to_shut()`／`pre_shut()`，会混合等待、接收控制和回收，实施前须另定准确语义 |
+路线已经选定；下表区分实施范围，不再将其列为待确认决策。
+
+| 已选方向 | 当前交付 |
+| --- | --- |
+| 模块级必需 provider 声明、缺失／环验证与有序启动 | 阶段 1；已迁移 Timers／Utility，无声明模块仍作为独立节点 |
+| 独立停止接收，已接收任务继续访问 provider | 后续阶段；当前就绪检查和任务排空规则保持不变 |
+| 逐模块资源／阶段记录，以及启动失败时的可选补偿，随后退出 `1` | 后续阶段；默认仍立即失败退出，不自动回滚 |
+| 通过全部活跃栈／任务／就绪检查后，先消费者、后 provider 完整清理 | 后续阶段；不提供新的通用停机或卸载保证 |
 
 ## 现有测试与后续验收
 
@@ -74,6 +78,6 @@
 
 测试用观察超时终止自己创建的保留进程，不代表框架正常停机。测试还检查四个无效截止时间参数。[启动失败测试](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/tests/app/startup_failures.cmake) 分别用 TOML 和 XML 检查 12 种失败模式，包括失败前已启动的真实监听器。[Core 启动测试](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/tests/core/plugin_manager_startup.cpp) 和[业务 runtime 测试](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/tests/core/business_runtime.cpp) 覆盖首个失败、回调／重入限制和全部模块就绪检查。
 
-本次提案审阅不新增原生运行通过记录，也不构成托管验收。实施方案前，须在永久测试中覆盖每个已进入阶段／资源获取点的补偿、依赖缺失／成环、跨插件回调接收者，以及已接收工作后续调用期间 provider 持续存活。本次源码审阅没有确认独立违反既定合同的缺陷；尚未提供的回滚／依赖顺序保证继续作为设计工作，不据此实施未经验证的运行时修复。
+永久 Core 依赖测试覆盖 provider 缺失／自依赖／成环、传递／菱形图、重复边、独立节点稳定排序、元数据异常，以及每个启动阶段的首个失败终止。`check-app-module-dependencies` 用真实 Timers DSO 加载缺少 Utility 的应用，要求在 `init()` 前发生依赖失败，并由启动器以退出码 `1` 结束；已有类型化示例／预设测试验证完整应用。本地记录与托管验收继续分开。后续阶段仍须永久测试每个已进入阶段／获取点的补偿、跨插件回调生命周期，以及已接收工作后续调用期间 provider 持续存活；有序启动本身不提供这些停机保证。
 
-源码入口：[管理器](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/src/core/plugin_manager.hpp)、[启动器](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/src/application/main.cpp)、[任务组](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/src/core/task.hpp)、[Net 服务](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/src/plugins/net/net_service_manager_module_impl.cpp)、[MySQL](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/src/plugins/mysql/mysql_module.cpp)、[Redis](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/src/plugins/redis/redis_module.cpp)。原生池语义以配置固定的 [arknet 版本](https://github.com/OpenArkStudio/arknet/tree/a0dfe09cd543e75cfb5996e537ce2fa49f2a758f) 为准，不代表未经验证的依赖升级。
+阶段 1 之前的源码入口：[管理器](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/src/core/plugin_manager.hpp)、[启动器](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/src/application/main.cpp)、[任务组](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/src/core/task.hpp)、[Net 服务](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/src/plugins/net/net_service_manager_module_impl.cpp)、[MySQL](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/src/plugins/mysql/mysql_module.cpp)、[Redis](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/src/plugins/redis/redis_module.cpp)。原生池语义以配置固定的 [arknet 版本](https://github.com/OpenArkStudio/arknet/tree/a0dfe09cd543e75cfb5996e537ce2fa49f2a758f) 为准，不代表未经验证的依赖升级。

@@ -86,12 +86,33 @@ The returned pointer is borrowed. Do not delete it or retain it after the owning
 
 The two example modules share the application update thread. The counter is deliberately not atomic; it does not support calls from arbitrary worker threads. Queue worker completions for the owning module thread or use a service's documented asynchronous API. See the [network reference](../reference/network.md) for network callback dispatch.
 
+## Declare startup dependencies
+
+Use ordinary C++ template parameters to declare required providers. For example, the Timers sample uses the same form as:
+
+```cpp
+#include <ark/module_base.hpp>
+#include <ark/utility/guid_module.hpp>
+#include <ark/utility/timer_module.hpp>
+
+class dependent_module final
+    : public ark::module_base<ark::module, ark::timer_module, ark::guid_module>
+{
+};
+```
+
+`module_base<interface_type, providers...>::get_dependencies()` returns provider interface RTTI registration keys. The first parameter still selects the inherited interface; providers add metadata, not base classes or owned pointers. `module::get_dependencies()` defaults to an empty list. A legacy implementation can override it to return required registration keys directly. Return metadata without mutating the registry; it is read once on the owner thread after installation and held as a snapshot for one startup attempt. Repeated keys count once; a self-dependency is a cycle. Optional lookups remain nullable and should not be declared required. Validation checks registration-key presence; callers of raw `add_module()` remain responsible for supplying an object implementing the registered interface.
+
+The migrated small application is Timers plus Utility. Timers really looks up Timer and Guid during `init()`; Utility's Timer, Guid, Schedule and Compress implementations have no required module providers. Other applications keep their existing declarations and lookup checks; they have not acquired a complete callback-lifetime graph. Stable key ordering is defined within a compatible build, not across different compiler RTTI encodings.
+
+**Upgrade:** `module` adds a metadata virtual method and changes its virtual table; Timers also changes its public base specialization. Rebuild the launcher, all official/business plugins and affected consumers together with compatible headers/compiler settings. Do not mix older binaries. Existing lookup keys remain unchanged; this C++ boundary provides no cross-compiler ABI guarantee. The metadata currently governs startup only: update, readiness, `pre_shut()`, `shut()` and plugin unloading retain their existing behavior. Independent ingress quiescence, reverse dependency cleanup and opt-in startup-failure compensation remain subsequent work in the [selected lifecycle route](../project/lifecycle-closeout.md).
+
 ## Choose lifecycle stages
 
 | Callback | Appropriate work | Current boundary |
 | --- | --- | --- |
-| `init()` | Initialize local resources | Other registered modules may not have run `init()` yet |
-| `post_init()` | Resolve interfaces and use dependencies initialized in `init()` | Other modules' `post_init()` ordering is not a dependency order |
+| `init()` | Initialize local resources | Declared providers have completed this phase; independent modules may follow |
+| `post_init()` | Resolve interfaces and use dependencies initialized in `init()` | Declared providers also finish `post_init()` before their consumers |
 | `check_config()` | Check configuration and dependencies | A failure stops the remaining startup work |
 | `pre_update()` | Prepare work before the application loop | Keep this stage bounded |
 | `update()` | Publish queued service and bridge completions | Called only for implementations that override it; the manager then polls its shared executor once. Its Boolean result does not stop updates |
@@ -100,11 +121,13 @@ The two example modules share the application update thread. The counter is deli
 
 ![Successful module lifecycle](../assets/module-lifecycle.svg)
 
-All module libraries are installed before the manager starts the initialization stages. Each stage visits the registered modules; the current containers do not provide dependency sorting or manifest-order execution. The base callbacks return `true`; override only the stages needed. The registration macro adds an implementation to the update list when it overrides `update()`. The counter provider therefore receives no frame updates, while `sample_module` increments it once per manager update.
+All module libraries are installed before the manager validates declared provider keys and builds a startup order. `init()`, `post_init()`, `check_config()` and `pre_update()` each use that same order, with providers before consumers. Undeclared modules are independent; ties between currently ready nodes use lexicographic registration-key order, not manifest or insertion order. The base callbacks return `true`; override only the stages needed. The registration macro adds an implementation to the update list when it overrides `update()`. The counter provider therefore receives no frame updates, while `sample_module` increments it once per manager update.
 
 Normal shutdown first stops managed top-level task admission and keeps pumping accepted tasks. It does not close their operation services or bridges. After draining, shutdown hooks and unloading run synchronously; a hook can block, and the shared poll's handler-count budget does not bound its duration. A failed hook leaves the launcher and resources alive, reports its phase and module, and is not automatically retried.
 
 <Aside type="caution" title="Handle the manager's startup result">
+
+A missing required provider key or a dependency cycle makes `start()` return false before any module startup hook. `get_startup_failure()` identifies `dependencies: <consumer> requires missing module '<provider>'` or lists modules blocked by a cycle; blocked modules can include downstream consumers outside the cycle itself. Metadata exceptions propagate unchanged with `dependencies: <module>` context. All registration and installation side effects have already occurred; validation does not roll them back.
 
 The first `false` from `init()`, `post_init()`, `check_config()` or `pre_update()` stops that stage and all later startup stages, and `plugin_manager::start()` returns `false`. Each callback runs at most once in its stage. Exceptions propagate unchanged and also stop the remaining startup calls. `get_startup_failure()` retains the current `phase: module` context on failure, or `load_plugin: plugin` while loading a library and invoking its entrypoint; it is empty after successful startup and must be read on the manager's owner thread. Modules that already completed a stage are not automatically rolled back.
 
@@ -157,8 +180,8 @@ std::unique_ptr<ark::counter_module> make_counter() {
 ```
 
 The single inheritance chain is implementation → `module_base<interface_type>` →
-interface → `module`. The base implements manager/name accessors and protected
-`find_module<T>()`; it adds no lifecycle or `update()` override. Lookup retains
+interface → `module`. The base implements manager/name accessors, required-provider metadata and protected
+`find_module<T>()`; it adds no startup/shutdown hook or `update()` override. Lookup retains
 its existing requirement that the requested interface is registered. Include the
 base in the implementation, so consumers do not need the concrete class.
 

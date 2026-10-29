@@ -26,7 +26,8 @@
 // These preserve the old registration macro's update detection for all three examples.
 static_assert(!std::same_as<decltype(&ark::timers_module::update), decltype(&ark::module::update)>);
 static_assert(std::same_as<decltype(&ark::module_lifecycle_module::update), decltype(&ark::module::update)>);
-static_assert(std::derived_from<ark::timers_module, ark::module_base<ark::module>>);
+static_assert(
+    std::derived_from<ark::timers_module, ark::module_base<ark::module, ark::timer_module, ark::guid_module>>);
 static_assert(std::derived_from<ark::module_lifecycle_module, ark::module_base<ark::module>>);
 
 static_assert(std::derived_from<ark::entity_operations_module, ark::module_base<ark::module>>);

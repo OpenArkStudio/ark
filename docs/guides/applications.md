@@ -79,7 +79,7 @@ The launcher still accepts user-maintained legacy XML manifests, for example:
 - Use the library stem in `name`, without a platform suffix or a `lib` prefix. The loader appends `.dll`, `.so` or `.dylib`; Debug builds also append `_d` before the suffix.
 - An empty `conf` value supplies no per-plugin filename. Timers does not need a separate `timers.conf` file.
 
-Copy the executable and selected plugin libraries from the same build. Keep Debug and Release artifacts in separate runtime directories. The plugin list is not a dependency-order contract: modules should resolve their dependencies through the [module API](modules.md), rather than rely on entry order.
+Copy the executable and selected plugin libraries from the same build. Keep Debug and Release artifacts in separate runtime directories. The plugin list is not a dependency-order contract: modules declare required provider keys through the [module API](modules.md#declare-startup-dependencies). The manager validates these after installation and orders all four startup phases by dependency, without changing shutdown order. Rebuild the launcher and every plugin together for the new module metadata virtual method; older binaries are incompatible.
 
 ## Check startup and stop the process
 
@@ -101,7 +101,7 @@ Manifest loading or validation failures return exit code `1` before plugin start
 
 The launcher composes startup failure context before writing it to stderr, keeping the phase and module together instead of issuing separate stream insertions.
 
-Failure-path checks: `check-app-business-runtime` covers 13 drain, readiness, hook-failure and retention scenarios using the real launcher and a controlled test plugin; `check-native-unload` verifies plugin exit exceptions and retained library handles. These tests do not provide partial-startup rollback or dependency-ordered teardown. The [startup and shutdown closeout proposal](../project/lifecycle-closeout.md) records resource acquisition boundaries, current native-retirement limits and the decisions needed before adding those guarantees.
+Failure-path checks: `check-app-business-runtime` covers 13 drain, readiness, hook-failure and retention scenarios using the real launcher and a controlled test plugin; `check-native-unload` verifies plugin exit exceptions and retained library handles. These tests do not provide partial-startup rollback or dependency-ordered teardown. The [startup and shutdown closeout proposal](../project/lifecycle-closeout.md) records resource acquisition boundaries, current native-retirement limits and the selected route and stages that remain before adding those guarantees.
 
 ## Run one application
 

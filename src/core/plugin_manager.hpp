@@ -20,14 +20,19 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <exception>
+#include <map>
 #include <memory>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <thread>
 #include <type_traits>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "ark/dynamic_library.hpp"
 #include "ark/logger.hpp"
@@ -47,6 +52,8 @@ class plugin_base;
 
 class plugin_manager final : private noncopyable
 {
+    using startup_modules = std::vector<std::pair<std::string, module*>>;
+
     enum class call_phase
     {
         idle,
@@ -120,19 +127,20 @@ public:
         plugin_conf_dir_ = conf_dir;
         plugins_ = plugins;
 
-        if (!init())
+        startup_modules order;
+        if (!init(order))
         {
             return false;
         }
-        if (!post_init())
+        if (!post_init(order))
         {
             return false;
         }
-        if (!check_config())
+        if (!check_config(order))
         {
             return false;
         }
-        if (!pre_update())
+        if (!pre_update(order))
         {
             return false;
         }
@@ -431,7 +439,72 @@ protected:
         return ((iter != module_instances_.end()) ? iter->second : nullptr);
     }
 
-    auto init() -> bool {
+    bool order_startup_modules(startup_modules& order) {
+        // Lexicographic registration keys break ties independently of unordered
+        // registry insertion and declaration order. Duplicate edges count once.
+        std::map<std::string, std::size_t> pending;
+        std::map<std::string, std::vector<std::string>> consumers;
+        for (const auto& [name, instance] : module_instances_)
+        {
+            pending.emplace(name, 0);
+        }
+        for (auto& [name, count] : pending)
+        {
+            startup_failure_ = "dependencies: " + name;
+            auto dependencies = module_instances_.at(name)->get_dependencies();
+            std::sort(dependencies.begin(), dependencies.end());
+            dependencies.erase(std::unique(dependencies.begin(), dependencies.end()), dependencies.end());
+            for (const auto& provider : dependencies)
+            {
+                if (!pending.contains(provider))
+                {
+                    startup_failure_ += " requires missing module '" + provider + "'";
+                    return false;
+                }
+                ++count;
+                consumers[provider].push_back(name);
+            }
+        }
+        std::set<std::string> ready;
+        for (const auto& [name, count] : pending)
+        {
+            if (count == 0)
+            {
+                ready.insert(name);
+            }
+        }
+        while (!ready.empty())
+        {
+            auto name = *ready.begin();
+            ready.erase(ready.begin());
+            order.emplace_back(name, module_instances_.at(name));
+            for (const auto& consumer : consumers[name])
+            {
+                if (--pending.at(consumer) == 0)
+                {
+                    ready.insert(consumer);
+                }
+            }
+        }
+        if (order.size() != pending.size())
+        {
+            startup_failure_ = "dependencies: cycle prevents startup; blocked modules: ";
+            bool first = true;
+            for (const auto& [name, count] : pending)
+            {
+                if (count != 0)
+                {
+                    startup_failure_ += (first ? "" : ", ") + name;
+                    first = false;
+                }
+            }
+            return false;
+        }
+        startup_failure_.clear();
+        return true;
+    }
+
+    auto init(startup_modules& order) -> bool {
         // load plugin dynamic libraries
         for (auto const& iter : plugins_)
         {
@@ -443,13 +516,17 @@ protected:
             }
         }
 
-        // initialize all modules
-        for (auto const& iter : module_instances_)
+        if (!order_startup_modules(order))
         {
-            module* module_ptr = iter.second;
+            return false;
+        }
+
+        // Initialize providers before their declared consumers in every phase.
+        for (const auto& [name, module_ptr] : order)
+        {
             ARK_ASSERT_CONTINUE(module_ptr != nullptr);
 
-            startup_failure_ = "init: " + iter.first;
+            startup_failure_ = "init: " + name;
             if (!module_ptr->init())
             {
                 return false;
@@ -460,13 +537,12 @@ protected:
         return true;
     }
 
-    auto post_init() -> bool {
-        for (auto const& iter : module_instances_)
+    auto post_init(const startup_modules& order) -> bool {
+        for (const auto& [name, module_ptr] : order)
         {
-            module* module_ptr = iter.second;
             ARK_ASSERT_CONTINUE(module_ptr != nullptr);
 
-            startup_failure_ = "post_init: " + iter.first;
+            startup_failure_ = "post_init: " + name;
             if (!module_ptr->post_init())
             {
                 return false;
@@ -477,13 +553,12 @@ protected:
         return true;
     }
 
-    auto check_config() -> bool {
-        for (auto const& iter : module_instances_)
+    auto check_config(const startup_modules& order) -> bool {
+        for (const auto& [name, module_ptr] : order)
         {
-            module* module_ptr = iter.second;
             ARK_ASSERT_CONTINUE(module_ptr != nullptr);
 
-            startup_failure_ = "check_config: " + iter.first;
+            startup_failure_ = "check_config: " + name;
             if (!module_ptr->check_config())
             {
                 return false;
@@ -494,13 +569,12 @@ protected:
         return true;
     }
 
-    auto pre_update() -> bool {
-        for (auto const& iter : module_instances_)
+    auto pre_update(const startup_modules& order) -> bool {
+        for (const auto& [name, module_ptr] : order)
         {
-            module* module_ptr = iter.second;
             ARK_ASSERT_CONTINUE(module_ptr != nullptr);
 
-            startup_failure_ = "pre_update: " + iter.first;
+            startup_failure_ = "pre_update: " + name;
             if (!module_ptr->pre_update())
             {
                 return false;

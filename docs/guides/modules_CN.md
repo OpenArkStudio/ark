@@ -86,12 +86,33 @@ private:
 
 示例中的两个模块在应用更新线程中调用。计数器没有使用原子变量，不支持任意工作线程直接访问。工作线程的完成结果应投递到模块所属线程，或使用服务明确提供的异步 API。网络回调的分发方式见[网络接口](../reference/network_CN.md)。
 
+## 声明启动依赖
+
+用普通 C++ 模板参数声明必需 provider。Timers 示例采用相同形式：
+
+```cpp
+#include <ark/module_base.hpp>
+#include <ark/utility/guid_module.hpp>
+#include <ark/utility/timer_module.hpp>
+
+class dependent_module final
+    : public ark::module_base<ark::module, ark::timer_module, ark::guid_module>
+{
+};
+```
+
+`module_base<interface_type, providers...>::get_dependencies()` 返回 provider 接口的 RTTI 注册键。第一个参数仍选择继承的接口；provider 只增加元数据，不增加基类或自有指针。`module::get_dependencies()` 默认返回空列表。旧实现也可覆写它，直接返回必需注册键。读取元数据时不得修改 registry；管理器在安装完成后于 owner 线程读取一次，并在本次启动中使用同一快照。重复键只计算一次，自依赖视为环。可选依赖继续使用可空查询，不应声明为必需。验证检查注册键是否存在；直接调用 `add_module()` 的代码仍须保证对象实现了所注册的接口。
+
+本阶段迁移的小应用为 Timers 加 Utility。Timers 在 `init()` 中实际查找 Timer 和 Guid；Utility 的 Timer、Guid、Schedule 和 Compress 实现没有必需的模块 provider。其他应用保留已有声明和查询检查，尚未形成完整的回调生命周期图。稳定注册键顺序只在兼容构建内定义，不保证不同编译器的 RTTI 编码具有相同排序。
+
+**升级要求：** `module` 新增元数据虚方法，虚表发生变化；Timers 的公开基类特化也改变。必须使用兼容的头文件／编译器配置，同时重建启动器、全部官方／业务插件及受影响的消费者，不得混用旧二进制。已有查找键保持不变，此 C++ 边界不提供跨编译器 ABI 保证。元数据当前只控制启动：update、就绪检查、`pre_shut()`、`shut()` 和插件卸载保留原有行为。独立停止接收、按依赖反向完整清理和可选的启动失败补偿，仍属于[已选生命周期路线](../project/lifecycle-closeout_CN.md)的后续阶段。
+
 ## 选择生命周期阶段
 
 | 回调 | 适合处理的工作 | 当前约束 |
 | --- | --- | --- |
-| `init()` | 初始化本模块资源 | 其他已注册模块可能尚未执行 `init()` |
-| `post_init()` | 查找接口，使用已在 `init()` 中初始化的依赖 | 其他模块的 `post_init()` 不按依赖顺序执行 |
+| `init()` | 初始化本模块资源 | 声明的 provider 已完成同一阶段，独立模块可能稍后执行 |
+| `post_init()` | 查找接口，使用已在 `init()` 中初始化的依赖 | 声明的 provider 也先于消费者完成 `post_init()` |
 | `check_config()` | 检查配置和依赖 | 失败时停止剩余启动工作 |
 | `pre_update()` | 准备进入应用循环 | 避免在这个阶段执行无期限的工作 |
 | `update()` | 分发服务与桥接的完成结果 | 只调用实现类覆盖的 `update()`，随后管理器统一轮询一次共享执行器；布尔返回值不会停止更新 |
@@ -100,11 +121,13 @@ private:
 
 ![模块成功启动的生命周期顺序](../assets/module-lifecycle.svg)
 
-管理器先安装所有模块，再执行初始化阶段。每个阶段遍历已注册模块；当前容器不提供依赖排序，也不保证按照清单顺序执行。基类回调默认返回 `true`，只需覆盖使用到的阶段。注册宏检测到实现类覆盖 `update()` 时，才把它加入更新列表。因此计数器实现不参与逐帧更新，`sample_module` 则在每次管理器更新时递增一次计数器。
+管理器先安装所有模块，再验证声明的 provider 注册键并生成启动顺序。`init()`、`post_init()`、`check_config()` 和 `pre_update()` 使用同一顺序，先 provider、后消费者。没有声明依赖的模块视为独立节点；当前可启动节点之间按注册键的字典序选择，不按清单或插入顺序执行。基类回调默认返回 `true`，只需覆盖使用到的阶段。注册宏检测到实现类覆盖 `update()` 时，才把它加入更新列表。因此计数器实现不参与逐帧更新，`sample_module` 则在每次管理器更新时递增一次计数器。
 
 正常停止时，管理器先停止受理新的顶层业务任务，继续驱动已受理任务，不会关闭它们使用的服务或桥接准入。任务排空后，关闭钩子与卸载同步执行；钩子可能阻塞，轮询的 handler 数量上限也不限制其耗时。钩子失败时，启动器输出阶段和模块信息，保留进程及资源，不会自动重试这些钩子。
 
 <Aside type="caution" title="检查管理器的启动结果">
+
+缺少必需 provider 注册键或依赖成环时，`start()` 在调用任何模块启动钩子前返回 false。`get_startup_failure()` 保留 `dependencies: <consumer> requires missing module '<provider>'`，或列出被依赖环阻塞的模块；阻塞列表也可能包含环外的下游消费者。元数据异常保持原样向上传播，并保留 `dependencies: <module>` 上下文。此时注册和安装的副作用已发生，验证不会回滚这些资源。
 
 `init()`、`post_init()`、`check_config()` 或 `pre_update()` 首次返回 `false` 时，管理器停止该阶段的剩余模块及后续启动阶段，`plugin_manager::start()` 返回 `false`。同一阶段内每个回调至多执行一次。异常保持原样向外传播，也会停止剩余启动调用。失败时，`get_startup_failure()` 保留当前的 `phase: module` 上下文；库加载及其入口调用使用 `load_plugin: plugin`。成功启动后上下文为空，读取时必须位于管理器所属线程。已经完成的阶段不会自动回滚。
 
@@ -156,7 +179,7 @@ std::unique_ptr<ark::counter_module> make_counter() {
 ```
 
 单继承链为具体实现 → `module_base<interface_type>` → 接口 → `module`。基类实现
-manager/name 访问函数及受保护的 `find_module<T>()`，不覆写生命周期或 `update()`。
+manager/name 访问函数、必需 provider 元数据及受保护的 `find_module<T>()`，不覆写启动／停机钩子或 `update()`。
 查找仍要求目标接口已经注册。在实现中包含基类即可，调用方无需依赖具体类。
 
 私有工厂返回 `std::unique_ptr<interface_type>`。

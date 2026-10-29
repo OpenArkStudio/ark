@@ -20,6 +20,9 @@
 
 #pragma once
 
+#include <string>
+#include <vector>
+
 #include "ark/macros.hpp"
 #include "ark/platform.hpp"
 
@@ -32,6 +35,12 @@ class module
 public:
     module() = default;
     virtual ~module() = default;
+
+    // Required provider registration keys. Read once after installation, before
+    // startup hooks. This metadata does not change update or shutdown order.
+    virtual std::vector<std::string> get_dependencies() const {
+        return {};
+    }
 
     virtual bool init() {
         return true;

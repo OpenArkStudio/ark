@@ -1,19 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 132" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 145" role="img" aria-labelledby="title desc">
   <title id="title">Module lifecycle</title>
-  <desc id="desc">init, post_init, check_config, pre_update, repeated update, pre_shut, shut.</desc>
+  <desc id="desc">After installation, validate required providers and sort startup dependencies before init, post_init, check_config and pre_update. Update and shutdown retain their existing order.</desc>
   <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 8 4 0 8" fill="none" stroke="#64748b"/></marker></defs>
   <g fill="none" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)">
-    <path d="M108 64H132M244 64H268M380 64H404M516 64H540M652 64H676M788 64H812"/>
-    <path d="M624 42V20H568V42"/>
+    <path d="M136 64H158M248 64H270M382 64H404M516 64H538M650 64H672M784 64H806M918 64H940"/>
+    <path d="M756 42V20H700V42"/>
   </g>
   <g fill="#f1f5f9" stroke="#94a3b8">
-    <rect x="8" y="42" width="100" height="44" rx="8"/><rect x="132" y="42" width="112" height="44" rx="8"/>
-    <rect x="268" y="42" width="112" height="44" rx="8"/><rect x="404" y="42" width="112" height="44" rx="8"/>
-    <rect x="540" y="42" width="112" height="44" rx="8" fill="#dbeafe" stroke="#3b82f6"/>
-    <rect x="676" y="42" width="112" height="44" rx="8"/><rect x="812" y="42" width="112" height="44" rx="8"/>
+    <rect x="8" y="42" width="128" height="44" rx="8"/>
+    <rect x="158" y="42" width="90" height="44" rx="8"/><rect x="270" y="42" width="112" height="44" rx="8"/>
+    <rect x="404" y="42" width="112" height="44" rx="8"/><rect x="538" y="42" width="112" height="44" rx="8"/>
+    <rect x="672" y="42" width="112" height="44" rx="8" fill="#dbeafe" stroke="#3b82f6"/>
+    <rect x="806" y="42" width="112" height="44" rx="8"/><rect x="940" y="42" width="112" height="44" rx="8"/>
   </g>
   <g fill="#0f172a" font-family="ui-monospace, monospace" font-size="13" text-anchor="middle">
-    <text x="58" y="69">init()</text><text x="188" y="69">post_init()</text><text x="324" y="69">check_config()</text>
-    <text x="460" y="69">pre_update()</text><text x="596" y="69">update()</text><text x="732" y="69">pre_shut()</text><text x="868" y="69">shut()</text>
+    <text x="72" y="69">dependencies</text><text x="203" y="69">init()</text><text x="326" y="69">post_init()</text>
+    <text x="460" y="69">check_config()</text><text x="594" y="69">pre_update()</text><text x="728" y="69">update()</text>
+    <text x="862" y="69">pre_shut()</text><text x="996" y="69">shut()</text>
   </g>
+  <text x="540" y="120" fill="#475569" font-family="sans-serif" font-size="13" text-anchor="middle">Startup: declared providers first. Update / shutdown: existing order.</text>
 </svg>
