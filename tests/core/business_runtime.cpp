@@ -1,4 +1,5 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
+#include <chrono>
 #include <cstdint>
 #include <exception>
 #include <functional>
@@ -374,6 +375,7 @@ TEST_CASE("Manager owner and active registry checks reject mutations before they
         rejects([&] { manager.get_shutdown_failure(); });
         rejects([&] { manager.update(1); });
         rejects([&] { manager.stop(1); });
+        rejects([&] { manager.stop_until(1, std::chrono::steady_clock::now()); });
         rejects([&] { manager.start(1, {}, {}, {}); });
         rejects([&] { manager.add_module(extra.get_name(), &extra); });
         rejects([&] { manager.remove_module(module.get_name()); });
@@ -382,7 +384,7 @@ TEST_CASE("Manager owner and active registry checks reject mutations before they
         rejects([&] { tasks.start(ready_task()); });
     });
     worker.join();
-    CHECK(rejected == 16);
+    CHECK(rejected == 17);
     module.on_update = [&] {
         CHECK_THROWS_AS(manager.update(1), std::logic_error);
         CHECK_THROWS_AS(manager.remove_module(module.get_name()), std::logic_error);
@@ -840,4 +842,103 @@ TEST_CASE("Admission stop rejects a cyclic manual graph before calling any hook"
     CHECK(manager.get_shutdown_failure() == "stop_accepting: cycle prevents admission stop; blocked modules: self");
     CHECK(module.stop_accepting_calls == 0);
     CHECK(module.pre_shut_calls == 0);
+}
+
+TEST_CASE("Admission deadline retains accepted tasks and cannot be bypassed by an unlimited stop") {
+    ark::plugin_manager manager;
+    observed_module module("admission-deadline");
+    REQUIRE(manager.add_module(module.get_name(), &module));
+    REQUIRE(manager.add_update_module(&module));
+    auto& tasks = manager.create_task_group(module);
+    unsigned completed{}, updates{};
+    REQUIRE(tasks.start(ready_task(), [&](std::exception_ptr error) {
+        CHECK_FALSE(error);
+        ++completed;
+    }) != 0);
+    module.on_update = [&] { ++updates; };
+    module.on_stop_accepting = [&] {
+        // Shorten the stored deadline from within a hook, without sleeping or
+        // permitting nested lifecycle execution.
+        CHECK_FALSE(manager.stop_until(2, std::chrono::steady_clock::now() - std::chrono::seconds(1)));
+        CHECK_FALSE(manager.stop_until(2, std::chrono::steady_clock::time_point::max()));
+        return true;
+    };
+    CHECK_FALSE(manager.stop_until(1, std::chrono::steady_clock::now() + std::chrono::hours(1)));
+    CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::timed_out);
+    CHECK(manager.get_shutdown_failure() == "stop_accepting: admission-deadline");
+    CHECK_FALSE(manager.get_shutdown_exception());
+    CHECK(module.stop_accepting_calls == 1);
+    CHECK(module.readiness_calls == 0);
+    CHECK(tasks.start(ready_task()) == 0);
+    CHECK(manager.update(3));
+    CHECK(updates == 1);
+    CHECK(completed == 1);
+    CHECK(manager.pending_tasks() == 0);
+    CHECK_FALSE(manager.stop(4));
+    CHECK_FALSE(manager.stop_until(5, std::chrono::steady_clock::time_point::max()));
+    CHECK(module.stop_accepting_calls == 1);
+    CHECK(module.readiness_calls == 0);
+    CHECK(module.pre_shut_calls == 0);
+    CHECK(module.shut_calls == 0);
+}
+
+TEST_CASE("A successful readiness hook cannot enter cleanup after its deadline") {
+    ark::plugin_manager manager;
+    observed_module module("readiness-deadline");
+    REQUIRE(manager.add_module(module.get_name(), &module));
+    module.on_readiness = [&] {
+        CHECK_FALSE(manager.stop_until(2, std::chrono::steady_clock::now() - std::chrono::seconds(1)));
+        return true;
+    };
+    CHECK_FALSE(manager.stop_until(1, std::chrono::steady_clock::now() + std::chrono::hours(1)));
+    CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::timed_out);
+    CHECK(manager.get_shutdown_failure() == "ready_to_shut: readiness-deadline");
+    CHECK(module.readiness_calls == 1);
+    CHECK(module.pre_shut_calls == 0);
+    CHECK(module.shut_calls == 0);
+    CHECK(manager.update(3));
+    CHECK_FALSE(manager.stop(4));
+    CHECK(module.readiness_calls == 1);
+}
+
+TEST_CASE("Cleanup deadline retains later resources and disables module updates") {
+    ark::plugin_manager manager;
+    observed_module module("cleanup-deadline");
+    REQUIRE(manager.add_module(module.get_name(), &module));
+    REQUIRE(manager.add_update_module(&module));
+    unsigned updates{};
+    module.on_update = [&] { ++updates; };
+    module.on_pre_shut = [&] {
+        CHECK_FALSE(manager.stop_until(2, std::chrono::steady_clock::now() - std::chrono::seconds(1)));
+    };
+    CHECK_FALSE(manager.stop_until(1, std::chrono::steady_clock::now() + std::chrono::hours(1)));
+    CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::cleanup_timed_out);
+    CHECK(manager.get_shutdown_failure() == "pre_shut: cleanup-deadline");
+    CHECK(module.pre_shut_calls == 1);
+    CHECK(module.shut_calls == 0);
+    CHECK_FALSE(manager.update(3));
+    CHECK(updates == 0);
+    CHECK_FALSE(manager.stop(4));
+    CHECK_FALSE(manager.stop_until(5, std::chrono::steady_clock::time_point::max()));
+    CHECK(module.pre_shut_calls == 1);
+    CHECK(module.shut_calls == 0);
+}
+
+TEST_CASE("Expired and future manager deadlines preserve terminal stop semantics") {
+    ark::plugin_manager expired;
+    CHECK_FALSE(expired.stop_until(1, std::chrono::steady_clock::now() - std::chrono::seconds(1)));
+    CHECK(expired.get_shutdown_state() == ark::plugin_manager::shutdown_state::timed_out);
+    CHECK_FALSE(expired.stop(2));
+    CHECK(expired.update(3));
+
+    ark::plugin_manager normal;
+    observed_module module("within-deadline");
+    REQUIRE(normal.add_module(module.get_name(), &module));
+    CHECK(normal.stop_until(1, std::chrono::steady_clock::now() + std::chrono::hours(1)));
+    CHECK(normal.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopped);
+    CHECK(normal.stop(2));
+    CHECK(normal.stop_until(3, std::chrono::steady_clock::now() - std::chrono::seconds(1)));
+    CHECK(module.stop_accepting_calls == 1);
+    CHECK(module.pre_shut_calls == 1);
+    CHECK(module.shut_calls == 1);
 }

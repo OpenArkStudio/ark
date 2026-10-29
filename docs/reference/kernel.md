@@ -217,6 +217,8 @@ bool set_int32_field(ark::kernel_module& kernel, const ark::guid_t& id, const st
 
 With assertions disabled, a failed row allocation returns `nullptr`, preserves existing rows and the next automatic index, and emits no `table_add` event. Retry after memory recovers; Debug builds retain the existing failed-add assertion. A map insertion exception reclaims the unpublished row before propagating; existing rows remain owned by the table.
 
+Container slot swaps retain the child handles before removing map entries. Moving to an empty slot and exchanging occupied slots preserve the selected children and existing callback order; cross-container exchanges update each child's parent through the existing remove/place callbacks. `remove()` detaches a child, while `destroy()` follows the Kernel destruction callback. These operations do not provide cross-container rollback or support arbitrary structural mutation from their callbacks.
+
 ### Custom scalar ownership
 
 Custom scalar creation releases an unpublished value if value construction or map insertion throws; the exception propagates without adding the name. Successful values remain owned by the entity.

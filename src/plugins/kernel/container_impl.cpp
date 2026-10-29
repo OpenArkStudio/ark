@@ -138,7 +138,7 @@ bool container_impl::swap(const uint32_t src_index, const uint32_t dest_index) {
     if (iter_dest == entity_data_list_.end())
     {
         entity_data_list_.erase(src_index);
-        if (!place_entity(dest_index, iter_src->second))
+        if (!place_entity(dest_index, src_entity_ptr))
         {
             return false;
         }
@@ -201,12 +201,12 @@ bool container_impl::swap(
     }
     else
     {
+        auto dest_src_entity_ptr = iter_dest->second;
         if (!remove(dest_index))
         {
             return false;
         }
 
-        auto dest_src_entity_ptr = iter_dest->second;
         if (!src_container_ptr->place(src_index, dest_src_entity_ptr) || !place_entity(dest_index, src_entity_ptr))
         {
             return false;

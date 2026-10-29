@@ -57,7 +57,8 @@ add_custom_target(check-core
 add_executable(ark_singleton_tests ../test_singleton.cpp)
 set_property(TARGET ark_singleton_tests PROPERTY LINK_LIBRARIES ark::core)
 add_custom_target(check-singleton
-    COMMAND $<TARGET_FILE:ark_singleton_tests>
+    COMMAND ${CMAKE_COMMAND} "-DPROGRAM=$<TARGET_FILE:ark_singleton_tests>"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/singleton.cmake"
     DEPENDS ark_singleton_tests USES_TERMINAL VERBATIM)
 add_dependencies(check-core check-singleton)
 if(TARGET check-proto-configuration)
@@ -304,6 +305,14 @@ if(ARK_BUILD_CONFIG)
                 -P "${PROJECT_SOURCE_DIR}/tests/app/business_runtime.cmake"
             DEPENDS app ark_business_runtime_probe USES_TERMINAL)
         add_dependencies(check-core check-app-business-runtime)
+        add_custom_target(check-app-shutdown-deadlines
+            COMMAND ${CMAKE_COMMAND} "-DPROGRAM=$<TARGET_FILE:app>"
+                "-DPLUGIN_DIR=$<TARGET_FILE_DIR:ark_business_runtime_probe>"
+                "-DSOURCE_ROOT=${PROJECT_SOURCE_DIR}"
+                "-DRUNTIME_DIR=${CMAKE_CURRENT_BINARY_DIR}/shutdown deadlines app"
+                -P "${PROJECT_SOURCE_DIR}/tests/app/shutdown_deadlines.cmake"
+            DEPENDS app ark_business_runtime_probe USES_TERMINAL)
+        add_dependencies(check-core check-app-shutdown-deadlines)
 
         add_library(ark_app_startup_failure_plugin SHARED ../app/startup_failure_plugin.cpp)
         set_property(TARGET ark_app_startup_failure_plugin PROPERTY LINK_LIBRARIES ark::core)
