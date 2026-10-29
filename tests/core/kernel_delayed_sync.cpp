@@ -6,6 +6,7 @@
 #include <map>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "../network/doctest.h"
@@ -398,6 +399,85 @@ TEST_CASE("Kernel delayed flush guard resets after callback exceptions") {
     world.deliveries.clear();
     REQUIRE(world.kernel.update());
     CHECK(world.deliveries.empty());
+}
+
+TEST_CASE("Kernel container swaps preserve child ownership parent bindings and callback order") {
+    using operation = ark::container_op_type;
+    using record = std::tuple<std::uint32_t, operation, std::uint32_t, std::uint32_t>;
+
+    struct observer
+    {
+        std::vector<record> events;
+
+        int on_event(const ark::guid_t&, std::uint32_t container, operation op, std::uint32_t from, std::uint32_t to) {
+            events.emplace_back(container, op, from, to);
+            return 0;
+        }
+    } observed;
+
+    auto& events = observed.events;
+    delayed_sync_world world;
+    const auto source = world.owner->find_container(201);
+    const auto destination = world.owner->find_container(202);
+    REQUIRE(source != nullptr);
+    REQUIRE(destination != nullptr);
+    const auto first = world.create_child();
+    REQUIRE(first->set_u_int32(1, 17));
+    const auto first_slot = source->find(first->get_id());
+    REQUIRE(first_slot == 1);
+    const std::weak_ptr<ark::entity> first_lifetime = first;
+    for (const auto index : {201u, 202u})
+    {
+        REQUIRE(static_cast<ark::kernel_module&>(world.kernel)
+                    .add_container_call_back("Owner", index, &observed, &observer::on_event, 100));
+    }
+
+    SUBCASE("same container move into an empty slot") {
+        REQUIRE(source->swap(first_slot, 7u));
+        CHECK(source->find(first_slot) == nullptr);
+        CHECK(source->find(7u) == first);
+        CHECK(first->get_parent_container() == source);
+        CHECK(events == std::vector<record>{{201u, operation::op_swap, first_slot, 7u}});
+    }
+    SUBCASE("same container exchange occupied slots") {
+        const auto second = world.create_child();
+        const auto second_slot = source->find(second->get_id());
+        events.clear();
+        REQUIRE(source->swap(first_slot, second_slot));
+        CHECK(source->find(first_slot) == second);
+        CHECK(source->find(second_slot) == first);
+        CHECK(first->get_parent_container() == source);
+        CHECK(second->get_parent_container() == source);
+        CHECK(events == std::vector<record>{{201u, operation::op_swap, first_slot, second_slot}});
+    }
+    SUBCASE("cross container move into an empty slot") {
+        REQUIRE(destination->swap(source, first_slot, 7u));
+        CHECK(source->find(first_slot) == nullptr);
+        CHECK(destination->find(7u) == first);
+        CHECK(first->get_parent_container() == destination);
+        CHECK(events ==
+              std::vector<record>{{201u, operation::op_remove, first_slot, 0u}, {202u, operation::op_place, 7u, 0u}});
+    }
+    SUBCASE("cross container exchange occupied slots") {
+        const auto second = world.create_child(202);
+        REQUIRE(second->set_u_int32(1, 23));
+        const auto second_slot = destination->find(second->get_id());
+        const std::weak_ptr<ark::entity> second_lifetime = second;
+        events.clear();
+        REQUIRE(destination->swap(source, first_slot, second_slot));
+        CHECK(source->find(first_slot) == second);
+        CHECK(destination->find(second_slot) == first);
+        CHECK(first->get_parent_container() == destination);
+        CHECK(second->get_parent_container() == source);
+        CHECK(second->get_u_int32(1) == 23);
+        CHECK_FALSE(second_lifetime.expired());
+        CHECK(events == std::vector<record>{{201u, operation::op_remove, first_slot, 0u},
+                            {202u, operation::op_remove, second_slot, 0u}, {201u, operation::op_place, first_slot, 0u},
+                            {202u, operation::op_place, second_slot, 0u}});
+    }
+    CHECK(first->get_u_int32(1) == 17);
+    CHECK_FALSE(first_lifetime.expired());
+    REQUIRE(world.kernel.update());
 }
 
 TEST_CASE("Real Kernel captures converge through trusted nested streams across rows child moves and destruction") {
