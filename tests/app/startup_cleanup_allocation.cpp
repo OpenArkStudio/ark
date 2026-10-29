@@ -3,7 +3,9 @@
 #include <cstdlib>
 #include <memory>
 #include <new>
+#include <string>
 #include <string_view>
+#include <unordered_map>
 
 #include <ark/plugin_manager.hpp>
 #include <ark/time/timer.hpp>
@@ -82,6 +84,11 @@ int main(int argc, char** argv) {
         return 2;
     }
     const std::string_view mode(argv[1]);
+    // Call arguments belong to the setup, not the armed startup operation.
+    // MSVC's empty containers may allocate before start() can enter its guard.
+    const std::string library_directory;
+    const std::string configuration_directory;
+    const std::unordered_map<std::string, std::string> plugins;
     std::array<char, 4096> long_detail{};
     long_detail.fill(char(120));
     long_detail.back() = char{};
@@ -118,11 +125,21 @@ int main(int argc, char** argv) {
         {
             return 6;
         }
+        if (mode == "call-argument")
+        {
+            const auto failed_argument = []() -> const std::string& { throw std::bad_alloc{}; };
+            (void)manager.start(1, failed_argument(), configuration_directory, plugins);
+        }
         fail_allocations = mode == "phase-record";
-        (void)manager.start(1, {}, {}, {});
+        (void)manager.start(1, library_directory, configuration_directory, plugins);
     }
     catch (const std::exception& error)
     {
+        const bool entered = manager.get_startup_call().result != ark::startup_call_result::not_entered;
+        if ((mode == "phase-record" && !entered) || (mode == "call-argument" && entered))
+        {
+            return 8;
+        }
         // Failure remains armed through the real production diagnostic, cleanup
         // action and process termination. Never disarm merely to make logging work.
         ark::app_detail::exit_startup_failure(manager, mode == "long-detail" ? long_detail.data() : error.what());

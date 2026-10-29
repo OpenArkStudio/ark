@@ -73,6 +73,8 @@ Pinned arknet's `io_pool::stop()` can wait/join; MySQL [retirement](https://gith
 
 `cmake --build <build> --target check-startup-cleanup --parallel 1` runs permanent C++ checks for false/exception in four stages, bounded/foreign enrollment, successful disarm, unsafe/throwing/duplicate cleanup and reentry. The actual launcher loads a separate DSO to exercise constructor failures before/partway/after acquisition, partial-install failure and every startup stage; it checks one release, exit1, no later update/ordinary shutdown/uninstall/DSO or capsule destruction. Isolated allocation-failure children keep global new failing through the real emergency exit: capsule allocation failure, allocation-free enrollment/recording, interrupted phase diagnostics and partial wheel initialization. `check-app-startup-failures` retains the existing unenrolled real-listener scenarios.
 
+Prepare owning call arguments before arming startup allocation failures. A separate pre-entry failure case verifies that an enrolled resource stays retained and cleanup does not run before `start()` is entered.
+
 This is local scoped module/private-resource acceptance, not IO retirement, business rollback or hosted-platform proof; raw logs remain in the local receipt. The independent HTTP candidate is still unmodified and its repro is unexecuted.
 
 Two IO decisions remain TODO; neither blocks the private-wheel slice:

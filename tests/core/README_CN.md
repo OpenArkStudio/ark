@@ -181,6 +181,6 @@ XXTEA 用例覆盖精确长度分配的短密钥、16 字节与内嵌零字节�
 关闭插件的核心测试不发现其依赖。公开布局重建要求与服务验收边界见
 [构造迁移](../../docs/reference/directory-structure_CN.md#kafka-类型化构造)。
 
-`check-startup-cleanup` 验证一个预登记 owning capsule、私有时间轮、四阶段失败、一次性清理与持续分配故障紧急退出；启用应用时，还运行真实 launcher／独立测试 DSO 的 14 个场景。它不接入共享 Utility 或 IO，也不证明业务回滚；见[启动失败清理](../../docs/project/startup-failure-cleanup_CN.md)。
+`check-startup-cleanup` 验证一个预登记 owning capsule、私有时间轮、四阶段失败、一次性清理与持续分配故障紧急退出；六个隔离子进程区分调用前失败与启动内部失败。启用应用时，还运行真实 launcher／独立测试 DSO 的 14 个场景。它不接入共享 Utility 或 IO，也不证明业务回滚；见[启动失败清理](../../docs/project/startup-failure-cleanup_CN.md)。
 
 `check-scalar-stream-allocation` 独立运行全局分配失败注入，逐个遍历标量发布端构造、基线复制、更新、首次／替换基线接收和增量接收中的分配。失败保留已提交状态与旧拥有值，重试仅推进一次修订；用例包含长／二进制字符串及全部标量类型，已纳入 `check-entity-stream`。

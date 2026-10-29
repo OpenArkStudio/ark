@@ -238,6 +238,6 @@ disabled-plugin core builds do not discover its dependencies. See the
 [construction migration](../../docs/reference/directory-structure.md#typed-kafka-construction)
 for the public-layout rebuild requirement and service-validation limits.
 
-`check-startup-cleanup` verifies one prepared owning capsule, a private wheel, four-stage failure, one-shot cleanup and emergency exit under persistent allocation failure. Application builds also run 14 actual-launcher/separate-DSO cases. Shared Utility/IO and business rollback remain outside this scope; see [startup-failure cleanup](../../docs/project/startup-failure-cleanup.md).
+`check-startup-cleanup` verifies one prepared owning capsule, a private wheel, four-stage failure, one-shot cleanup and emergency exit under persistent allocation failure. Six isolated child cases distinguish failures before call entry from failures inside startup. Application builds also run 14 actual-launcher/separate-DSO cases. Shared Utility/IO and business rollback remain outside this scope; see [startup-failure cleanup](../../docs/project/startup-failure-cleanup.md).
 
 `check-scalar-stream-allocation` isolates global allocation failure from ordinary tests and visits every allocation in scalar publisher construction, baseline copying, updates, first/replacement baseline reception and delta reception. Each failure preserves the committed state and retained values; retry advances exactly one revision. It is included in `check-entity-stream` and exercises long/binary strings plus all scalar alternatives.
