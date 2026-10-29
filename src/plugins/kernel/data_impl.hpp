@@ -20,7 +20,9 @@
 
 #pragma once
 
+#include <limits>
 #include <new>
+#include <stdexcept>
 #include <string>
 
 #include "ark/core_def.hpp"
@@ -631,7 +633,12 @@ public:
 
 protected:
     void inner_set_string(const char* value) {
-        const size_t value_size = strlen(value) + 1;
+        const size_t length = strlen(value);
+        if (length >= std::numeric_limits<uint32_t>::max() && length >= buffer_size)
+        {
+            throw std::length_error("Kernel string exceeds its storage length");
+        }
+        const size_t value_size = length + 1;
         char* p = nullptr;
 
         if (value_size > buffer_size)
@@ -653,7 +660,12 @@ protected:
     }
 
     void inner_set_user_data(const void* data, size_t size) {
-        size_t value_size = get_raw_user_data_size(size);
+        constexpr size_t maximum = std::numeric_limits<uint32_t>::max();
+        if (size > maximum - sizeof(size_t))
+        {
+            throw std::length_error("Kernel user data exceeds its storage length");
+        }
+        const size_t value_size = get_raw_user_data_size(size);
         char* p = (char*)allocator_.alloc(value_size);
         if (p == nullptr)
         {

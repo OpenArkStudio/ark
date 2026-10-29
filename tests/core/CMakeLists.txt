@@ -7,7 +7,7 @@ target_link_libraries(ark_core_header_checks PRIVATE ark::core)
 add_subdirectory(hash_header)
 
 add_executable(ark_core_tests main.cpp strings.cpp containers.cpp pod_arrays.cpp templates.cpp callbacks.cpp
-    header_regressions.cpp cxx20_language.cpp concurrency.cpp plugin_manager_startup.cpp data_strings.cpp node_data_storage.cpp
+    header_regressions.cpp cxx20_language.cpp concurrency.cpp plugin_manager_startup.cpp data_strings.cpp data_length_bounds.cpp node_data_storage.cpp
     object_vectors.cpp plugin_construction.cpp module_factory.cpp random_generator.cpp xxtea.cpp murmur_hash.cpp)
 target_link_libraries(ark_core_tests PRIVATE ark::core ark::kernel ark::utility)
 add_dependencies(ark_core_tests ark_core_header_checks ark_murmur_hash_standalone_check)
@@ -83,7 +83,7 @@ add_executable(ark_data_allocation_tests main.cpp data_allocation_failure.cpp)
 set_property(TARGET ark_data_allocation_tests PROPERTY LINK_LIBRARIES ark::kernel)
 add_executable(ark_data_allocation_hook_tests main.cpp data_allocation_hooks.cpp)
 set_property(TARGET ark_data_allocation_hook_tests PROPERTY LINK_LIBRARIES ark::kernel)
-add_executable(ark_data_guid32_tests main.cpp data_allocation_failure.cpp data_strings.cpp node_data_storage.cpp)
+add_executable(ark_data_guid32_tests main.cpp data_allocation_failure.cpp data_strings.cpp data_length_bounds.cpp node_data_storage.cpp)
 set_property(TARGET ark_data_guid32_tests PROPERTY LINK_LIBRARIES ark::kernel)
 target_compile_definitions(ark_data_guid32_tests PRIVATE ARK_USE_GUID_32)
 add_custom_target(check-data-allocation

@@ -183,6 +183,8 @@ GUID field callbacks retain the `dt_guid` tag. Read their native signed value wi
 
 `data_impl`/`data_base` report null string or user-data allocations as `std::bad_alloc`. Failed assignment and setters preserve the destination; copies preserve the source. Setters accept valid input that refers to their own storage.
 
+Heap-backed values in `data_impl`/`data_base` must fit their 32-bit storage length, including the string terminator or user-data length header. Oversized input throws `std::length_error` before invoking the storage allocator and preserves the existing value.
+
 ```cpp
 #include <cstdint>
 #include <string>
