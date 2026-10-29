@@ -398,3 +398,14 @@ The opt-in [restart operations manual](restart.md) covers private service setup,
 fault coordination and cleanup. The [short guide](../../docs/guides/database-restart.md)
 summarizes existing same-pool recovery and local results. Ordinary checks only
 compile the runner.
+
+## MySQL consistent-read isolation
+
+The SSL-only `ark_database_public_plugin_isolation_tests` program verifies public
+`begin()` transactions against the explicitly configured server defaults
+`REPEATABLE-READ` and `READ-COMMITTED`, including query-lease session reset,
+independent pinned connections and committed snapshot visibility. It requires an
+owned authenticated loopback service with verified TLS and a disposable schema.
+`check-database` builds it without running service work. See the
+[isolation guide](../../docs/guides/database-isolation.md) for both invocations,
+privileges, cleanup and limits.

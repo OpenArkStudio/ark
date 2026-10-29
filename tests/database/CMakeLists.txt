@@ -161,6 +161,13 @@ if(ARKNET_ENABLE_SSL)
     target_compile_definitions(ark_database_public_mysql_plugin_tests PRIVATE
         ARK_DATABASE_PLUGIN_DIR="$<TARGET_FILE_DIR:ark_database_mysql_plugin>/")
     add_dependencies(ark_database_public_mysql_plugin_tests ark_database_mysql_plugin)
+    ark_database_test(ark_database_public_plugin_isolation_tests public_plugin_isolation.cpp)
+    set_property(TARGET ark_database_public_plugin_isolation_tests PROPERTY INCLUDE_DIRECTORIES "")
+    set_property(TARGET ark_database_public_plugin_isolation_tests PROPERTY LINK_LIBRARIES ark::mysql Threads::Threads)
+    target_compile_definitions(ark_database_public_plugin_isolation_tests PRIVATE
+        ARK_DATABASE_PLUGIN_DIR=\"$<TARGET_FILE_DIR:ark_database_mysql_plugin>/\")
+    add_dependencies(ark_database_public_plugin_isolation_tests ark_database_mysql_plugin)
+    add_dependencies(check-database ark_database_public_plugin_isolation_tests)
     add_dependencies(ark_database_public_plugin_service_tests ark_database_mysql_plugin)
     target_link_libraries(ark_database_public_plugin_service_tests PRIVATE ark::mysql)
     target_link_libraries(ark_database_public_plugin_cancellation_tests PRIVATE ark::mysql)
