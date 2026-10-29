@@ -7,7 +7,7 @@ target_link_libraries(ark_core_header_checks PRIVATE ark::core)
 add_subdirectory(hash_header)
 
 add_executable(ark_core_tests main.cpp strings.cpp containers.cpp pod_arrays.cpp templates.cpp callbacks.cpp
-    header_regressions.cpp cxx20_language.cpp concurrency.cpp plugin_manager_startup.cpp data_strings.cpp data_length_bounds.cpp node_data_storage.cpp
+    header_regressions.cpp cxx20_language.cpp concurrency.cpp plugin_manager_startup.cpp module_dependencies.cpp data_strings.cpp data_length_bounds.cpp node_data_storage.cpp
     object_vectors.cpp plugin_construction.cpp module_factory.cpp random_generator.cpp xxtea.cpp murmur_hash.cpp)
 target_link_libraries(ark_core_tests PRIVATE ark::core ark::kernel ark::utility)
 add_dependencies(ark_core_tests ark_core_header_checks ark_murmur_hash_standalone_check)
@@ -305,6 +305,14 @@ if(ARK_BUILD_CONFIG)
                 -P "${PROJECT_SOURCE_DIR}/tests/app/business_runtime.cmake"
             DEPENDS app ark_business_runtime_probe USES_TERMINAL)
         add_dependencies(check-core check-app-business-runtime)
+        add_custom_target(check-app-shutdown-deadlines
+            COMMAND ${CMAKE_COMMAND} "-DPROGRAM=$<TARGET_FILE:app>"
+                "-DPLUGIN_DIR=$<TARGET_FILE_DIR:ark_business_runtime_probe>"
+                "-DSOURCE_ROOT=${PROJECT_SOURCE_DIR}"
+                "-DRUNTIME_DIR=${CMAKE_CURRENT_BINARY_DIR}/shutdown deadlines app"
+                -P "${PROJECT_SOURCE_DIR}/tests/app/shutdown_deadlines.cmake"
+            DEPENDS app ark_business_runtime_probe USES_TERMINAL)
+        add_dependencies(check-core check-app-shutdown-deadlines)
 
         add_library(ark_app_startup_failure_plugin SHARED ../app/startup_failure_plugin.cpp)
         set_property(TARGET ark_app_startup_failure_plugin PROPERTY LINK_LIBRARIES ark::core)
@@ -321,6 +329,17 @@ if(ARK_BUILD_CONFIG)
             DEPENDS app ark_app_startup_failure_plugin ark_app_missing_entry_plugin
             USES_TERMINAL)
         add_dependencies(check-core check-app-startup-failures)
+
+        if(TARGET timers_plugin)
+            add_custom_target(check-app-module-dependencies
+                COMMAND ${CMAKE_COMMAND} "-DPROGRAM=$<TARGET_FILE:app>"
+                    "-DPLUGIN_DIR=$<TARGET_FILE_DIR:timers_plugin>"
+                    "-DSOURCE_ROOT=${PROJECT_SOURCE_DIR}"
+                    "-DRUNTIME_DIR=${CMAKE_CURRENT_BINARY_DIR}/module dependency app"
+                    -P "${PROJECT_SOURCE_DIR}/tests/app/module_dependencies.cmake"
+                DEPENDS app timers_plugin USES_TERMINAL VERBATIM)
+            add_dependencies(check-core check-app-module-dependencies)
+        endif()
 
         add_custom_target(check-app-manifest-failures
             COMMAND ${CMAKE_COMMAND} "-DPROGRAM=$<TARGET_FILE:app>"

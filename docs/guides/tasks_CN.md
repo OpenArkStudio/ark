@@ -67,16 +67,21 @@ runtime 和组须在同一线程构造、操作和销毁。`manual_runtime` 不�
 1. 模块 `update()`：先 `service.update()`，再 `bridge.dispatch()`。
 2. `manager.update(timestamp, maximum_handlers = 64)`：统一轮询一次，所有组共用 handler 预算。模块不得另行轮询组或 runtime。
 
-`manager.stop(timestamp)` 停止所有组的顶层任务准入。有任务或更新/完成回调栈未返回时，直接返回 `false`，不等待。服务和桥接须继续受理这些协程的后续操作。任务完成且回调栈退出后，再次 `stop()` 才同步执行 `pre_shut()`、`shut()` 和卸载；用户钩子可能阻塞。
+`manager.stop(timestamp)` 先关闭所有组的顶层任务准入，再按缓存拓扑反向执行[一次性模块停止接收钩子](modules_CN.md#停止接收新业务根请求)。活跃 update／完成回调会将钩子推迟到下一次外层 owner frame 的 stop。有任务或活跃栈未返回时，直接返回 `false`，不等待。服务和桥接须继续受理这些协程的后续操作。任务完成且回调栈退出后，再次 `stop()` 才同步执行 `pre_shut()`、`shut()` 和卸载；用户钩子可能阻塞。
+
+`manager.stop_until(timestamp, deadline)` 接收 `std::chrono::steady_clock::time_point`。首次及后续调用中最早的截止时间持续生效，包括后来的 `stop(timestamp)`；无期限调用不能清除截止时间。没有传入截止时间时，`stop(timestamp)` 保留无限等待语义。时间检查发生在同步钩子边界，以及进入 `pre_shut()` 前。钩子超时返回后，不能再进入后续清理。超时状态不可恢复并返回 `false`；`get_shutdown_failure()` 保留阶段／模块，普通超时的 `get_shutdown_exception()` 为空。清理已开始时，已执行动作不回滚，`cleanup_timed_out` 还会停止更新。详见[启动器超时行为](applications_CN.md#确认启动并停止进程)。
 
 | 状态 | 调用方处理 |
 | --- | --- |
 | `running` | 正常更新并受理任务 |
+| `stopping_acceptance` | 任务组已关闭准入；退出活跃栈，在外层 owner frame 调用 stop，执行一次模块根请求入口关闭 |
 | `draining` | 继续模块更新和统一轮询，保留业务状态/服务 |
+| `timed_out` | 清理前到达截止时间；继续 owner 更新，但不再恢复清理 |
+| `cleanup_timed_out` | 清理开始后到达截止时间；保留剩余资源，停止后续更新和清理 |
 | `failed` | 关闭钩子失败/抛出异常，或原生库关闭失败；停止后续卸载并保留资源 |
 | `stopped` | 关闭钩子和原生关闭成功；重复 `stop()` 返回 `true` |
 
-用 `get_shutdown_state()`、`get_shutdown_failure()` 和 `get_shutdown_exception()` 区分等待与失败。启动器持续驱动待完成任务；钩子失败时只报告一次并保留进程。没有隐含停机超时，也不以取消、分离或销毁协程替代排空；任务检查不等待，handler 预算不限制停机耗时。
+用 `get_shutdown_state()`、`get_shutdown_failure()` 和 `get_shutdown_exception()` 区分等待与失败。停止接收钩子成功后，启动器继续驱动待完成任务。停止接收钩子返回 false／异常时进入不可恢复的 failed：只报告一次，保留待完成帧和资源，不再更新或清理，不表示等待后重试。没有隐含停机超时，也不以取消、分离或销毁协程替代排空；任务检查不等待，handler 预算不限制停机耗时。
 
 | `dynamic_library::unload()` 结果 | 效果 |
 | --- | --- |
@@ -90,7 +95,7 @@ runtime 和组须在同一线程构造、操作和销毁。`manual_runtime` 不�
 
 <Aside type="caution" title="任务完成不等于 IO 资源已释放">
 
-检查仅覆盖管理器组已受理的顶层任务。模块没有统一的停止接收请求阶段。安全卸载还需外部回调返回、连接池线程退出、后台清理完成；任务归零不证明这些条件。未受组管理的工作不得引用即将销毁的模块。
+检查仅覆盖管理器组已受理的顶层任务。新的停止接收钩子是模块合同，默认不执行操作；官方 Net／HTTP 监听器尚未迁移。安全卸载还需外部回调返回、连接池线程退出、后台清理完成；任务归零不证明这些条件。未受组管理的工作不得引用即将销毁的模块。
 
 </Aside>
 

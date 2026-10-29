@@ -3,16 +3,22 @@
 
 #include <concepts>
 #include <string>
+#include <typeinfo>
+#include <vector>
 
 #include "ark/module.hpp"
 #include "ark/plugin_manager.hpp"
 
 namespace ark {
 
-template<std::derived_from<module> interface_type>
+template<std::derived_from<module> interface_type, std::derived_from<module>... provider_types>
 class module_base : public interface_type
 {
 public:
+    std::vector<std::string> get_dependencies() const override {
+        return {typeid(provider_types).name()...};
+    }
+
     plugin_manager* get_plugin_manager() const override {
         return plugin_manager_;
     }

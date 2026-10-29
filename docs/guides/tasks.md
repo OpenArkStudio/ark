@@ -67,16 +67,21 @@ Private database bridges share this executor through `manager.get_task_runtime()
 1. Module `update()`: call `service.update()`, then `bridge.dispatch()`.
 2. `manager.update(timestamp, maximum_handlers = 64)`: poll once, sharing the handler budget across all groups. Modules must not also poll their group/runtime.
 
-`manager.stop(timestamp)` stops accepting new top-level tasks in every group. It returns `false` without waiting while tasks or update/completion stacks remain. Keep services and bridges accepting for accepted coroutines' later operations. After completion and stack unwinding, another `stop()` synchronously runs `pre_shut()`, `shut()` and unloading; user hooks may block.
+`manager.stop(timestamp)` first seals new top-level tasks in every group, then runs [one-shot module admission hooks](modules.md#stop-new-business-roots) in reverse cached topology. Active update/completion stacks defer those hooks to the next outer owner-frame stop. It returns `false` without waiting while tasks or active stacks remain. Keep services and bridges accepting for accepted coroutines' later operations. After completion and stack unwinding, another `stop()` synchronously runs `pre_shut()`, `shut()` and unloading; user hooks may block.
+
+`manager.stop_until(timestamp, deadline)` accepts a `std::chrono::steady_clock::time_point`. The earliest deadline supplied remains active across later calls, including `stop(timestamp)`; an unlimited call cannot clear it. Without a supplied deadline, `stop(timestamp)` retains its unlimited behavior. Time checks occur at synchronous hook boundaries and before `pre_shut()`. A hook that returns after expiry cannot enter later cleanup. Expiry is sticky and returns `false`; `get_shutdown_failure()` identifies the phase/module, while `get_shutdown_exception()` remains empty for a plain timeout. Once cleanup has begun, completed actions are not undone and `cleanup_timed_out` also disables updates. See [launcher timeout behavior](applications.md#check-startup-and-stop-the-process).
 
 | State | Caller action |
 | --- | --- |
 | `running` | Update normally and accept tasks |
+| `stopping_acceptance` | Groups are sealed; return from active stacks and call stop on an outer owner frame to close module root gates once |
 | `draining` | Continue module updates and the central poll; retain business state and services |
+| `timed_out` | A deadline expired before cleanup; continue owner updates but never resume teardown |
+| `cleanup_timed_out` | A deadline expired after cleanup began; retain remaining resources without further updates or cleanup |
 | `failed` | A shutdown hook failed/threw or a native library close failed; stop further unloading and retain remaining resources |
 | `stopped` | Shutdown hooks and native close calls succeeded; repeated `stop()` returns `true` |
 
-Inspect `get_shutdown_state()`, `get_shutdown_failure()` and `get_shutdown_exception()` to distinguish waiting from failure. The launcher continues driving pending tasks; on hook failure it reports once and retains the process. There is no implicit shutdown timeout, cancellation, detach or frame destruction instead of draining; task checks do not wait and handler budgets do not bound shutdown latency.
+Inspect `get_shutdown_state()`, `get_shutdown_failure()` and `get_shutdown_exception()` to distinguish waiting from failure. After successful admission hooks, the launcher continues driving pending tasks. A false/exception in an admission hook enters sticky failed: it reports once and pins pending frames/resources without further updates or teardown; it does not mean wait-and-retry. There is no implicit shutdown timeout, cancellation, detach or frame destruction instead of draining; task checks do not wait and handler budgets do not bound shutdown latency.
 
 | `dynamic_library::unload()` result | Effect |
 | --- | --- |
@@ -90,7 +95,7 @@ Use manager/groups on their constructing thread. In update/shutdown hooks or exe
 
 <Aside type="caution" title="Task completion does not release native IO resources">
 
-The check covers only managed groups' accepted top-level tasks. Modules have no common phase for stopping incoming requests. Safe code unloading also requires external callbacks to return, pool workers to exit and background cleanup to finish; zero tasks proves none of these. Unmanaged work must not reference a module being destroyed.
+The check covers only managed groups' accepted top-level tasks. The new admission hook is a module contract with a default no-op; official Net/HTTP listeners are not yet migrated. Safe code unloading also requires external callbacks to return, pool workers to exit and background cleanup to finish; zero tasks proves none of these. Unmanaged work must not reference a module being destroyed.
 
 </Aside>
 
