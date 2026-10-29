@@ -647,7 +647,8 @@ protected:
         }
 
         startup_call_.enter("<registry>", "dependencies");
-        startup_modules order;
+        // Count construction propagates MSVC Debug iterator-proxy allocation failures.
+        startup_modules order(0);
         if (!order_modules(order, startup_failure_, "dependencies"))
         {
             startup_call_.result = startup_call_result::returned_false;
@@ -864,7 +865,7 @@ private:
                 // here, before the one-shot hook sequence, never during drain.
                 if (!lifecycle_order_valid_)
                 {
-                    startup_modules order;
+                    startup_modules order(0);
                     if (!order_modules(order, shutdown_failure_, "stop_accepting"))
                     {
                         shutdown_state_ = shutdown_state::failed;

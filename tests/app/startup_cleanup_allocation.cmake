@@ -27,3 +27,12 @@ foreach(mode capsule call-argument phase-record hook partial-wheel long-detail)
     endif()
     message(STATUS "${mode}: persistent allocation failure retained native diagnostic and exit1")
 endforeach()
+
+# Unexpected termination must remain a failure, with context and no crash-dialog wait.
+execute_process(COMMAND "${PROGRAM}" terminate-probe RESULT_VARIABLE result
+    OUTPUT_VARIABLE output ERROR_VARIABLE errors TIMEOUT 5)
+file(WRITE "${RUNTIME_DIR}-terminate-probe.stderr.log" "${errors}")
+if(NOT result STREQUAL "86" OR NOT errors MATCHES "unexpected std::terminate")
+    message(FATAL_ERROR "Unexpected terminate did not retain its diagnostic and failure exit: ${result}\n${errors}")
+endif()
+message(STATUS "terminate-probe: unexpected termination reported context and exit86")

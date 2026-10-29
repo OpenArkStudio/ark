@@ -73,7 +73,7 @@ Net／HTTP／MySQL 接入前，先证明构造／成员展开不会丢失活跃�
 
 `cmake --build <build> --target check-startup-cleanup --parallel 1` 运行常驻 C++ 测试：四阶段 false／异常、单槽拒绝／错误线程、成功解除登记、unsafe／异常／重复清理与重入；真实 launcher 加载独立 DSO，覆盖获取前／部分／完成后的构造异常、部分安装异常及四阶段失败，检查释放一次、exit1、没有后续 update／正常停服／uninstall／DSO 或 capsule 析构。隔离分配故障子进程保持 global new 持续失败直到真实紧急退出，验证 capsule 分配失败、无分配登记／记录、阶段诊断失败及部分 wheel 初始化失败。原有未登记真实监听器场景由 `check-app-startup-failures` 保留。
 
-启动分配故障注入前先准备好调用参数。另设调用前失败用例，验证尚未进入 `start()` 时保留已登记资源，不执行清理。
+启动分配故障注入前先准备好调用参数。另设调用前失败用例，验证尚未进入 `start()` 时保留已登记资源，不执行清理。异常终止对照用例必须输出上下文并以失败状态退出，不等待 Windows 崩溃对话框。
 
 这些是本机有限模块／私有资源验收，不证明 IO 回收、业务回滚或托管平台通过；原始日志留在本地 receipt。HTTP 异常候选仍未修复或执行复现。
 

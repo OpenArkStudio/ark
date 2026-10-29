@@ -78,7 +78,8 @@ public:
 
     void init(uint64_t now_time) {
         // Commit only a complete wheel; local owners also cover container exceptions.
-        std::vector<timer_owner> timer_storage;
+        // Count construction propagates MSVC Debug iterator-proxy allocation failures.
+        std::vector<timer_owner> timer_storage(0);
         std::list<time_wheel_data*> free_timers;
         std::array<timer_vec_owner, tv_num> tw_vecs{};
         timer_storage.reserve(free_timer_size);
