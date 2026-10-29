@@ -57,7 +57,8 @@ add_custom_target(check-core
 add_executable(ark_singleton_tests ../test_singleton.cpp)
 set_property(TARGET ark_singleton_tests PROPERTY LINK_LIBRARIES ark::core)
 add_custom_target(check-singleton
-    COMMAND $<TARGET_FILE:ark_singleton_tests>
+    COMMAND ${CMAKE_COMMAND} "-DPROGRAM=$<TARGET_FILE:ark_singleton_tests>"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/singleton.cmake"
     DEPENDS ark_singleton_tests USES_TERMINAL VERBATIM)
 add_dependencies(check-core check-singleton)
 if(TARGET check-proto-configuration)
