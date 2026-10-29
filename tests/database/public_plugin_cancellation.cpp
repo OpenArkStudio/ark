@@ -386,9 +386,11 @@ void mysql_success(const ark::mysql_reply& reply) {
     require(bool(reply), "Explicit MySQL observer/recovery operation failed");
 }
 
-ark::task<> mysql_preflight(plugin_host& host, ark::mysql_module& database, std::string table) {
-    auto created =
-        co_await database.query("primary", "CREATE TABLE `" + table + "` (id INT PRIMARY KEY,n BIGINT NOT NULL)", 5s);
+ark::task<> mysql_preflight(
+    plugin_host& host, ark::mysql_module& database, std::string table, bool transaction = false) {
+    auto created = co_await database.query("primary",
+        "CREATE TABLE `" + table + "` (id INT PRIMARY KEY,n BIGINT NOT NULL)" + (transaction ? " ENGINE=InnoDB" : ""),
+        5s);
     host.check_executor();
     mysql_success(created);
     auto seeded = co_await database.query("primary", "INSERT INTO `" + table + "` VALUES (1,0)", 5s);
@@ -518,6 +520,173 @@ void check_mysql() {
                 result->result.status.outcome_unknown,
         "MySQL native cancellation result did not survive module/manager destruction");
 }
+
+std::int64_t mysql_scalar(const arknet::mysql::query_result& result) {
+    require(
+        result.rows.size() == 1 && result.rows[0].size() == 1, "MySQL transaction cancellation scalar has wrong shape");
+    return std::get<std::int64_t>(result.rows[0][0]);
+}
+
+void mysql_cancelled_transaction(const ark::mysql_transaction_reply& reply) {
+    const auto& status = reply.transaction_status;
+    require(!reply && reply.result.status.code == arknet::mysql::connection_errc::cancelled &&
+                reply.result.status.outcome_unknown &&
+                reply.result.status.transport_error == asio::error::operation_aborted &&
+                status.outcome == ark::mysql_transaction_outcome::unconfirmed && status.discard_requested &&
+                !reply.rollback && !status.rollback_code && !status.rollback_outcome_unknown &&
+                !reply.initiation_exception && !reply.statement_close && !reply.statement_close_exception &&
+                !status.cleanup_exception && !status.cancellation_exception && !status.lease_return_exception,
+        "Sent transaction cancellation lost its uncertain/discarded result or fabricated confirmed rollback");
+}
+
+ark::task<> mysql_transaction_request(plugin_host& host, ark::mysql_module& database, std::string tag,
+    std::int64_t& original, std::optional<ark::mysql_transaction_reply>& owned,
+    std::optional<ark::mysql_transaction_reply>& result) {
+    auto begun = co_await database.begin("primary", {20s, 3s});
+    host.check_executor();
+    require(
+        bool(begun) && begun.transaction && begun.transaction_status.outcome == ark::mysql_transaction_outcome::active,
+        "MySQL cancellation transaction did not begin");
+    auto identity = co_await database.query(begun.transaction, "SELECT CAST(CONNECTION_ID() AS SIGNED)");
+    host.check_executor();
+    require(bool(identity), "MySQL cancellation transaction could not identify its pinned connection");
+    original = mysql_scalar(identity.result);
+    auto changed = co_await database.query(begun.transaction, "UPDATE `" + tag + "` SET n=n+1 WHERE id=1");
+    host.check_executor();
+    require(bool(changed) && changed.result.affected_rows == 1 &&
+                changed.transaction_status.outcome == ark::mysql_transaction_outcome::active,
+        "MySQL cancellation pre-write did not remain in its transaction");
+    owned = co_await database.query(begun.transaction, "SELECT n FROM `" + tag + "` WHERE id=1");
+    host.check_executor();
+    require(bool(*owned) && mysql_scalar(owned->result) == 1 &&
+                owned->transaction_status.outcome == ark::mysql_transaction_outcome::active,
+        "MySQL cancellation transaction did not read its uncommitted pre-write");
+    result = co_await database.query(
+        begun.transaction, "UPDATE `" + tag + "` SET n=n+10 WHERE id=1 AND SLEEP(10)=0 /*" + tag + "*/");
+    host.check_executor();
+}
+
+ark::task<> mysql_transaction_observe(plugin_host& host, ark::mysql_module& database, cancellation_state& state,
+    std::int64_t& original, std::optional<ark::mysql_transaction_reply>& owned,
+    std::optional<ark::mysql_transaction_reply>& result, std::string tag) {
+    auto identity = co_await database.query("observer", "SELECT CAST(CONNECTION_ID() AS SIGNED)", 3s);
+    host.check_executor();
+    mysql_success(identity);
+    const auto observer_id = mysql_scalar(identity.result);
+    std::optional<std::chrono::steady_clock::time_point> quiet_until;
+    const auto deadline = std::chrono::steady_clock::now() + 18s;
+    for (;;)
+    {
+        require(!state.request.error && std::chrono::steady_clock::now() < deadline,
+            "MySQL transaction cancellation failed or exceeded the server-session retirement bound");
+        const auto sql = "SELECT CAST(ID AS SIGNED), STATE, INFO FROM information_schema.processlist "
+                         "WHERE ID <> CONNECTION_ID() AND (ID=" +
+                         std::to_string(original) + " OR INFO LIKE '%" + tag + "%')";
+        auto listing = co_await database.query("observer", sql, 3s);
+        host.check_executor();
+        mysql_success(listing);
+        require(listing.result.rows.size() <= 1, "MySQL transaction cancellation observed concurrent replay");
+        if (!listing.result.rows.empty())
+        {
+            const auto& row = listing.result.rows[0];
+            require(row.size() == 3 && original && original != observer_id &&
+                        std::get<std::int64_t>(row[0]) == original && !quiet_until,
+                "MySQL transaction cancellation changed session or replayed after retirement");
+            const auto* phase = std::get_if<std::string>(&row[1]);
+            const auto* text = std::get_if<std::string>(&row[2]);
+            if (!state.cancelled && phase && *phase == "User sleep" && text && text->find(tag) != std::string::npos)
+            {
+                auto hidden = co_await database.query("observer", "SELECT n FROM `" + tag + "` WHERE id=1", 3s);
+                host.check_executor();
+                mysql_success(hidden);
+                require(owned && mysql_scalar(owned->result) == 1 && mysql_scalar(hidden.result) == 0,
+                    "MySQL independent observer saw the uncommitted transaction pre-write");
+                state.observed = true;
+                cancel_observed(host, state);
+                require(!result, "MySQL transaction cancellation fabricated an immediate result");
+                std::cout << "mysql transaction server-visible tagged UPDATE active; primary=" << original
+                          << " observer=" << observer_id << "; task cancellation requested\n";
+            }
+        }
+        if (result && !state.recovered)
+        {
+            require(state.observed && state.cancelled, "MySQL transaction cancelled before server observation");
+            mysql_cancelled_transaction(*result);
+            auto recovered = co_await database.query("primary", "SELECT CAST(CONNECTION_ID() AS SIGNED), 9", 5s);
+            host.check_executor();
+            mysql_success(recovered);
+            require(recovered.result.rows.size() == 1 && recovered.result.rows[0].size() == 2 &&
+                        std::get<std::int64_t>(recovered.result.rows[0][0]) != original &&
+                        std::get<std::int64_t>(recovered.result.rows[0][1]) == 9,
+                "MySQL transaction cancellation did not recover through an explicit request on a fresh connection");
+            state.recovered = true;
+        }
+        if (listing.result.rows.empty() && state.recovered)
+        {
+            if (!quiet_until)
+            {
+                quiet_until = std::chrono::steady_clock::now() + 500ms;
+            }
+            if (std::chrono::steady_clock::now() >= *quiet_until)
+            {
+                state.retired_on_server = true;
+                break;
+            }
+        }
+        co_await observer_interval();
+        host.check_executor();
+    }
+    auto counter = co_await database.query("observer", "SELECT n FROM `" + tag + "` WHERE id=1", 3s);
+    host.check_executor();
+    mysql_success(counter);
+    require(mysql_scalar(counter.result) == 0 && owned && mysql_scalar(owned->result) == 1,
+        "MySQL disconnected transaction left committed writes or changed its retained pre-write result");
+    auto dropped = co_await database.query("observer", "DROP TABLE `" + tag + "`", 3s);
+    host.check_executor();
+    mysql_success(dropped);
+    std::cout << "mysql transaction cancelled/unknown, unconfirmed/discarded, no rollback reply; "
+                 "original session absent, explicit recovery, bounded no-replay and final counter=0 verified\n";
+}
+
+void check_mysql_transaction() {
+    ark::mysql_options options;
+    options.pool.connection.host = environment("ARK_DATABASE_MYSQL_HOST");
+    require(options.pool.connection.host == "127.0.0.1", "MySQL transaction cancellation requires owned IPv4 loopback");
+    options.pool.connection.port = port("ARK_DATABASE_MYSQL_PORT");
+    options.pool.connection.username = environment("ARK_DATABASE_MYSQL_USER");
+    options.pool.connection.password = environment("ARK_DATABASE_MYSQL_PASSWORD");
+    options.pool.connection.database = environment("ARK_DATABASE_MYSQL_DATABASE");
+    options.pool.connection.ca_file = environment("ARK_DATABASE_MYSQL_CA");
+    options.pool.connection.tls = arknet::mysql::tls_mode::required;
+    options.pool.connection.timeout = 5s;
+    options.pool.max_connections = 1;
+    const auto tag = "ark_dso_tx_cancel_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    cancellation_state state;
+    std::int64_t original{};
+    std::optional<ark::mysql_transaction_reply> owned, result;
+    {
+        plugin_host host("ark_database_mysql_plugin");
+        auto* database = host.manager.find_module<ark::mysql_module>();
+        require(database && database->configure("primary", options) && database->configure("observer", options),
+            "Cannot configure MySQL transaction cancellation pools");
+        host.preflight(mysql_preflight(host, *database, tag, true));
+        state.request_id =
+            host.start(mysql_transaction_request(host, *database, tag, original, owned, result), state.request);
+        host.start(mysql_transaction_observe(host, *database, state, original, owned, result, tag), state.observer);
+        host.pump_until([&] { return state.request.count && state.observer.count; });
+        plugin_host::check_completion(state.request);
+        plugin_host::check_completion(state.observer);
+        require(!host.tasks->cancel(state.request_id), "Retired MySQL transaction task still accepted cancellation");
+        host.stop();
+        require(state.request.count == 1 && state.observer.count == 1,
+            "MySQL transaction cancellation completion repeated during shutdown");
+    }
+    require(state.observed && state.cancelled && state.recovered && state.retired_on_server && owned && result &&
+                bool(*owned) && mysql_scalar(owned->result) == 1,
+        "MySQL transaction cancellation results did not survive module/manager/runtime destruction");
+    mysql_cancelled_transaction(*result);
+}
+
 #endif
 
 } // namespace
@@ -525,7 +694,7 @@ void check_mysql() {
 int main(int argc, char** argv) {
     try
     {
-        require(argc == 2, "Usage: ark_database_public_plugin_cancellation_tests redis|mysql");
+        require(argc == 2, "Usage: ark_database_public_plugin_cancellation_tests redis|mysql|mysql-transaction");
         const std::string_view protocol(argv[1]);
         if (protocol == "redis")
         {
@@ -535,6 +704,10 @@ int main(int argc, char** argv) {
         else if (protocol == "mysql")
         {
             check_mysql();
+        }
+        else if (protocol == "mysql-transaction")
+        {
+            check_mysql_transaction();
         }
 #endif
         else

@@ -27,4 +27,64 @@ MySQL first creates a private one-row counter table. Its task executes one tagge
 
 Both cases require one owner-thread/shared-executor continuation and exactly one root completion with no coroutine exception, retirement of the managed task, bounded natural manager/native shutdown, repeated stop, and an owning cancelled result surviving plugin/module/manager destruction. Repeated cancellation of a pending task succeeds; cancellation of its retired ID fails. Throttling timers do not establish that a command is active: only server observations do. No forced frame destruction, `cancel_all`, server-termination mode, automatic write retry or production policy change is introduced. Native close success does not prove physical image unmapping.
 
-These are opt-in cancellation scenarios, separate from positive natural-drain modes and deadline/error fixtures. They do not establish Redis TLS, transaction cancellation, every failure race, external-service interoperability, cross-platform acceptance, hot update or capacity. Exact executed revision/runtime identities and cleanup evidence belong to the local handoff; this test description alone is not a passing run.
+These are opt-in cancellation scenarios, separate from positive natural-drain modes and deadline/error fixtures. The earlier query modes do not establish Redis TLS, transaction cancellation or every failure race, external-service interoperability, cross-platform acceptance, hot update or capacity. Exact executed revision/runtime identities and cleanup evidence belong to the local handoff; this test description alone is not a passing run.
+
+## MySQL transaction-operation cancellation
+
+The additional SSL-only `mysql-transaction` mode uses the existing public
+`begin()` and `query(transaction, ...)` interfaces; no new target is needed:
+
+```sh
+database-build/tests/database/ark_database_public_plugin_cancellation_tests mysql-transaction
+```
+
+Use the same private MySQL environment and schema-scoped privileges above, with a
+nonempty password. The mode creates a unique InnoDB counter table. The request
+begins a transaction, records its connection ID, increments the counter to one,
+and retains its own successful read of that uncommitted value. It then submits a
+tagged slow UPDATE within the same transaction. A distinct observer session must
+see that exact connection and tagged statement in `User sleep`, and must still
+read counter zero, before cancelling the managed request task.
+
+A sent cancellation must retain `connection_errc::cancelled`,
+`outcome_unknown=true` and `operation_aborted`. Its transaction status must remain
+`unconfirmed` with `discard_requested=true`, no rollback reply/code and no cleanup,
+cancellation or lease-return exception. This path discards the uncertain
+connection; it does not issue a fictitious rollback through that closed connection.
+The caller does not restart or replace the transaction with SQL or retry a write.
+
+An explicit new query through the original named pool must succeed on a different
+server connection. The observer tracks both the original connection ID and tagged
+SQL until the whole original session disappears, then requires a further 500 ms
+without its return or tagged replay. Only after that retirement does it require
+counter zero and remove the table. This verifies the observed server-side discard
+effect, including the earlier completed-but-uncommitted write. It does not turn
+the API's unknown result into a confirmed rollback response or a durability claim.
+A successful retained read must still contain one after cancellation, table
+removal and module/manager/runtime destruction; the cancelled reply must preserve
+its original diagnostics. The common single-completion, owner-executor, repeated
+cancellation and natural retirement checks still apply.
+
+The transaction mode covers cancellation of one sent transaction query. It does
+not cover cancellation during acquire, BEGIN, prepare/execute/statement close,
+commit or rollback, every cancellation race, crash recovery or automatic retry.
+The independent observation window bounds its no-replay claim. The earlier
+`mysql` autocommit case retains its zero-or-one outcome rule; this mode does not
+change that contract. SSL-disabled builds reject `mysql-transaction` before
+service work.
+
+### Local transaction acceptance
+
+On **2026-10-29**, `mysql-transaction` passed with program source
+`28edd1a88c5e7179668aa387a9158d3db32a15f0` and pinned arknet
+`a0dfe09cd543e75cfb5996e537ce2fa49f2a758f`, using macOS 27.0.1 arm64,
+Apple Clang 21.0.0, Boost.Asio 1.90.0, OpenSSL 3.6.4 and a private authenticated,
+verified-TLS MySQL Community Server 8.4.13. The primary/observer IDs were `13`/`14`;
+the final counter was zero. A separate private-server general-log query counted
+exactly one pre-write and one tagged slow UPDATE. The original `mysql` and `redis`
+modes also passed, with final counters one; Redis used a separate authenticated
+7.4.2 instance. Wrong-password and untrusted-CA controls failed; SSL-disabled
+builds rejected both MySQL modes before service work. Independent queries found
+zero remaining tables/keys; both owned services exited normally and their exact
+PIDs/listeners, private data, credentials and keys were removed. This is local
+macOS Boost Debug acceptance, separate from hosted or cross-platform checks.
