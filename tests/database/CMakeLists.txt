@@ -167,6 +167,8 @@ if(ARKNET_ENABLE_SSL)
     add_dependencies(ark_database_public_plugin_cancellation_tests ark_database_mysql_plugin)
     target_link_libraries(ark_database_public_plugin_server_termination_tests PRIVATE ark::mysql)
     add_dependencies(ark_database_public_plugin_server_termination_tests ark_database_mysql_plugin)
+    target_link_libraries(ark_database_public_plugin_restart_tests PRIVATE ark::mysql)
+    add_dependencies(ark_database_public_plugin_restart_tests ark_database_mysql_plugin)
     ark_database_sample_check(mysql)
     add_custom_target(check-database-samples-mysql
         COMMAND $<TARGET_FILE:ark_database_mysql_sample_tests>
