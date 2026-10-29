@@ -26,6 +26,10 @@
 
 namespace ark {
 
+namespace entity_sync {
+class snapshot_access;
+}
+
 class container_impl final
     : public container
     , public std::enable_shared_from_this<container_impl>
@@ -35,6 +39,7 @@ public:
 
 private:
     friend class kernel_module_impl;
+    friend class entity_sync::snapshot_access;
 
     // contain entity class meta
     std::shared_ptr<container_meta> container_meta_{nullptr};

@@ -88,3 +88,30 @@ builds rejected both MySQL modes before service work. Independent queries found
 zero remaining tables/keys; both owned services exited normally and their exact
 PIDs/listeners, private data, credentials and keys were removed. This is local
 macOS Boost Debug acceptance, separate from hosted or cross-platform checks.
+
+## MySQL prepared execute cancellation
+
+The SSL-only `mysql-statement` mode uses the existing public
+`execute(transaction, sql, parameters)` API, whose implementation owns the
+prepare/execute/close lifecycle. Use the same private MySQL configuration above:
+
+```sh
+database-build/tests/database/ark_database_public_plugin_cancellation_tests mysql-statement
+```
+
+It shares the transaction mode's pre-write, retained own-write read, independent
+visibility, cancellation diagnostics, fresh-connection recovery, original-session
+retirement, 500 ms quiet window and natural shutdown checks. The slow UPDATE
+binds its increment and row ID as parameters. Before cancellation, the observer
+must see the exact original session, unique SQL tag, `STATE='User sleep'` and
+`COMMAND='Execute'`; this establishes that execute, rather than prepare, is active.
+The cancelled reply must have neither a statement-close reply/exception nor a
+rollback reply/code. Final counter zero is an observed effect of discarding this
+connection, not an API-confirmed rollback or global exactly-once guarantee.
+
+This mode covers one sent prepared execution in a transaction. Cancellation during
+acquire, BEGIN, prepare, statement close, commit or rollback and other execute races
+remain outside it. SSL-disabled builds reject this mode before service work.
+The [prepared cancellation record](../../docs/reports/database-services.md#mysql-prepared-execute-cancellation)
+contains its exact local execution identity and controls; earlier records keep
+their own tested revisions and limits.

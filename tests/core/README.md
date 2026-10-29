@@ -80,6 +80,8 @@ exit code 1 with a manifest diagnostic, including on Windows, and is included in
 `resource/meta/`. It checks four kernel/config initialization orders with both
 resource-relative paths and legacy paths beginning with `/`, for eight combinations.
 
+`entity_nested_snapshot.cpp` checks owning root/table/container captures, explicit child authorization, schema-local indices, row/GUID reuse, clear and callback exceptions, aggregate limits, duplicate references/cycles and non-wrapping lifetime counters. Row allocation/insertion failure tests also verify that failed additions consume no incarnation. `check-kernel-plugin` captures nested state through the actual loaded virtual interface and retains values after normal stop.
+
 `entity_snapshot.cpp` uses real Entity/schema objects to check owning selected scalar
 capture, every supported native type, integer/GUID boundaries, finite floating values,
 binary strings, typed lazy zeroes without node creation, hidden-field exclusion,
@@ -90,7 +92,7 @@ keeps an external source implementation of the original pure interface concrete,
 checks the default `logic_error`, a custom override and the framework override.
 
 `check-entity-stream`, included in `check-core`, runs the scalar publisher/replica
-without Protobuf. It covers immutable retained states, coalescing, duplicate and
+without Protobuf. `entity_nested_stream.cpp` adds fixed trusted per-class/column/child bindings, recursive atomic root patches, row/Entity reuse and bounded lifetime history. `entity_nested_stream_allocation.cpp` injects failures across publisher update/removal and receiver baseline/candidate construction; throwing allocations preserve the old state/revision and allow one retry. Real nested Kernel captures exercise two fixed projections, row reuse/clear and child moves/destruction. It also covers immutable retained states, coalescing, duplicate and
 gap handling, identity/type checks, removal, newer-generation recovery and limits.
 The Entity tests also capture real HP/MP/name fields, apply baseline and deltas,
 destroy the source and recover after a tombstone. These are C++ state checks, not
@@ -237,3 +239,5 @@ disabled-plugin core builds do not discover its dependencies. See the
 for the public-layout rebuild requirement and service-validation limits.
 
 `check-startup-cleanup` verifies one prepared owning capsule, a private wheel, four-stage failure, one-shot cleanup and emergency exit under persistent allocation failure. Application builds also run 14 actual-launcher/separate-DSO cases. Shared Utility/IO and business rollback remain outside this scope; see [startup-failure cleanup](../../docs/project/startup-failure-cleanup.md).
+
+`check-scalar-stream-allocation` isolates global allocation failure from ordinary tests and visits every allocation in scalar publisher construction, baseline copying, updates, first/replacement baseline reception and delta reception. Each failure preserves the committed state and retained values; retry advances exactly one revision. It is included in `check-entity-stream` and exercises long/binary strings plus all scalar alternatives.

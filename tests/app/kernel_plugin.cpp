@@ -80,6 +80,7 @@ int main(int argc, char* argv[]) {
     require(kernel->add_class_call_back("Player", &events, &entity_events::on_event),
         "Kernel entity observer registration failed");
     std::optional<ark::entity_sync::scalar_snapshot> retained;
+    std::optional<ark::entity_sync::nested_snapshot> retained_nested;
     {
         ark::data_list_impl args;
         if (json)
@@ -98,6 +99,34 @@ int main(int argc, char* argv[]) {
                 "JSON profile and per-field argument precedence changed");
             const std::array<std::uint32_t, 10> selection{100, 104, 105, 106, 107, 108, 109, 110, 111, 112};
             retained = kernel->capture_scalar_snapshot(*entity, selection);
+            auto* table = entity->find_table(200);
+            require(table != nullptr, "Kernel DSO nested table missing");
+            auto* row = table->add_row(3);
+            require(row && row->set_u_int32(1, 13) && row->set_string(2, std::string("a\0b", 3)),
+                "Kernel DSO nested row creation failed");
+            auto child = kernel->create_container_entity(entity->get_id(), 201, "Item", 0);
+            require(child && child->set_string(2, "Owned"), "Kernel DSO nested child creation failed");
+            ark::entity_sync::nested_projection projection{"player/v1", entity->get_id(),
+                {"Player", {100, 104}, {{200, {1, 2}}}, {{201, {{child->get_id(), {"Item", {1, 2}, {}, {}}}}}}}};
+            retained_nested = kernel->capture_nested_snapshot(*entity, projection);
+            require(retained_nested->root.incarnation != 0 &&
+                        retained_nested->root.tables.at(200).rows.at(3).incarnation != 0 &&
+                        retained_nested->root.containers.at(201).size() == 1,
+                "Kernel DSO nested lifetime or relationship capture failed");
+            const auto child_id = child->get_id();
+            const auto slot = entity->find_container(201)->find(child_id);
+            require(kernel->destroy_entity(child_id), "Kernel DSO nested child destruction failed");
+            child.reset();
+            auto replacement = kernel->create_entity(child_id, 7, 0, "Item", 0, ark::data_list_impl{});
+            require(replacement && entity->find_container(201)->place(slot, replacement),
+                "Kernel DSO reused GUID insertion failed");
+            const auto reused = kernel->capture_nested_snapshot(*entity, projection);
+            require(reused.root.containers.at(201).at(slot).incarnation !=
+                        retained_nested->root.containers.at(201).at(slot).incarnation,
+                "Kernel DSO reused GUID retained its old incarnation");
+            require(kernel->destroy_entity(child_id), "Kernel DSO replacement destruction failed");
+            replacement.reset();
+            table->clear();
             const auto& values = retained->fields;
             require(values.size() == selection.size() && std::get<std::string>(values.at(100)) == "Configured" &&
                         std::get<std::uint32_t>(values.at(104)) == 77 && std::get<bool>(values.at(105)) &&
@@ -150,6 +179,16 @@ int main(int argc, char* argv[]) {
                     std::get<ark::entity_sync::guid_value>(retained->fields.at(111)).value == 42,
             "Kernel DSO unload invalidated an owning scalar snapshot");
     }
-    std::cout << "Kernel actual DSO interfaces, scalar snapshots, metadata/configuration, entity lifecycle and "
-                 "shutdown passed\n";
+    if (retained_nested)
+    {
+        require(std::get<std::string>(retained_nested->root.scalars.fields.at(100)) == "Configured" &&
+                    std::get<std::string>(retained_nested->root.tables.at(200).rows.at(3).fields.at(2)) ==
+                        std::string("a\0b", 3) &&
+                    std::get<std::string>(
+                        retained_nested->root.containers.at(201).begin()->second.scalars.fields.at(2)) == "Owned",
+            "Kernel DSO unload invalidated an owning nested snapshot");
+    }
+    std::cout
+        << "Kernel actual DSO interfaces, scalar and nested snapshots, metadata/configuration, entity lifecycle and "
+           "shutdown passed\n";
 }

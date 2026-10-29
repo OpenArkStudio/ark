@@ -28,6 +28,10 @@
 
 namespace ark {
 
+namespace entity_sync {
+class snapshot_access;
+}
+
 class table_impl final : public table
 {
 public:
@@ -37,12 +41,15 @@ public:
 
 private:
     friend class kernel_module_impl;
+    friend class entity_sync::snapshot_access;
+    friend class kernel_nested_snapshot_test_access;
 
     // table meta
     std::shared_ptr<table_meta> table_meta_{nullptr};
 
     // current row
     uint32_t current_row_{0};
+    std::uint64_t last_incarnation_{0};
 
     // table data
     table_data data_;

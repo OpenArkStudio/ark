@@ -16,6 +16,7 @@
 | <a id="mysql-dso-写入与两连接提交可见性"></a>MySQL DSO 写入 | 二进制插入、自身写入读取、独立连接的提交／回滚可见性及保留结果均通过 | `ark_database_public_plugin_service_tests mysql-transactions` | [写入记录](../reports/database-services_CN.md#mysql-dso-写入与两连接提交可见性) |
 | <a id="真实插件请求取消"></a>服务端观察确认的请求取消 | 两种模式均通过；保留原生取消结果及有限窗口内的计数观察 | [C++ 取消程序](../../tests/database/cancellation_CN.md) | [取消记录](../reports/database-services_CN.md#真实插件请求取消) |
 | MySQL 已发送事务查询取消 | `cancelled`／`outcome_unknown`；事务 `unconfirmed`／已请求丢弃，无回滚回复；原会话消失后观察到 `n=0` | [C++ `mysql-transaction` 模式](../../tests/database/cancellation_CN.md#mysql-事务内操作取消) | [事务取消记录](../reports/database-services_CN.md#mysql-已发送事务操作取消) |
+| MySQL 预处理执行取消 | 精确会话处于 Execute 后才取消；未知／请求丢弃结果及新连接恢复均通过 | [C++ `mysql-statement` 模式](../../tests/database/cancellation_CN.md#mysql-预处理执行取消) | [预处理取消记录](../reports/database-services_CN.md#mysql-预处理执行取消) |
 | <a id="真实插件服务端终止"></a>自有服务终止 | 两种模式均通过：向精确 PID 注入故障后返回已发送／结果未知的原生错误；脚本防护对照也通过 | [C++ 程序与 shell 脚本](../../tests/database/server_termination_CN.md) | [终止记录](../reports/database-services_CN.md#真实插件服务端终止) |
 | <a id="真实插件-redis-tls"></a>Redis TLS | 认证二进制操作通过；不相关 CA 和错误主机名对照拒绝连接 | [Redis TLS 模式](../../tests/database/redis_tls_CN.md) | [TLS 记录](../reports/database-services_CN.md#真实插件-redis-tls) |
 | 原连接池上的显式重启恢复 | 自有服务在同一端点重启后，Redis 与 MySQL 的新只读请求均通过 | [C++ 重启程序与故障脚本](../../tests/database/restart_CN.md) | [重启记录](database-restart_CN.md) |
@@ -45,8 +46,8 @@ MySQL 要求启用 SSL。故障脚本使用 shell 工具。
 自然排空与原生 DSO 关闭不证明操作系统已物理移除库映像，也不证明任意热更新安全。
 `manager.stop()` 仍为协作式调用，不能中断阻塞钩子；测试时限不增加强制生产停机期限。
 
-崩溃持久性、持久化、完整隔离级别覆盖、事务恢复，以及 acquire／BEGIN／prepare／execute／
-statement close／commit／rollback 阶段的取消，均未在这些记录中验收。双向 TLS、
+崩溃持久性、持久化、完整隔离级别覆盖、事务恢复，以及 acquire／BEGIN／prepare／
+statement close／commit／rollback 阶段的取消及其他 execute 竞争，均未在这些记录中验收。双向 TLS、
 证书轮换／撤销、Redis TLS 取消与故障恢复，以及其他取消／故障竞争也未覆盖。
 请求取消不证明回滚或全局恰好执行一次。
 即使观察到最终零值，已发送事务查询的取消结果仍为未确认。

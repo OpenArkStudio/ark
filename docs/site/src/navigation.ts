@@ -320,6 +320,11 @@ const tree: Entry[] = [
         "数据模型提案"
       ],
       [
+        "project/entity-replication-design",
+        "Entity replication",
+        "Entity 复制"
+      ],
+      [
         "project/network-design",
         "Cluster and routing design",
         "集群与路由设计"

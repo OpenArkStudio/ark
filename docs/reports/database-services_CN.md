@@ -2,7 +2,7 @@
 
 [验收索引](../guides/database-validation_CN.md)
 
-本页分别记录公开模块的真实服务正常／故障检查、插件 DSO 正常流程、MySQL DSO 写入事务、经服务端观察确认的请求取消、已发送 MySQL 事务查询取消、自有服务终止，以及可信 Redis TLS。每类检查保留各自的测试版本与环境；通过结果仅适用于对应范围。
+本页分别记录公开模块的真实服务正常／故障检查、插件 DSO 正常流程、MySQL DSO 写入事务、经服务端观察确认的请求取消、已发送 MySQL 事务查询与预处理执行取消、自有服务终止，以及可信 Redis TLS。每类检查保留各自的测试版本与环境；通过结果仅适用于对应范围。
 
 ## 公开模块与真实服务
 
@@ -117,7 +117,7 @@ cmake --build database-build --target ark_database_public_plugin_cancellation_te
 
 **2026-10-29**，`ark_database_public_plugin_cancellation_tests` 的
 `mysql-transaction` 模式通过，退出码为 `0`。验收程序在实际执行版本、交付提交和
-本组合目录中的内容逐字节一致；本次文档集成不代表另一次真实服务运行。
+原组合目录中的内容逐字节一致；当次文档集成不代表另一次真实服务运行。
 
 | 身份／环境 | 配置 |
 | --- | --- |
@@ -161,6 +161,44 @@ ThreadSanitizer 验收。原始日志和源码／二进制哈希仅保留在本�
 acquire、BEGIN、prepare／execute／statement close、commit 或 rollback 阶段的取消，
 以及其他竞争、事务恢复、崩溃持久性、高可用和容量，均不在本记录范围内。
 较早的独立查询取消与提交可见性记录保留各自所测版本和未覆盖范围。
+
+## MySQL 预处理执行取消
+
+**2026-10-29**，公开 DSO C++ 程序的 `mysql-statement` 模式通过，退出码为 `0`。
+实际执行的程序源码为 `30f963cade5162d8b3b474646dc8c123b987a5be`，Git blob 为
+`2a880b3fd0476f045928082a29f01560e4a66803`；后续文档修改未改变程序。
+基准为 `988dfbc048425cdb56cbe5f14314320fe698d07d`，arknet 使用 CI 固定版本
+`a0dfe09cd543e75cfb5996e537ce2fa49f2a758f`。
+
+本机环境为 macOS 27.0.1 arm64、C++20 Debug、Apple Clang 21.0.0、Boost.Asio 1.90.0
+和 OpenSSL 3.6.4。独占的 MySQL Community Server 8.4.13 位于 `127.0.0.1:29891`，
+要求认证及可信 TLS，并校验 IP 身份。CREATE、DROP、SELECT、INSERT、UPDATE 权限仅限
+全新私有 schema。
+
+宿主加载真实隐藏符号插件，仅调用公开协程 API。事务完成前置写入并保留自身读取的 `n=1`，
+独立观察者读取到 `n=0`。观察会话 `11` 确认原会话 `10` 的带标记参数化 UPDATE
+同时处于 `User sleep` 和 `COMMAND='Execute'` 后，才对待完成任务取消两次。
+原结果保留 `connection_errc::cancelled`、`outcome_unknown=true` 和
+`operation_aborted`；事务状态仍为 `unconfirmed`、`discard_requested=true`，
+无语句关闭或回滚回复／状态码，也无启动、语句关闭、清理、取消或租约归还异常。
+
+通过原连接池显式提交的新查询在不同连接上成功。原会话整体消失，随后额外 500 ms 内原会话
+及带标记 SQL 均未重现；此后观察者才要求最终 `n=0` 并删表。对私有服务通用日志的独立查询
+确认：该唯一标记对应一次 Prepare、一次 Execute 和一次前置写入。这些有限观察不代表 API
+已确认回滚、持久性或全局恰好执行一次。本次未加入自动重试或替换事务。
+
+两个根任务均在所属线程／共享执行器上完成一次，自然退出并通过重复 stop。
+后续操作、删表及宿主销毁后，保留的读取结果及原始取消诊断仍有效。已有 `mysql-transaction`
+模式再次通过（会话 `13`／`14`，最终 `n=0`）。错误密码和不可信 CA 对照均拒绝请求。
+未启用 SSL 的构建在服务操作前拒绝新模式；七项配置／构建模式拒绝对照均通过。
+针对性原生回归通过 23 个用例、1157 条断言，并通过公开 MySQL DSO 生命周期检查。
+独立查询确认剩余表为零。自有 MySQL 通过认证正常关闭，精确 PID `17059` 以退出码 `0`
+回收；监听、私有数据、凭据和密钥均已清理。
+
+按[既有 C++ 模式说明](../../tests/database/cancellation_CN.md#mysql-预处理执行取消)运行。
+本记录只覆盖事务内一次已发送预处理执行的取消，不覆盖 acquire、BEGIN、prepare、statement close、
+commit 或 rollback 阶段的取消、其他 execute 竞争、崩溃恢复、高可用或容量。
+这是本机 macOS Boost Debug 证据；其他平台、sanitizer、托管 CI 和发布需分别验收。
 
 ## 真实插件服务端终止
 
@@ -232,6 +270,6 @@ bash tests/database/owned_server_fault_actor_guards.sh
 
 ## 验收边界
 
-DSO 流程覆盖正常插件销毁与原生关闭调用。`FreeLibrary` 或 `dlclose` 成功不证明操作系统已物理移除库映像。本机请求取消、服务端终止及 MySQL 写入／提交可见性验收仅覆盖记录中的操作。崩溃持久性、完整隔离级别覆盖、事务恢复、acquire／BEGIN／prepare／execute／statement close／commit／rollback 阶段的取消、双向 TLS 与证书轮换／撤销、Redis TLS 取消／故障恢复、其他取消／故障竞争、操作系统库映像移除、其他平台／部署环境与跨机器容量仍未验收。这些记录均不证明任意热更新安全或生产容量。
+DSO 流程覆盖正常插件销毁与原生关闭调用。`FreeLibrary` 或 `dlclose` 成功不证明操作系统已物理移除库映像。本机请求取消、服务端终止及 MySQL 写入／提交可见性验收仅覆盖记录中的操作。崩溃持久性、完整隔离级别覆盖、事务恢复、acquire／BEGIN／prepare／statement close／commit／rollback 阶段的取消及其他预处理 execute 竞争、双向 TLS 与证书轮换／撤销、Redis TLS 取消／故障恢复、其他取消／故障竞争、操作系统库映像移除、其他平台／部署环境与跨机器容量仍未验收。这些记录均不证明任意热更新安全或生产容量。
 
 [显式重启恢复](../guides/database-restart_CN.md)和[两种服务端默认隔离级别](../guides/database-isolation_CN.md)分别有本地验收记录；其所测版本和范围不扩展上述较早用例的结论。
