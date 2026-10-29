@@ -41,6 +41,7 @@
 #include "ark/module.hpp"
 #include "ark/noncopyable.hpp"
 #include "ark/plugin.hpp"
+#include "ark/startup_cleanup.hpp"
 #include "ark/task.hpp"
 
 namespace ark {
@@ -64,7 +65,8 @@ class plugin_manager final : private noncopyable
         updating,
         stopping_acceptance,
         tearing_down,
-        uninstalling
+        uninstalling,
+        startup_cleanup
     };
 
     class phase_guard
@@ -118,14 +120,64 @@ public:
         return instance_ptr;
     }
 
+    // Prepare before resource acquisition. The capsule must be independently
+    // owned; neither the action nor its deleter may borrow an incomplete module.
+    // One slot, keys <=95 bytes; false means acquire nothing and fail startup.
+    bool prepare_startup_cleanup(std::string_view owner, std::string_view code_owner,
+        const std::shared_ptr<void>& context, startup_cleanup_action action) noexcept {
+        if (owner_ != std::this_thread::get_id() || startup_finished_ ||
+            (phase_ != call_phase::idle && phase_ != call_phase::installing && phase_ != call_phase::starting) ||
+            shutdown_state_ != shutdown_state::running || task_runtime_->get_executor().running_in_this_thread())
+        {
+            return false;
+        }
+        return startup_cleanup_.prepare(owner, code_owner, context, action);
+    }
+
+    const startup_call_record& get_startup_call() const noexcept {
+        return startup_call_;
+    }
+
+    // Call only after failed start() returned/unwound. No poll/cancel, normal
+    // shutdown, deletion or DSO unload. Caller must still terminate with exit 1.
+    startup_cleanup_result cleanup_failed_startup() noexcept {
+        if (owner_ != std::this_thread::get_id() || execution_active() || !startup_finished_ || startup_succeeded_)
+        {
+            return startup_cleanup_result::unsafe;
+        }
+        startup_cleanup_started_ = true;
+        shutdown_state_ = shutdown_state::failed;
+        phase_guard active(*this, call_phase::startup_cleanup);
+        for (const auto& [owner, tasks] : task_groups_)
+        {
+            tasks->stop_accepting();
+        }
+        return startup_cleanup_.run();
+    }
+
     auto start(int64_t const timestamp, std::string const& lib_dir, std::string const& conf_dir,
         std::unordered_map<std::string, std::string> const& plugins) -> bool {
         check_owner();
-        if (execution_active() || shutdown_state_ != shutdown_state::running)
+        if (execution_active() || startup_finished_ || shutdown_state_ != shutdown_state::running)
         {
             throw std::logic_error("Plugin manager cannot start during a lifecycle call or after shutdown begins");
         }
         phase_guard active(*this, call_phase::starting);
+
+        struct attempt_guard
+        {
+            plugin_manager& manager;
+
+            ~attempt_guard() {
+                manager.startup_finished_ = true;
+                if (!manager.startup_succeeded_ && manager.startup_call_.result == startup_call_result::entered)
+                {
+                    manager.startup_call_.result = startup_call_result::exception;
+                }
+            }
+        } attempt{*this};
+
+        startup_call_.enter("<manager>", "prepare");
         startup_failure_.clear();
         timestamp_ = timestamp;
 
@@ -150,6 +202,8 @@ public:
             return false;
         }
 
+        startup_succeeded_ = true;
+        startup_cleanup_.disarm();
         return true;
     }
 
@@ -274,7 +328,18 @@ public:
     void register_plugin(std::string const& plugin_name) {
         check_registration();
         std::string runtime_plugin_name = GET_CLASS_NAME(plugin_type);
-        plugin* new_plugin = ARK_NEW plugin_type();
+        startup_call_.enter(plugin_name, "constructor");
+        plugin* new_plugin{};
+        try
+        {
+            new_plugin = ARK_NEW plugin_type();
+            startup_call_.result = startup_call_result::passed;
+        }
+        catch (...)
+        {
+            startup_call_.result = startup_call_result::exception;
+            throw;
+        }
         register_plugin(new_plugin, plugin_name, runtime_plugin_name);
     }
 
@@ -405,7 +470,17 @@ protected:
         // Installation may publish resources that require cooperative shutdown.
         // Retain the existing process-exit policy once user installation begins.
         candidate.release();
-        plugin->install();
+        startup_call_.enter(plugin_name, "install");
+        try
+        {
+            plugin->install();
+            startup_call_.result = startup_call_result::passed;
+        }
+        catch (...)
+        {
+            startup_call_.result = startup_call_result::exception;
+            throw;
+        }
         // manage this plugin
         plugin_instances_.insert(std::make_pair(runtime_plugin_name, plugin));
     }
@@ -469,8 +544,21 @@ protected:
         }
         for (auto& [name, count] : pending)
         {
+            const bool startup = std::string_view(phase) == "dependencies";
+            if (startup)
+            {
+                startup_call_.enter(name, phase);
+            }
             failure = std::string(phase) + ": " + name;
+            if (startup)
+            {
+                startup_call_.diagnostic_ready = true;
+            }
             auto dependencies = module_instances_.at(name)->get_dependencies();
+            if (startup)
+            {
+                startup_call_.result = startup_call_result::passed;
+            }
             std::sort(dependencies.begin(), dependencies.end());
             dependencies.erase(std::unique(dependencies.begin(), dependencies.end()), dependencies.end());
             for (const auto& provider : dependencies)
@@ -525,23 +613,48 @@ protected:
         return true;
     }
 
+    bool call_startup(module& instance, const std::string& name, std::string_view phase, bool (module::*hook)()) {
+        startup_call_.enter(name, phase);
+        try
+        {
+            startup_failure_ = std::string(phase) + ": " + name;
+            startup_call_.diagnostic_ready = true;
+            const bool result = (instance.*hook)();
+            startup_call_.result = result ? startup_call_result::passed : startup_call_result::returned_false;
+            return result;
+        }
+        catch (...)
+        {
+            startup_call_.result = startup_call_result::exception;
+            throw;
+        }
+    }
+
     auto init() -> bool {
         // load plugin dynamic libraries
         for (auto const& iter : plugins_)
         {
             phase_guard installing(*this, call_phase::installing);
+            startup_call_.enter(iter.first, "load_plugin");
             startup_failure_ = "load_plugin: " + iter.first;
+            startup_call_.diagnostic_ready = true;
             if (!load_plugin_library(iter.first))
             {
+                startup_call_.result = startup_call_result::returned_false;
                 return false;
             }
+            startup_call_.result = startup_call_result::passed;
         }
 
-        startup_modules order;
+        startup_call_.enter("<registry>", "dependencies");
+        // Count construction propagates MSVC Debug iterator-proxy allocation failures.
+        startup_modules order(0);
         if (!order_modules(order, startup_failure_, "dependencies"))
         {
+            startup_call_.result = startup_call_result::returned_false;
             return false;
         }
+        startup_call_.result = startup_call_result::passed;
         lifecycle_order_ = std::move(order);
         lifecycle_order_valid_ = true;
 
@@ -550,8 +663,7 @@ protected:
         {
             ARK_ASSERT_CONTINUE(module_ptr != nullptr);
 
-            startup_failure_ = "init: " + name;
-            if (!module_ptr->init())
+            if (!call_startup(*module_ptr, name, "init", &module::init))
             {
                 return false;
             }
@@ -566,8 +678,7 @@ protected:
         {
             ARK_ASSERT_CONTINUE(module_ptr != nullptr);
 
-            startup_failure_ = "post_init: " + name;
-            if (!module_ptr->post_init())
+            if (!call_startup(*module_ptr, name, "post_init", &module::post_init))
             {
                 return false;
             }
@@ -582,8 +693,7 @@ protected:
         {
             ARK_ASSERT_CONTINUE(module_ptr != nullptr);
 
-            startup_failure_ = "check_config: " + name;
-            if (!module_ptr->check_config())
+            if (!call_startup(*module_ptr, name, "check_config", &module::check_config))
             {
                 return false;
             }
@@ -598,8 +708,7 @@ protected:
         {
             ARK_ASSERT_CONTINUE(module_ptr != nullptr);
 
-            startup_failure_ = "pre_update: " + name;
-            if (!module_ptr->pre_update())
+            if (!call_startup(*module_ptr, name, "pre_update", &module::pre_update))
             {
                 return false;
             }
@@ -756,7 +865,7 @@ private:
                 // here, before the one-shot hook sequence, never during drain.
                 if (!lifecycle_order_valid_)
                 {
-                    startup_modules order;
+                    startup_modules order(0);
                     if (!order_modules(order, shutdown_failure_, "stop_accepting"))
                     {
                         shutdown_state_ = shutdown_state::failed;
@@ -932,7 +1041,8 @@ private:
 
     void check_registry_mutation() const {
         check_owner();
-        if ((phase_ != call_phase::idle && phase_ != call_phase::installing && phase_ != call_phase::uninstalling) ||
+        if (startup_cleanup_started_ ||
+            (phase_ != call_phase::idle && phase_ != call_phase::installing && phase_ != call_phase::uninstalling) ||
             task_runtime_->get_executor().running_in_this_thread())
         {
             throw std::logic_error("Cannot mutate the module registry during update or shutdown hooks");
@@ -980,6 +1090,11 @@ private:
     std::exception_ptr shutdown_exception_;
     std::string shutdown_failure_;
     std::string startup_failure_;
+    detail::startup_cleanup_slot startup_cleanup_;
+    startup_call_record startup_call_;
+    bool startup_finished_{};
+    bool startup_succeeded_{};
+    bool startup_cleanup_started_{};
 
     // Bus id
     int bus_id_{0};

@@ -62,6 +62,7 @@ set(ark_core_public_headers
     "string_pod.hpp"
     "string_utils.hpp"
     "task.hpp"
+    "startup_cleanup.hpp"
     "time/date_time.hpp"
     "time/timer.hpp"
     "uid_generator.hpp"

@@ -139,7 +139,7 @@ cmake --build core-build --target check-business-runtime
 
 同时构建应用与配置读取器时，`check-app-business-runtime` 在真实启动器中加载测试专用原生插件。POSIX 用例请求 SIGTERM，Windows 向真实命令线程输入 `exit`。任务排空用例中，已受理任务在排空阶段收到两次受控私有桥接结果；任务组仍有空余容量时也拒绝新根任务。最后完成回调返回后，owner frame 停止原生工作并等待线程退出、join，随后才进入关闭与卸载。默认无限等待和配置正数时限的正常排空均须返回退出码 0。另有关闭钩子返回失败或抛出异常、update 抛出标准或非标准异常、任务停滞、任务或原生线程延迟完成的子进程，要求诊断只输出一次、模块仍保留，并存活至测试观察时限。更新异常轨迹必须包含抛出、owner 更新恢复和已受理任务完成；Windows 不能将这些已处理的 C++ 异常送入原生崩溃对话框。原生线程就绪超时用例使用空任务组和受控等待的原生线程，避免协程调度消耗其 50 毫秒时限；轨迹与诊断必须确认待完成任务为零，并处于就绪等待阶段。配置的应用等待时限到达后，后续完成不得恢复卸载；非法、负数和溢出的 CLI 时限必须在加载配置前拒绝。应用时限仅在 owner loop 返回时检查，不能中断阻塞中的用户更新、就绪检查或关闭调用。测试观察时限只终止测试自己创建的子进程，不表示成功停机或生产策略；测试不使用真实数据库。
 
-开启应用、示例、Kernel 和 Utility 后，`check-typed-examples` 加载真实 Utility DSO，验证四个接口、接口 RTTI 注册键、GUID 生成与解析、zlib/Zstandard 二进制往返、由管理器时间戳推进的定时器，以及正常和重复停机。`check-app-presets` 同样加载仓库 Timers 运行包；两者均为 `check-core` 的依赖。task/scheduler 包含顺序检查通过 `ark::utility` 获取映射后的 scheduler 头，独立的 task-only 公开接口检查仍只依赖 `ark::core`。
+开启应用、示例、Kernel 和 Utility 后，`check-typed-examples` 加载真实 Utility DSO，验证四个接口、接口 RTTI 注册键、GUID 生成与解析、zlib/Zstandard 二进制往返、由管理器时间戳推进的定时器，以及正常和重复停机。`check-app-presets` 同样加载仓库 Timers 运行包；两者均为 `check-core` 的依赖。POSIX 的 `check-app-preset-stop` 从忽略并阻塞 SIGINT 的父进程运行全部退出／信号场景；派生 helper 在执行 shell 前恢复受测信号的默认处置，并仅解除这些信号的阻塞。原有时限、子进程回收、FIFO 删除及无关进程存活断言保持不变。task/scheduler 包含顺序检查通过 `ark::utility` 获取映射后的 scheduler 头，独立的 task-only 公开接口检查仍只依赖 `ark::core`。
 
 启用 Net、Bus、Utility 与 Protobuf 时，`check-net-plugin` 加载真实动态库，验证两个 Net 接口及 RTTI 键、管理器线程上的 TCP／HTTP 回调、重复停服与监听端口释放。该目标也是 `check-core` 的依赖，无需外部服务。独立的 `tests/consumer/net` 工程仅链接 `ark::net`，逐个编译保留的公开头。
 
@@ -180,5 +180,7 @@ XXTEA 用例覆盖精确长度分配的短密钥、16 字节与内嵌零字节�
 并加载真实生产动态库检查导出。测试不创建生产者、不连接 broker。Kafka 继续默认关闭；
 关闭插件的核心测试不发现其依赖。公开布局重建要求与服务验收边界见
 [构造迁移](../../docs/reference/directory-structure_CN.md#kafka-类型化构造)。
+
+`check-startup-cleanup` 验证一个预登记 owning capsule、私有时间轮、四阶段失败、一次性清理与持续分配故障紧急退出；六种隔离分配故障区分调用前失败与启动内部失败，另设异常终止对照用例检查诊断与失败退出。额外验证单对象及数组的 `new` 和 `new (std::nothrow)` 分配与释放匹配，并覆盖构造异常、持续分配失败返回空指针。启用应用时，还运行真实 launcher／独立测试 DSO 的 14 个场景。它不接入共享 Utility 或 IO，也不证明业务回滚；见[启动失败清理](../../docs/project/startup-failure-cleanup_CN.md)。
 
 `check-scalar-stream-allocation` 独立运行全局分配失败注入，逐个遍历标量发布端构造、基线复制、更新、首次／替换基线接收和增量接收中的分配。失败保留已提交状态与旧拥有值，重试仅推进一次修订；用例包含长／二进制字符串及全部标量类型，已纳入 `check-entity-stream`。

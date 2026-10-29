@@ -102,6 +102,25 @@ public:
         require(helper_ >= 0, "helper fork failed");
         if (helper_ == 0)
         {
+            // Trap handlers in a non-interactive shell require these signals
+            // to be catchable when the shell starts, regardless of its runner.
+            constexpr int signals[] = {SIGHUP, SIGINT, SIGTERM, SIGALRM, SIGPIPE};
+            sigset_t catchable;
+            if (sigemptyset(&catchable) != 0)
+            {
+                _exit(126);
+            }
+            for (const int number : signals)
+            {
+                if (std::signal(number, SIG_DFL) == SIG_ERR || sigaddset(&catchable, number) != 0)
+                {
+                    _exit(126);
+                }
+            }
+            if (sigprocmask(SIG_UNBLOCK, &catchable, nullptr) != 0)
+            {
+                _exit(126);
+            }
             close(identity[0]);
             if (broken_reader)
             {
@@ -168,6 +187,21 @@ int main(int argc, char* argv[]) {
         std::cerr << "Usage: application_preset_stop <helper-script>" << std::endl;
         return 2;
     }
+    // Build runners can ignore or block SIGINT. Exercise both inherited states
+    // every run; the helper child must restore its signal preconditions.
+    const auto previous_interrupt = std::signal(SIGINT, SIG_IGN);
+    if (previous_interrupt == SIG_ERR)
+    {
+        std::cerr << "could not prepare inherited SIGINT disposition" << std::endl;
+        return 1;
+    }
+    sigset_t blocked, previous_mask;
+    if (sigemptyset(&blocked) != 0 || sigaddset(&blocked, SIGINT) != 0 ||
+        sigprocmask(SIG_BLOCK, &blocked, &previous_mask) != 0)
+    {
+        std::cerr << "could not prepare inherited SIGINT mask" << std::endl;
+        return 1;
+    }
     const auto directory = std::filesystem::temp_directory_path() / ("ark-preset-stop-" + std::to_string(getpid()));
     if (!std::filesystem::create_directory(directory))
     {
@@ -207,5 +241,7 @@ int main(int argc, char* argv[]) {
         reap(unrelated);
     }
     std::filesystem::remove_all(directory);
+    sigprocmask(SIG_SETMASK, &previous_mask, nullptr);
+    std::signal(SIGINT, previous_interrupt);
     return result;
 }

@@ -2,6 +2,7 @@
 #include <atomic>
 #include <chrono>
 #include <functional>
+#include <latch>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -463,6 +464,14 @@ TEST_CASE("RUDP closes malformed business frames through the Update event path")
 }
 
 TEST_CASE("RUDP rejects an old-session send after reconnect during serialization") {
+    bool delay_peer_publication = false;
+    SUBCASE("normal peer publication") {
+    }
+    SUBCASE("server peer publication follows the client connect event") {
+        delay_peer_publication = true;
+    }
+
+    std::latch publication_allowed(1);
     std::mutex peer_mutex;
     std::shared_ptr<arknet::rudp_session> peer;
     std::vector<std::string> messages;
@@ -470,7 +479,32 @@ TEST_CASE("RUDP rejects an old-session send after reconnect during serialization
     rudp_receiver receiver;
     auto client = rudp_client(receiver);
     auto header = rudp_header<ark::s_msg_header>();
-    server.bind_connect([&](auto& session) {
+
+    // Release before either transport is destroyed, including a failed REQUIRE.
+    // The latch itself outlives server callbacks and their joined IO threads.
+    struct publication_release
+    {
+        std::latch& allowed;
+        bool released{};
+
+        void release() {
+            if (!released)
+            {
+                allowed.count_down();
+                released = true;
+            }
+        }
+
+        ~publication_release() {
+            release();
+        }
+    } publication{publication_allowed};
+
+    server.bind_connect([&, delay_peer_publication](auto& session) {
+        if (delay_peer_publication)
+        {
+            publication_allowed.wait();
+        }
         std::lock_guard lock(peer_mutex);
         peer = session;
     });
@@ -480,8 +514,19 @@ TEST_CASE("RUDP rejects an old-session send after reconnect during serialization
     });
     REQUIRE(server.start("127.0.0.1", 0));
     REQUIRE(client->start_client(header, 2, "127.0.0.1", server.listen_port()));
-    REQUIRE(
-        await_rudp([&] { return receiver.event_count(ark::net_event_type::connect) == 1; }, [&] { client->update(); }));
+    REQUIRE(await_rudp(
+        [&] {
+            const auto connected = receiver.event_count(ark::net_event_type::connect) == 1;
+            if (connected)
+            {
+                publication.release();
+            }
+            // Native ACK precedes bind_connect: client readiness alone does not
+            // guarantee that this test's server peer has been published.
+            std::lock_guard lock(peer_mutex);
+            return connected && peer != nullptr;
+        },
+        [&] { client->update(); }));
     const auto old_id = receiver.events().back().session;
 
     rudp_serialization_header request;
