@@ -102,12 +102,24 @@ add_custom_target(check-data-allocation
     DEPENDS ark_data_allocation_tests ark_data_allocation_hook_tests ark_data_guid32_tests USES_TERMINAL VERBATIM)
 add_dependencies(check-core check-data-allocation)
 
-add_executable(ark_entity_stream_tests main.cpp entity_stream.cpp)
+add_executable(ark_entity_stream_tests main.cpp entity_stream.cpp entity_nested_stream.cpp)
 set_property(TARGET ark_entity_stream_tests PROPERTY LINK_LIBRARIES ark::kernel)
 add_custom_target(check-entity-stream
     COMMAND $<TARGET_FILE:ark_entity_stream_tests>
     DEPENDS ark_entity_stream_tests USES_TERMINAL)
 add_dependencies(check-core check-entity-stream)
+add_executable(ark_scalar_stream_allocation_tests main.cpp entity_scalar_stream_allocation.cpp)
+set_property(TARGET ark_scalar_stream_allocation_tests PROPERTY LINK_LIBRARIES ark::kernel)
+add_custom_target(check-scalar-stream-allocation
+    COMMAND $<TARGET_FILE:ark_scalar_stream_allocation_tests>
+    DEPENDS ark_scalar_stream_allocation_tests USES_TERMINAL)
+add_dependencies(check-entity-stream check-scalar-stream-allocation)
+add_executable(ark_nested_stream_allocation_tests main.cpp entity_nested_stream_allocation.cpp)
+set_property(TARGET ark_nested_stream_allocation_tests PROPERTY LINK_LIBRARIES ark::kernel)
+add_custom_target(check-nested-stream-allocation
+    COMMAND $<TARGET_FILE:ark_nested_stream_allocation_tests>
+    DEPENDS ark_nested_stream_allocation_tests USES_TERMINAL)
+add_dependencies(check-entity-stream check-nested-stream-allocation)
 
 add_executable(ark_logging_tests main.cpp logging_paths.cpp logging_source.cpp)
 target_link_libraries(ark_logging_tests PRIVATE ark::core)
@@ -375,7 +387,7 @@ if(ARK_BUILD_CONFIG)
 endif()
 
 if(ARK_BUILD_PROTO)
-    add_executable(ark_kernel_initialization_tests main.cpp module_initialization.cpp kernel_resource_ownership.cpp table_row_allocation.cpp entity_config_copy.cpp entity_json_loading.cpp kernel_delayed_sync.cpp entity_snapshot.cpp entity_snapshot_interface.cpp
+    add_executable(ark_kernel_initialization_tests main.cpp module_initialization.cpp kernel_resource_ownership.cpp table_row_allocation.cpp entity_config_copy.cpp entity_json_loading.cpp kernel_delayed_sync.cpp entity_nested_snapshot.cpp entity_snapshot.cpp entity_snapshot_interface.cpp
         ../../src/plugins/kernel/class_call_back_manager.cpp
         ../../src/plugins/kernel/class_meta.cpp
         ../../src/plugins/kernel/class_meta_module_impl.cpp

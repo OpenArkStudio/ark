@@ -64,11 +64,15 @@ cmake --build hash-header-build --target check-murmur-hash-header
 `check-kernel-initialization` 从 `resource/meta/` 加载真实元数据和静态数据，
 分别使用资源相对路径及以 `/` 开头的旧路径，验证内核与配置模块的四种初始化顺序，共八种组合。
 
+`entity_nested_snapshot.cpp` 覆盖拥有型根／表格／容器捕获、显式子授权、Schema 局部索引、行号／GUID 复用、清空与回调异常、聚合上限、重复引用／环及存续期计数不回绕。行分配／插入失败测试同时检查失败添加不消耗标记。`check-kernel-plugin` 经真实已加载虚接口捕获嵌套状态，并在正常停止后保留值。
+
 `entity_snapshot.cpp` 使用真实 Entity／定义对象，检查独立拥有的显式标量捕获、全部受支持原生类型、整数／GUID 边界、有限浮点值、二进制字符串、不创建节点的惰性零值、隐藏字段排除、源销毁、限额，以及失败后源保持不变。头文件消费者还在关闭 Protobuf 时编译独立的快照值契约。
 
 捕获测试通过 `kernel_module` 指针调用。`entity_snapshot_interface.cpp` 保留一份只实现原有纯虚接口的外部源码实现，检查它仍可实例化、默认方法抛出 `logic_error`、自定义覆写及框架覆写。
 
 `check-entity-stream` 纳入 `check-core`，无需 Protobuf 即可验证标量发布端与接收端，覆盖保留的不可变状态、合并、重复与缺口、身份与类型检查、移除、更高代次恢复和限额。Entity 测试还捕获真实 HP／MP／名称字段，应用基线与增量，销毁源对象后验证保留值，并在删除标记后恢复。这些是 C++ 状态检查，不代表网络交付或 Godot 验收。
+`entity_nested_stream.cpp` 检查固定可信的逐类／列／子绑定、递归整根原子补丁、行／Entity 复用及有界身份历史。`entity_nested_stream_allocation.cpp` 对发布更新／删除、接收基线／候选构造的分配点注入失败，要求抛出分配异常时旧状态／修订不变且可重试。真实嵌套 Kernel 捕获检查两个固定投影、行复用／清空及子移动／销毁；这些不是网络交付验收。
+
 
 同一 target 运行 `kernel_delayed_sync.cpp`：真实容器创建、移除和销毁经过延迟收集、Kernel 更新、Protobuf 序列化和既有掩码交付回调。用例覆盖完整载荷、实体引用、空槽／销毁标记、仅自身同步掩码，以及空批次、标量、表格和混合对照。范围受限的测试友元仅观察该回调，不提供传输层或客户端。
 
@@ -176,3 +180,5 @@ XXTEA 用例覆盖精确长度分配的短密钥、16 字节与内嵌零字节�
 并加载真实生产动态库检查导出。测试不创建生产者、不连接 broker。Kafka 继续默认关闭；
 关闭插件的核心测试不发现其依赖。公开布局重建要求与服务验收边界见
 [构造迁移](../../docs/reference/directory-structure_CN.md#kafka-类型化构造)。
+
+`check-scalar-stream-allocation` 独立运行全局分配失败注入，逐个遍历标量发布端构造、基线复制、更新、首次／替换基线接收和增量接收中的分配。失败保留已提交状态与旧拥有值，重试仅推进一次修订；用例包含长／二进制字符串及全部标量类型，已纳入 `check-entity-stream`。

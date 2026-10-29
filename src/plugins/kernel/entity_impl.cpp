@@ -18,6 +18,7 @@
  *
  */
 
+#include <atomic>
 #include <memory>
 
 #include "ark/kernel/container_impl.hpp"
@@ -26,12 +27,18 @@
 #include "ark/kernel/entity_impl.hpp"
 #include "ark/kernel/event_manager_impl.hpp"
 #include "ark/kernel/static_entity_impl.hpp"
+#include "detail/incarnation.hpp"
 
 namespace ark {
+
+namespace {
+std::atomic<std::uint64_t> entity_incarnations{0};
+}
 
 entity_impl::entity_impl(std::shared_ptr<class_meta> class_meta_ptr, const guid_t& guid, const id_type config_id,
     const int32_t map_id, const int32_t map_entity_id, const data_list& data_list)
     : guid_(guid)
+    , incarnation_(detail::next_incarnation(entity_incarnations))
     , config_id_(config_id) {
     class_meta_ = class_meta_ptr;
 

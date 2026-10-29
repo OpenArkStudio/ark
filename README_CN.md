@@ -25,7 +25,7 @@
 
 - **业务服务**：插件、模块与生命周期回调，业务插件放在所属应用仓库。
 - **实体数据**：属性、表格和容器，支持元数据、配置默认值与变更回调。
-- **增量同步**：对选定标量字段建立基线并合并增量；[Godot 演示](https://github.com/OpenArkStudio/ark-client-godot)通过 Protobuf 同步移动与 HP／MP。
+- **增量同步**：选定标量字段的基线／增量，以及拥有型表格／容器树基线与增量；[Godot 演示](https://github.com/OpenArkStudio/ark-client-godot)通过 Protobuf 同步移动与 HP／MP。
 - **进程通信**：通过 [arknet](https://github.com/OpenArkStudio/arknet) 使用 TCP、WebSocket、HTTP 和 RUDP，提供总线标识与消息路由。
 - **开发工具**：Protobuf 消息与原生 [CSV/XLSX 到 Entity JSON 导出器](docs/guides/tools_CN.md)，可生成 C++／C# 字段索引；Python/XML 导入器保留旧资源流程。
 
