@@ -101,7 +101,7 @@ macOS/Linux 可使用 Ctrl+C 或 `SIGTERM`，由应用主循环处理停止请�
 
 启动器先组成完整的启动失败诊断，再写入 stderr，使生命周期阶段与模块名保持在同一次应用输出中。
 
-失败路径验证：`check-app-business-runtime` 检查就绪异常与启动器进程保留；`check-native-unload` 检查插件出口异常与库句柄保留。
+失败路径验证：`check-app-business-runtime` 通过真实启动器与受控测试插件覆盖 13 个排空、就绪、钩子失败及资源保留场景；`check-native-unload` 检查插件出口异常与库句柄保留。这些测试不提供部分启动回滚或按依赖顺序清理的保证。[启动与停机闭环提案](../project/lifecycle-closeout_CN.md) 记录资源获取边界、当前原生资源回收限制，以及增加上述保证前需要确认的决策。
 
 ## 启动一个应用
 

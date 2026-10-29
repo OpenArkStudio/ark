@@ -101,7 +101,7 @@ Manifest loading or validation failures return exit code `1` before plugin start
 
 The launcher composes startup failure context before writing it to stderr, keeping the phase and module together instead of issuing separate stream insertions.
 
-Failure-path checks: `check-app-business-runtime` verifies readiness exceptions and retained launcher processes; `check-native-unload` verifies plugin exit exceptions and retained library handles.
+Failure-path checks: `check-app-business-runtime` covers 13 drain, readiness, hook-failure and retention scenarios using the real launcher and a controlled test plugin; `check-native-unload` verifies plugin exit exceptions and retained library handles. These tests do not provide partial-startup rollback or dependency-ordered teardown. The [startup and shutdown closeout proposal](../project/lifecycle-closeout.md) records resource acquisition boundaries, current native-retirement limits and the decisions needed before adding those guarantees.
 
 ## Run one application
 
