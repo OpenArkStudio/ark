@@ -67,6 +67,17 @@ runtime 和组须在同一线程构造、操作和销毁。`manual_runtime` 不�
 1. 模块 `update()`：先 `service.update()`，再 `bridge.dispatch()`。
 2. `manager.update(timestamp, maximum_handlers = 64)`：统一轮询一次，所有组共用 handler 预算。模块不得另行轮询组或 runtime。
 
+`manager.is_polling_tasks()` 只能在所属线程查询，仅在 `manager.update()` 统一轮询任务期间
+（包括任务完成回调）为真。普通模块更新、轮询返回或抛出异常后均为假。
+在 `manager.update()` 之外直接调用 `task_group::poll()` 或保留的 `manual_runtime::poll()` 不建立该阶段。
+阶段标记属于管理器对象，其他动态库中的服务提供方可直接查询，不依赖该库内部的 Asio 线程局部上下文。
+它表示受信任的执行范围，不是任意外部工作流的身份令牌；应用入口不得在排空期间向执行器投递新的请求根。
+
+**迁移：**直接轮询组或 runtime 仍执行就绪工作，并保留现有拆除与重入防护，
+但停止接收后不再授予 Net HTTP 后续请求权限。管理器拥有的任务应由 `manager.update()` 驱动。
+独立任务组和工具保留直接轮询 API。宿主和所有插件须一起重新构建，使用更新后的内联管理器阶段行为；
+不增加虚函数槽或对象数据。
+
 `manager.stop(timestamp)` 先关闭所有组的顶层任务准入，再按缓存拓扑反向执行[一次性模块停止接收钩子](modules_CN.md#停止接收新业务根请求)。活跃 update／完成回调会将钩子推迟到下一次外层 owner frame 的 stop。有任务或活跃栈未返回时，直接返回 `false`，不等待。服务和桥接须继续受理这些协程的后续操作。任务完成且回调栈退出后，再次 `stop()` 才同步执行 `pre_shut()`、`shut()` 和卸载；用户钩子可能阻塞。
 
 `manager.stop_until(timestamp, deadline)` 接收 `std::chrono::steady_clock::time_point`。首次及后续调用中最早的截止时间持续生效，包括后来的 `stop(timestamp)`；无期限调用不能清除截止时间。没有传入截止时间时，`stop(timestamp)` 保留无限等待语义。时间检查发生在同步钩子边界，以及进入 `pre_shut()` 前。钩子超时返回后，不能再进入后续清理。超时状态不可恢复并返回 `false`；`get_shutdown_failure()` 保留阶段／模块，普通超时的 `get_shutdown_exception()` 为空。清理已开始时，已执行动作不回滚，`cleanup_timed_out` 还会停止更新。详见[启动器超时行为](applications_CN.md#确认启动并停止进程)。
@@ -95,7 +106,7 @@ runtime 和组须在同一线程构造、操作和销毁。`manual_runtime` 不�
 
 <Aside type="caution" title="任务完成不等于 IO 资源已释放">
 
-检查仅覆盖管理器组已受理的顶层任务。新的停止接收钩子是模块合同，默认不执行操作；官方 Net／HTTP 监听器尚未迁移。安全卸载还需外部回调返回、连接池线程退出、后台清理完成；任务归零不证明这些条件。未受组管理的工作不得引用即将销毁的模块。
+任务检查仅覆盖管理器组已受理的顶层任务。各模块的停止接收与就绪钩子有各自的原生工作范围；参见 [Net HTTP 客户端](../reference/network_CN.md#http-客户端停止接收与排空)与 [HTTP 服务端](../reference/http_CN.md)。安全卸载还需外部回调返回、连接池线程退出、后台清理完成；任务归零不证明这些条件。未受组管理的工作不得引用即将销毁的模块。
 
 </Aside>
 

@@ -66,7 +66,8 @@ class plugin_manager final : private noncopyable
         stopping_acceptance,
         tearing_down,
         uninstalling,
-        startup_cleanup
+        startup_cleanup,
+        polling_tasks
     };
 
     class phase_guard
@@ -243,8 +244,18 @@ public:
 
         // Modules publish service results and schedule bridge deliveries first.
         // One bounded owner poll serves every managed group, including drain.
-        task_runtime_->poll(maximum_handlers);
+        {
+            phase_guard polling(*this, call_phase::polling_tasks);
+            task_runtime_->poll(maximum_handlers);
+        }
         return true;
+    }
+
+    // Manager-owned continuation authority, independent of module-local Asio
+    // context state. Raw runtime/group polls do not enter this phase.
+    bool is_polling_tasks() const {
+        check_owner();
+        return phase_ == call_phase::polling_tasks;
     }
 
     std::shared_ptr<arknet::manual_runtime> get_task_runtime() const {

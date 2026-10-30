@@ -64,8 +64,10 @@ owner's `update()`. Rejected callback delivery does not grant permission to subm
 another request during drain.
 
 The untagged request interface recognizes two bounded continuation scopes: a
-synchronous call inside this client's accepted HTTP callback, and execution on
-the associated manager's shared task executor on the owner thread. This preserves
+synchronous call inside this client's accepted HTTP callback, and execution in
+the associated manager's central task-poll phase during owner-thread
+`manager.update()`. The manager's `is_polling_tasks()` reads that object's phase;
+it does not depend on an Asio context marker local to the calling shared library. This preserves
 Etcd's callback retry and provider requests initiated by previously accepted
 managed tasks. Merely running a module's `update()` does not grant admission.
 Calls deferred outside these scopes to another thread or an external scheduler
@@ -74,6 +76,16 @@ interface does not infer arbitrary application workflow ownership. The shared
 executor is a trusted continuation scope: application ingress must not post new
 roots onto it during drain. Keep lifecycle and callback dispatch on the module's
 owner thread, and close application ingress before draining tasks.
+
+**Migration:** direct `task_group::poll()` and retained `manual_runtime::poll()`
+still execute handlers and retain their existing teardown/reentry guards, but no
+longer grant HTTP request continuation permission after admission closes. Drive
+managed tasks through `manager.update()` instead. Its module-update portion does
+not grant this permission; only the central task poll does, including task
+completion handlers. The phase is restored on normal return and exceptions.
+Rebuild the host and all plugins against the updated manager headers together.
+This changes admission behavior without adding virtual slots, object data or a
+wire-format change.
 
 `ready_to_shut()` waits for every accepted native request to publish its result,
 all queued callback results to be delivered, and active callback invocations to

@@ -300,6 +300,95 @@ TEST_CASE("Normal manager drain admits no new task and preserves sequential brid
     CHECK(module.shut_calls == 1);
 }
 
+TEST_CASE("Manager task poll authority excludes module updates and raw compatibility polls") {
+    ark::plugin_manager manager;
+    observed_module module("poll-authority");
+    REQUIRE(manager.add_module(module.get_name(), &module));
+    REQUIRE(manager.add_update_module(&module));
+    auto runtime = manager.get_task_runtime();
+    auto& tasks = manager.create_task_group(module);
+    unsigned module_updates = 0;
+    unsigned polls = 0;
+    module.on_update = [&] {
+        CHECK_FALSE(manager.is_polling_tasks());
+        ++module_updates;
+    };
+    CHECK_FALSE(manager.is_polling_tasks());
+    asio::post(runtime->get_executor(), [&] {
+        CHECK(manager.is_polling_tasks());
+        CHECK_THROWS_AS(manager.update(1), std::logic_error);
+        ++polls;
+    });
+    CHECK(manager.update(1));
+    CHECK(module_updates == 1);
+    CHECK(polls == 1);
+    CHECK_FALSE(manager.is_polling_tasks());
+    REQUIRE(tasks.start(ready_task(), [&](std::exception_ptr error) {
+        CHECK_FALSE(error);
+        CHECK(manager.is_polling_tasks());
+        ++polls;
+    }) != 0);
+    CHECK(manager.update(2));
+    CHECK(polls == 2);
+    CHECK_FALSE(manager.is_polling_tasks());
+    for (bool group_poll : {false, true})
+    {
+        asio::post(runtime->get_executor(), [&] {
+            CHECK_FALSE(manager.is_polling_tasks());
+            ++polls;
+        });
+        if (group_poll)
+        {
+            tasks.poll();
+        }
+        else
+        {
+            runtime->poll();
+        }
+        CHECK_FALSE(manager.is_polling_tasks());
+    }
+    CHECK(polls == 4);
+    CHECK(manager.stop(3));
+}
+
+TEST_CASE("Manager task poll authority resets after module and handler exceptions") {
+    ark::plugin_manager manager;
+    observed_module module("throwing-poll-authority");
+    REQUIRE(manager.add_module(module.get_name(), &module));
+    REQUIRE(manager.add_update_module(&module));
+    module.on_update = [&] {
+        CHECK_FALSE(manager.is_polling_tasks());
+        throw std::runtime_error("module update failed");
+    };
+    CHECK_THROWS_AS(manager.update(1), std::runtime_error);
+    CHECK_FALSE(manager.is_polling_tasks());
+    module.on_update = {};
+    asio::post(manager.get_task_runtime()->get_executor(), [&] {
+        CHECK(manager.is_polling_tasks());
+        throw std::runtime_error("task handler failed");
+    });
+    CHECK_THROWS_AS(manager.update(2), std::runtime_error);
+    CHECK_FALSE(manager.is_polling_tasks());
+    unsigned delivered = 0;
+    asio::post(manager.get_task_runtime()->get_executor(), [&] {
+        CHECK(manager.is_polling_tasks());
+        ++delivered;
+    });
+    CHECK(manager.update(3));
+    CHECK(delivered == 1);
+    CHECK_FALSE(manager.is_polling_tasks());
+    bool rejected_foreign_thread = false;
+    std::thread foreign([&] {
+        try
+        { manager.is_polling_tasks(); }
+        catch (const std::logic_error&)
+        { rejected_foreign_thread = true; }
+    });
+    foreign.join();
+    CHECK(rejected_foreign_thread);
+    CHECK(manager.stop(4));
+}
+
 TEST_CASE("Final completion cannot teardown or mutate owners even during an external context poll") {
     ark::plugin_manager manager;
     observed_module module("final-completion");
@@ -320,7 +409,9 @@ TEST_CASE("Final completion cannot teardown or mutate owners even during an exte
     }) != 0);
     // Compatibility consumers can still hold a runtime handle. That must not
     // create a hole in teardown guards when the manager did not initiate poll.
+    CHECK_FALSE(manager.is_polling_tasks());
     runtime->poll();
+    CHECK_FALSE(manager.is_polling_tasks());
     CHECK(completed == 1);
     CHECK(module.readiness_calls == 0);
     CHECK(manager.stop(2));

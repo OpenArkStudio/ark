@@ -536,6 +536,40 @@ TEST_CASE("HTTP manager drain permits provider work from an accepted managed tas
     CHECK(peer.count() == 1);
 }
 
+TEST_CASE("HTTP drain permission requires the manager poll instead of raw runtime or group polls") {
+    for (bool group_poll : {false, true})
+    {
+        auto owned_client = ark::detail::make_http_client_module();
+        auto& client = *owned_client;
+        ark::plugin_manager manager;
+        client.set_name("http-client");
+        client.set_plugin_manager(&manager);
+        REQUIRE(manager.add_module(client.get_name(), &client));
+        auto& tasks = manager.create_task_group(client);
+        std::future<http_result> future;
+        REQUIRE(tasks.start(managed_http_request(client, 1, future)) != 0);
+        CHECK_FALSE(manager.stop(1));
+        CHECK_FALSE(manager.is_polling_tasks());
+        if (group_poll)
+        {
+            tasks.poll();
+        }
+        else
+        {
+            manager.get_task_runtime()->poll();
+        }
+        REQUIRE(future.valid());
+        REQUIRE(future.wait_for(0ms) == std::future_status::ready);
+        const auto result = future.get();
+        CHECK_FALSE(result.first);
+        CHECK(result.second == arknet::error_code(asio::error::operation_aborted).message());
+        CHECK_FALSE(manager.is_polling_tasks());
+        CHECK(manager.pending_tasks() == 0);
+        CHECK(client.ready_to_shut());
+        CHECK(manager.stop(2));
+    }
+}
+
 TEST_CASE("HTTP manager timeout retains requests and callback owners for later updates") {
     http_peer peer(false);
     REQUIRE(peer.start());
