@@ -8,7 +8,7 @@ import { dirname, join, posix } from "node:path";
 import { parse } from "parse5";
 import { unified } from "unified";
 import remarkParse from "remark-parse";
-import GithubSlugger from "github-slugger";
+import { getHeadingsFromHtml } from "@cloudflare/nimbus-docs/runtime";
 import { canonicalFile, pageRoute } from "./content.mjs";
 
 const site = fileURLToPath(new URL("../", import.meta.url));
@@ -39,7 +39,8 @@ for (const file of documents) {
   const source = await readFile(join(docs, file), "utf8");
   const output = join(site, "dist", pageRoute(file).replace(/^\//, ""));
   const markdown = await readFile(join(output, "index.md"), "utf8");
-  const html = parse(await readFile(join(output, "index.html"), "utf8"));
+  const htmlSource = await readFile(join(output, "index.html"), "utf8");
+  const html = parse(htmlSource);
   const htmlNodes = walk(html, "childNodes");
   const visible = text(html, "childNodes");
   assert.deepEqual(codes(markdown), codes(source), `${file}: exported examples differ`);
@@ -51,10 +52,15 @@ for (const file of documents) {
   }
   const ids = new Set(htmlNodes.flatMap(node => (node.attrs ?? []).filter(attr => attr.name === "id").map(attr => attr.value)));
   const previous = base ? execFileSync("git", ["show", `${base}:docs/${file}`], { cwd: repo, encoding: "utf8" }) : source;
-  const slugger = new GithubSlugger();
+  const publishedHeadings = getHeadingsFromHtml(htmlSource);
+  const currentHeadings = headings(source);
   for (const heading of headings(previous).filter(node => node.depth > 1)) {
-    const id = slugger.slug(text(heading));
-    assert.ok(ids.has(id), `${file}: lost #${id}`);
+    const label = text(heading);
+    assert.ok(currentHeadings.some(node => node.depth === heading.depth && text(node) === label), `${file}: source heading removed: ${label}`);
+    const index = publishedHeadings.findIndex(node => node.depth === heading.depth && node.text === label);
+    assert.ok(index >= 0, `${file}: published heading removed: ${label}`);
+    const [{ slug }] = publishedHeadings.splice(index, 1);
+    assert.ok(ids.has(slug), `${file}: missing heading anchor #${slug}`);
     anchors++;
   }
   for (const node of sourceNodes(source).filter(node => node.type === "image")) {

@@ -30,7 +30,11 @@ Initial receive-buffer requests for 10,000 session objects: **5,000 MiB → 39.1
 
 - 1 KiB / 64 B blocks: ordinary object allocations per message **18 → 2**.
 - 4 KiB / bytewise input: ordinary object allocations per message **4098 → 2**.
-- The batch-16 regression remains part of the memory/throughput tradeoff.
+<Aside type="caution" title="Retained throughput regression">
+
+The batch-16 regression remains part of the memory/throughput tradeoff.
+
+</Aside>
 
 CPU 100% represents one logical core. This single-threaded program includes message validation in its timing. Connection capacity, network throughput and RTT require end-to-end acceptance.
 

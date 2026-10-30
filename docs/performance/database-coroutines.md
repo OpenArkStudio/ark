@@ -5,7 +5,11 @@ Matched work through ark's private database services: **56 paired configurations
 Bars show the median of three runs; short whiskers show min–max. Panel scales are independent. The horizontal axis is **connections / outstanding requests**. Table changes = (coroutine median / callback median − 1) × 100%.
 
 
+<Aside type="note" title="Reading the metrics">
+
 Complete tables include P50 and exact values. P99 is the median of three per-process 99th percentiles, without pooling requests across processes. RSS is the whole-process high-water mark, including warmup and preallocated latency samples; callback mode also creates idle bridge/task objects, so it does not isolate coroutine frame cost.
+
+</Aside>
 
 ## Redis · TCP
 
@@ -423,7 +427,11 @@ Raw records and source/binary/dependency hashes stay in an independent local dir
 
 </details>
 
+<Aside type="caution" title="Evidence limits">
+
 - The hash lock covers only its 2,436 recorded inputs; MySQL `@loader_path` relative dynamic libraries are not a complete transitive dependency hash closure.
 - The recorded `ninja -n` output proposes CMake regeneration; no rebuild was executed and pre-measurement hashes were not reconstructed afterward. These limits do not demonstrate a dependency change.
+
+</Aside>
 
 These closed-loop, local short-duration results do not establish saturation capacity, cross-host behavior, production-duration endurance or cluster PCU.
