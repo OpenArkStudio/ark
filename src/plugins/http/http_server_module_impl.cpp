@@ -23,6 +23,7 @@
 #include <mutex>
 #include <set>
 #include <string>
+#include <utility>
 
 #include <arknet/http/http_server.hpp>
 
@@ -83,6 +84,38 @@ void release_endpoint(std::string& key) {
     key.clear();
 }
 
+class endpoint_reservation final
+{
+public:
+    explicit endpoint_reservation(std::string key)
+        : key_(std::move(key))
+        , reserved_(key_.empty() || reserve_endpoint(key_)) {
+    }
+
+    ~endpoint_reservation() {
+        if (reserved_)
+        {
+            release_endpoint(key_);
+        }
+    }
+
+    endpoint_reservation(const endpoint_reservation&) = delete;
+    endpoint_reservation& operator=(const endpoint_reservation&) = delete;
+
+    bool is_reserved() const noexcept {
+        return reserved_;
+    }
+
+    void transfer_to(std::string& key) noexcept {
+        key_.swap(key);
+        reserved_ = false;
+    }
+
+private:
+    std::string key_;
+    bool reserved_;
+};
+
 } // namespace
 
 bool http_server_module_impl::init() {
@@ -113,8 +146,8 @@ bool http_server_module_impl::start_server(
     {
         return false;
     }
-    const auto endpoint = port == 0 ? std::string{} : endpoint_key(ip, port);
-    if (!endpoint.empty() && !reserve_endpoint(endpoint))
+    endpoint_reservation reservation(port == 0 ? std::string{} : endpoint_key(ip, port));
+    if (!reservation.is_reserved())
     {
         return false;
     }
@@ -127,12 +160,10 @@ bool http_server_module_impl::start_server(
     });
     if (!server->start(ip, port))
     {
-        auto reserved_endpoint = endpoint;
-        release_endpoint(reserved_endpoint);
         return false;
     }
     server_ = std::move(server);
-    listen_key_ = endpoint;
+    reservation.transfer_to(listen_key_);
     return true;
 }
 
