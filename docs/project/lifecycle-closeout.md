@@ -42,6 +42,7 @@ On startup failure the launcher writes the phase/owner diagnostic, runs only exp
 | Managed tasks | `task_group::stop_accepting()`, module service publication, shared `manual_runtime::poll()` | Task count and handler budget do not measure native worker exit or elapsed shutdown time |
 | MySQL / Redis | `ready_to_shut()` observes service/bridge quiescence; `pre_shut()` seals admission and calls native retirement; `shut()` requires `native_retired()` before clearing connections | Retirement uses the pinned arknet pool's `close_and_wait()`; legacy service `stop()` only requests close/suppresses callbacks and is not this barrier |
 | Net HTTP client / routed HTTP server | Close new request admission, drain requests/callbacks or routes/response sends, then synchronously stop the pool/server in `pre_shut()` | The client preserves trusted continuations; the server does not pause TCP accept. Independent background work needs separate ownership; normal native closure can still block |
+| Opt-in Net external roots | [`reg_external_root_callback()`](../reference/network.md#explicit-external-root-registration) checks manager state on owner-thread dispatch; the application supplies rejection handling | Ordinary callbacks remain unchanged. The manager and borrowed receivers must outlive registration; this is not callback unregistration or an unload barrier |
 | Net service manager | Holds listeners, clients and callbacks; its current `shut()` does not explicitly retire those services | Object destruction and selected DSO tests cover concrete release paths, not a general dependency-aware callback barrier |
 
 The shared manual runtime executes user handlers on its owner thread; native IO pools keep their own threads. Do not destroy owners or unload their code until the corresponding callbacks have returned and the owning native retirement barrier has completed. A successful `dlclose`/`FreeLibrary` does not prove physical image unmapping.
@@ -63,7 +64,7 @@ The route has been selected; these are implementation boundaries, not pending po
 | Selected direction | Current delivery |
 | --- | --- |
 | Required module-level provider declarations, with missing/cycle validation and ordered startup | Available framework stage; Timers/Utility migrated, undeclared modules remain independent nodes |
-| Separate ingress quiescence while accepted tasks retain provider access | Core contract, HTTP request-level integration and controlled business fixture; other Net protocol ingress still needs migration |
+| Separate ingress quiescence while accepted tasks retain provider access | Core contract, HTTP request-level integration, opt-in Net root registration and controlled business fixture; application callbacks still need explicit classification and migration |
 | Opt-in cleanup after startup failure, then exit `1` | Available single slot, latest-call record and private standalone-wheel validation; shared Utility Timer, IO and full phase history remain outside this slice |
 | Consumer-before-provider complete cleanup, after all active/task/readiness gates | Subsequent stage; no new general shutdown or unload guarantee is provided |
 
