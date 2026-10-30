@@ -22,6 +22,7 @@
 #include <deque>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <unordered_map>
 
 #include <arknet/base/io_pool.hpp>
@@ -39,6 +40,8 @@ public:
     ~http_client_module_impl() override;
 
     bool update() override;
+    bool stop_accepting() override;
+    bool ready_to_shut() const override;
     bool pre_shut() override;
 
     std::future<std::pair<bool, std::string>> async_request(arknet::http::verb method, const std::string& host,
@@ -94,8 +97,11 @@ private:
         int connect_timeout = 5);
 
 private:
+    bool is_continuation() const;
+
     struct state;
     std::shared_ptr<state> state_;
+    const std::thread::id owner_ = std::this_thread::get_id();
 };
 
 namespace {
@@ -185,7 +191,11 @@ struct http_client_module_impl::state : std::enable_shared_from_this<state>
     {
         http_callback function;
         http_result result;
+        bool accepted;
     };
+
+    static thread_local const state* callback_context;
+    static thread_local bool callback_accepted;
 
     arknet::io_pool runtime{1};
     std::mutex mutex;
@@ -193,20 +203,22 @@ struct http_client_module_impl::state : std::enable_shared_from_this<state>
     std::deque<callback> finished;
     std::uint64_t next_request = 0;
     bool accepting = true;
+    bool stopped = false;
+    std::size_t active_callbacks = 0;
 
     void submit(arknet::http::verb method, const std::string& host, const std::string& service,
         const std::string& target, const std::map<std::string, std::string>* params,
         const std::vector<std::string>* cookies, const std::string* body, const std::string* content_type,
-        int io_timeout, int connect_timeout, http_callback completion) {
+        int io_timeout, int connect_timeout, bool continuation, std::function<void(http_result, bool)> completion) {
         auto message = make_request(method, target, params, cookies, body, content_type);
         arknet::http_request_options options;
         options.io_timeout = std::chrono::seconds(io_timeout);
         options.connect_timeout = std::chrono::seconds(connect_timeout);
         std::unique_lock<std::mutex> lock(mutex);
-        if (!accepting)
+        if (stopped || (!accepting && !continuation))
         {
             lock.unlock();
-            completion(make_result(asio::error::operation_aborted, {}));
+            completion(make_result(asio::error::operation_aborted, {}), false);
             return;
         }
         auto operation = std::make_shared<arknet::http_request>(runtime.get_context(0));
@@ -215,23 +227,24 @@ struct http_client_module_impl::state : std::enable_shared_from_this<state>
         operation->async_request(host, service, std::move(message), options,
             [self = shared_from_this(), id, completion = std::move(completion)](
                 arknet::error_code error, arknet::http_request::response_type response) mutable {
-                {
-                    std::lock_guard<std::mutex> completed_lock(self->mutex);
-                    self->requests.erase(id);
-                }
-                completion(make_result(error, std::move(response)));
+                // Keep the request visible until its result is published. In particular,
+                // a queued callback must become visible before readiness can succeed.
+                completion(make_result(error, std::move(response)), true);
+                std::lock_guard<std::mutex> completed_lock(self->mutex);
+                self->requests.erase(id);
             });
     }
 
-    void queue_type(http_callback callback, http_result result) {
+    void queue_type(http_callback callback, http_result result, bool accepted) {
         std::lock_guard<std::mutex> lock(mutex);
-        finished.push_back({std::move(callback), std::move(result)});
+        finished.push_back({std::move(callback), std::move(result), accepted});
     }
 
     void stop() {
         {
             std::lock_guard<std::mutex> lock(mutex);
             accepting = false;
+            stopped = true;
             for (const auto& [id, operation] : requests)
             {
                 operation->cancel();
@@ -240,6 +253,9 @@ struct http_client_module_impl::state : std::enable_shared_from_this<state>
         runtime.stop();
     }
 };
+
+thread_local const http_client_module_impl::state* http_client_module_impl::state::callback_context = nullptr;
+thread_local bool http_client_module_impl::state::callback_accepted = false;
 
 http_client_module_impl::http_client_module_impl()
     : state_(std::make_shared<state>()) {
@@ -259,14 +275,66 @@ bool http_client_module_impl::pre_shut() {
     return true;
 }
 
-bool http_client_module_impl::update() {
-    std::deque<state::callback> callbacks;
+bool http_client_module_impl::stop_accepting() {
+    std::lock_guard<std::mutex> lock(state_->mutex);
+    state_->accepting = false;
+    return true;
+}
+
+bool http_client_module_impl::ready_to_shut() const {
+    std::lock_guard<std::mutex> lock(state_->mutex);
+    return state_->requests.empty() && state_->finished.empty() && state_->active_callbacks == 0;
+}
+
+bool http_client_module_impl::is_continuation() const {
+    if (state::callback_context)
     {
-        std::lock_guard<std::mutex> lock(state_->mutex);
-        callbacks.swap(state_->finished);
+        return state::callback_context == state_.get() && state::callback_accepted;
     }
-    for (auto& callback : callbacks)
+    auto* manager = get_plugin_manager();
+    return manager && std::this_thread::get_id() == owner_ &&
+           manager->get_task_runtime()->get_executor().running_in_this_thread();
+}
+
+bool http_client_module_impl::update() {
+    auto shared = state_;
+    std::size_t remaining;
     {
+        std::lock_guard<std::mutex> lock(shared->mutex);
+        remaining = shared->finished.size();
+    }
+    while (remaining--)
+    {
+        state::callback callback;
+        {
+            std::lock_guard<std::mutex> lock(shared->mutex);
+            if (shared->finished.empty())
+            {
+                break;
+            }
+            callback = std::move(shared->finished.front());
+            shared->finished.pop_front();
+            ++shared->active_callbacks;
+        }
+
+        struct delivery_guard
+        {
+            state& shared;
+            state::callback& callback;
+            const state* previous_context = state::callback_context;
+            bool previous_accepted = state::callback_accepted;
+
+            ~delivery_guard() {
+                callback.function = {};
+                state::callback_context = previous_context;
+                state::callback_accepted = previous_accepted;
+                std::lock_guard<std::mutex> lock(shared.mutex);
+                --shared.active_callbacks;
+            }
+        } delivery{*shared, callback};
+
+        state::callback_context = shared.get();
+        state::callback_accepted = callback.accepted;
         if (callback.function)
         {
             callback.function(std::move(callback.result));
@@ -282,7 +350,8 @@ std::future<http_result> http_client_module_impl::async_request(arknet::http::ve
     auto promise = std::make_shared<std::promise<http_result>>();
     auto future = promise->get_future();
     state_->submit(method, host, service, target, params, cookies, body, content_type, io_timeout, connect_timeout,
-        [promise = std::move(promise)](http_result result) { promise->set_value(std::move(result)); });
+        is_continuation(),
+        [promise = std::move(promise)](http_result result, bool) { promise->set_value(std::move(result)); });
     return future;
 }
 
@@ -291,8 +360,9 @@ void http_client_module_impl::async_request(http_callback callback, arknet::http
     const std::vector<std::string>* cookies, const std::string* body, const std::string* content_type, int io_timeout,
     int connect_timeout) {
     state_->submit(method, host, service, target, params, cookies, body, content_type, io_timeout, connect_timeout,
-        [state = state_, callback = std::move(callback)](
-            http_result result) mutable { state->queue_type(std::move(callback), std::move(result)); });
+        is_continuation(), [state = state_, callback = std::move(callback)](http_result result, bool accepted) mutable {
+            state->queue_type(std::move(callback), std::move(result), accepted);
+        });
 }
 
 namespace detail {
