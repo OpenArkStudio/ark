@@ -123,7 +123,8 @@ public:
 
     // Prepare before resource acquisition. The capsule must be independently
     // owned; neither the action nor its deleter may borrow an incomplete module.
-    // One slot, keys <=95 bytes; false means acquire nothing and fail startup.
+    // Up to startup_cleanup_capacity owners, keys <=95 bytes. Rejected enrollment
+    // retains no ownership; acquire nothing and fail startup.
     bool prepare_startup_cleanup(std::string_view owner, std::string_view code_owner,
         const std::shared_ptr<void>& context, startup_cleanup_action action) noexcept {
         if (owner_ != std::this_thread::get_id() || startup_finished_ ||
@@ -1101,7 +1102,7 @@ private:
     std::exception_ptr shutdown_exception_;
     std::string shutdown_failure_;
     std::string startup_failure_;
-    detail::startup_cleanup_slot startup_cleanup_;
+    detail::startup_cleanup_registry startup_cleanup_;
     startup_call_record startup_call_;
     bool startup_finished_{};
     bool startup_succeeded_{};

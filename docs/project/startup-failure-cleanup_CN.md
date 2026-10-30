@@ -1,6 +1,6 @@
 # 可选启动失败清理
 
-启动失败默认立即退出 `1`；只有通过 `plugin_manager::prepare_startup_cleanup()` 预登记的独立自有资源，可先执行一次失败清理。首个切片固定一个槽位，以无业务回调的私有时间轮验证，不接入共享 Utility Timer 或 IO。原有获取点源码基准：[d9618a66](https://github.com/OpenArkStudio/ark/tree/d9618a663fc2069b734007812590c88736d17ed5)。不做同进程重试，不调用正常停服充当回滚，不推断外部业务／事务回滚；Registry 和热更新继续暂停。
+启动失败默认立即退出 `1`；只有通过 `plugin_manager::prepare_startup_cleanup()` 预登记的独立自有资源，可先执行一次失败清理。预分配登记表支持跨模块最多 16 个独立自有资源，以无业务回调的私有时间轮验证，不接入共享 Utility Timer 或 IO。原有获取点源码基准：[d9618a66](https://github.com/OpenArkStudio/ark/tree/d9618a663fc2069b734007812590c88736d17ed5)。不做同进程重试，不调用正常停服充当回滚，不推断外部业务／事务回滚；Registry 和热更新继续暂停。
 
 ## 启动失败时已经存在什么
 
@@ -40,7 +40,7 @@ if (!manager.prepare_startup_cleanup(
 return std::make_unique<isolated_timer_module>(capsule);
 ```
 
-API 接收 owner 键、代码所有者键、强持有的 `shared_ptr<void>` 和普通函数指针 `startup_cleanup_result (*)(void*)`。两个键均为非空、无 NUL、最多 95 字节；固定容量为 **1**，满槽、无效输入、错误线程、重入执行器或已结束启动均返回 false，登记本身 `noexcept` 且不分配。失败后不得获取本次资源。上下文分配失败发生在获取之前，走默认退出。
+API 接收 owner 键、代码所有者键、强持有的 `shared_ptr<void>` 和普通函数指针 `startup_cleanup_result (*)(void*)`。两个键均为非空、无 NUL、最多 95 字节；具名常量 `startup_cleanup_capacity` 为 **16**，每个管理器预分配全部条目。资源 owner ID 在全部代码所有者之间必须唯一；多个资源可使用相同代码所有者键。无效键、重复 owner、容量已满、错误线程、重入执行器或已结束启动均返回 false，且不持有被拒绝的 capsule。登记本身 `noexcept` 且不分配。失败后不得获取本次资源。上下文分配失败发生在获取之前，走默认退出。
 
 允许启动前 idle 或启动／安装阶段预登记，但只在一次 `start()` 已返回 false 或抛异常并展开后，才可执行失败清理。启动尝试结束后不能再次 start。同进程嵌入调用者必须在清理后退出 `1`；清理函数不会提供重试或恢复入口。启动前、尚未进入 start 的独立构造异常仍采用原有 RAII／默认退出。
 
@@ -51,15 +51,15 @@ API 接收 owner 键、代码所有者键、强持有的 `shared_ptr<void>` 和�
 | 记录 | 有界范围与含义 |
 | --- | --- |
 | `get_startup_call()` | 仅保留最近进入的受宿主管理调用：插件构造／install、加载／依赖检查、四个模块钩子。owner 95 字节、phase 23 字节固定缓冲，调用前记录进入，返回后记录通过／false，异常时记录 exception；不是全部对象的阶段历史。依赖检查不会据此推断资源。 |
-| 自有资源槽 | 获取前固定键、strong capsule、代码所有者、action 进入标记及结果。由 capsule 表达真实部分获取；阶段和缺少 acquired 标记都不证明资源不存在。 |
+| 自有资源登记表 | 获取前最多 16 个条目固定键、strong capsule、代码所有者及 action；整次尝试共用进入标记及缓存结果。由 capsule 表达真实部分获取；阶段和缺少 acquired 标记都不证明资源不存在。 |
 
-启动器先保留主失败诊断，再在外层 start 已返回／展开后调用 `cleanup_failed_startup()`。管理器封闭新登记及 managed task root admission，不 cancel、不 poll；保护生命周期／registry 重入。动作最多调用一次，`unsafe`／`failed`／异常均保持失败；异常由宿主捕获。重复调用返回缓存结果，既不重复释放，也不调用正常 stop、uninstall 或 DSO close。成功启动只解除尝试登记，完整模块必须继续持有 capsule。
+启动器先保留主失败诊断，再在外层 start 已返回／展开后调用 `cleanup_failed_startup()`。管理器封闭新登记及 managed task root admission，不 cancel、不 poll；保护生命周期／registry 重入。动作按成功登记的逆序执行，与模块启动顺序无关，每个动作最多调用一次。首个 `unsafe`、`failed` 或异常立即停止遍历，保留该所有者及全部更早所有者；异常及动作返回的 `not_run` 转为 `failed`。重复调用只返回缓存结果，不继续遍历。登记、遍历和紧急诊断均不分配内存，动作也须遵守该失败路径契约。不调用正常 stop、uninstall 或 DSO close。成功启动只解除尝试登记，完整模块必须继续持有 capsule。
 
 清理后无论结果如何都退出 `1`。全部已加载代码、未回收所有者及 capsule／控制块析构代码保留到进程退出；即使动作返回 done，也不在失败路径销毁 capsule。普通未登记模块、部分安装但未进入成功插件表的对象和原有构造展开保持既有行为。动作必须独立、有限且不会阻塞；宿主不能抢占一个阻塞函数。
 
 紧急诊断使用 1024 字节栈缓冲和原生 stderr 写入，保留 phase／owner 优先于异常详情，超长文本截断；不构造字符串、格式化日志或调用虚命名方法。若分配故障打断普通阶段诊断构建，使用固定调用记录。Windows 继续 `TerminateProcess`，其余平台继续 `_Exit(1)`，绕过正常析构。原生写失败也继续退出。
 
-**兼容性：** 不增加 module 虚方法，不改变正常停服顺序；`plugin_manager` 新增内联状态，改变公开类布局，宿主和全部插件／消费方须使用同一头文件重新构建。不得混用旧二进制。
+**兼容性：** 不增加 module 虚方法，不改变正常停服顺序；扩大的内联登记表改变 `plugin_manager` 公开类布局，宿主和全部插件／消费方须使用同一头文件重新构建。不得混用旧二进制。
 
 **独立 HTTP 异常安全：** cpp 私有的预约所有者在构造／绑定／启动返回 false 或抛异常时，只释放自己成功预约的键。重复预约被拒绝时，不会释放其他模块的键。原生启动成功后，通过无异常字符串 swap 将预约转交模块，由正常 `pre_shut()` 释放；无需改变公开 API、类布局或生命周期。端口 `0` 继续跳过固定端点预约。
 
@@ -73,7 +73,7 @@ Net／HTTP／MySQL 接入前，先证明构造／成员展开不会丢失活跃�
 
 ## 有限验收
 
-`cmake --build <build> --target check-startup-cleanup --parallel 1` 运行常驻 C++ 测试：四阶段 false／异常、单槽拒绝／错误线程、成功解除登记、unsafe／异常／重复清理与重入；真实 launcher 加载独立 DSO，覆盖获取前／部分／完成后的构造异常、部分安装异常及四阶段失败，检查释放一次、exit1、没有后续 update／正常停服／uninstall／DSO 或 capsule 析构。隔离分配故障子进程保持 global new 持续失败直到真实紧急退出，验证 capsule 分配失败、无分配登记／记录、阶段诊断失败及部分 wheel 初始化失败。原有未登记真实监听器场景由 `check-app-startup-failures` 保留。
+`cmake --build <build> --target check-startup-cleanup --parallel 1` 运行常驻 C++ 测试：四阶段 false／异常、16 个 owner 容量、无效／重复／错误线程／迟到登记拒绝且不持有被拒 capsule、逆序执行、成功解除登记、提前停止、缓存结果与重入；真实 launcher 加载独立 DSO，覆盖获取前／部分／完成后的构造异常、部分安装异常及四阶段失败，检查每个已访问 owner 释放一次、exit1、没有后续 update／正常停服／uninstall／DSO 或 capsule 析构。三模块场景验证逆序清理，并在 unsafe／failed／异常时保留更早所有者。隔离分配故障子进程保持 global new 持续失败直到真实紧急退出，验证 capsule 分配失败、无分配登记／记录及满容量遍历、阶段诊断失败及部分 wheel 初始化失败。原有未登记真实监听器场景由 `check-app-startup-failures` 保留。
 
 启动分配故障注入前先准备好调用参数。另设调用前失败用例，验证尚未进入 `start()` 时保留已登记资源，不执行清理。异常终止对照用例必须输出上下文并以失败状态退出，不等待 Windows 崩溃对话框。
 

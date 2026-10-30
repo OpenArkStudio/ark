@@ -333,3 +333,31 @@ for (const prefix of ["", "zh/"]) {
   assert.doesNotMatch(markdown, /<(?:CardGrid|LinkCard|Aside|Steps|Step)[\s/>]/, `${route}: raw component in Markdown`);
 }
 console.log("Checked bilingual lifecycle procedures and retention constraints.");
+
+for (const prefix of ["", "zh/"]) {
+  const route = prefix + "project/startup-failure-cleanup/";
+  const html = parse(await readFile(join(root, route, "index.html"), "utf8"));
+  const markdown = await readFile(join(root, route, "index.md"), "utf8");
+  const text = node => node.value ?? (node.childNodes ?? []).map(text).join("");
+  const rendered = text(html);
+  for (const token of ["startup_cleanup_capacity", "16", "95", "unsafe", "failed", "not_run", "shared_ptr<void>"]) {
+    assert.ok(rendered.includes(token), `${route}: missing rendered startup constraint ${token}`);
+    assert.ok(markdown.includes(token), `${route}: missing exported startup constraint ${token}`);
+  }
+  const order = prefix ? "动作按成功登记的逆序执行" : "reverse successful enrollment order";
+  const halt = prefix ? "保留该所有者及全部更早所有者" : "retains that owner and every older owner";
+  const retry = prefix ? "不继续遍历" : "without resuming traversal";
+  for (const constraint of [order, halt, retry]) {
+    assert.ok(rendered.includes(constraint), `${route}: missing rendered cleanup order/retention`);
+    assert.ok(markdown.includes(constraint), `${route}: missing exported cleanup order/retention`);
+  }
+  assert.doesNotMatch(markdown, /Capacity is exactly \*\*1\*\*|固定容量为 \*\*1\*\*|one-slot|单槽/, `${route}: stale single-owner limit`);
+  for (const related of ["guides/applications/", "project/lifecycle-closeout/", "project/roadmap/"]) {
+    const relatedMarkdown = await readFile(join(root, prefix, related, "index.md"), "utf8");
+    const relatedHtml = parse(await readFile(join(root, prefix, related, "index.html"), "utf8"));
+    assert.ok(text(relatedHtml).includes("16"), `${prefix}${related}: missing rendered capacity`);
+    assert.ok(relatedMarkdown.includes("16"), `${prefix}${related}: missing exported capacity`);
+    assert.doesNotMatch(relatedMarkdown, /single[- ](?:cleanup )?slot|one-slot|单槽/, `${prefix}${related}: stale single-owner limit`);
+  }
+}
+console.log("Checked bilingual startup cleanup capacity, reverse order and retained early halt in HTML+Markdown.");

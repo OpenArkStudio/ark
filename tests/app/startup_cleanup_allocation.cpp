@@ -220,6 +220,18 @@ int main(int argc, char** argv) {
     {
         return 3;
     }
+    std::array<std::shared_ptr<context>, ark::startup_cleanup_capacity> capsules;
+    constexpr std::array<const char*, ark::startup_cleanup_capacity> keys{"resource-0", "resource-1", "resource-2",
+        "resource-3", "resource-4", "resource-5", "resource-6", "resource-7", "resource-8", "resource-9", "resource-10",
+        "resource-11", "resource-12", "resource-13", "resource-14", "resource-15"};
+    if (mode == "registry")
+    {
+        capsules[0] = module.capsule;
+        for (std::size_t index = 1; index < capsules.size(); ++index)
+        {
+            capsules[index] = std::make_shared<context>();
+        }
+    }
     try
     {
         if (mode == "capsule")
@@ -230,7 +242,32 @@ int main(int argc, char** argv) {
         }
         // Preparation and fixed phase recording themselves must not allocate.
         fail_allocations = true;
-        if (!manager.prepare_startup_cleanup("allocation-wheel", "allocation-test", module.capsule, release))
+        if (mode == "registry")
+        {
+            for (std::size_t index{}; index < capsules.size(); ++index)
+            {
+                if (!manager.prepare_startup_cleanup(keys[index], "allocation-test", capsules[index], release))
+                {
+                    return 5;
+                }
+                const auto owners = capsules[index].use_count();
+                const bool duplicate =
+                    manager.prepare_startup_cleanup(keys[index], "other-plugin", capsules[index], release);
+                if (duplicate || capsules[index].use_count() != owners)
+                {
+                    return 9;
+                }
+            }
+            const auto owners = module.capsule.use_count();
+            const bool overflow =
+                manager.prepare_startup_cleanup("overflow", "allocation-test", module.capsule, release);
+            const bool duplicate = manager.prepare_startup_cleanup(keys[0], "other-plugin", module.capsule, release);
+            if (overflow || duplicate || module.capsule.use_count() != owners)
+            {
+                return 9;
+            }
+        }
+        else if (!manager.prepare_startup_cleanup("allocation-wheel", "allocation-test", module.capsule, release))
         {
             return 5;
         }
@@ -249,7 +286,7 @@ int main(int argc, char** argv) {
             const auto failed_argument = []() -> const std::string& { throw std::bad_alloc{}; };
             (void)manager.start(1, failed_argument(), configuration_directory, plugins);
         }
-        fail_allocations = mode == "phase-record";
+        fail_allocations = mode == "phase-record" || mode == "registry";
         (void)manager.start(1, library_directory, configuration_directory, plugins);
     }
     catch (const std::exception& error)

@@ -19,6 +19,8 @@ enum class startup_cleanup_result
 
 using startup_cleanup_action = startup_cleanup_result (*)(void*);
 
+inline constexpr std::size_t startup_cleanup_capacity = 16;
+
 enum class startup_call_result
 {
     not_entered,
@@ -59,67 +61,95 @@ private:
 
 namespace detail {
 
-// Exactly one independently owned resource in this slice. No vector/function
-// allocation, incomplete module pointer or deleter invocation on the failure path.
-class startup_cleanup_slot
+// Preallocated independent owners, enrolled before acquisition. Failure cleanup
+// retains every capsule and its DSO deleter code until the launcher's exit.
+class startup_cleanup_registry
 {
 public:
     bool prepare(std::string_view owner, std::string_view code_owner, const std::shared_ptr<void>& context,
         startup_cleanup_action action) noexcept {
-        if (prepared_ || owner.empty() || owner.size() >= owner_.size() || code_owner.empty() ||
-            code_owner.size() >= code_owner_.size() || owner.find(char{}) != std::string_view::npos ||
-            code_owner.find(char{}) != std::string_view::npos || !context || !action)
+        if (entered_ || count_ == entries_.size() || !valid_key(owner) || !valid_key(code_owner) || !context || !action)
         {
             return false;
         }
-        for (std::size_t index{}; index < owner.size(); ++index)
+        for (std::size_t index{}; index < count_; ++index)
         {
-            owner_[index] = owner[index];
+            if (owner == entries_[index].owner.data())
+            {
+                return false;
+            }
         }
-        for (std::size_t index{}; index < code_owner.size(); ++index)
-        {
-            code_owner_[index] = code_owner[index];
-        }
-        context_ = context;
-        action_ = action;
-        prepared_ = true;
+        auto& entry = entries_[count_];
+        copy(entry.owner, owner);
+        copy(entry.code_owner, code_owner);
+        entry.context = context;
+        entry.action = action;
+        ++count_;
         return true;
     }
 
     startup_cleanup_result run() noexcept {
-        if (!prepared_ || entered_)
+        if (entered_)
         {
             return result_;
         }
         entered_ = true;
-        try
+        for (std::size_t index = count_; index > 0; --index)
         {
-            result_ = action_(context_.get());
-            if (result_ == startup_cleanup_result::not_run)
+            auto& entry = entries_[index - 1];
+            try
             {
-                result_ = startup_cleanup_result::failed;
+                result_ = entry.action(entry.context.get());
+                if (result_ != startup_cleanup_result::done && result_ != startup_cleanup_result::unsafe &&
+                    result_ != startup_cleanup_result::failed)
+                {
+                    result_ = startup_cleanup_result::failed;
+                }
+            }
+            catch (...)
+            { result_ = startup_cleanup_result::failed; }
+            if (result_ != startup_cleanup_result::done)
+            {
+                // An incomplete newer resource can still borrow an older one.
+                // Do not release older owners or retry any action after failure.
+                break;
             }
         }
-        catch (...)
-        { result_ = startup_cleanup_result::failed; }
-        // Keep even a successfully emptied capsule: its deleter/control block
-        // may contain DSO code. The launcher exits without unloading anything.
         return result_;
     }
 
     void disarm() noexcept {
-        action_ = nullptr;
         entered_ = true;
-        context_.reset();
+        for (std::size_t index{}; index < count_; ++index)
+        {
+            entries_[index].action = nullptr;
+            entries_[index].context.reset();
+        }
     }
 
 private:
-    std::array<char, 96> owner_{};
-    std::array<char, 96> code_owner_{};
-    std::shared_ptr<void> context_;
-    startup_cleanup_action action_{};
+    struct entry
+    {
+        std::array<char, 96> owner{};
+        std::array<char, 96> code_owner{};
+        std::shared_ptr<void> context;
+        startup_cleanup_action action{};
+    };
+
+    static bool valid_key(std::string_view key) noexcept {
+        return !key.empty() && key.size() < 96 && key.find(char{}) == std::string_view::npos;
+    }
+
+    static void copy(std::array<char, 96>& target, std::string_view value) noexcept {
+        for (std::size_t index{}; index < value.size(); ++index)
+        {
+            target[index] = value[index];
+        }
+    }
+
+    std::array<entry, startup_cleanup_capacity> entries_{};
+    std::size_t count_{};
     startup_cleanup_result result_{startup_cleanup_result::not_run};
-    bool prepared_{};
     bool entered_{};
 };
 
