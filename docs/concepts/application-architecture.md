@@ -1,6 +1,6 @@
 # Application architecture
 
-An ark application is a process assembled from selected plugin libraries. A plugin can register several modules, and modules call each other through registered interfaces. Composition happens within the process; communication with another process uses the [Bus and network interfaces](../reference/bus.md).
+An ark process loads plugin libraries; each plugin can register several modules that call registered interfaces. Cross-process communication uses the [Bus and network interfaces](../reference/bus.md).
 
 ![Application composition and call boundaries](../assets/application-composition.svg)
 
@@ -26,13 +26,13 @@ Built-in application manifests use TOML, except the retained external Freebird e
 
 The loader loads each library and calls its exported plugin entry. `timers_plugin::install()` registers `timers_module`; the utility plugin provides services such as timers. A module resolves those services with `find_module<timer_module>()`, rather than creating another copy of the utility plugin.
 
-The manifest's names are runtime library names. Existing `ark_utility_plugin` / `timers_plugin` names do not follow the C++ class spelling and must match the built artifacts. Debug libraries use the configured `_d` postfix. An empty `config` supplies no configuration filename; the loader itself does not parse plugin-specific content.
+Manifest names must match runtime libraries such as `ark_utility_plugin` and `timers_plugin`, rather than C++ class names. Debug libraries use the configured `_d` postfix. An empty `config` supplies no filename; the loader does not parse plugin-specific content.
 
 ## Paths and a runnable starting point
 
 The existing launcher resolves these paths from its working directory. Library and plugin-configuration prefixes are concatenated with filenames, so retain the trailing separator in `bin/` and `conf/`. The manifest's location does not automatically become the base directory.
 
-After following [installation](../get-started/installation.md) and preparing the runtime directory, run from `build/`:
+After [installation](../get-started/installation.md) and runtime staging, run from `run/timers/`:
 
 ```sh
 ./bin/app --busid=1.0.1.1 --name=timers --app_conf=conf/timers.app.toml
@@ -59,4 +59,10 @@ The manager validates declared module provider keys after installation and topol
 
 Pointers returned by `find_module()` belong to the loaded plugin. Stop asynchronous producers before teardown and do not retain those pointers after unload. Keeping connections and state through an in-flight business-plugin replacement is not an automatic consequence of this composition model.
 
-Continue with [framework boundaries](architecture.md), [module implementation](../guides/modules.md), or [Kernel data](../reference/kernel.md).
+<CardGrid>
+
+<LinkCard title="Framework boundaries" href="architecture.md" description="Responsibilities and in-process calls." />
+<LinkCard title="Module implementation" href="../guides/modules.md" description="Interfaces, lifecycle and borrowed pointers." />
+<LinkCard title="Kernel data" href="../reference/kernel.md" description="Metadata, entities and data interfaces." />
+
+</CardGrid>

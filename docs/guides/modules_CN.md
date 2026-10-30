@@ -1,12 +1,10 @@
 # 创建模块
 
-模块通过 C++ 接口提供应用服务，插件负责创建和注册实现，插件管理器调用生命周期回调。实体访问、定时器和业务规则都可以作为模块；插件用于组合并安装一组模块。
-
-下面将计数器接口与实现分开，并由另一个模块调用。配合[创建插件](plugins_CN.md)中的示例即可构建动态库。
+模块通过 C++ 接口提供应用服务；插件注册实现，管理器驱动生命周期。以下计数器与消费者在同一应用线程运行。配合[创建插件](plugins_CN.md)即可构建动态库。
 
 ## 定义接口与实现
 
-将下面的代码保存为 `sample_module.hpp`：
+公开接口保存为 `sample_module.hpp`，不暴露具体类：
 
 ```cpp
 #pragma once
@@ -14,7 +12,6 @@
 #include <cstdint>
 
 #include <ark/module.hpp>
-#include <ark/plugin_manager.hpp>
 
 namespace ark {
 
@@ -25,10 +22,42 @@ public:
     virtual std::uint64_t value() const = 0;
 };
 
-class counter_module_impl final : public counter_module
+class sample_module : public module
 {
-    ARK_DECLARE_MODULE_FUNCTIONS
+};
 
+} // namespace ark
+```
+
+将工厂声明保存为插件私有的 `sample_factory.hpp`，不安装或提供给接口消费者：
+
+```cpp
+#pragma once
+
+#include <memory>
+
+#include "sample_module.hpp"
+
+namespace ark {
+
+std::unique_ptr<counter_module> make_counter();
+std::unique_ptr<sample_module> make_sample();
+
+} // namespace ark
+```
+
+在同目录的 `sample_module.cpp` 中定义具体类及返回接口的工厂：
+
+```cpp
+#include <ark/module_base.hpp>
+
+#include "sample_factory.hpp"
+
+namespace ark {
+namespace {
+
+class counter_module_impl final : public module_base<counter_module>
+{
 public:
     void increment() override {
         ++value_;
@@ -39,50 +68,60 @@ public:
     }
 
 private:
-    std::uint64_t value_ = 0;
+    std::uint64_t value_{};
 };
 
-class sample_module final : public module
+class sample_module_impl final : public module_base<sample_module, counter_module>
 {
-    ARK_DECLARE_MODULE_FUNCTIONS
-
 public:
     bool post_init() override {
-        counter_module_ = find_module<counter_module>();
-        return counter_module_ != nullptr;
+        counter_ = find_module<counter_module>();
+        return counter_ != nullptr;
     }
 
     bool update() override {
-        if (counter_module_ == nullptr)
+        if (counter_ == nullptr)
         {
             return false;
         }
-
-        counter_module_->increment();
+        counter_->increment();
         return true;
     }
 
     bool pre_shut() override {
-        counter_module_ = nullptr;
+        counter_ = nullptr;
         return true;
     }
 
 private:
-    counter_module* counter_module_ = nullptr;
+    counter_module* counter_{};
 };
+
+} // namespace
+
+std::unique_ptr<counter_module> make_counter() {
+    return std::make_unique<counter_module_impl>();
+}
+
+std::unique_ptr<sample_module> make_sample() {
+    return std::make_unique<sample_module_impl>();
+}
 
 } // namespace ark
 ```
 
-示例把三个类型放在同一个文件中，便于说明关系。应用项目应向调用方提供接口头文件，将实现细节保留在内部。两个实现类都使用 `ARK_DECLARE_MODULE_FUNCTIONS`；这个宏保存管理器指针和注册名称，并提供受保护的 `find_module<T>()` 方法。
+`module_base<interface_type, providers...>` 提供 manager／name 访问、必需 provider 元数据与受保护的 `find_module<T>()`，不增加生命周期或 `update()` 覆写。继承链为具体实现 → 基类 → 接口 → `module`。本例消费者声明必需的 `counter_module`；[插件注册](plugins_CN.md#配对注册与注销)显式为消费者启用 update、为计数器禁用。hpp／cpp 按功能共置，消费者只依赖接口。
 
 ## 使用同一个接口注册和查找
 
-以 `counter_module` 为接口注册 `counter_module_impl`，再通过 `find_module<counter_module>()` 查找。注册键来自接口类型的 RTTI 名称；实现类名称和动态库文件名都是不同的键。同一个管理器中，每个接口只注册一个实现。注册宏不会把重复注册转换成受支持的多实现模型。
+以 `counter_module` 为接口注册 `counter_module_impl`，再通过 `find_module<counter_module>()` 查找。注册键来自接口类型的 RTTI 名称；实现类名称和动态库文件名都是不同的键。同一个管理器中，每个接口只注册一个实现。重复注册不构成受支持的多实现模型。
 
-返回的指针由插件持有，调用方不拥有对象。不要删除这个指针，也不要在插件注销模块后继续使用。只要管理器仍有业务任务，任何模块都不能注销，因为其他模块的任务可能仍引用该服务提供方。接口不存在或动态类型转换失败时，启用断言的构建会触发断言；关闭断言时，`find_module<T>()` 返回 `nullptr`。使用前应检查返回值，不要在 Debug 中通过失败查找探测可选服务。应用和插件需要使用兼容的头文件、编译器与 ABI 设置，并启用 RTTI。
+返回值是借用指针，不得删除或在插件注销模块后继续使用。只要管理器仍有受管业务任务，就拒绝注销任何模块，因为其他模块的任务可能仍引用 provider。应用与插件须使用兼容的头文件、编译器／ABI 配置并启用 RTTI。
 
-`plugin_manager::try_find_module<T>()` 用于允许依赖缺失的查询。接口 RTTI 键不存在，或已注册对象的运行时类型不匹配时，返回 `nullptr`，不记录日志、触发断言或修改注册。只能在管理器所属线程调用；其他线程调用时抛出 `std::logic_error`。现有 `find_module<T>()` 保留断言契约。服务启动路径使用可空查询，将缺少必需模块的情况传递到正常启动失败处理。
+| 查询 | 接口 RTTI 键缺失或动态类型不匹配 | 调用约束 |
+| --- | --- | --- |
+| `find_module<T>()` | 启用断言时触发断言；关闭断言时返回 `nullptr` | 使用前检查结果；Debug 中不得通过失败查找探测可选服务；原有断言契约不变 |
+| `plugin_manager::try_find_module<T>()` | 返回 `nullptr`，不记录日志、触发断言或改变注册 | 仅管理器所属线程可调用，其他线程抛出 `std::logic_error`；服务启动用它将缺少必需模块的情况交给正常启动失败处理 |
 
 示例中的两个模块在应用更新线程中调用。计数器没有使用原子变量，不支持任意工作线程直接访问。工作线程的完成结果应投递到模块所属线程，或使用服务明确提供的异步 API。网络回调的分发方式见[网络接口](../reference/network_CN.md)。
 
@@ -101,11 +140,17 @@ class dependent_module final
 };
 ```
 
-`module_base<interface_type, providers...>::get_dependencies()` 返回 provider 接口的 RTTI 注册键。第一个参数仍选择继承的接口；provider 只增加元数据，不增加基类或自有指针。`module::get_dependencies()` 默认返回空列表。旧实现也可覆写它，直接返回必需注册键。读取元数据时不得修改 registry；管理器在安装完成后于 owner 线程读取一次并缓存已验证顺序。合法 idle 模块新增／移除使缓存失效，首次停止接收阶段会按需重建一次。声明在注册期间应保持稳定；轮询和重入 stop 不会重复读取。重复键只计算一次，自依赖视为环。可选依赖继续使用可空查询，不应声明为必需。验证检查注册键是否存在；直接调用 `add_module()` 的代码仍须保证对象实现了所注册的接口。
+| 依赖声明 | 契约 |
+| --- | --- |
+| `module_base<interface_type, providers...>::get_dependencies()` | 返回 provider 接口 RTTI 键；首参数选择继承接口，provider 仅加元数据，不加基类或自有指针 |
+| `module::get_dependencies()` | 默认空列表；旧实现可直接覆写必需键；读取时不得修改 registry |
+| 验证 | 重复键算一次，自依赖为环；可选查询保持可空，不声明为必需；只检查键存在，直接 `add_module()` 的调用方须保证对象实现该接口 |
+| 缓存 | 安装后在 owner 线程读取一次并缓存顺序；合法 idle 新增／移除使缓存失效，首次停止接收阶段按需重建；声明在注册期间稳定，轮询与重入 stop 不重读 |
+| 排序 | 当前可启动节点按注册键稳定排序；只在兼容构建内定义，不保证跨编译器 RTTI 顺序 |
 
-本阶段迁移的小应用为 Timers 加 Utility。Timers 在 `init()` 中实际查找 Timer 和 Guid；Utility 的 Timer、Guid、Schedule 和 Compress 实现没有必需的模块 provider。其他应用保留已有声明和查询检查，尚未形成完整的回调生命周期图。稳定注册键顺序只在兼容构建内定义，不保证不同编译器的 RTTI 编码具有相同排序。
+Timers 在 `init()` 查找 Timer／Guid；Utility 的 Timer、Guid、Schedule、Compress 无必需 provider。其他应用保留原声明与查询检查，不代表完整回调生命周期图。
 
-**升级要求：** `module` 新增元数据与 `stop_accepting()` 虚方法，虚表发生变化；管理器缓存生命周期顺序，对象布局也改变。Timers 的公开基类特化同样改变。必须使用兼容的头文件／编译器配置，同时重建启动器、全部官方／业务插件及受影响的消费者，不得混用旧二进制。已有查找键保持不变，此 C++ 边界不提供跨编译器 ABI 保证。元数据控制启动，以及反向的停止接收钩子顺序。update、就绪检查、`pre_shut()`、`shut()` 和插件卸载保留原有顺序。官方入口迁移、按依赖反向完整清理和可选的启动失败补偿，仍属于[已选生命周期路线](../project/lifecycle-closeout_CN.md)的后续阶段。
+**升级要求：** `module` 新增元数据与 `stop_accepting()` 虚方法，改变虚表；管理器缓存改变对象布局，Timers 的公开基类特化也改变。使用兼容头文件／编译器同时重建启动器、全部官方／业务插件与受影响消费者，不混用旧二进制。查找键不变，不提供跨编译器 ABI 保证。依赖图只控制启动与反向停止接收钩子，update、就绪、`pre_shut()`、`shut()`、卸载顺序不变。官方入口迁移、反向完整清理及可选启动失败补偿仍见[后续路线](../project/lifecycle-closeout_CN.md)。
 
 ## 选择生命周期阶段
 
@@ -115,38 +160,43 @@ class dependent_module final
 | `post_init()` | 查找接口，使用已在 `init()` 中初始化的依赖 | 声明的 provider 也先于消费者完成 `post_init()` |
 | `check_config()` | 检查配置和依赖 | 失败时停止剩余启动工作 |
 | `pre_update()` | 准备进入应用循环 | 避免在这个阶段执行无期限的工作 |
-| `update()` | 分发服务与桥接的完成结果 | 只调用实现类覆盖的 `update()`，随后管理器统一轮询一次共享执行器；布尔返回值不会停止更新 |
+| `update()` | 分发服务与桥接的完成结果 | 仅显式启用 update 的注册参与，随后统一轮询一次共享执行器；布尔返回值不会停止更新 |
 | `stop_accepting()` | 关闭外部业务根请求入口 | 排空任务前按消费者优先顺序执行一次；false／异常保留资源 |
 | `pre_shut()` | 解除订阅，准备清理资源 | 业务任务完成且更新/完成回调返回后才进入；首次返回 `false` 或抛出异常时停止关闭流程 |
 | `shut()` | 释放模块持有的资源 | 只有全部 `pre_shut()` 成功才进入；首次返回 `false` 或抛出异常后，不再执行剩余回调或继续卸载 |
 
 ![模块成功启动的生命周期顺序](../assets/module-lifecycle.svg)
 
-管理器先安装所有模块，再验证声明的 provider 注册键并生成启动顺序。`init()`、`post_init()`、`check_config()` 和 `pre_update()` 使用同一顺序，先 provider、后消费者。没有声明依赖的模块视为独立节点；当前可启动节点之间按注册键的字典序选择，不按清单或插入顺序执行。基类回调默认返回 `true`，只需覆盖使用到的阶段。注册宏检测到实现类覆盖 `update()` 时，才把它加入更新列表。因此计数器实现不参与逐帧更新，`sample_module` 则在每次管理器更新时递增一次计数器。
-
-正常停止时，管理器先关闭顶层业务任务准入，再执行一次性停止接收钩子，然后继续驱动已受理任务，不会关闭它们使用的服务或桥接准入。任务排空后，关闭钩子与卸载同步执行；钩子可能阻塞，轮询的 handler 数量上限也不限制其耗时。钩子失败时，启动器输出阶段和模块信息，保留进程及资源，不会自动重试这些钩子。
+四个启动阶段复用已验证的 provider 优先顺序；独立节点按注册键排序，不按清单或插入顺序。基类回调默认返回 `true`，只覆写需要的阶段。本例插件显式禁用计数器 update、启用消费者 update，后者每次管理器更新递增一次计数器。
 
 <Aside type="caution" title="检查管理器的启动结果">
 
-缺少必需 provider 注册键或依赖成环时，`start()` 在调用任何模块启动钩子前返回 false。`get_startup_failure()` 保留 `dependencies: <consumer> requires missing module '<provider>'`，或列出被依赖环阻塞的模块；阻塞列表也可能包含环外的下游消费者。元数据异常保持原样向上传播，并保留 `dependencies: <module>` 上下文。此时注册和安装的副作用已发生，验证不会回滚这些资源。
+| 启动失败 | 结果与诊断 |
+| --- | --- |
+| provider 缺失／成环 | 启动钩子前 `start()` 返回 false；`dependencies: <consumer> requires missing module '<provider>'`，或列出被环阻塞的模块（含环外下游） |
+| 元数据异常 | 原样传播，保留 `dependencies: <module>` |
+| 四个启动回调返回 `false`／抛异常 | 停止当前及后续阶段；false 使 `plugin_manager::start()` 返回 `false`，异常原样传播；每阶段每回调至多一次，保留 `phase: module` |
+| 库或 `DllEntryPlugin` 缺失 | 返回 false，保留 `load_plugin: <plugin>`；库加载／入口调用期间使用 `load_plugin: plugin`。已加载但缺入口的库因静态初始化可能已启动工作，保留至进程退出，不自动卸载 |
+| `get_startup_failure()` | 仅 owner 线程读取；成功启动后为空 |
 
-`init()`、`post_init()`、`check_config()` 或 `pre_update()` 首次返回 `false` 时，管理器停止该阶段的剩余模块及后续启动阶段，`plugin_manager::start()` 返回 `false`。同一阶段内每个回调至多执行一次。异常保持原样向外传播，也会停止剩余启动调用。失败时，`get_startup_failure()` 保留当前的 `phase: module` 上下文；库加载及其入口调用使用 `load_plugin: plugin`。成功启动后上下文为空，读取时必须位于管理器所属线程。已经完成的阶段不会自动回滚。
-
-应用启动器输出保留的上下文及可用异常信息，并在进入更新循环或启动 Windows 命令线程前返回退出码 `1`。这个失败路径不会调用 `pre_shut()` 或 `shut()` 清理部分启动资源，也不会在同一进程中重试；部署工具应启动新进程。缺少库文件或 `DllEntryPlugin` 入口时，管理器返回 false，并保留 `load_plugin: <plugin>` 上下文。已加载但缺少入口的库保留至进程退出，因为其静态初始化可能已启动工作；管理器不会自动卸载或回滚。其他程序不变量的断言保持不变。`update()` 的返回值仍被忽略。部署时应完整配置依赖插件；自行管理循环的调用方需要检查启动结果。
+安装／注册及已完成阶段不回滚。启动器输出上下文与可用异常信息，在更新循环或 Windows 命令线程启动前以 `1` 退出，不调用 `pre_shut()`／`shut()`，不在同进程重试；部署工具应启动新进程。其他不变量断言不变。自行管理循环时，完整选择插件并检查启动结果；详见[启动器失败合同](applications_CN.md#确认启动并停止进程)。
 
 </Aside>
 
 ## 停止接收新业务根请求
 
-覆写 `bool stop_accepting()`，只关闭模块自己的外部业务根请求入口。默认实现返回 `true`，保持源码兼容。已接收流程仍需访问 provider 请求、完成通知和 bridge；不得因为名称类似，就在这里关闭 provider 的 `close()`、`stop()` 或操作准入。
+`bool stop_accepting()` 默认返回 `true` 以保持源码兼容。覆写时只关闭外部业务根入口；已受理流程仍需 provider 请求、完成交付与桥接，不得因同名操作就关闭 provider 的 `close()`、`stop()` 或准入。
 
-首次 `manager.stop()` 关闭全部受管任务组的顶层准入，进入 `stopping_acceptance`。如果 update、poll 或完成回调仍在执行，则返回 false，等外层 owner frame 再调用 `stop()` 后执行模块钩子。钩子按缓存启动拓扑的反向顺序运行，**先消费者、后 provider**，然后才等待受管任务完成；独立节点的顺序也是启动键顺序的反向。启动时缓存已验证顺序；合法 idle 模块新增／移除使缓存失效。从未调用 start 的手动管理器，或缓存已失效的管理器，会在任何钩子执行前、生命周期 guard 保护下重建并验证一次当前图，包括同键替换，不使用失效缓存中的旧指针。依赖声明在注册生存期内应保持稳定；轮询期间和钩子序列开始后，不再读取元数据。
+| 阶段／边界 | 行为 |
+| --- | --- |
+| `stopping_acceptance` | 首次 `manager.stop()` 关闭全部受管任务组准入；活跃 update／poll／completion 使其返回 false，推迟至外层 owner-frame `stop()`；等待任务前，钩子按反向缓存拓扑执行一次，独立节点反向注册键排序 |
+| 冷／失效缓存 | 未启动过的手动管理器或失效图，在钩子前受生命周期保护地重建／验证一次，含同键替换；不用陈旧指针。钩子序列开始后或轮询中不重读元数据 |
+| 硬失败 `failed` | 首次钩子 false／异常或重建图无效，保留 `stop_accepting: <module>` 与异常；停止后续钩子、更新及清理，保留已受理帧／资源；已关闭入口不重开，重复 stop 不重试。false 不是等待就绪 |
+| `draining` | 全部钩子成功后继续启用的模块更新和共享 owner poll，等待任务及活跃栈完成，再走全模块就绪门与同步清理；不关闭任务服务／桥接，不改变 `pre_shut()`、`shut()`、插件出口或库关闭顺序，不增加启动失败补偿 |
+| 重入 | 重入 stop 返回 false；递归 update／start 与 registry 修改在生效前被拒绝 |
+| `timed_out`／`cleanup_timed_out` | `stop_until(timestamp, deadline)` 在准入／就绪钩子返回后、清理前检查截止时间；清理前超时保留资源并允许更新，清理开始后超时保留剩余资源并禁用更新；后续 `stop()` 不绕过到期状态 |
 
-每个实际到达的钩子只调用一次。`true` 允许继续下一个钩子；`false` 是硬失败，不表示等待就绪。首个 false／异常或无效重建图使状态锁定为 `failed`，保留 `stop_accepting: <module>` 上下文与异常详情，不再执行后续钩子、更新或清理。已经关闭的入口不会重新打开，重复 stop 不重试，已接收帧和资源继续保留。钩子可以阻塞，协作式超时不能中断它。重入 stop 返回 false；递归 update／start 和 registry 修改在生效前被拒绝。
-
-全部钩子成功后进入 `draining`：继续启用的模块更新和共享 owner poll，直到已接收任务及活跃栈结束，再通过现有的全部模块就绪检查并清理。本阶段不改变 `pre_shut()`、`shut()`、插件出口或库关闭顺序，也不增加启动失败补偿。
-
-通过 `stop_until(timestamp, deadline)` 传入截止时间后，管理器在停止接收／就绪钩子返回后及清理前检查时间；后续 `stop()` 不能绕过超时保留。清理前的 `timed_out` 保留资源并允许更新；清理开始后的 `cleanup_timed_out` 保留剩余资源并停止更新。检查不能抢占钩子，也不能回滚已经执行的动作。详见[超时状态](tasks_CN.md#模块共用业务执行器)。
+钩子与卸载同步执行，可能阻塞；poll 的 handler 数量预算不限制钩子耗时，钩子／关闭调用返回边界的超时检查不能抢占或撤销已执行动作。失败钩子报告阶段／模块，保留启动器与资源，不自动重试。详见[超时状态](tasks_CN.md#模块共用业务执行器)。
 
 **迁移边界：** 官方 HTTP 服务端按请求停止接收并排空已接收响应。Net 提供可选的[显式业务根回调助手](../reference/network_CN.md#显式注册外部业务根回调)，要求应用提供拒绝处理器。原普通注册和访客房间行为不变；其余 TCP／WebSocket／RUDP 业务入口须逐项迁移。业务回调入口的接纳检查不暂停传输层 accept，直接停止传输或操作 acceptor 不能代替已接收流程的保留。参见 [HTTP 停服](../reference/http_CN.md#路由请求)。
 
@@ -158,45 +208,15 @@ class dependent_module final
 
 ## 继续阅读
 
-- [创建插件](plugins_CN.md)：配对注册、动态库入口、构建与运行选择。
-- [应用启动器](applications_CN.md)：进程参数和配置路径。
-- [协程任务](tasks_CN.md)：显式任务所有权、准入和所属线程轮询。
-- [Kernel 接口](../reference/kernel_CN.md)：官方模块提供的实体与数据服务。
+<CardGrid>
+
+<LinkCard title="创建插件" href="plugins_CN.md" description="注册配对、DLL 入口、构建与运行时选择。" />
+<LinkCard title="应用启动器" href="applications_CN.md" description="进程参数与配置路径。" />
+<LinkCard title="协程任务" href="tasks_CN.md" description="任务所有权、准入与所属线程轮询。" />
+<LinkCard title="Kernel 参考" href="../reference/kernel_CN.md" description="官方模块提供的实体与数据服务。" />
+
+</CardGrid>
 
 ## 用基类隐藏具体实现
 
-新模块可用 `<ark/module_base.hpp>` 中的 `ark::module_base<interface_type>` 替代
-`ARK_DECLARE_MODULE_FUNCTIONS`。接口头文件只需包含 `<ark/module.hpp>`，具体类放在
-实现 `.cpp` 中：
-
-```cpp
-// counter_factory.hpp：插件私有的工厂声明
-#include <memory>
-#include "counter_module.hpp" // 声明 ark::counter_module
-
-std::unique_ptr<ark::counter_module> make_counter();
-
-// counter_module.cpp
-#include <ark/module_base.hpp>
-
-class counter_impl final : public ark::module_base<ark::counter_module>
-{
-public:
-    void increment() override { ++value_; }
-    std::uint64_t value() const override { return value_; }
-private:
-    std::uint64_t value_{};
-};
-
-std::unique_ptr<ark::counter_module> make_counter() {
-    return std::make_unique<counter_impl>();
-}
-```
-
-单继承链为具体实现 → `module_base<interface_type>` → 接口 → `module`。基类实现
-manager/name 访问函数、必需 provider 元数据及受保护的 `find_module<T>()`，不覆写启动／停机钩子或 `update()`。
-查找仍要求目标接口已经注册。在实现中包含基类即可，调用方无需依赖具体类。
-
-私有工厂返回 `std::unique_ptr<interface_type>`。
-[插件的类型化注册辅助函数](plugins_CN.md#用类型化注册和显式入口)
-按该接口注册，并要求显式选择是否参与 update。原有模块宏仍可使用。
+上面的[完整示例](#定义接口与实现)即推荐写法。已有 `ARK_DECLARE_MODULE_FUNCTIONS` 模块仍受支持；迁移时保持接口 RTTI 键与 update 选择，按[插件兼容表](plugins_CN.md#用类型化注册和显式入口)替换创建／注册宏。工厂返回 `std::unique_ptr<interface_type>`，具体类留在 cpp，基类只由实现包含。

@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parse } from "parse5";
+import { unified } from "unified";
+import remarkParse from "remark-parse";
+import { pageRoute } from "./content.mjs";
 
 const root = resolve("dist");
 const pages = [];
@@ -140,4 +143,65 @@ for (const prefix of ["", "zh/"]) {
   }
 
 }
-console.log(`Checked ${pages.length} static HTML pages and ${references.size} internal references, language switching, cards, callouts, highlighting and AI Markdown.`);
+// Exercise publication, not just the source converter: Nimbus adds the project
+// base and serializes cards, every tab panel and nested steps independently.
+const markdownParser = unified().use(remarkParse);
+const componentPages = ["README", "get-started/installation", "get-started/quick-start",
+  "guides/applications", "guides/modules", "guides/plugins",
+  "concepts/architecture", "concepts/application-architecture"];
+function descendants(node, childKey = "children") {
+  return [node, ...(node[childKey] ?? []).flatMap(child => descendants(child, childKey))];
+}
+const nodeText = node => node.value ?? (node.childNodes ?? []).map(nodeText).join("");
+for (const prefix of ["", "zh/"]) {
+  for (const slug of componentPages) {
+    const file = `${slug}${prefix ? "_CN" : ""}.md`;
+    const source = await readFile(new URL(`../../${file}`, import.meta.url), "utf8");
+    const route = pageRoute(file).replace(/^\//, "");
+    const output = join(root, route);
+    const html = parse(await readFile(join(output, "index.html"), "utf8"));
+    const markdown = await readFile(join(output, "index.md"), "utf8");
+    const sourceNodes = descendants(markdownParser.parse(source));
+    const publishedNodes = descendants(markdownParser.parse(markdown));
+    const htmlNodes = descendants(html, "childNodes");
+    const code = nodes => nodes.filter(node => node.type === "code").map(node => node.value);
+    assert.deepEqual(code(publishedNodes), code(sourceNodes), `${file}: AI Markdown lost or changed a code example`);
+    const htmlCode = htmlNodes.filter(node => node.tagName === "pre").map(node => nodeText(node).trimEnd());
+    assert.deepEqual(htmlCode, code(sourceNodes).map(value => value.trimEnd()), `${file}: HTML lost or changed a code example`);
+    const htmlText = nodeText(html);
+    for (const node of sourceNodes.filter(node => node.type === "html")) {
+      for (const tag of node.value.matchAll(/<(?:LinkCard|TabItem|Aside|Step)(?=[\s/>])[^>]*>/g)) {
+        for (const label of tag[0].matchAll(/(?:title|description|label)="([^"]+)"/g)) {
+          const panelLabel = htmlNodes.some(node => node.attrs?.some(attr => attr.name === "data-nb-tab-label" && attr.value === label[1]));
+          assert.ok(htmlText.includes(label[1]) || panelLabel, `${file}: HTML lost component label ${label[1]}`);
+          assert.ok(markdown.includes(label[1]), `${file}: AI Markdown lost component label ${label[1]}`);
+        }
+        if (tag[0].startsWith("<LinkCard ")) {
+          const href = tag[0].match(/href="([^"]+)"/)?.[1];
+          assert.ok(href, `${file}: routing card needs a link`);
+          const target = new URL(href, `https://source.invalid/docs/${file}`);
+          const expected = "/ark" + pageRoute(target.pathname.slice("/docs/".length)) + target.search + target.hash;
+          assert.ok(htmlNodes.some(node => node.tagName === "a" && node.attrs?.some(attr => attr.name === "href" && attr.value === expected)), `${file}: HTML lost card link ${expected}`);
+          assert.ok(markdown.includes(`](${expected})`), `${file}: AI Markdown lost card link ${expected}`);
+        }
+      }
+    }
+    assert.doesNotMatch(markdown, /<(?:CardGrid|LinkCard|Tabs|TabItem|Steps|Step|Aside)[\s/>]/, `${file}: raw component leaked into AI Markdown`);
+    assert.doesNotMatch(markdown, /\]\(\/ark\/ark\//, `${file}: AI Markdown doubled the project base`);
+    if (slug === "README") {
+      const grids = htmlNodes.filter(node => node.attrs?.some(attr => attr.name === "data-home-links"));
+      assert.equal(grids.length, 1, `${file}: duplicate home routing grid`);
+      assert.ok(documents.get(join(output, "index.html")).has("where-to-go-next"), `${file}: home routing anchor changed`);
+      for (const target of ["get-started/installation", "concepts/architecture", "guides/plugins", "networking"]) {
+        assert.ok(markdown.includes(`](/ark/${prefix}${target})`), `${file}: home card lost its base-aware Markdown link`);
+      }
+    }
+    if (slug.startsWith("get-started/")) {
+      for (const label of ["macOS/Linux", "Windows PowerShell"]) {
+        assert.ok(htmlNodes.some(node => node.attrs?.some(attr => attr.name === "data-nb-tab-label" && attr.value === label)), `${file}: missing ${label} tab`);
+        assert.ok(markdown.includes(`### ${label}`), `${file}: Markdown lost ${label} tab label`);
+      }
+    }
+  }
+}
+console.log(`Checked ${pages.length} static HTML pages and ${references.size} internal references, language switching, cards, callouts, highlighting and AI Markdown; verified examples and component labels on ${componentPages.length * 2} bilingual guide outputs.`);

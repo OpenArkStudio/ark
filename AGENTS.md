@@ -212,6 +212,10 @@ branch or worktree when the existing checkout contains uncommitted changes.
 
 ## Keep documentation synchronized
 
+- Choose Nimbus components by content type to reduce repetition: routing cards
+  for overviews, steps for procedures and tabs for supported alternatives. Keep
+  reference constraints visible; preserve bilingual labels, links and code in
+  both rendered pages and complete AI Markdown exports.
 - Resolve legacy page aliases to their canonical source before editing. Nimbus
   may skip retired Markdown files even when they remain in Git. Check the emitted
   HTML and Markdown for the changed content; a successful build alone does not

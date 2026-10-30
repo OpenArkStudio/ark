@@ -47,9 +47,17 @@ ark::timer_module* find_timers(ark::plugin_manager& manager) {
 
 ## 头文件路径与 CMake 目标
 
-核心头文件位于 `src/core/`，启动器位于 `src/application/`；应用清单与共享配置读取位于 `src/config/`，所有官方插件的头文件与实现位于各自的 `src/plugins/<name>/`。Kernel 的 `src/plugins/kernel/entity.hpp` 与实现共置，仍使用 `<ark/kernel/entity.hpp>`。MySQL、Redis、Utility、Net、Bus、HTTP 和 Kernel 将公开头文件与实现共置于 `src/plugins/<name>/`；CMake 仅将显式列出的公开头文件映射到构建树的 `src/plugins/sdk-include/ark/<name>/`。业务代码依赖 `ark::mysql`、`ark::redis`、`ark::utility`、`ark::net`、`ark::bus`、`ark::http` 或 `ark::kernel`，继续使用 `<ark/...>` 逻辑路径，通过显式映射取头。Kernel 保留既有装配头、具体值类型和模板；此次移动不改变注册或可见性。核心目标定义位于 `src/core/`，各插件仍保留独立可选目标，`ark::ark` 汇总可用 API 目标。
+源码按功能共置公开头与实现；CMake 的显式头清单保留 `<ark/...>` 逻辑包含路径。
 
-公共插件／模块的 hpp 与 cpp 按功能目录共置。头文件映射只在选定构建树中生成包含视图，不形成另一层源码。
+| 内容 | 源码位置 | 公开目标与映射 |
+| --- | --- | --- |
+| 核心 | `src/core/` | `ark::core` 提供显式公开头，并映射到自己的构建树包含目录 |
+| 启动器 | `src/application/` | 组装应用进程 |
+| 应用清单与共享配置读取 | `src/config/` | 配置读取边界独立于插件实现 |
+| 全部官方插件 | `src/plugins/<name>/`，公开 hpp 与 cpp 按功能共置 | 各插件保留独立可选目标；`ark::ark` 汇总可用 API 目标 |
+| MySQL、Redis、Utility、Net、Bus、HTTP、Kernel | 各自的 `src/plugins/<name>/` | `ark::mysql`、`ark::redis`、`ark::utility`、`ark::net`、`ark::bus`、`ark::http`、`ark::kernel` 将显式公开头映射到 `src/plugins/sdk-include/ark/<name>/` |
+
+Kernel 的 `src/plugins/kernel/entity.hpp` 与实现共置，保留 `<ark/kernel/entity.hpp>`、既有装配头、具体值类型和模板；移动不改变注册或可见性。头映射只在选定构建树中生成包含视图，不形成另一层源码。
 
 `ark/` 是文件系统中的头文件前缀，不会自动创建 C++ 命名空间；命名空间由各头文件显式声明的 `namespace ark` 决定。依赖 API 接口目标只传递编译要求，不会选择或加载插件动态库。
 

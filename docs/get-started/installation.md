@@ -15,7 +15,15 @@ cd ark
 
 Install vcpkg and set the `VCPKG_ROOT` environment variable to that checkout. Select Boost for the network dependency.
 
-On macOS/Linux, use a POSIX shell. The [macOS compiler and SDK example](#macos-compiler-and-sdk) below selects the Apple toolchain explicitly.
+The public ark targets enable MSVC's standard-conforming preprocessor
+(`/Zc:preprocessor`). Custom targets inherit it through `ark::core`; when compiling
+ark headers manually, enable this option together with C++20 mode.
+
+<Tabs syncKey="build-platform">
+
+<TabItem label="macOS/Linux">
+
+Use a POSIX shell. The [macOS compiler and SDK example](#macos-compiler-and-sdk) below selects the Apple toolchain explicitly.
 
 ```sh
 cmake -S . -B app-build -G Ninja \
@@ -24,11 +32,9 @@ cmake -S . -B app-build -G Ninja \
   -DASIO_STANDALONE=OFF -DCMAKE_BUILD_TYPE=Release
 ```
 
-On Windows, use Visual Studio 2022 Developer PowerShell:
+</TabItem>
 
-The public ark targets enable MSVC's standard-conforming preprocessor
-(`/Zc:preprocessor`). Custom targets inherit it through `ark::core`; when compiling
-ark headers manually, enable this option together with C++20 mode.
+<TabItem label="Windows PowerShell">
 
 ```powershell
 cmake -S . -B app-build -G Ninja `
@@ -36,6 +42,10 @@ cmake -S . -B app-build -G Ninja `
   "-DVCPKG_MANIFEST_FEATURES=application;boost;etcd-client" `
   -DASIO_STANDALONE=OFF -DCMAKE_BUILD_TYPE=Release
 ```
+
+</TabItem>
+
+</Tabs>
 
 </Step>
 <Step title="Build">

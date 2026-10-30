@@ -1,67 +1,77 @@
 # Create a plugin
 
-A plugin installs and uninstalls a group of modules. Its shared library exports the entry points used by the ark launcher; its modules expose the interfaces used by application code. Core and official plugins live in ark, while business plugins live with their application.
-
-This guide builds a business plugin containing the counter and consumer from [Create a module](modules.md). Keep `sample_module.hpp`, `sample_plugin.hpp`, `sample_plugin.cpp` and `CMakeLists.txt` together for this example.
+A plugin assembles modules and exports the shared-library entries called by the launcher. Official plugins belong in ark; business plugins belong with their application. Co-locate the [module example’s](modules.md#define-the-interface-and-implementation) `sample_module.hpp`, `sample_factory.hpp`, `sample_module.cpp` with this page’s `sample_plugin.cpp` and `CMakeLists.txt`.
 
 ## Declare the plugin
 
-Save as `sample_plugin.hpp`:
-
-```cpp
-#pragma once
-
-#include <ark/plugin.hpp>
-#include <ark/plugin_manager.hpp>
-
-namespace ark {
-
-ARK_DECLARE_PLUGIN(sample_plugin)
-
-} // namespace ark
-```
-
-`ARK_DECLARE_PLUGIN` supplies the plugin class, manager/configuration accessors and the declarations of `install()` and `uninstall()`. The macros below use ark's unqualified framework types, so the example declares them inside `namespace ark`.
+Keep the concrete `sample_plugin` in cpp below; no public plugin header is needed. `plugin_base<derived_type>` supplies version `0`, the `typeid(derived_type).name()` identity, manager access and `get_plugin_conf()` / `set_plugin_conf()`. Configuration is shared by instances of one derived type and isolated between types. Set the manager before installation; do not change it while modules are registered.
 
 ## Pair registration and unregistration
 
-Save as `sample_plugin.cpp`:
+Save as `sample_plugin.cpp`. Factories return exclusively owned interfaces; installation selects updates explicitly and uninstallation removes the consumer before its provider:
 
 ```cpp
-#include "sample_module.hpp"
-#include "sample_plugin.hpp"
+#include <stdexcept>
+
+#include <ark/plugin_base.hpp>
+
+#include "sample_factory.hpp"
 
 namespace ark {
+namespace {
 
-ARK_DECLARE_PLUGIN_DLL_FUNCTION(sample_plugin)
+class sample_plugin final : public plugin_base<sample_plugin>
+{
+public:
+    void install() override {
+        if (!register_module<counter_module>(make_counter(), module_update::disabled))
+        {
+            throw std::runtime_error("counter registration rejected");
+        }
+        if (!register_module<sample_module>(make_sample(), module_update::enabled))
+        {
+            throw std::runtime_error("sample registration rejected");
+        }
+    }
 
-void sample_plugin::install() {
-    ARK_REGISTER_MODULE(counter_module, counter_module_impl);
-    ARK_REGISTER_MODULE(sample_module, sample_module);
+    void uninstall() override {
+        if (!unregister_module<sample_module>())
+        {
+            throw std::runtime_error("sample unregistration rejected");
+        }
+        if (!unregister_module<counter_module>())
+        {
+            throw std::runtime_error("counter unregistration rejected");
+        }
+    }
+};
+
+} // namespace
+
+ARK_EXPORT_FUNC void DllEntryPlugin(plugin_manager* manager,
+    const std::string& stem, logger* log) {
+    logger::init(log);
+    manager->register_plugin<sample_plugin>(stem);
 }
 
-void sample_plugin::uninstall() {
-    ARK_UNREGISTER_MODULE(sample_module, sample_module);
-    ARK_UNREGISTER_MODULE(counter_module, counter_module_impl);
+ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
+    manager->unregister_plugin<sample_plugin>();
 }
 
 } // namespace ark
 ```
 
-| Operation | Meaning |
+| Operation | Contract |
 | --- | --- |
-| `ARK_REGISTER_MODULE(counter_module, counter_module_impl)` | Allocate the implementation, set its manager/name and register it under the public interface |
-| `ARK_REGISTER_MODULE(sample_module, sample_module)` | Register a simple module using the same type for interface and implementation |
-| `ARK_UNREGISTER_MODULE(...)` | Remove the corresponding module/update entries and delete the module object |
-| `ARK_DECLARE_PLUGIN_DLL_FUNCTION(sample_plugin)` | Define the exported `DllEntryPlugin` / `DllExitPlugin` functions and plugin configuration storage |
+| `register_module<interface_type>(unique_ptr, module_update)` | Consumes the exclusive candidate, preserves its interface address and registers `typeid(interface_type).name()`; omitting the template argument infers the interface from the factory return type |
+| `module_update::enabled` / `disabled` | Mandatory choice; `disabled` excludes even an `update()` override. No default or override detection |
+| `unregister_module<interface_type>()` | Pair every successful registration; success removes records and deletes the object once. Implement `uninstall()` in required module order; plugin destruction alone does not uninstall modules |
 
 <Aside type="note" title="One entry-point pair per library">
 
-Place the DLL macro in exactly one translation unit per shared library. It generates fixed C entry-point names; adding it to every module source or exporting two independently declared plugin entry points from one library causes duplicate definitions. The C entry points still pass C++ types, so they do not establish a compiler-independent ABI.
+Define `DllEntryPlugin` / `DllExitPlugin` in exactly one translation unit per library, using the necessary `ARK_EXPORT_FUNC` platform visibility macro. Duplicate entries cause symbol conflicts. Entries still pass C++ types: no pure C, cross-compiler or cross-version ABI is promised. The local removal order does not establish cross-plugin teardown order.
 
 </Aside>
-
-Keep `install()` focused on registration. Resolve cross-module dependencies during the lifecycle stages described in [Create a module](modules.md). Pair every registered interface/implementation with an unregistration operation. The example removes the consumer before its counter; that local order does not establish a dependency order between separate plugins.
 
 ## Build the shared library
 
@@ -79,7 +89,7 @@ set(ARK_BUILD_CORE_TESTS OFF CACHE BOOL "Build core tests" FORCE)
 set(ARK_BUILD_EXAMPLES OFF CACHE BOOL "Build ark examples" FORCE)
 add_subdirectory("${ARK_SOURCE_DIR}" ark)
 
-add_library(sample_plugin SHARED sample_plugin.cpp)
+add_library(sample_plugin SHARED sample_plugin.cpp sample_module.cpp)
 target_link_libraries(sample_plugin PRIVATE ark::core)
 set_target_properties(sample_plugin PROPERTIES
     PREFIX ""
@@ -130,7 +140,7 @@ On Windows, library paths are UTF-8. The loader converts them to absolute wide-c
 | Symptom | Check |
 | --- | --- |
 | Library cannot be opened | Deployment working directory, filename/prefix/extension, Debug postfix and shared-library dependencies |
-| Entry point cannot be found | DLL macro is defined once in the library and exported symbols are visible |
+| Entry point cannot be found | Explicit entry functions are defined once in the library and exported symbols are visible |
 | Module lookup asserts, or returns `nullptr` with assertions disabled | The runtime manifest includes the provider library, `install()` registers `T`, and consumer/provider use compatible interface definitions |
 | Includes compile but no service is available | An interface target supplies headers; it does not install a runtime module |
 
@@ -138,121 +148,50 @@ The manager does not make plugin unloading safe for arbitrary outstanding callba
 
 ## Use typed registration and explicit entries
 
-`<ark/plugin_base.hpp>` provides `ark::plugin_base<derived_type>` as an alternative to
-`ARK_DECLARE_PLUGIN`. It supplies version `0`, the existing `typeid(derived_type).name()`
-identity, manager accessors, and `get_plugin_conf()` / `set_plugin_conf()`.
-Configuration is shared by instances of the same derived plugin and isolated
-between different derived types. Set the manager before installation and keep it
-unchanged while modules are registered.
+The [complete example above](#pair-registration-and-unregistration) is recommended. Existing macros/plugins remain supported. Preserve interface keys, update selection, lifecycle, drain and unload contracts during migration:
 
-A private factory can return an interface without exposing its concrete class
-([module example](modules.md#use-a-base-class-with-a-private-implementation)):
+| Legacy spelling | Recommended replacement |
+| --- | --- |
+| `ARK_DECLARE_MODULE_FUNCTIONS` | Derive from `module_base<interface_type, providers...>` in cpp; publish only the interface |
+| `ARK_DECLARE_PLUGIN` | Derive from `plugin_base<derived_type>` in cpp; retain manager/configuration semantics |
+| `ARK_REGISTER_MODULE` / `ARK_UNREGISTER_MODULE` | Private factory returning `std::unique_ptr<interface_type>`; replace legacy override-based update detection with an explicit switch, and pair removal in reverse order |
+| `ARK_DECLARE_PLUGIN_DLL_FUNCTION` | Explicit entry/exit functions, retaining `ARK_EXPORT_FUNC` |
 
-```cpp
-#include <stdexcept>
-#include <ark/plugin_base.hpp>
-#include "counter_factory.hpp"
+### Registration failures and resource retention
 
-class counter_plugin final : public ark::plugin_base<counter_plugin>
-{
-public:
-    void install() override {
-        if (!register_module(make_counter(), ark::module_update::disabled)) {
-            throw std::runtime_error("counter registration rejected");
-        }
-    }
-    void uninstall() override {
-        if (!unregister_module<ark::counter_module>()) {
-            throw std::runtime_error("counter unregistration rejected");
-        }
-    }
-};
+| Boundary | Behavior and caller responsibility |
+| --- | --- |
+| Candidate ownership | Object is unpublished and exclusively owned by `unique_ptr`; remove legacy borrowed observers before transfer |
+| Rejected registration | Null candidate, duplicate module identity, occupied update identity or registered address returns false; destroys the candidate once, leaving no borrowed pointer |
+| Registration exception | Metadata/allocation exceptions and owner-thread, callback-phase and shutdown guards propagate; no undo of earlier successful registration or cleanup hooks |
+| Rejected removal | Missing owned identity or registry mismatch returns false; active callbacks/pending managed work invoke existing guards and retain the module and records |
+| Later installation failure | Earlier registered resources remain under startup-failure process exit, without same-process rollback/retry; the [launcher](applications.md#check-startup-and-stop-the-process) reports failure and exits `1` |
+| Plugin allocation/metadata | `register_plugin<T>()` retains `ARK_NEW` / `ARK_DELETE`, including nullable nothrow allocation. Null skips installation, records `allocate_plugin: <library stem>` and makes `start()` return false before later libraries/module phases. Metadata exceptions before installation destroy the candidate once; after installation starts, process-exit policy applies |
+| Library wrappers | Scoped until published to the manager; failed native loads retire the wrapper even if logging throws. Loaded handles retain explicit unload policy; no caller migration required |
 
-ARK_EXPORT_FUNC void DllEntryPlugin(ark::plugin_manager* manager,
-    const std::string& stem, ark::logger* log) {
-    ark::logger::init(log);
-    manager->register_plugin<counter_plugin>(stem);
-}
+These plugins use typed construction. Rebuild plugins with changed public layouts and their consumers together; Net's public implementation-header removal also requires rebuilding affected consumers.
 
-ARK_EXPORT_FUNC void DllExitPlugin(ark::plugin_manager* manager) {
-    manager->unregister_plugin<counter_plugin>();
-}
-```
-
-Both helpers are protected templates. `register_module<interface_type>(candidate,
-module_update::enabled)` opts into update; `disabled` excludes it even when the
-implementation overrides `update()`. There is no default or override detection.
-The factory return type determines the interface when the template argument is
-omitted. Successful registration preserves the factory's interface address and
-uses `typeid(interface_type).name()` for lookup.
-
-The candidate must exclusively own an object not yet published to the registry;
-remove any legacy borrowed observers before transferring it. Registration consumes
-the `unique_ptr`. A null candidate, duplicate module
-identity, occupied update identity, or already registered address returns false.
-A rejected candidate is destroyed once. Metadata/allocation exceptions and the
-existing owner-thread, callback-phase and shutdown guards propagate; an incomplete
-registry insertion leaves no borrowed pointer to the rejected candidate. These
-helpers do not undo earlier successful registrations or run cleanup hooks.
-
-After success, ownership follows the explicit unregister/delete path used by the
-legacy macros. `unregister_module<interface_type>()` returns false for a missing owned
-identity or a registry identity mismatch. Active callbacks or pending managed
-work prevent removal through the existing guards, retaining the module and its
-records. A successful removal deletes the module once. Implement `uninstall()`
-in the required module order; destruction alone does not uninstall or delete
-registered modules. A later installation failure retains earlier resources under
-the existing startup-failure process-exit policy, without same-process rollback
-or retry.
-
-`plugin_manager::register_plugin<T>()` keeps `ARK_NEW`/`ARK_DELETE` allocation
-hooks, including nullable nothrow allocation. A null allocation returns without
-installation and records `allocate_plugin: <library stem>` as the startup failure.
-The manager then returns false from `start()` before later libraries or module phases.
-Before `install()` starts, a metadata exception destroys the plugin
-candidate once; once installation starts, the existing process-exit policy above
-applies. Dynamic-library wrappers also have scoped ownership until published to
-the manager. Failed native loads retire the wrapper even if logging throws;
-loaded handles keep the existing explicit unload policy. No caller migration is
-required.
-
-Existing macros and plugins remain supported. Export the entry functions
-explicitly with the existing platform visibility macro. The plugin boundary
-still passes C++ types; this API does not promise a pure C ABI or cross-version
-ABI stability. Lifecycle phases, draining and library unload rules are unchanged.
-
-Net constructs its HTTP client through a private factory returning `std::unique_ptr<http_client_module>` and registers it with updates enabled. Applications consume `<ark/net/http_client_module.hpp>` and typed manager lookup; the old `http_client_module_impl.hpp` is removed from the public/install interfaces. Rebuild affected consumers together; see [Net migration](../reference/network.md#api-and-private-construction).
-
-Kernel also uses typed construction while retaining its public `*_impl` and `kernel_plugin` types and header paths. Its private factory header is not installed. Rebuild Kernel and consumers together because those public class layouts change; the [Kernel migration table](../reference/kernel.md#typed-kernel-construction) records unchanged interface keys, update selection and registration order.
-
-Consul follows the same construction pattern while retaining all three public headers and types. Its private factory is not installed; the module keeps its interface RTTI key and disabled updates. Rebuild Consul and consumers together because its public implementation/plugin layouts change. See [Consul construction migration](../reference/directory-structure.md#typed-consul-construction) for test entry points and dependency conditions.
-
-Etcd Client also retains all five public headers and types while using typed bases, a private interface-returning factory and explicit entry/exit functions. Its interface RTTI key and disabled updates are unchanged. Rebuild the plugin and consumers together because the public implementation/plugin layouts change. The [Etcd Client construction migration](../reference/directory-structure.md#typed-etcd-client-construction) describes optional JSON dependencies and tests without an Etcd service.
-
-OSS SDK uses the same typed bases and private interface-returning factory while retaining all three public headers/types, its interface RTTI key and disabled updates. Rebuild the plugin and consumers together for the public layout change. Typed unregistration replaces its undefined legacy deregistration call; the implementation remains a TODO scaffold. See [OSS SDK construction migration](../reference/directory-structure.md#typed-oss-sdk-construction) for build and test boundaries.
-
-Kafka retains all four public headers and both RdKafka callback bases while adopting typed construction and explicit entries. Its interface key and enabled frame updates remain unchanged, and the runtime plugin stays off by default. Rebuild Kafka and consumers together after the public layout change. See [Kafka construction migration](../reference/directory-structure.md#typed-kafka-construction) for driver requirements and tests without a broker connection.
+| Plugin | Public surface and construction | Preserved behavior and migration limits |
+| --- | --- | --- |
+| [Net](../reference/network.md#api-and-private-construction) | Private factory returns `std::unique_ptr<http_client_module>`; applications use `<ark/net/http_client_module.hpp>` and typed lookup | Updates enabled; old `http_client_module_impl.hpp` removed from public/install interfaces |
+| [Kernel](../reference/kernel.md#typed-kernel-construction) | Public `*_impl`, `kernel_plugin` types and header paths retained; private factory header not installed | Public class layouts change; interface keys, update selection and registration order unchanged |
+| [Consul](../reference/directory-structure.md#typed-consul-construction) | All three public headers/types retained; private factory not installed | Public implementation/plugin layouts change; interface RTTI key and disabled updates unchanged; linked guide covers test entry points and dependencies |
+| [Etcd Client](../reference/directory-structure.md#typed-etcd-client-construction) | All five public headers/types retained; typed bases, private interface-returning factory and explicit entry/exit functions | Public implementation/plugin layouts change; interface RTTI key and disabled updates unchanged; linked guide covers optional JSON dependencies and tests without an Etcd service |
+| [OSS SDK](../reference/directory-structure.md#typed-oss-sdk-construction) | All three public headers/types retained; typed bases and private interface-returning factory | Public layouts change; interface RTTI key and disabled updates unchanged; typed unregistration replaces the undefined legacy call; still a TODO scaffold; linked guide covers build/test limits |
+| [Kafka](../reference/directory-structure.md#typed-kafka-construction) | All four public headers and both RdKafka callback bases retained; typed construction and explicit entries | Public layouts change; interface key and enabled frame updates unchanged; runtime plugin off by default; linked guide covers driver requirements and tests without a broker connection |
 
 ## Logger and singleton lifetime
 
-`logger::init(log)` borrows the host logger. Keep it alive while any plugin can
-log, and let its creator destroy it. `logger::init(nullptr)` uses the logger
-singleton's lazy creation path; repeated calls keep the current instance.
-
-For `singleton<T>`, `set_instance(pointer)` only changes the active pointer and
-never takes ownership. A lazy-created instance remains owned until explicit
-`shutdown()`, even while a borrowed pointer temporarily replaces it. Restore the
-saved pointer or detach it with `set_instance(nullptr)` before a borrowed object
-is destroyed. `shutdown()` clears the active pointer and destroys only the
-internally owned object, once. It also prevents automatic creation, including
-when called before the first `instance()`. Later `instance()` returns null unless
-an object is explicitly injected; `get_instance()` requires a valid active
-instance. `set_instance(nullptr)` detaches without stopping lazy initialization
-that has not yet run. Constructor exceptions still propagate and allow another
-initialization attempt. Allocation failure retains the existing null-return
-behavior. Concurrent lazy first access is synchronized; injection and shutdown
-require external serialization against access. There is no automatic process-exit
-cleanup. Do not delete the internally owned object yourself or restore its pointer after shutdown.
+| Operation | Ownership and lifetime |
+| --- | --- |
+| `logger::init(log)` | Borrows the host logger; its creator keeps it alive while plugins can log and destroys it |
+| `logger::init(nullptr)` | Lazy singleton creation; repeated calls retain the current logger |
+| `singleton<T>::set_instance(pointer)` | Changes only the active pointer, never ownership. Lazy-created objects remain owned until `shutdown()`, even during borrowed replacement |
+| Borrowed replacement | Restore the saved pointer or detach with `set_instance(nullptr)` before destroying the borrowed object; never delete the internally owned object or restore it after shutdown |
+| `shutdown()` | Clears active state, destroys only the internally owned object once and prevents lazy creation, even before first `instance()`. No automatic process-exit cleanup |
+| Access after shutdown | `instance()` returns null unless explicitly injected; `get_instance()` requires a valid active instance |
+| `set_instance(nullptr)` | Detaches without stopping lazy initialization that has not run |
+| Failure / concurrency | Constructor exceptions propagate and permit retry; allocation failure retains null-return behavior. Lazy first access is synchronized; externally serialize injection/shutdown against access |
 
 With `ARK_BUILD_CORE_TESTS=ON`, `check-core` includes `check-singleton`, which runs
 the ownership, injection, construction-retry, concurrent initialization, shutdown

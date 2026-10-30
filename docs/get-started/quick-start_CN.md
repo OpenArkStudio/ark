@@ -2,15 +2,25 @@
 
 运行 Timers，确认应用能够加载插件并进入模块生命周期。它只使用 `ark_utility_plugin` 和 `timers_plugin`，不需要 Consul、数据库服务或 Excel 配置生成步骤。
 
+<Steps>
+
+<Step>
+
 ## 编译应用和插件
 
 先完成[安装与构建](installation_CN.md)。以下命令在仓库根目录执行，使用该文档中的 Release 输出目录 `app-build/bin/`。程序和插件文件应来自同一次构建。
 
+</Step>
+
+<Step>
+
 ## 准备运行目录
 
-创建独立运行目录，放入程序、应用配置和日志配置，使运行文件与源码配置分开。
+在独立运行目录中放置程序、应用清单和日志配置，与源码配置分开。
 
-macOS/Linux：
+<Tabs syncKey="timers-platform">
+
+<TabItem label="macOS/Linux">
 
 ```sh
 mkdir -p run/timers/bin run/timers/conf
@@ -18,13 +28,19 @@ cp -R app-build/bin/. run/timers/bin/
 cp config/timers.app.toml config/log.conf run/timers/conf/
 ```
 
-Windows PowerShell：
+</TabItem>
+
+<TabItem label="Windows PowerShell">
 
 ```powershell
 New-Item -ItemType Directory -Path run/timers/bin, run/timers/conf -Force | Out-Null
 Copy-Item app-build/bin/* run/timers/bin/ -Recurse -Force
 Copy-Item config/timers.app.toml, config/log.conf run/timers/conf/
 ```
+
+</TabItem>
+
+</Tabs>
 
 运行所需的文件如下：
 
@@ -36,13 +52,19 @@ run/timers/
     └── log.conf
 ```
 
-复制命令还会带入同次构建的其他产物，但 `timers.app.toml` 只选择上述两个动态库。此示例不需要单独的 `timers.conf` 或 `resource/` 目录。
+复制命令会带入同次构建的其他产物；`timers.app.toml` 只选择上述两个库，无需单独的 `timers.conf` 或 `resource/`。
+
+</Step>
+
+<Step>
 
 ## 启动 Timers
 
 进入 `run/timers/` 后启动。应用配置中的 `bin/` 和 `conf/` 都相对于这个工作目录。
 
-macOS/Linux：
+<Tabs syncKey="timers-platform">
+
+<TabItem label="macOS/Linux">
 
 ```sh
 cd run/timers
@@ -50,7 +72,9 @@ cd run/timers
   --app_conf=conf/timers.app.toml --log_conf=conf/log.conf
 ```
 
-Windows：
+</TabItem>
+
+<TabItem label="Windows PowerShell">
 
 ```powershell
 cd run/timers
@@ -58,7 +82,15 @@ cd run/timers
   --app_conf=conf/timers.app.toml --log_conf=conf/log.conf
 ```
 
+</TabItem>
+
+</Tabs>
+
 Debug 程序名为 `app_d` 或 `app_d.exe`，插件文件在平台后缀前带有 `_d`。将整套 Debug 产物放入独立运行目录，XML 中的插件名称保持不变。
+
+</Step>
+
+<Step>
 
 ## 确认运行结果
 
@@ -71,6 +103,10 @@ macOS/Linux 使用 Ctrl+C 停止，Windows 在应用控制台输入 `exit`。Tim
 插件加载失败，或模块启动回调返回 `false`、抛出异常时，启动器记录失败阶段并以退出码 `1` 结束，不进入后续启动阶段或更新循环。按[应用启动器](../guides/applications_CN.md#排查启动问题)中的步骤检查配置和动态库错误。
 
 </Aside>
+
+</Step>
+
+</Steps>
 
 ## 接入自己的应用
 

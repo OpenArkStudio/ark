@@ -1,6 +1,6 @@
 # Application launcher
 
-The `app` executable selects a process identity, reads a TOML or XML application manifest and loads its plugin libraries. Start with the runnable [Timers quick start](../get-started/quick-start.md); this page explains configuration paths, library names and startup checks.
+`app` selects the process identity, reads a TOML or XML manifest and loads plugins. Start with [Timers](../get-started/quick-start.md); use this guide for configuration paths, library names and startup checks.
 
 ## Command-line arguments
 
@@ -21,7 +21,7 @@ The `app` executable selects a process identity, reads a TOML or XML application
 
 ## Resolve configuration paths
 
-Relative paths resolve from the process working directory. Moving the executable or placing the manifest in another folder does not change that base directory.
+Relative paths resolve from the process working directory, regardless of executable or manifest location.
 
 ![Configuration paths resolved from the working directory](../assets/launcher-paths.svg)
 
@@ -99,7 +99,16 @@ This limit is cooperative: it cannot interrupt a blocking user `update()`, readi
 
 <Aside type="caution" title="Do not use process survival as the readiness check">
 
-Manifest loading or validation failures return exit code `1` before plugin startup. If `plugin_manager::start()` returns `false` or a module/plugin startup exception propagates, the launcher flushes a synchronous diagnostic with the failing phase, module or plugin and available exception details, then terminates with exit code `1` before entering the update loop or starting the Windows command thread. This failure path bypasses C++ object/static destruction so partially started IO pools cannot hold the process open. Other buffered or asynchronous logs may be lost. The launcher does not roll back partial startup, run normal shutdown hooks or retry in the same process. Deployment tools should start a fresh process after this failure exit. Missing libraries or `DllEntryPlugin` entrypoints also report `load_plugin: <plugin>` and terminate with exit code `1`. An already loaded library missing its entrypoint is retained until process exit; it is not automatically unloaded. Argument parsing failures, including help handling, still return `0`. Check the expected module's initialization log and application-specific readiness before routing traffic to a process. A running PID or a zero exit status alone is insufficient.
+Before routing traffic, check the expected module's initialization log and application readiness. A running PID or zero exit status is insufficient.
+
+| Failure path | Diagnostic and exit behavior |
+| --- | --- |
+| Manifest loading or validation | Exit `1` before plugin startup |
+| `plugin_manager::start()` returns `false`, or a module/plugin startup exception propagates | Flush a synchronous diagnostic with phase, module/plugin and available exception details; exit `1` before the update loop or Windows command thread |
+| Missing library or `DllEntryPlugin` | Report `load_plugin: <plugin>` and exit `1`; a loaded library missing its entrypoint stays retained until process exit, without automatic unload |
+| Argument parsing failure, including help handling | Still return `0` |
+
+A failed `start()` or propagated startup exception bypasses C++ object/static destruction so partially started IO pools cannot hold the process open; other buffered/asynchronous logs may be lost. The launcher does not roll back partial startup, run normal shutdown hooks or retry in the same process. Deployment tools should start a fresh process.
 
 </Aside>
 
