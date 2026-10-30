@@ -108,7 +108,7 @@ Keep: Emit the synchronous stop message and exit `0`
 | Opt-in Net external roots | [`reg_external_root_callback()`](../reference/network.md#explicit-external-root-registration) checks manager state on owner-thread dispatch; the application supplies rejection handling | Ordinary callbacks remain unchanged. The manager and borrowed receivers must outlive registration; this is not callback unregistration or an unload barrier |
 | Net service manager | Holds listeners, clients and callbacks; its current `shut()` does not explicitly retire those services | Object destruction and selected DSO tests cover concrete release paths, not a general dependency-aware callback barrier |
 
-The shared manual runtime executes user handlers on its owner thread; native IO pools keep their own threads. Do not destroy owners or unload their code until the corresponding callbacks have returned and the owning native retirement barrier has completed. A successful `dlclose`/`FreeLibrary` does not prove physical image unmapping.
+Drive business continuations through `manager.update()`; direct `task_group::poll()` / `manual_runtime::poll()` calls do not grant HTTP continuation authority during drain. Native IO keeps its pool threads. Retain owners/code until callbacks return and native retirement completes. Successful `dlclose`/`FreeLibrary` does not prove physical image unmapping.
 
 The default wait is unlimited. A positive `--shutdown_timeout_ms` sets a monotonic `stop_until()` deadline retained across stop calls. Checks run after admission/readiness hooks return, before `pre_shut()`, and at cleanup hook/close return boundaries. Zero pending tasks does not excuse a slow hook.
 

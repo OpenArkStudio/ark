@@ -213,7 +213,7 @@ for (const prefix of ["", "zh/"]) {
   for (const step of source.matchAll(/<Step title="([^"]+)">/g)) {
     assert.ok(markdown.includes(`**${step[1]}**`), `${route}: lost exported shutdown step`);
   }
-  for (const token of ["stopping_acceptance", "draining", "timed_out", "cleanup_timed_out", "failed", "close_and_wait()", "reg_external_root_callback()", "17", "12", "--shutdown_timeout_ms"]) {
+  for (const token of ["stopping_acceptance", "draining", "timed_out", "cleanup_timed_out", "failed", "close_and_wait()", "reg_external_root_callback()", "manager.update()", "task_group::poll()", "17", "12", "--shutdown_timeout_ms"]) {
     assert.ok(markdown.includes(token), `${route}: missing lifecycle constraint ${token}`);
   }
   for (const target of ["guides/applications", "project/startup-failure-cleanup"]) {
