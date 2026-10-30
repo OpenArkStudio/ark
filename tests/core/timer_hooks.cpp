@@ -279,3 +279,20 @@ TEST_CASE("Timer hook constructor failure releases storage without arming a late
     CHECK(allocations == releases);
     fail_container_after = std::numeric_limits<std::size_t>::max();
 }
+
+TEST_CASE("Time wheel callback predicate includes an addition interrupted before ID registration") {
+    REQUIRE(live.empty());
+    ark::time_wheel_manager manager;
+    manager.init(0);
+    unsigned calls{};
+    ark::timer_functor callback = [&](auto, const auto&) { ++calls; };
+    fail_standard_allocation = true;
+    CHECK_THROWS_AS(manager.add_timer(ark::null_guid, 1, 1h, std::move(callback)), std::bad_alloc);
+    CHECK_FALSE(manager.remove_timer(1));
+    CHECK(manager.has_retained_callbacks());
+    CHECK(calls == 0);
+    manager.shut();
+    CHECK_FALSE(manager.has_retained_callbacks());
+    CHECK(live.empty());
+    CHECK(allocations == releases);
+}
