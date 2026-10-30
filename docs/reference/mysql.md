@@ -2,7 +2,14 @@
 
 `mysql_module` provides named native arknet pools, queries, parameterized prepared statements and transactions. It replaces mysql++, the driver-manager modules and the former synchronous SQL-builder interface. Rebuild plugins and migrate consumers to managed coroutine tasks.
 
-The public interface's single source is `src/plugins/mysql/mysql_module.hpp`, beside the implementation and private plugin assembly. Link `ark::mysql` to obtain its configure-time build-tree copy at `ark/mysql/mysql_module.hpp`, even when the runtime plugin is disabled. A handwritten `-I <source>/include` alone is insufficient. The implementation class lives only in `.cpp`; the former `mysql_module_impl.hpp` and plugin assembly header are private implementation inputs. Rebuild the host, plugins and affected consumers together; installed consumption uses `find_package(ark CONFIG REQUIRED COMPONENTS mysql)` and the same `ark::mysql` target. See [installation](../get-started/installation.md#install-and-consume-the-cmake-package) for dependencies and relocatable packages. Installation does not provide an old-binary compatibility guarantee or load a runtime module.
+| Interface use | Contract |
+| --- | --- |
+| Single source | `src/plugins/mysql/mysql_module.hpp`, beside implementation/private assembly |
+| Build | `ark::mysql` maps `ark/mysql/mysql_module.hpp` at configure time, even with runtime plugins disabled; handwritten `-I <source>/include` alone is insufficient |
+| Private implementation | Concrete class only in `.cpp`; `mysql_module_impl.hpp` and plugin assembly header stay private |
+| Installed consumption | `find_package(ark CONFIG REQUIRED COMPONENTS mysql)`, still linking `ark::mysql`; dependencies/relocation in [installation](../get-started/installation.md#install-and-consume-the-cmake-package) |
+
+Rebuild host, plugins and affected consumers together. Installation promises neither old-binary compatibility nor runtime-module loading.
 
 ## Configure and query
 
@@ -42,7 +49,14 @@ ark::task<> run() {
 }
 ```
 
-Configuration is explicit and owner-thread only. It can precede the database module's `init()` because registration already installs its plugin manager. Duplicates and new configuration while the manager is draining return false; empty names or zero limits throw. Once `pre_shut()` seals the module, configuration throws `std::logic_error`. Connections cannot be reconfigured in place. TLS certificate verification is enabled by default; configure the CA and server name as needed. The optional MySQL target requires `ARKNET_ENABLE_SSL=ON` and OpenSSL. No mysql++ driver is linked. The official plugin does not read database options from the application manifest's `config` path or from a database XML preset. Keep that plugin's `config` empty and call `configure()` with owning options from a business module. See [build and runtime activation](build-options.md#native-database-plugins) and [managed task lifecycle](../guides/tasks.md).
+| Configuration boundary | Behavior |
+| --- | --- |
+| Owner thread | Explicit configuration; registration supplies the manager, so it may precede the module’s `init()`. No in-place reconfiguration |
+| Rejection / exceptions | Duplicate names/new configuration during manager drain return false; empty names/zero limits throw; after `pre_shut()` seals admission, throws `std::logic_error` |
+| TLS / build | Certificate verification defaults on; set CA/server name as needed. Requires `ARKNET_ENABLE_SSL=ON` and OpenSSL, without mysql++ |
+| Option source | No manifest `config` or database XML reader; leave `config` empty and pass owning options through a business module’s `configure()` |
+
+See [build/runtime activation](build-options.md#native-database-plugins) and [managed task lifecycle](../guides/tasks.md).
 
 ## Transactions
 
@@ -63,7 +77,7 @@ ark::task<> update_player() {
 }
 ```
 
-Transactions retain one native lease across all steps. Their monotonic identifiers are valid only for the issuing module instance; they own no plugin implementation object. Use one operation at a time per transaction. Unknown/expired identifiers and overlapping steps throw. The original timeout covers acquire, BEGIN, every step and commit; it is never renewed by another step. An unused transaction rolls back at its deadline. `cleanup_timeout` bounds the separate rollback attempt. A failed or uncertain cleanup discards the connection. Automatic retry or cross-connection replay is not provided.
+Transactions hold one native lease. Monotonic IDs belong only to the issuing module instance, owning no implementation object. One operation per transaction; unknown/expired IDs or overlapping steps throw. The original timeout covers acquire, BEGIN, steps and commit without renewal. Unused transactions roll back at deadline; `cleanup_timeout` separately bounds rollback. Failed/uncertain cleanup discards the connection; no automatic retry or cross-connection replay.
 
 `mysql_reply` retains the owning `arknet::mysql::query_result` and separate statement-close diagnostics. `mysql_transaction_reply` additionally retains rollback results, initiation failures and the final transaction status. Successful execution alone does not prove cleanup or commit succeeded. Native database/transport failures are returned; local C++ and bridge admission failures propagate as exceptions. Cancellation requests reach the native request and preserve `outcome_unknown` for a potentially executed statement.
 

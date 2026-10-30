@@ -22,9 +22,9 @@ auto* timers = manager.find_module<ark::timer_module>();
 const auto entity = guids->create_guid();
 ```
 
-Pointers are borrowed from the loaded plugin. Keep the owning plugin alive while using them. Timer member callbacks also borrow their receiver; retain the receiver until its callbacks finish or are removed. Advance the manager on its owner thread using millisecond timestamps; creating a timer does not advance it. The schedule module uses its existing background scheduler, whose thread-pool configuration remains 16. This migration does not add callback cancellation, hot reload or new shutdown guarantees. Finish producers and callbacks according to the [module lifecycle](../guides/modules.md) before unload.
+Interfaces borrow the plugin; timer member callbacks also borrow receivers. Keep both alive through use/callback completion or removal. Advance the manager on its owner with millisecond timestamps; creating timers does not advance time. The background scheduler pool remains 16. No new cancellation/hot-reload/shutdown guarantee; finish producers/callbacks under the [module lifecycle](../guides/modules.md) before unload.
 
-The plugin keeps installation order GUID, timer, schedule, compression and reverses that order during uninstallation. Timer `pre_shut()` still shuts down its time wheel. GUID layout, compression levels/algorithms and scheduler behavior are unchanged. The library stem remains `ark_utility_plugin`, with the existing platform extension and Debug `_d` postfix.
+Installation remains GUID → timer → schedule → compression, reversed on uninstall; timer `pre_shut()` closes its wheel. GUID layout, compression levels/algorithms and scheduling stay unchanged. `ark_utility_plugin` retains platform suffixes and Debug `_d`.
 
 ## Timer ownership and allocation
 
@@ -48,22 +48,19 @@ interface is unchanged.
 
 ## Compression buffers and concurrency
 
-The core helpers `<ark/compress/zlib.hpp>`, `<ark/compress/zstd.hpp>` and
-`<ark/compress/lz4.hpp>` use an owned heap buffer for each call. Successful calls
-append to the supplied output string; rejected input leaves it unchanged. Callers
-must supply a readable input range and synchronize any shared output string.
-The existing compression policy requires the codec's worst-case output bound to
-be strictly below 1 MiB. Decompression accepts at most 1 MiB of output, including
-exactly 1 MiB. Zstandard requires a known frame content size and rejects larger,
-unknown-size or invalid frames before decoding. Invalid compressed data returns
-`false`. LZ4's existing empty-block decompression result remains `false`.
+`<ark/compress/zlib.hpp>`, `<ark/compress/zstd.hpp>` and `<ark/compress/lz4.hpp>` own per-call heap buffers. Success appends output; rejected input leaves it unchanged. Supply readable input and synchronize shared output.
 
-zlib, LZ4 and Zstandard normal calls have no shared writable output buffer.
-Zstandard dictionary calls still mutate their instance's cached contexts: use a
-separate `zstd_compress` instance per thread, or externally serialize dictionary
-initialization, dictionary calls and destruction. Dictionary initialization,
-ownership and copy behavior retain their existing contract. This change does not
-establish same-instance dictionary concurrency or plugin unload safety.
+| Codec boundary | Contract |
+| --- | --- |
+| Compression | Worst-case output bound must be strictly below 1 MiB |
+| Decompression | At most 1 MiB, including exactly 1 MiB; Zstandard rejects oversized, unknown-size or invalid frames before decoding |
+| Failure | Invalid data returns `false`; LZ4 empty-block decompression remains `false` |
+
+<Aside type="caution" title="Dictionary contexts still need serialization">
+
+Normal zlib/LZ4/Zstandard calls share no writable output. Dictionary calls still mutate cached contexts: use separate `zstd_compress` instances per thread or serialize dictionary initialization/calls/destruction. Initialization, ownership and copy contracts stay unchanged; no same-instance dictionary concurrency or plugin-unload safety is established.
+
+</Aside>
 
 Enable `ARK_BUILD_COMPRESSION_TESTS=ON` and the vcpkg `compression-tests` feature
 to run `cmake --build <build-dir> --target check-compression`. The target is also

@@ -26,18 +26,19 @@ port = 9090
 threads = 4
 ```
 
-All three fields are required. `host` must be a nonempty string without NUL;
-`port` is a TOML integer in `0..65535`, and `threads` an integer in `1..255`.
-Unknown keys, missing/wrong types and out-of-range values fail `init()` with the
-file and field in the diagnostic; syntax errors include line and column.
-Renaming an old XML file does not convert its contents. See
-[plugin configuration](../service-manifests.md#http-and-consul-plugin-settings).
+| Required field | TOML constraint |
+| --- | --- |
+| `host` | Nonempty string without NUL |
+| `port` | Integer `0..65535` |
+| `threads` | Integer `1..255` |
 
-`start_server()` uses those configured values. The explicit overload retains its
-public defaults `port = 8080` and `thread_num = 1`; these are not TOML defaults.
-A zero port asks the OS for an available port. The public module does not expose
-the selected port, so choose a known configured port when clients must discover it.
-Initialization parses configuration without starting a listener.
+Unknown/missing keys, wrong types and out-of-range values fail `init()` with file/field diagnostics; syntax errors add line/column. Renaming XML does not convert it: see [plugin configuration](../service-manifests.md#http-and-consul-plugin-settings). Initialization parses without listening.
+
+<Aside type="note" title="Configuration versus overload defaults">
+
+`start_server()` uses configured values. Explicit-overload defaults `port = 8080`, `thread_num = 1` are not TOML defaults. Port zero requests an OS-assigned port; the module does not expose it, so configure a known port when clients need discovery.
+
+</Aside>
 
 ## Route requests
 
@@ -66,24 +67,14 @@ workers. Routing does not wait for `manager.update()` or move handlers to the
 manager's thread. `make_200<response_body_type>()` retains the public response
 helper, including content type, length and keep-alive behavior.
 
-An already running module rejects another start. Two module instances cannot
-reserve the same nonzero endpoint within the library. `pre_shut()` stops and
-releases the server and reservation; the endpoint can then be started again.
-The owner thread drives normal manager shutdown. After explicit `stop_accepting()`,
-this instance rejects new business route invocations with HTTP 503 and closes that
-connection. Already admitted routes continue; `ready_to_shut()` waits for handlers
-and their response sends before normal cleanup releases the listener. Admission
-is per business request: the TCP listener remains open, and both existing and new
-connections use the same gate. Failed sends also finish their request; completion
-does not prove the client received the response.
+| Listener / shutdown boundary | Behavior |
+| --- | --- |
+| Endpoint reservation | Rejects start while running; two instances in one library cannot reserve one nonzero endpoint. `pre_shut()` stops/releases server and reservation, retaining restart behavior when used alone |
+| `stop_accepting()` | Permanently closes this instance’s business admission; `start_server()` cannot reopen it. New requests receive HTTP 503 and close their connection; TCP listening continues, with one gate for existing/new connections |
+| `ready_to_shut()` | Waits for admitted handlers/response sends before listener cleanup. Failed sends also finish requests, without proving client receipt |
+| Lifecycle | Owner-thread manager shutdown retains cooperative waits/timeouts and cannot interrupt blocked routes. Independently scheduled handler work needs separate ownership; HTTP send accounting excludes it |
 
-Admission closure is permanent for this instance: `start_server()` cannot reopen
-it. The existing restart behavior after calling only `pre_shut()` is unchanged.
-The manager retains cooperative waiting and timeout preservation; it cannot
-interrupt a blocked route. Work independently scheduled by a handler needs
-separate lifecycle ownership and is not covered by HTTP send accounting. This
-does not provide generic plugin hot replacement or HTTP/2 support. arknet continues
-to own IO workers, request parsing and transport operations.
+No generic hot replacement or HTTP/2 support; arknet retains IO workers, request parsing and transport.
 
 ## Public interfaces and header mapping
 

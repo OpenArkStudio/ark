@@ -231,6 +231,10 @@ branch or worktree when the existing checkout contains uncommitted changes.
 - Keep ark and arknet boundaries clear. Cross-link the other project's accepted
   public APIs rather than copying them or claiming pending integration is merged.
   Never attribute later main changes or unpublished results to an older release.
+- Before publishing documentation-only batches, classify their actual paths with
+  the existing CI policy. Prefer the established site checker for export checks;
+  a new tool file can require native validation. Do not widen the allowlist merely
+  to avoid that validation.
 - Run the relevant Nimbus/link checks. After publication, verify the Pages run
   succeeded for the intended source revision and inspect affected published pages.
   A local preview, merged PR and deployed site are distinct evidence states.

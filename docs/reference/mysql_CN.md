@@ -2,7 +2,14 @@
 
 `mysql_module` 提供具名 arknet 原生连接池、查询、参数化预处理语句和事务，替换 mysql++、驱动管理模块及原有同步 SQL 构造接口。应用需要重新编译插件，将调用迁移到受管理的协程任务。
 
-公开接口的唯一源码是 `src/plugins/mysql/mysql_module.hpp`，与实现和私有插件装配文件同目录。链接 `ark::mysql` 获取配置期复制到构建树的 `ark/mysql/mysql_module.hpp`；即使不构建运行时插件，该映射仍有效。不要仅依赖手写 `-I <源码>/include`。实现类已隐藏到 `.cpp`，原 `mysql_module_impl.hpp` 和插件装配头属于私有实现。宿主、插件和相关消费者需要一起重新构建；安装后的消费方式使用 `find_package(ark CONFIG REQUIRED COMPONENTS mysql)` 和相同的 `ark::mysql` 目标。依赖与可迁移包的说明见[安装指南](../get-started/installation_CN.md#安装并消费-cmake-包)。安装不承诺旧二进制兼容，也不会自动加载运行时模块。
+| 接口使用 | 契约 |
+| --- | --- |
+| 唯一源码 | `src/plugins/mysql/mysql_module.hpp`，与实现和私有装配共置 |
+| 构建 | `ark::mysql` 在配置期映射 `ark/mysql/mysql_module.hpp`，运行时插件关闭时仍可用；仅手写 `-I <源码>/include` 不足 |
+| 私有实现 | 具体类仅在 `.cpp`；`mysql_module_impl.hpp` 与插件装配头保持私有 |
+| 安装消费 | `find_package(ark CONFIG REQUIRED COMPONENTS mysql)`，仍链接 `ark::mysql`；依赖与可迁移包见[安装指南](../get-started/installation_CN.md#安装并消费-cmake-包) |
+
+宿主、插件与受影响消费者须一起重建。安装不承诺旧二进制兼容，也不加载运行时模块。
 
 ## 配置与查询
 
@@ -42,7 +49,14 @@ ark::task<> run() {
 }
 ```
 
-配置只能在框架线程显式创建。注册时已设置插件管理器，因此业务配置可以早于数据库模块自身的 `init()`。重名或管理器排空期间新增配置返回 false，空名称或零限额会抛出异常；`pre_shut()` 封闭模块后再配置会抛出 `std::logic_error`。不支持原位替换连接配置。TLS 默认校验证书，按部署配置 CA 和服务名称。MySQL 可选构建目标要求 `ARKNET_ENABLE_SSL=ON` 及 OpenSSL，不链接 mysql++。官方插件不会从应用清单中的 `config` 路径或数据库 XML 预设读取连接选项。该插件的 `config` 应留空，由业务模块通过 `configure()` 传入拥有型选项。另见[构建与运行时启用](build-options_CN.md#原生数据库插件)和[托管任务生命周期](../guides/tasks_CN.md)。
+| 配置边界 | 行为 |
+| --- | --- |
+| 所属线程 | 只能显式配置；注册已设置 manager，可早于数据库模块的 `init()`；不支持原位重配 |
+| 拒绝／异常 | 重名或 manager 排空期间新增配置返回 false；空名称／零限额抛异常；`pre_shut()` 封闭后抛 `std::logic_error` |
+| TLS／构建 | 默认校验证书，按需设置 CA／服务名；要求 `ARKNET_ENABLE_SSL=ON` 与 OpenSSL，不链接 mysql++ |
+| 选项来源 | 插件不读取清单 `config` 或数据库 XML；保持 `config` 为空，由业务模块 `configure()` 传入拥有型选项 |
+
+另见[构建与运行时启用](build-options_CN.md#原生数据库插件)和[托管任务生命周期](../guides/tasks_CN.md)。
 
 ## 事务
 
@@ -63,7 +77,7 @@ ark::task<> update_player() {
 }
 ```
 
-事务各步骤始终使用同一条原生连接。递增标识只对签发它的模块实例有效，不持有插件内部对象。一个事务同一时间只能执行一个操作；未知或过期标识、重叠步骤会抛出异常。最初设置的超时覆盖取连接、BEGIN、各步骤及提交，不因新步骤而重置。未结束的事务到期后尝试回滚；`cleanup_timeout` 单独限制回滚清理时间。清理失败或结果未知时丢弃连接，不自动重试或切换连接重放语句。
+事务各步骤持有同一原生租约；递增标识只对签发模块实例有效，不拥有插件实现对象。同一事务仅允许一个操作，未知／过期标识或重叠步骤抛异常。原超时覆盖取连接、BEGIN、各步骤与提交，不续期；未使用事务到期回滚，`cleanup_timeout` 单独限制回滚。清理失败或不确定则丢弃连接，不自动重试或跨连接重放。
 
 `mysql_reply` 保留拥有型 `arknet::mysql::query_result` 及独立的预处理语句关闭诊断。`mysql_transaction_reply` 还保留回滚结果、启动异常和事务最终状态。执行成功并不代表清理或提交成功。数据库及传输错误返回原生结果，本地 C++ 异常和协程桥限额异常向调用方传播。取消请求会转交原生操作；语句可能已经执行时保留 `outcome_unknown`。
 

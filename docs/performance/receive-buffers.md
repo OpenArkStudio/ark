@@ -1,6 +1,6 @@
 # Receive-buffer and framing performance
 
-66 measurements were run locally on 2026-10-15 using Release builds and the standalone C++ program. All configurations are retained.
+All 66 local measurements from 2026-10-15 are retained: standalone C++, Release builds.
 
 ![Initial buffers and decoding throughput, medians and ranges](assets/receive-buffers.svg)
 
@@ -30,7 +30,11 @@ Initial receive-buffer requests for 10,000 session objects: **5,000 MiB → 39.1
 
 - 1 KiB / 64 B blocks: ordinary object allocations per message **18 → 2**.
 - 4 KiB / bytewise input: ordinary object allocations per message **4098 → 2**.
-- 4 KiB / 64 KiB blocks / batch 16: throughput changed **-13.6%**; the memory/throughput tradeoff is retained.
+<Aside type="caution" title="Retained throughput regression">
+
+The batch-16 regression remains part of the memory/throughput tradeoff.
+
+</Aside>
 
 CPU 100% represents one logical core. This single-threaded program includes message validation in its timing. Connection capacity, network throughput and RTT require end-to-end acceptance.
 
@@ -57,4 +61,4 @@ The default initial capacity is 4 KiB, growing as needed. For large batches, cal
 - [Machine, source and binary hashes](../../benchmarks/results/macmini-m4pro-20261015/receive-buffers/metadata.json)
 - [Baseline commit](https://github.com/OpenArkStudio/ark/commit/1f02377cceba8660af4b0432aa566cad8164e1cb)
 
-Both implementations use the same benchmark source. Each of three rounds runs the baseline, optimized default capacity and capacity cases in that order. Each case starts a fresh process, with no concurrent compilation.
+Three rounds use one benchmark source, ordered baseline → optimized default → capacity cases. Each case starts a fresh process; compilation never runs concurrently.

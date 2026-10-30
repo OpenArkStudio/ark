@@ -4,7 +4,14 @@
 迁移时，将 `connect`、`set`、`get` 以及命令专用包装替换为命名连接配置和
 `co_await command` / `pipeline`。插件不提供阻塞兼容层，应用需要重新编译。
 
-公开接口的唯一源码是 `src/plugins/redis/redis_module.hpp`，与实现和私有插件装配文件同目录。链接 `ark::redis` 获取配置期复制到构建树的 `ark/redis/redis_module.hpp`；即使不构建运行时插件，该映射仍有效。不要仅依赖手写 `-I <源码>/include`。实现类已隐藏到 `.cpp`，原 `redis_module_impl.hpp` 和插件装配头属于私有实现。宿主、插件和相关消费者需要一起重新构建；安装后的消费方式使用 `find_package(ark CONFIG REQUIRED COMPONENTS redis)` 和相同的 `ark::redis` 目标。依赖与可迁移包的说明见[安装指南](../get-started/installation_CN.md#安装并消费-cmake-包)。安装不承诺旧二进制兼容，也不会自动加载运行时模块。
+| 接口使用 | 契约 |
+| --- | --- |
+| 唯一源码 | `src/plugins/redis/redis_module.hpp`，与实现和私有装配共置 |
+| 构建 | `ark::redis` 在配置期映射 `ark/redis/redis_module.hpp`，运行时插件关闭时仍可用；仅手写 `-I <源码>/include` 不足 |
+| 私有实现 | 具体类仅在 `.cpp`；`redis_module_impl.hpp` 与插件装配头保持私有 |
+| 安装消费 | `find_package(ark CONFIG REQUIRED COMPONENTS redis)`，仍链接 `ark::redis`；依赖与可迁移包见[安装指南](../get-started/installation_CN.md#安装并消费-cmake-包) |
+
+宿主、插件与受影响消费者须一起重建。安装不承诺旧二进制兼容，也不加载运行时模块。
 
 ```cpp
 // 业务模块成员：ark::redis_module* redis_{}; ark::task_group* tasks_{};
@@ -37,22 +44,16 @@ ark::task<> workflow() {
 }
 ```
 
-配置持有字符串、凭据、连接池、协议、响应限额和 TLS 设置。连接名重复或入口已封闭时，
-`configure` 返回 false；空名称和无效限额抛出异常。消费模块可以在 Redis 模块自身的
-`init` 之前配置，已安装的管理器会提供任务运行时。官方插件不会从应用清单中的 `config` 路径
-或数据库 XML 预设读取连接选项。该插件的 `config` 应留空，由业务模块通过 `configure()`
-传入拥有型选项。配置仅限所属线程使用，不支持动态替换。启用
-`ARKNET_ENABLE_SSL` 后，可设置 `options.tls = true`，并通过 `options.pool`
-配置证书验证；未编译 SSL 时请求 TLS 会抛出异常。另见[构建与运行时启用](build-options_CN.md#原生数据库插件)
-和[托管任务生命周期](../guides/tasks_CN.md)。
+配置拥有字符串、凭据、连接池、协议、响应限额及 TLS 设置，仅限所属线程，不动态替换。`configure` 在重名／封闭准入时返回 false，空名称／无效限额抛异常；可早于模块 `init`，已安装 manager 提供运行时。插件不读取清单 `config` 或数据库 XML；保持 `config` 为空，由业务模块 `configure()` 传入拥有型选项。启用 `ARKNET_ENABLE_SSL` 后用 `options.tls = true` 及 `options.pool` 配置证书验证；无 SSL 构建请求 TLS 会抛异常。见[构建与运行时启用](build-options_CN.md#原生数据库插件)和[托管任务生命周期](../guides/tasks_CN.md)。
 
-命令工厂按值接收输入，在惰性任务启动前保存数据。返回任务还会持有连接状态，因此尚未
-启动的任务在模块外观对象销毁后仍有有效状态。操作必须运行在管理器的同一个任务执行器
-上；外部执行器会在提交原生请求前被拒绝。未知连接名返回原生 `not_connected`，入口
-封闭后返回 `closed`。桥接层准入失败抛出异常，无效截止时间返回原生
-`invalid_command`。原生传输和数据库错误保留为 `arknet::redis::result`；Redis
-错误回复仍是有序 `replies` 向量中的值。结果转换为 true 只表示操作状态成功，
-不代表每条 Redis 回复均成功。
+命令工厂持有惰性启动前的输入；返回任务保留连接状态，外观对象在未启动任务使用前销毁也不丢失状态。
+
+| 请求边界 | 结果 |
+| --- | --- |
+| 执行器 | 必须是 manager 的同一个任务执行器；外部执行器在原生提交前抛异常 |
+| 未知连接／封闭准入 | 原生 `not_connected`／`closed` |
+| 桥接准入／无效截止时间 | 前者抛异常，后者返回原生 `invalid_command` |
+| 原生错误／回复 | 保留 `arknet::redis::result`，错误回复仍为有序 `replies` 中的值；true 只表示操作状态，不保证每条回复成功 |
 
 `pipeline(name, commands, timeout)` 返回包含有序回复的单个原生结果。超时覆盖连接池
 获取和命令执行。`max_operations` 限制桥接记录和服务中等待所属线程交付的操作数量；
@@ -60,17 +61,14 @@ ark::task<> workflow() {
 `queue_full`。连接池、等待队列和响应限额分别通过 `options.pool` 配置。这些限额按
 命名连接生效，不代表整个进程的内存上限。
 
-管理器托管任务组的取消请求会转交原生服务。等待连接期间取消的请求确定尚未发送；发送
-后取消可能返回 `command_may_have_run == true`。插件不会重放写操作，也不会合成成功
-结果。调用者持有的原生结果及部分回复在连接池退出后仍有效。
+管理器任务组的取消转交原生服务。等待取连接时取消确定未发送，发送后可能 `command_may_have_run == true`；不重放写入、不合成成功。调用者拥有原生结果及部分回复，连接池退役后仍有效。
 
-管理器更新期间，Redis 插件先执行 `service.update()`，再调度桥接交付。管理器统一轮询
-共享任务运行时，并在所属线程恢复业务协程；arknet 负责原生 IO 和工作线程。停止期间，应用仍需持续更新管理器：
-`stop()` 可以在已接收工作流结束前返回 false，同一工作流的后续命令仍可提交。就绪检查
-只观察逻辑活动，不会提前封闭服务。所有托管任务和交付调用栈返回后，`pre_shut` 封闭
-入口，并在宿主生命周期调用帧中执行原生 `retire_native()`。返回 false 或抛出异常时
-保留资源，`shut` 不会释放未退出的服务。`service.stop()` 不是原生退出屏障。运行中的
-任务递归调用生命周期函数不构成受支持的销毁路径，管理器会将停机工作延后到宿主调用帧。
+| 更新／停机 | 契约 |
+| --- | --- |
+| 完成交付 | 插件先 `service.update()` 再桥接派发；manager 中央轮询共享运行时，在所属线程恢复协程；arknet 负责原生 IO／工作线程 |
+| 排空 | `stop()` 返回 false 时继续更新；已接收流程可提交后续命令，就绪仅观察逻辑活动，不提前封闭服务 |
+| 原生退役 | 任务及交付栈返回后，宿主生命周期帧中由 `pre_shut` 封闭准入并 `retire_native()`；false／异常保留资源，阻止 `shut` 释放；`service.stop()` 不是退役屏障 |
+| 重入 | 不支持任务内递归生命周期销毁，manager 将停机延至宿主帧 |
 
 `tests/database/public_redis_module.cpp` 使用有界本机 RESP 协议端点验证公开接口：输入
 与结果所有权、流水线顺序、外部执行器拒绝、限额、取消、TLS 证书验证和管理器优雅
