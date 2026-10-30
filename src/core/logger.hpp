@@ -34,6 +34,7 @@
 #include "ark/spdlog/sinks/date_and_hour_file_sink.h"
 //#include "ark/spdlog/sinks/rotating_file_with_date_sink.h"
 
+#include "ark/application_manifest.hpp"
 #include "ark/container/map.hpp"
 #include "ark/macros.hpp"
 #include "ark/xml.hpp"
@@ -94,6 +95,11 @@ public:
     uint16_t sink_queue_count{1024};
 
     bool consol{true};
+#ifdef OPEN_FILE_LOG
+    bool file{true};
+#else
+    bool file{false};
+#endif
     spdlog::level::level_enum level{spdlog::level::trace};
     std::string pattern{};
 };
@@ -104,6 +110,11 @@ class log_conf final
     std::string default_log_name_{"default"};
 
 public:
+    void set_conf_data(const std::string& name, std::shared_ptr<log_conf_data> data) {
+        conf_datas_.erase(name);
+        conf_datas_.insert(name, std::move(data));
+    }
+
     void load_log_conf(std::string const& filename) {
         xml xml(filename);
         auto root_node = xml.get_root_node();
@@ -143,6 +154,7 @@ class spdlogger final
 {
     std::shared_ptr<log_conf_data> log_conf_{nullptr};
     std::string log_name_{};
+    bool registered_{false};
 
     std::shared_ptr<spdlog::logger> logger_{nullptr};
     std::shared_ptr<spdlog::details::thread_pool> tp_{nullptr};
@@ -153,27 +165,32 @@ public:
     }
 
     ~spdlogger() {
-        spdlog::drop(log_name_);
+        if (registered_)
+        {
+            spdlog::drop(log_name_);
+        }
     }
 
-    void init(std::string const& filename) {
-        log_name_ = (std::filesystem::path(log_conf_->output_path) / filename).string();
+    void init(std::string const& filename, const std::string& identity = {}) {
+        const auto file_path = (std::filesystem::path(log_conf_->output_path) / filename).string();
+        log_name_ = identity.empty() ? file_path : identity + ":" + file_path;
         std::vector<spdlog::sink_ptr> sinks_vec;
 
-#ifdef OPEN_FILE_LOG
-        switch (log_conf_->sink_type)
+        if (log_conf_->file)
         {
-        case k_log_sink_type::date_and_hour_sink:
-        {
-            auto date_and_hour_sink = std::make_shared<spdlog::sinks::date_and_hour_file_sink_mt>(log_name_);
-            sinks_vec.emplace_back(date_and_hour_sink);
-        }
-        break;
-        default:
-            ARK_ASSERT_BREAK(0);
+            switch (log_conf_->sink_type)
+            {
+            case k_log_sink_type::date_and_hour_sink:
+            {
+                auto date_and_hour_sink = std::make_shared<spdlog::sinks::date_and_hour_file_sink_mt>(file_path);
+                sinks_vec.emplace_back(date_and_hour_sink);
+            }
             break;
+            default:
+                ARK_ASSERT_BREAK(0);
+                break;
+            }
         }
-#endif
 
         if (log_conf_->consol)
         {
@@ -201,6 +218,7 @@ public:
         logger_->flush_on(log_conf_->level);
 
         spdlog::register_logger(logger_);
+        registered_ = true;
     }
 
     void log(spdlog::level::level_enum level, std::string const& content) {
@@ -249,7 +267,55 @@ public:
         singleton<logger>::set_instance(instance);
     }
 
+    bool init_logger(const logging_settings& settings, const std::string& log_filename) {
+        if (default_logger_ != nullptr)
+        {
+            return false;
+        }
+        auto config = std::make_unique<log_conf>();
+        const auto convert = [](const logger_settings& value) {
+            if (value.queue_count > 65535 || (!value.console && !value.file) || value.pattern.empty() ||
+                value.pattern.find('\0') != std::string::npos || value.output_path.empty() ||
+                value.output_path.find('\0') != std::string::npos ||
+                (value.level != "trace" && value.level != "debug" && value.level != "info" && value.level != "warn" &&
+                    value.level != "error" && value.level != "critical" && value.level != "off"))
+            {
+                throw std::invalid_argument("invalid logging settings");
+            }
+            auto result = std::make_shared<log_conf_data>();
+            result->consol = value.console;
+            result->file = value.file;
+            result->output_path = value.output_path;
+            result->sink_queue_count = static_cast<uint16_t>(value.queue_count);
+            result->pattern = value.pattern;
+            result->level = value.level == "error" ? spdlog::level::err : spdlog::level::from_str(value.level);
+            return result;
+        };
+        config->set_conf_data("default", convert(settings));
+        for (const auto& [name, value] : settings.loggers)
+        {
+            config->set_conf_data(name, convert(value));
+        }
+        auto local = std::make_shared<spdlogger>(config->get_conf_data("default"));
+        local->init(log_filename, "default");
+        auto oss = local;
+        if (auto data = config->get_conf_data("oss"))
+        {
+            oss = std::make_shared<spdlogger>(std::move(data));
+            oss->init(log_filename, "oss");
+        }
+        log_conf_ = std::move(config);
+        default_logger_ = std::move(local);
+        oss_logger_ = std::move(oss);
+        set_log_func({});
+        return true;
+    }
+
     bool init_logger(std::string const& conf_file, std::string const& log_filename) {
+        if (default_logger_ != nullptr)
+        {
+            return false;
+        }
         if (log_conf_ == nullptr)
         {
             log_conf_ = std::make_unique<log_conf>();
@@ -293,7 +359,7 @@ public:
 
         // create logger
         auto new_logger = std::make_shared<spdlogger>(log_conf_data);
-        new_logger->init(filename);
+        new_logger->init(filename, name);
         loggers_.insert(std::make_pair(id, new_logger));
         return new_logger;
     }

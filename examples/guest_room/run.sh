@@ -23,4 +23,4 @@ if [ -z "$bin_dir" ] || [ -z "$runtime_dir" ]; then
 fi
 cmake "-DBIN_DIR=$bin_dir" "-DRUNTIME_DIR=$runtime_dir" "-DHOST=$host" "-DPORT=$port" -P "$sample_dir/stage.cmake"
 cd -- "$runtime_dir"
-exec "./bin/$program" --busid=1.1.31.1 --name=guest_room --app_conf=conf/guest_room.app.toml --log_conf=conf/log.conf --shutdown_timeout_ms=5000
+exec "./bin/$program" --busid=1.1.31.1 --name=guest_room --app_conf=conf/guest_room.app.toml --shutdown_timeout_ms=5000

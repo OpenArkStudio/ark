@@ -9,10 +9,10 @@ Stage a complete matching build and the supplied example metadata before running
 ```sh
 mkdir -p run/entity_operations/bin run/entity_operations/conf
 cp -R app-build/bin/. run/entity_operations/bin/
-cp config/entity_operations.app.toml config/kernel.plugin.conf config/log.conf run/entity_operations/conf/
+cp config/entity_operations.app.toml config/kernel.plugin.conf run/entity_operations/conf/
 cp -R examples/entity_operations/resource run/entity_operations/
 cd run/entity_operations
-./bin/app --busid=1.0.1.1 --name=entity_operations --app_conf=conf/entity_operations.app.toml --log_conf=conf/log.conf
+./bin/app --busid=1.0.1.1 --name=entity_operations --app_conf=conf/entity_operations.app.toml
 ```
 
 Use `app_d` for Debug; stop with Ctrl+C. The metadata is a small runnable example, not exported production business data. `check-typed-examples` loads the real DSO and verifies its four entities, fields, item rows, custom values, compile-time module/update contract and lifecycle; `check-core` includes it. The old timed workload is now an explicitly launched [C++ benchmark](../../benchmarks/ENTITY_OPERATIONS.md), independent of startup.

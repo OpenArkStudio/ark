@@ -43,8 +43,10 @@ cmake --build app-build --config Release --parallel 2
 
 ```sh
 ./bin/app --busid=1.0.1.1 --name=timers \
-  --app_conf=conf/timers.app.toml --log_conf=conf/log.conf
+  --app_conf=conf/timers.app.toml
 ```
+
+日志与应用共用清单；省略设置时使用控制台 INFO 输出。详见[配置与迁移](docs/service-manifests_CN.md#内嵌日志配置)。
 
 [Godot C# 演示客户端](https://github.com/OpenArkStudio/ark-client-godot)与 [`guest_room`](examples/guest_room/) 配套，展示移动同步、HP/MP 属性与断线重连。[原 Unity 客户端](https://github.com/OpenArkStudio/ArkClient-Unity3D)尚未与当前 ark 服务端完成兼容性验证。
 

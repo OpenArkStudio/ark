@@ -335,6 +335,25 @@ for (const prefix of ["", "zh/"]) {
 console.log("Checked bilingual lifecycle procedures and retention constraints.");
 
 for (const prefix of ["", "zh/"]) {
+  for (const target of ["guides/applications", "guides/service-configuration/application-manifests", "get-started/quick-start"]) {
+    const route = `${prefix}${target}/`;
+    const html = await readFile(join(root, route, "index.html"), "utf8");
+    const markdown = await readFile(join(root, route, "index.md"), "utf8");
+    for (const token of ["[logging]", "INFO"]) {
+      assert.ok(html.includes(token), `${route}: missing embedded logging default in HTML`);
+      assert.ok(markdown.includes(token), `${route}: missing embedded logging default in Markdown`);
+    }
+    if (target !== "get-started/quick-start") {
+      for (const token of ["--log_conf", "application_manifest"]) {
+        assert.ok(html.includes(token) && markdown.includes(token), `${route}: missing logging migration ${token}`);
+      }
+    }
+    assert.doesNotMatch(markdown, /--log_conf=conf\/log\.conf|cp [^\n]*config\/log\.conf/, `${route}: stale two-file launch instructions`);
+  }
+}
+console.log("Checked bilingual embedded logging defaults and migration in HTML and Markdown.");
+
+for (const prefix of ["", "zh/"]) {
   const route = prefix + "project/startup-failure-cleanup/";
   const html = parse(await readFile(join(root, route, "index.html"), "utf8"));
   const markdown = await readFile(join(root, route, "index.md"), "utf8");

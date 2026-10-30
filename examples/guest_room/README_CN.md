@@ -37,7 +37,7 @@ cmake --build app-build --target app guest_room_plugin ark_kernel_plugin ark_uti
 ```sh
 cmake -DBIN_DIR=/absolute/app-build/bin -DRUNTIME_DIR=/absolute/run/guest_room -DHOST=127.0.0.1 -DPORT=19100 -P examples/guest_room/stage.cmake
 cd /absolute/run/guest_room
-./bin/app --busid=1.1.31.1 --name=guest_room --app_conf=conf/guest_room.app.toml --log_conf=conf/log.conf --shutdown_timeout_ms=5000
+./bin/app --busid=1.1.31.1 --name=guest_room --app_conf=conf/guest_room.app.toml --shutdown_timeout_ms=5000
 ```
 
 Windows 使用 `app.exe`／`app_d.exe`。官方 [C# Godot 客户端](https://github.com/OpenArkStudio/ark-client-godot)连接相同主机和端口，移动发送频率约为 10 Hz。断线重连后，客户端须清空旧帧和房间状态，重新加入并接收新的玩家 ID 和实际 Entity GUID。字段和错误约定见[协议](protocol_CN.md)；[wire-vectors.json](wire-vectors.json) 与 C# 测试使用相同的线格式向量。

@@ -411,3 +411,91 @@ DOCTEST_TEST_CASE("Missing files and unreadable directory inputs fail without pa
     DOCTEST_REQUIRE(std::filesystem::create_directory(native_path(directory)));
     check_error(directory, false);
 }
+
+DOCTEST_TEST_CASE("omitted logging has a usable console INFO default in both formats") {
+    manifest_files files;
+    for (const auto name : {"default.toml", "default.xml"})
+    {
+        const auto manifest = ark::load_application_manifest(
+            files.write(std::string_view(name).ends_with("toml") ? "[application]\n" : "<xml><plugins/></xml>", name));
+        DOCTEST_CHECK(manifest.logging.console);
+        DOCTEST_CHECK_FALSE(manifest.logging.file);
+        DOCTEST_CHECK(manifest.logging.level == "info");
+        DOCTEST_CHECK(manifest.logging.queue_count == 0);
+        DOCTEST_CHECK_FALSE(manifest.logging.pattern.empty());
+        DOCTEST_CHECK(manifest.logging.loggers.empty());
+    }
+}
+
+DOCTEST_TEST_CASE("embedded logging owns overrides and named loggers inherit base settings") {
+    manifest_files files;
+    const auto manifest = ark::load_application_manifest(files.write(R"([application]
+[logging]
+console = false
+file = true
+level = 'debug'
+pattern = '%v'
+output_path = 'logs with spaces/nested'
+queue_count = 65535
+[logging.loggers.oss]
+level = 'warn'
+output_path = 'logs/oss'
+)"));
+    DOCTEST_CHECK_FALSE(manifest.logging.console);
+    DOCTEST_CHECK(manifest.logging.file);
+    DOCTEST_CHECK(manifest.logging.level == "debug");
+    DOCTEST_CHECK(manifest.logging.pattern == "%v");
+    DOCTEST_CHECK(manifest.logging.output_path == "logs with spaces/nested");
+    DOCTEST_CHECK(manifest.logging.queue_count == 65535);
+    const auto& oss = manifest.logging.loggers.at("oss");
+    DOCTEST_CHECK(oss.file);
+    DOCTEST_CHECK_FALSE(oss.console);
+    DOCTEST_CHECK(oss.pattern == "%v");
+    DOCTEST_CHECK(oss.level == "warn");
+    DOCTEST_CHECK(oss.output_path == "logs/oss");
+    const auto xml = ark::load_application_manifest(files.write(
+        R"(<xml><plugins/><logging console="false" file="true" level="debug" pattern="%v" output_path="logs with spaces/nested" queue_count="65535"><logger name="oss" level="warn" output_path="logs/oss"/></logging></xml>)",
+        "logging.xml"));
+    DOCTEST_CHECK(xml.logging.level == manifest.logging.level);
+    DOCTEST_CHECK(xml.logging.queue_count == manifest.logging.queue_count);
+    DOCTEST_CHECK(xml.logging.loggers.at("oss").output_path == oss.output_path);
+}
+
+DOCTEST_TEST_CASE("logging rejects bad fields ranges and disabled outputs before returning a manifest") {
+    manifest_files files;
+    for (const auto bad : {"logging = 1\n", "[logging]\nconsole = 1\n", "[logging]\nfile = 'yes'\n",
+             "[logging]\nlevel = 'SECRET_SENTINEL'\n", "[logging]\nqueue_count = -1\n",
+             "[logging]\nqueue_count = 65536\n", "[logging]\nqueue_count = 1.0\n", "[logging]\npattern = ''\n",
+             "[logging]\noutput_path = ''\n", "[logging]\noutput_path = \"x\\u0000y\"\n", "[logging]\nunknown = true\n",
+             "[logging]\nconsole = false\n", "[logging]\nloggers = []\n", "[logging.loggers]\noss = 1\n",
+             "[logging.loggers.oss]\nloggers = {}\n", "[logging.loggers.\"x\\u0000y\"]\nlevel = 'info'\n"})
+    {
+        DOCTEST_CAPTURE(std::string_view(bad));
+        const auto path = files.write(std::string(bad) + "[application]\n");
+        check_error(path);
+        try
+        { static_cast<void>(ark::load_application_manifest(path)); }
+        catch (const ark::application_manifest_error& error)
+        {
+            DOCTEST_CHECK(std::string(error.what()).find("logging") != std::string::npos);
+            DOCTEST_CHECK(std::string(error.what()).find("SECRET_SENTINEL") == std::string::npos);
+        }
+    }
+    for (const auto attributes : {"console='yes'", "queue_count='-1'", "level='bad'", "typo='1'"})
+    {
+        const auto path = files.write(std::string("<xml><plugins/><logging ") + attributes + "/></xml>", "bad.xml");
+        DOCTEST_CHECK_THROWS_AS(ark::load_application_manifest(path), ark::application_manifest_error);
+    }
+}
+
+DOCTEST_TEST_CASE("XML logging rejects duplicate attributes elements and nested logger settings") {
+    manifest_files files;
+    for (const auto body : {"<logging console='true' console='false'/>", "<logging/><logging/>",
+             "<logging name='ignored'/>", "<logging><logger name='oss'/><logger name='oss'/></logging>",
+             "<logging><logger name='oss'><ignored/></logger></logging>"})
+    {
+        DOCTEST_CHECK_THROWS_AS(
+            ark::load_application_manifest(files.write(std::string("<xml><plugins/>") + body + "</xml>", "bad.xml")),
+            ark::application_manifest_error);
+    }
+}

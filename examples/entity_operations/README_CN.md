@@ -9,10 +9,10 @@
 ```sh
 mkdir -p run/entity_operations/bin run/entity_operations/conf
 cp -R app-build/bin/. run/entity_operations/bin/
-cp config/entity_operations.app.toml config/kernel.plugin.conf config/log.conf run/entity_operations/conf/
+cp config/entity_operations.app.toml config/kernel.plugin.conf run/entity_operations/conf/
 cp -R examples/entity_operations/resource run/entity_operations/
 cd run/entity_operations
-./bin/app --busid=1.0.1.1 --name=entity_operations --app_conf=conf/entity_operations.app.toml --log_conf=conf/log.conf
+./bin/app --busid=1.0.1.1 --name=entity_operations --app_conf=conf/entity_operations.app.toml
 ```
 
 Debug 使用 `app_d`，以 Ctrl+C 停止。附带元数据是可运行的小型示例，不是生产业务导出数据。

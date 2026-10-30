@@ -19,8 +19,7 @@ else
     CDPATH='' cd -- "$(dirname -- "$0")"
 fi
 [ -x "$binary" ] || { echo "Missing executable: $binary" >&2; exit 1; }
-for config in "conf/$2.app.toml" conf/log.conf; do
-    [ -f "$config" ] || { echo "Missing configuration: $config" >&2; exit 1; }
-done
+config="conf/$2.app.toml"
+[ -f "$config" ] || { echo "Missing configuration: $config" >&2; exit 1; }
 export LC_ALL=C
-exec "$binary" "--busid=$3" "--name=$2" "--app_conf=conf/$2.app.toml" --log_conf=conf/log.conf
+exec "$binary" "--busid=$3" "--name=$2" "--app_conf=conf/$2.app.toml"

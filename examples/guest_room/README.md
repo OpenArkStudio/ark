@@ -37,7 +37,7 @@ The equivalent platform-neutral staging command is:
 ```sh
 cmake -DBIN_DIR=/absolute/app-build/bin -DRUNTIME_DIR=/absolute/run/guest_room -DHOST=127.0.0.1 -DPORT=19100 -P examples/guest_room/stage.cmake
 cd /absolute/run/guest_room
-./bin/app --busid=1.1.31.1 --name=guest_room --app_conf=conf/guest_room.app.toml --log_conf=conf/log.conf --shutdown_timeout_ms=5000
+./bin/app --busid=1.1.31.1 --name=guest_room --app_conf=conf/guest_room.app.toml --shutdown_timeout_ms=5000
 ```
 
 Use `app.exe` / `app_d.exe` on Windows. Connect the official [C# Godot client](https://github.com/OpenArkStudio/ark-client-godot) to the same host/port; send movement at about 10 Hz. The client must join again after reconnecting, clear old frame/state buffers and accept a new player ID and actual Entity GUID. Detailed wire fields and errors are in the [protocol](protocol.md); [wire-vectors.json](wire-vectors.json) mirrors the C# test fixture.

@@ -36,7 +36,7 @@ The byte-preserved historical documentation archive retains original names and c
 
 ## Run entity operations
 
-Stage the matching build, `config/entity_operations.app.toml`, `config/kernel.plugin.conf` and `config/log.conf` under a separate runtime, and copy `examples/entity_operations/resource` into that runtime. Start with `--name=entity_operations --app_conf=conf/entity_operations.app.toml`; see the [example instructions](../../examples/entity_operations/README.md). Startup creates four players and demonstrates data/table/custom values without timed loops. The real-DSO regression uses this same manifest and metadata. A separate benchmark requires an explicit `--iterations N`; its eight-iteration smoke disables timing and is not performance evidence.
+Stage the matching build, `config/entity_operations.app.toml`, `config/kernel.plugin.conf` under a separate runtime, and copy `examples/entity_operations/resource` into that runtime. Start with `--name=entity_operations --app_conf=conf/entity_operations.app.toml`; see the [example instructions](../../examples/entity_operations/README.md). Startup creates four players and demonstrates data/table/custom values without timed loops. The real-DSO regression uses this same manifest and metadata. A separate benchmark requires an explicit `--iterations N`; its eight-iteration smoke disables timing and is not performance evidence.
 
 ## Database sample construction
 

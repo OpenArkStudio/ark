@@ -37,7 +37,7 @@ foreach(mode IN ITEMS
     execute_process(
         COMMAND "${PROGRAM}" --busid=1.0.1.1 --name=business-runtime-test
             "--app_conf=${directory}/application.toml"
-            "--log_conf=${SOURCE_ROOT}/config/log.conf" ${deadline_argument}
+             ${deadline_argument}
         WORKING_DIRECTORY "${directory}"
         INPUT_FILE "${directory}/exit.txt"
         RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE errors TIMEOUT ${timeout})

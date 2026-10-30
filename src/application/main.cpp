@@ -146,7 +146,7 @@ void create_back_thread() {
 }
 #endif // ARK_PLATFORM_WIN
 
-bool parse_args(int argc, char* argv[], std::chrono::milliseconds& shutdown_timeout) {
+bool parse_args(int argc, char* argv[], std::chrono::milliseconds& shutdown_timeout, bool& configuration_error) {
 #if defined(ARK_PLATFORM_LINUX) || defined(ARK_PLATFORM_DARWIN)
     // ignore signals
     signal(SIGHUP, SIG_IGN);
@@ -188,8 +188,8 @@ bool parse_args(int argc, char* argv[], std::chrono::milliseconds& shutdown_time
     args::ValueFlag<std::string> app_conf(parser, "app config path", "Set application configuration", {'a', "app_conf"},
         "some.app.toml", args::Options::Required | args::Options::Single);
 
-    args::ValueFlag<std::string> log_conf(parser, "log config path", "Set application log configuration",
-        {'l', "log_conf"}, "./conf/log.conf", args::Options::Single);
+    args::ValueFlag<std::string> log_conf(parser, "log config path",
+        "Removed: move logging into the application configuration", {'l', "log_conf"}, "", args::Options::Single);
 
     args::ValueFlag<std::string> shutdown_wait(parser, "milliseconds",
         "Retain process/resources if shutdown waits this long (0: unlimited)", {"shutdown_timeout_ms"}, "0",
@@ -211,6 +211,13 @@ bool parse_args(int argc, char* argv[], std::chrono::milliseconds& shutdown_time
     catch (args::ValidationError& e)
     {
         std::cout << parser << ", error = " << e.what() << std::endl;
+        return false;
+    }
+
+    if (log_conf)
+    {
+        std::cerr << "--log_conf/-l has been removed; move logger settings into [logging] in --app_conf" << std::endl;
+        configuration_error = true;
         return false;
     }
 
@@ -273,12 +280,6 @@ bool parse_args(int argc, char* argv[], std::chrono::milliseconds& shutdown_time
         return false;
     }
 
-    // log_conf is optional arg.
-    logger::init(nullptr);
-    auto log_file_name = ARK_FORMAT("{}{}{}{}", plugin_manager::instance()->get_app_name(), "_",
-        misc::bus2_str(plugin_manager::instance()->get_bus_id()), ".log");
-    logger::instance()->init_logger(log_conf.Get(), log_file_name);
-
     return true;
 }
 
@@ -309,13 +310,12 @@ bool main_loop(std::exception_ptr* error = nullptr) {
 
 int main(int argc, char* argv[]) {
     std::chrono::milliseconds shutdown_timeout{};
-    if (!parse_args(argc, argv, shutdown_timeout))
+    bool configuration_error = false;
+    if (!parse_args(argc, argv, shutdown_timeout, configuration_error))
     {
         std::cout << "Application parameter is invalid, please check it..." << std::endl;
-        return 0;
+        return configuration_error ? 1 : 0;
     }
-
-    print_logo();
 
     const auto& app_conf_path = plugin_manager::instance()->get_app_conf();
     application_manifest manifest;
@@ -326,6 +326,25 @@ int main(int argc, char* argv[]) {
         std::cerr << "Application manifest loading failed: " << error.what() << std::endl;
         return 1;
     }
+
+    try
+    {
+        const auto filename = ARK_FORMAT("{}_{}.log", plugin_manager::instance()->get_app_name(),
+            misc::bus2_str(plugin_manager::instance()->get_bus_id()));
+        logger::init(nullptr);
+        if (!logger::instance()->init_logger(manifest.logging, filename))
+        {
+            std::cerr << "Application logging initialization failed: logger already initialized" << std::endl;
+            return 1;
+        }
+    }
+    catch (const std::exception& error)
+    {
+        std::cerr << "Application logging initialization failed (" << app_conf_path << "): " << error.what()
+                  << std::endl;
+        return 1;
+    }
+    print_logo();
 
     try
     {

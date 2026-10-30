@@ -16,6 +16,7 @@
 | `ARK_BUILD_PLUGIN_REDIS` | `OFF` | 构建原生 Redis 协程插件，TLS 连接池需要开启 SSL |
 | `ARK_BUILD_DATABASE_TESTS` | `OFF` | 构建原生数据库及公开插件回归，要求显式设置 `ARKNET_SOURCE_DIR` |
 | `ARK_BUILD_BENCHMARKS` | `OFF` | 构建独立 C++ 基准程序 |
+| `ARK_OPEN_FILE_LOG` | `ON` | 旧版日志库 API 的默认文件输出；应用清单中的 `logging.file` 独立控制文件输出 |
 | `ARK_USE_GUID_32` | `OFF` | 使用 32 位 GUID 配置；公共接口目标向调用方传递该设置 |
 | `ARKNET_SOURCE_DIR` | 空 | 使用独立的本地 arknet 源码 |
 | `ARKNET_REVISION` | 仓库固定的 commit | 指定获取 arknet 时使用的版本；已有 CMake 缓存会保留原值 |

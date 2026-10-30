@@ -9,15 +9,16 @@
 | `--busid` / `-b` | Yes | Logical process Bus address, such as `1.0.1.1`; this is not a socket bind address |
 | `--name` / `-n` | Yes | Application name, also used in the log filename |
 | `--app_conf` / `-a` | Yes | TOML application manifest with the lowercase `.toml` extension, or a legacy XML `*.app.conf` file |
-| `--log_conf` / `-l` | No | Logger configuration; defaults to `./conf/log.conf` |
 | `--help` / `-h` | No | Print the launcher's argument reference |
 
 ```sh
 ./bin/app --busid=1.0.1.1 --name=timers \
-  --app_conf=conf/timers.app.toml --log_conf=conf/log.conf
+  --app_conf=conf/timers.app.toml
 ```
 
 `busid`, `name` and `app_conf` must be supplied explicitly. The [Bus reference](../reference/bus.md) describes the address fields. Use the executable's `--help` output for additional platform-specific flags.
+
+`--log_conf` / `-l` has been removed. Supplying either flag exits with code `1` and a migration diagnostic. Move logger settings into the application manifest; the launcher never reads a separate `log.conf`. See [embedded logging](../service-manifests.md#embedded-logging). The public `application_manifest` layout changed: rebuild applications, plugins and consumers together.
 
 ## Resolve configuration paths
 
@@ -28,7 +29,7 @@ Relative paths resolve from the process working directory, regardless of executa
 | Input | How it is selected | Example from the runtime directory |
 | --- | --- | --- |
 | Application manifest | `--app_conf` | `conf/timers.app.toml` |
-| Logger settings | `--log_conf`, or its default | `conf/log.conf` |
+| Logger settings | Optional `[logging]` in the application manifest | Console INFO when omitted |
 | Plugin libraries | TOML `plugin_library_dir` or XML `plugin_lib_dir`, plus the library filename | `bin/timers_plugin.dylib` on macOS Release |
 | Per-plugin settings | TOML `plugin_config_dir` + `config`, or XML `plugin_conf_dir` + `conf` | `conf/my-plugin.conf` when the filename is `my-plugin.conf` |
 | Kernel metadata and configuration | The Kernel's `resource/` directory | `resource/meta/entity_class.config`, `resource/server/item.config` |
@@ -51,7 +52,7 @@ name = "ark_utility_plugin"
 name = "timers_plugin"
 ```
 
-Pass `--app_conf=conf/timers.app.toml` to select it. The application table is required; directory fields are optional strings. Each plugin requires a unique, nonempty `name`; its optional `config` string selects a per-plugin file. See [Application manifests](../service-manifests.md) for validation rules and format boundaries. Bus, HTTP and Consul plugin settings use TOML; see the [Bus reference](../reference/bus.md#configure-processes-and-relationships) for its fields. Logger settings, Kernel metadata and exported business data retain their XML formats.
+Pass `--app_conf=conf/timers.app.toml` to select it. The application table is required; directory fields are optional strings. Each plugin requires a unique, nonempty `name`; its optional `config` string selects a per-plugin file. See [Application manifests](../service-manifests.md) for validation rules and format boundaries. Bus, HTTP and Consul plugin settings use TOML; see the [Bus reference](../reference/bus.md#configure-processes-and-relationships) for its fields. Logging shares the application manifest; Kernel metadata and exported business data retain their XML formats.
 
 ### Plugin library names
 
@@ -128,7 +129,7 @@ run.bat <Release|Debug> <name> <busid> [runtime-directory]
 The default runtime directory is the script's directory. When invoking the checkout's `deployment/scripts/` helpers, pass the staged runtime explicitly; alternatively copy a helper into the runtime root to use that default. An explicit runtime path
 is relative to the caller's working directory. The helper selects `bin/app`
 (`app.exe` on Windows) for Release or `bin/app_d` (`app_d.exe`) for Debug, reads
-`conf/<name>.app.toml` and `conf/log.conf`, and runs in the foreground. The name
+`conf/<name>.app.toml`, and runs in the foreground. The name
 also becomes the application's `--name` value. Use the executable directly for
 legacy XML manifests, a custom manifest path, a different process name or other launcher flags.
 
@@ -181,7 +182,7 @@ their original `bin/rund.*` commands. Use the current commands above instead.
 | --- | --- |
 | Usage text or `Application parameter is invalid` | Supply all three required arguments; check spelling with `--help` |
 | Manifest loading fails | Check the working directory, explicit path and format; a lowercase `.toml` suffix selects TOML, while legacy `*.app.conf` files use XML |
-| Logger configuration cannot be read | Check the working directory and `--log_conf` path |
+| Logging validation or initialization fails | Check the manifest diagnostic and `logging.output_path` permissions |
 | `Load shared library[...] failed` | Check TOML `plugin_library_dir` or XML `plugin_lib_dir`, platform suffix, Debug suffix and the library's dependent shared libraries |
 | Plugin loads but the expected module is unavailable | Check registration, enabled targets and required plugins; see [Create a plugin](plugins.md) |
 | Built-in server role fails at `init:` | Load Bus and Net; Game also requires Kernel before callback registration. See [role startup errors](../concepts/server-architecture.md#role-startup-errors) for the checked scope |

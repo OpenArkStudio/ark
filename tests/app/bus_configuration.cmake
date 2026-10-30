@@ -36,7 +36,7 @@ foreach(mode invalid_threads invalid_intranet unknown_setting xml_content missin
         "[[plugins]]\nname = 'ark_bus_plugin'\nconfig = '${path}'\n"
         "[[plugins]]\nname = 'ark_net_plugin'\n[[plugins]]\nname = 'ark_utility_plugin'\n")
     execute_process(COMMAND "${PROGRAM}" --busid=1.0.1.1 --name=bus-config-test
-        "--app_conf=${manifest}" "--log_conf=${SOURCE_ROOT}/config/log.conf"
+        "--app_conf=${manifest}"
         WORKING_DIRECTORY "${RUNTIME_DIR}" RESULT_VARIABLE result
         OUTPUT_VARIABLE output ERROR_VARIABLE errors TIMEOUT 15)
     file(WRITE "${manifest}.stdout.log" "${output}")

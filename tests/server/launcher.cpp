@@ -176,7 +176,6 @@ int main(int argc, char** argv) {
             << "check_interval = '10s'\ncheck_timeout = '3s'\n";
         bus.close();
         const auto app_conf = "--app_conf=" + (runtime / "application.toml").string();
-        const auto log_conf = "--log_conf=" + (source / "config/log.conf").string();
         child_owner child;
         child.pid = ::fork();
         require(child.pid >= 0, "fork failed");
@@ -193,7 +192,7 @@ int main(int argc, char** argv) {
             }
             ::close(output);
             ::execl(program.c_str(), program.c_str(), bus_argument.c_str(), name_argument.c_str(), app_conf.c_str(),
-                log_conf.c_str(), static_cast<char*>(nullptr));
+                static_cast<char*>(nullptr));
             std::_Exit(126);
         }
         const auto startup_deadline = std::chrono::steady_clock::now() + 10s;

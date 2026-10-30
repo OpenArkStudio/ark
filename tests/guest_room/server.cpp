@@ -99,8 +99,7 @@ struct launcher
             dup2(log, STDERR_FILENO);
             close(log);
             execl(program.c_str(), program.c_str(), "--busid=1.1.31.1", "--name=guest_room_native_test",
-                "--app_conf=conf/guest_room.app.toml", "--log_conf=conf/log.conf", "--shutdown_timeout_ms=3000",
-                static_cast<char*>(nullptr));
+                "--app_conf=conf/guest_room.app.toml", "--shutdown_timeout_ms=3000", static_cast<char*>(nullptr));
             _exit(127);
         }
     }

@@ -16,7 +16,7 @@
 
 ## 准备运行目录
 
-在独立运行目录中放置程序、应用清单和日志配置，与源码配置分开。
+在独立运行目录中放置程序和应用清单，与源码配置分开。
 
 <Tabs syncKey="timers-platform">
 
@@ -25,7 +25,7 @@
 ```sh
 mkdir -p run/timers/bin run/timers/conf
 cp -R app-build/bin/. run/timers/bin/
-cp config/timers.app.toml config/log.conf run/timers/conf/
+cp config/timers.app.toml run/timers/conf/
 ```
 
 </TabItem>
@@ -35,7 +35,7 @@ cp config/timers.app.toml config/log.conf run/timers/conf/
 ```powershell
 New-Item -ItemType Directory -Path run/timers/bin, run/timers/conf -Force | Out-Null
 Copy-Item app-build/bin/* run/timers/bin/ -Recurse -Force
-Copy-Item config/timers.app.toml, config/log.conf run/timers/conf/
+Copy-Item config/timers.app.toml run/timers/conf/
 ```
 
 </TabItem>
@@ -48,8 +48,7 @@ Copy-Item config/timers.app.toml, config/log.conf run/timers/conf/
 run/timers/
 ├── bin/       同一次构建的 app、ark_utility_plugin 和 timers_plugin
 └── conf/
-    ├── timers.app.toml
-    └── log.conf
+    └── timers.app.toml
 ```
 
 复制命令会带入同次构建的其他产物；`timers.app.toml` 只选择上述两个库，无需单独的 `timers.conf` 或 `resource/`。
@@ -69,7 +68,7 @@ run/timers/
 ```sh
 cd run/timers
 ./bin/app --busid=1.0.1.1 --name=timers \
-  --app_conf=conf/timers.app.toml --log_conf=conf/log.conf
+  --app_conf=conf/timers.app.toml
 ```
 
 </TabItem>
@@ -79,7 +78,7 @@ cd run/timers
 ```powershell
 cd run/timers
 .\bin\app.exe --busid=1.0.1.1 --name=timers `
-  --app_conf=conf/timers.app.toml --log_conf=conf/log.conf
+  --app_conf=conf/timers.app.toml
 ```
 
 </TabItem>
@@ -94,7 +93,7 @@ Debug 程序名为 `app_d` 或 `app_d.exe`，插件文件在平台后缀前带�
 
 ## 确认运行结果
 
-控制台应出现包含 `timers_module` 和 `PostInit` 的日志。示例注册的定时器每十秒输出一次 `timer log`，共五次。附带的日志配置还会在运行目录的 `binlog/` 下写入文件。
+控制台应出现包含 `timers_module` 和 `PostInit` 的日志。示例注册的定时器每十秒输出一次 `timer log`，共五次。省略日志设置时使用控制台 INFO 输出。在同一清单中添加 `[logging]` 可启用文件输出，详见[日志设置](../service-manifests_CN.md#内嵌日志配置)。
 
 macOS/Linux 使用 Ctrl+C 停止，Windows 在应用控制台输入 `exit`。Timers 应依次输出 `PreShut`、`Shut`。
 

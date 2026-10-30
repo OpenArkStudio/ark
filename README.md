@@ -43,8 +43,10 @@ Follow the [quick start](docs/get-started/quick-start.md) to prepare the runtime
 
 ```sh
 ./bin/app --busid=1.0.1.1 --name=timers \
-  --app_conf=conf/timers.app.toml --log_conf=conf/log.conf
+  --app_conf=conf/timers.app.toml
 ```
+
+Logging shares the application manifest; omitted settings use console INFO output. See [configuration and migration](docs/service-manifests.md#embedded-logging).
 
 The [Godot C# demo](https://github.com/OpenArkStudio/ark-client-godot) pairs with [`guest_room`](examples/guest_room/) to demonstrate shared movement, HP/MP attributes and reconnecting. The [legacy Unity client](https://github.com/OpenArkStudio/ArkClient-Unity3D) has not been verified against the current ark server.
 

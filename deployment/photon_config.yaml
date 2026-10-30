@@ -228,26 +228,6 @@ data:
     <xml>
         <conf ConfDir="conf/" ConfigClassFilePath="../resource/meta/config_class.config" EntityClassFilePath="../resource/meta/entity_class.config" />
     </xml>
-  log.conf: |-
-    <xml>
-        <!--
-        log level enum
-        #define SPDLOG_LEVEL_TRACE 0
-        #define SPDLOG_LEVEL_DEBUG 1
-        #define SPDLOG_LEVEL_INFO 2
-        #define SPDLOG_LEVEL_WARN 3
-        #define SPDLOG_LEVEL_ERROR 4
-        #define SPDLOG_LEVEL_CRITICAL 5
-        -->
-
-        <!-- We use spdlog for the frame default logger. -->
-        <logger name="default" queue_count="1024" path="./binlog">
-            <debug console="1" level="1" pattern="%^[%Y%m%d %H:%M:%S.%e][%-5l]%v%$"/>
-            <release console="1" level="2" pattern="[%Y%m%d %H:%M:%S.%e][%-5l]%v"/>
-        </logger>
-
-        <!-- other name will be added, like remote-log,  -->
-    </xml>
   login.app.toml: |-
     [application]
     plugin_library_dir = "bin/"

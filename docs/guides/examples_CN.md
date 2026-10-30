@@ -40,7 +40,7 @@
 
 ## 运行实体操作示例
 
-在独立运行目录准备同次构建的产物、`config/entity_operations.app.toml`、`config/kernel.plugin.conf` 和 `config/log.conf`，并复制 `examples/entity_operations/resource`。使用 `--name=entity_operations --app_conf=conf/entity_operations.app.toml` 启动，详见[示例说明](../../examples/entity_operations/README_CN.md)。启动创建四个玩家并演示数据、表和自定义值，不执行计时循环；真实 DSO 回归使用相同清单与元数据。独立基准必须显式指定 `--iterations N`；八次迭代的 smoke 关闭计时，不构成性能证据。
+在独立运行目录准备同次构建的产物、`config/entity_operations.app.toml`、`config/kernel.plugin.conf`，并复制 `examples/entity_operations/resource`。使用 `--name=entity_operations --app_conf=conf/entity_operations.app.toml` 启动，详见[示例说明](../../examples/entity_operations/README_CN.md)。启动创建四个玩家并演示数据、表和自定义值，不执行计时循环；真实 DSO 回归使用相同清单与元数据。独立基准必须显式指定 `--iterations N`；八次迭代的 smoke 关闭计时，不构成性能证据。
 
 ## 数据库示例装配
 

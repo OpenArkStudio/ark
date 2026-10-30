@@ -41,12 +41,44 @@ name = "timers_plugin"
 ```sh
 mkdir -p run/timers/bin run/timers/conf
 cp -R out/bin/. run/timers/bin/
-cp config/timers.app.toml config/log.conf run/timers/conf/
+cp config/timers.app.toml run/timers/conf/
 cd run/timers
 ./bin/app --busid=1.0.0.1 --name=timers -a conf/timers.app.toml
 ```
 
-Debug 构建使用 `app_d`。Bus、HTTP 和 Consul 的运行参数使用 TOML，应用清单只指定这些文件的路径。Bus 字段见[运行配置](reference/bus_CN.md#配置进程与连接关系)，HTTP／Consul 示例见下文。日志仍读取 XML 格式的 `conf/log.conf`；Kernel 和业务导出数据保留 XML 格式。
+Debug 构建使用 `app_d`。Bus、HTTP 和 Consul 的运行参数使用 TOML，应用清单只指定这些文件的路径。Bus 字段见[运行配置](reference/bus_CN.md#配置进程与连接关系)，HTTP／Consul 示例见下文。日志使用同一应用清单；Kernel 和业务导出数据保留 XML 格式。
+
+## 内嵌日志配置
+
+日志设置可省略。未提供 `[logging]` 时，启动器使用同步控制台 INFO 日志，包含时间和源码位置，不创建日志文件，也不读取 `log.conf`。需要覆盖默认值时，在同一应用文件中添加：
+
+```toml
+[logging]
+console = true
+file = true
+level = "info"
+pattern = "%^[%Y%m%d %H:%M:%S.%e][%-5l]%v%$"
+output_path = "./binlog"
+queue_count = 0
+
+[logging.loggers.oss]
+output_path = "./binlog/oss"
+```
+
+| 字段 | 默认值 | 约束 |
+| --- | --- | --- |
+| `console` / `file` | `true` / `false` | 布尔输出开关，至少启用一项。文件输出必须显式启用，按日期目录和小时文件名轮转。 |
+| `level` | `"info"` | `trace`、`debug`、`info`、`warn`、`error`、`critical` 或 `off`。 |
+| `pattern` | 上例格式 | 不含 NUL 的非空 spdlog 格式字符串。 |
+| `output_path` | `"./binlog"` | 不含 NUL 的非空路径；相对路径以进程工作目录为基准。应用名和 Bus ID 组成文件名。启用文件输出时自动创建父目录。 |
+| `queue_count` | `0` | 0..65535 的整数；0 表示同步输出，正数启用独立异步队列。 |
+| `loggers` | 空 | 具名表继承基础设置，再覆盖提供的字段。`oss` 选择 OSS 日志；未配置时 OSS 共用默认日志。其他名称可通过 `create_logger()` 使用。 |
+
+Debug 和 Release 使用相同设置。XML 应用清单可在 `<plugins>` 旁添加 `<logging console="true" file="false" level="info" queue_count="0"><logger name="oss" level="warn"/></logging>`，属性名和默认值相同。XML 布尔值也接受 `1` 和 `0`。插件专用的服务和业务配置继续单独组织。
+
+**不兼容迁移：**从启动命令移除 `--log_conf` / `-l`；显式提供任一参数会以退出码 `1` 结束。将旧 XML 中选用的 `debug`/`release` 设置迁入 `[logging]`：`path` 改为 `output_path`，数值日志级别 0..6 改为上述名称，`console` 改用布尔值。需要保留文件输出时设置 `file = true`；保留原有异步队列时设置 `queue_count = 1024`。新 API 的文件输出由运行时设置控制，不受 `ARK_OPEN_FILE_LOG` 影响；该构建选项仍控制旧版库接口的默认值。`application_manifest` 的公开布局已改变，应用、插件和使用方必须一起重新编译。直接调用库的 XML 重载 `logger::init_logger(path, filename)` 继续保留，启动器不使用该重载。
+
+日志结构错误会包含应用路径和字段，并在插件加载前失败。文件初始化失败也以退出码 `1` 结束。异步输出仍受既有紧急退出行为限制；需要日志在调用内完成时使用 `queue_count = 0`。既有启动失败诊断继续通过紧急 stderr 路径输出。
 
 ## HTTP 与 Consul 插件配置
 
