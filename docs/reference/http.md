@@ -69,8 +69,20 @@ helper, including content type, length and keep-alive behavior.
 An already running module rejects another start. Two module instances cannot
 reserve the same nonzero endpoint within the library. `pre_shut()` stops and
 releases the server and reservation; the endpoint can then be started again.
-The owner thread drives normal manager shutdown. This is existing HTTP listener
-shutdown, not generic plugin hot replacement or HTTP/2 support. arknet continues
+The owner thread drives normal manager shutdown. After explicit `stop_accepting()`,
+this instance rejects new business route invocations with HTTP 503 and closes that
+connection. Already admitted routes continue; `ready_to_shut()` waits for handlers
+and their response sends before normal cleanup releases the listener. Admission
+is per business request: the TCP listener remains open, and both existing and new
+connections use the same gate. Failed sends also finish their request; completion
+does not prove the client received the response.
+
+Admission closure is permanent for this instance: `start_server()` cannot reopen
+it. The existing restart behavior after calling only `pre_shut()` is unchanged.
+The manager retains cooperative waiting and timeout preservation; it cannot
+interrupt a blocked route. Work independently scheduled by a handler needs
+separate lifecycle ownership and is not covered by HTTP send accounting. This
+does not provide generic plugin hot replacement or HTTP/2 support. arknet continues
 to own IO workers, request parsing and transport operations.
 
 ## Public interfaces and header mapping
@@ -97,10 +109,10 @@ actual HTTP DSO and sends real loopback HTTP requests. It checks the interface
 key, router identity, path/query routing, binary POST bodies, response status and
 headers, IO-worker dispatch without manager updates, retirement of an active
 handler during owner-thread stop, repeated stop and endpoint reuse. The in-flight
-shutdown case permits the existing connection-close outcome; it does not require
-a response after shutdown begins. No substitute server or transport is used.
+shutdown case requires the admitted response to finish and new requests to receive
+503 without invoking their routes. No substitute server or transport is used.
 
-The existing 37-case `check-network` suite retains its HTTP duplicate binding,
+`check-network` suite retains its HTTP duplicate binding,
 restart, public response helper and invalid-TOML assertions through the private
 factory. `tests/consumer/http` links only `ark::http`, compiles the public header
 separately and rejects private header paths with apps/Protobuf disabled. See
