@@ -83,7 +83,7 @@ foreach(outcome done unsafe failed throw)
     set(manifest "${RUNTIME_DIR}/multi-${outcome}.toml")
     file(WRITE "${manifest}" "[application]\nplugin_library_dir = \"${directory}\"\n[[plugins]]\nname = \"ark_app_startup_cleanup_plugin\"\nconfig = \"multi:${outcome}\"\n")
     execute_process(COMMAND "${PROGRAM}" --busid=1.0.1.1 --name=startup-cleanup-test
-        "--app_conf=${manifest}" "--log_conf=${SOURCE_ROOT}/config/log.conf"
+        "--app_conf=${manifest}"
         WORKING_DIRECTORY "${RUNTIME_DIR}" RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE errors TIMEOUT 10)
     file(WRITE "${manifest}.stdout.log" "${output}")
     file(WRITE "${manifest}.stderr.log" "${errors}")
