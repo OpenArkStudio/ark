@@ -126,7 +126,17 @@ TEST_CASE("HTTP reservation transfers its string storage without allocating") {
 TEST_CASE("HTTP native listen rejection releases its reservation for reuse") {
     const std::string ip = "127.0.0.1";
     asio::io_context context;
-    asio::ip::tcp::acceptor occupied(context, {asio::ip::address_v4::loopback(), 0});
+    asio::ip::tcp::acceptor occupied(context);
+    occupied.open(asio::ip::tcp::v4());
+#if defined(_WIN32)
+    // Windows SO_REUSEADDR can override a nonexclusive listener. Reserve this
+    // fixture exclusively before binding so the native start must fail.
+    const int exclusive = 1;
+    REQUIRE(::setsockopt(occupied.native_handle(), SOL_SOCKET, SO_EXCLUSIVEADDRUSE,
+                reinterpret_cast<const char*>(&exclusive), sizeof(exclusive)) == 0);
+#endif
+    occupied.bind({asio::ip::address_v4::loopback(), 0});
+    occupied.listen();
     const auto port = occupied.local_endpoint().port();
     const auto endpoint = ark::endpoint_key(ip, port);
     auto server = ark::detail::make_http_server_module();
