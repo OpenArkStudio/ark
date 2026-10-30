@@ -16,16 +16,9 @@ Include `<ark/container/vector.hpp>` and consume the `ark::core` CMake target.
 
 Self-move assignment leaves the container unchanged.
 
-Every non-null raw pointer must occupy only one owning slot. Do not insert it into
-another slot or owning container, or delete a pointer borrowed through `at()` or
-an iterator. Use the container methods to replace or clear slots; assigning to a
-raw-pointer slot through an iterator bypasses its ownership handling.
-Raw objects are released with scalar C++ `delete`; each inserted pointer must
-refer to an object that can be deleted through `T*`.
+A non-null raw pointer belongs to one owning slot only. Do not place it in another slot/owning container or delete pointers borrowed through `at()` or iteration. Replace/clear through container methods; iterator assignment bypasses ownership. Scalar C++ `delete` releases objects, so deletion through `T*` must be valid.
 
-Ownership transfers after insertion succeeds. If appending allocates and throws,
-the caller still owns the incoming raw pointer. Keep it in a `unique_ptr` until
-insertion returns:
+Ownership transfers only after insertion succeeds; allocation failure during append leaves it with the caller. Retain a `unique_ptr` until insertion returns:
 
 ```cpp
 #include <memory>
@@ -58,16 +51,15 @@ int main() {
 
 ## Slots and iteration
 
-`size()` counts slots, including empty ones. `resize(n)` only grows the vector and
-initializes new slots to null; a smaller value does not shrink it.
-`push_back(value)` fills the first empty slot, or appends if none exists.
-`push_back(index, value)` replaces an existing slot; an index at or beyond `size()`
-appends one slot. Call `resize()` first when a particular index is required.
+| Slot operation | Behavior |
+| --- | --- |
+| `size()` / `resize(n)` | Size includes empty slots; resize only grows and null-initializes, never shrinks |
+| `push_back(value)` | Fills the first empty slot, otherwise appends |
+| `push_back(index, value)` | Replaces an existing slot; index ≥ `size()` appends one. Use `resize()` before targeting a specific index |
+| `at(index)` | Null outside the vector; `operator[]` / `erase(index)` require a valid index |
+| Iteration | Forward/reverse visit null slots; read-only access uses `cbegin()` / `cend()`, `crbegin()` / `crend()` |
 
-`at(index)` returns null when the index is outside the vector. `operator[]` and
-`erase(index)` require a valid index. Forward and reverse iteration visit all
-slots, including null entries. Use `cbegin()` / `cend()` and `crbegin()` / `crend()`
-for read-only slot access. Container access requires caller synchronization.
+Caller synchronization is required.
 
 ## Migration
 

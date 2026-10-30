@@ -16,13 +16,20 @@ target_link_libraries(my_service PRIVATE ark::core ark::proto)
 
 Protobuf、Abseil 与 utf8_range 应来自同一套兼容安装。手工选择软件包时，同步检查 `Protobuf_DIR`、`absl_DIR` 与 `utf8_range_DIR`；链接成功本身不能证明反射和 JSON 行为正确。
 
-Windows 上，`AFProto`／`ark::proto` 构建为单一生成消息共享库。宿主和加载的插件导入同一套消息类及描述符，包括宿主为公开 Kernel 转换接口创建消息的场景。CMake 通过 protoc 生成 `ARK_PROTO_EXPORT` 声明，并由 `ark::proto` 向消费者传递导入定义；不要把另一份生成的 `.pb.cc` 编入消费者，也不要手工定义导出宏。其他平台保留原有静态 AFProto 库和生成命令。
+| 链接／部署边界 | 要求 |
+| --- | --- |
+| Windows 消息库 | `AFProto`／`ark::proto` 是单一共享生成库；宿主与插件共用消息类／描述符，包括宿主为公开 Kernel 转换创建的对象 |
+| 生成声明 | protoc 生成 `ARK_PROTO_EXPORT`，`ark::proto` 传播导入定义；不要把另一份 `.pb.cc` 编入消费者或手工定义导出宏 |
+| 其他平台 | 保留静态 AFProto 与原生成命令 |
+| **Windows 二进制迁移** | 同时重建宿主／插件，使用同一套兼容 Protobuf 运行时及构建配置；部署构建 `bin/` 的 `AFProto.dll`（Debug：`AFProto_d.dll`） |
+| 安装／兼容 | 既有 RUNTIME 规则将 DLL 装入 `bin/`，导入库装入库目录；即使 `.lib` 同名，也不混用旧静态归档与新导入库；字段号／二进制编码不变 |
+| 插件依赖 | 加载器先解析本机绝对路径，从插件旁查找 `AFProto_d.dll` 等依赖，不受程序／工作目录位置影响；依赖应随插件部署，缺失／不兼容仍失败并保留 Windows 原生错误码 |
 
-**Windows 二进制迁移：**一起重建宿主和插件，部署既有构建 `bin/` 中的 `AFProto.dll`（Debug 为 `AFProto_d.dll`）。Windows 宿主、插件和消息 DLL 必须使用同一套兼容的 Protobuf 运行时与构建配置。既有 RUNTIME 安装规则把 DLL 放到 `bin/`，导入库放到库目录。虽然 `.lib` 文件名保留，也不能混用旧静态 AFProto 归档与新导入库。此变更影响 Windows 链接和部署，不改变协议字段号或二进制编码。
-
-Windows 插件加载器会先把请求路径解析为本机格式的绝对路径。即使可执行文件或工作目录位于其他位置，也会从插件目录查找旁边的依赖，例如 `AFProto_d.dll`。部署时将依赖与插件放在一起；缺失或不兼容的库仍会导致加载失败，并保留 Windows 原生错误码。
-
-`check-proto-configuration` 配置两个 CMake 分支并运行真实 protoc，检查消息／描述符导出声明、消费者导入定义及原有非 Windows 生成路径。它不在其他平台上编译或加载 Windows 二进制。`check-kernel-plugin` 保留宿主创建的 Protobuf 对象及真实跨 DSO 转换。`check-native-loader` 单独测试宿主与插件分目录、依赖只放在插件旁边的场景，同时覆盖绝对和相对路径。Windows 加载验收仍要求该平台的原生运行。
+| 检查 | 证据范围 |
+| --- | --- |
+| `check-proto-configuration` | 两个 CMake 分支与真实 protoc：消息／描述符导出、消费者导入、非 Windows 生成路径；不跨平台编译／加载 Windows 二进制 |
+| `check-kernel-plugin` | 宿主创建 Protobuf 对象并真实跨 DSO 转换 |
+| `check-native-loader` | 宿主／插件分目录、依赖仅在插件旁，覆盖绝对／相对路径；Windows 加载验收须原生运行 |
 
 ## 消息序列化
 
@@ -55,7 +62,16 @@ ark 不提供可替换的消息 codec API。现有序列化流程使用生成的
 
 上述旧 JSON 键现在通过显式 `json_name` 保留，包括原先隐式生成的驼峰键。既有 `SceneID`、`groupID`、Consul 的外部键及其他 `json_name` 不变。此次只拆分已确认的 ID 词边界，不调整既有缩写、业务词汇或拼写。
 
-访客房间的四个枚举符号由 `ACTION_UNSPECIFIED`、`ACTION_DAMAGE`、`ACTION_SKILL`、`ACTION_REST` 改为 `action_unspecified`、`action_damage`、`action_skill`、`action_rest`，数值仍依次为 0、1、2、3。更新 C++ 常量引用，并从相同 schema 重新生成 C#。Protobuf 二进制帧及共享线格式向量不变；使用 Protobuf JSON／文本格式的工具须采用新的枚举字符串，这部分文本名称不兼容旧大写形式。
+访客房间枚举仅改符号，数值保留：
+
+| 原符号 | 新符号 | 数值 |
+| --- | --- | ---: |
+| `ACTION_UNSPECIFIED` | `action_unspecified` | 0 |
+| `ACTION_DAMAGE` | `action_damage` | 1 |
+| `ACTION_SKILL` | `action_skill` | 2 |
+| `ACTION_REST` | `action_rest` | 3 |
+
+更新 C++ 常量并从同一 schema 重新生成 C#。二进制帧与共享线格式向量不变；JSON／文本工具须采用新枚举字符串，与旧大写文本不兼容。
 
 `check-proto-naming` 通过真实 protoc 为 `src/proto/proto/` 与 `resources/photon/proto/` 生成 descriptor set，再检查所有源码文件、手写消息、字段、oneof、枚举及枚举值的 lower_snake_case。检查排除 protoc 自动生成的 map entry 类名及 proto3 optional 合成 oneof，并验证改名字段的 tag／类型／JSON 键及代表性旧二进制、JSON 消息。该目标随 `check-core` 执行；也可独立运行：
 

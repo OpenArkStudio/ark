@@ -24,15 +24,12 @@ headers that include protocol messages; `ark::net` then carries `ark::proto`.
 Direct endpoint headers remain usable with protocol generation disabled.
 API targets do not build or load the runtime DSO.
 
-The private plugin uses `plugin_base`, and a factory returning
-`std::unique_ptr<net_service_manager_module>` constructs a cpp-local
-`module_base<net_service_manager_module>`. Lookup retains the public interface's
-RTTI key. A second private factory returns `std::unique_ptr<http_client_module>`;
-its `module_base<http_client_module>` implementation is declared only in
-`http_client_module_impl.cpp`. HTTP client registration also uses its public interface key. Both
-modules still receive updates; HTTP installs first and uninstalls last. The
-library stem `ark_net_plugin` and `DllEntryPlugin`/`DllExitPlugin` signatures stay
-unchanged. arknet continues to own IO workers and transport operations.
+| Private construction | Interface and behavior |
+| --- | --- |
+| Service manager | `std::unique_ptr<net_service_manager_module>` factory; cpp-local `module_base<net_service_manager_module>`, retaining the public RTTI key |
+| HTTP client | `std::unique_ptr<http_client_module>` factory; `module_base<http_client_module>` defined only in `http_client_module_impl.cpp`, registered under its public key |
+
+Private assembly uses `plugin_base`. Both modules update; HTTP installs first/uninstalls last. `ark_net_plugin` and `DllEntryPlugin`/`DllExitPlugin` signatures stay unchanged; arknet owns IO workers/transport.
 
 **Header migration:** remove includes of
 `<ark/net/net_service_manager_module_impl.hpp>`, `<ark/net/net_plugin.hpp>` and
@@ -55,13 +52,12 @@ HTTP client participates in the admission and drain phases described below.
 
 ## HTTP client admission and drain
 
-The official `http_client_module` overrides the existing module lifecycle hooks.
-`stop_accepting()` closes new request roots without cancelling accepted HTTP IO.
-Repeated calls succeed. Future-based `get`, `post` and `async_request`, and both
-callback `post` overloads, reject new roots with `{false, operation_aborted.message()}`.
-Rejected futures are ready immediately; rejected callbacks still wait for the
-owner's `update()`. Rejected callback delivery does not grant permission to submit
-another request during drain.
+`http_client_module` overrides `stop_accepting()` to close new request roots without cancelling accepted HTTP IO; repeated calls succeed.
+
+| New root after closure | Rejection delivery |
+| --- | --- |
+| Future `get`, `post`, `async_request` | `{false, operation_aborted.message()}`, immediately ready |
+| Both callback `post` overloads | Same rejection, delivered by owner `update()`; rejected callbacks grant no continuation permission during drain |
 
 The untagged request interface recognizes two bounded continuation scopes: a
 synchronous call inside this client's accepted HTTP callback, and execution in
