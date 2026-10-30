@@ -213,8 +213,8 @@ TEST_CASE("Scheduler dispatched capture destruction completes before readiness")
     ark::scheduler scheduler(1);
     release_on_exit unblock{release};
     auto capture = std::make_shared<retiring_capture>(scheduler, entered, release, reentered, retired);
-    scheduler.in(0ms, [capture] {});
-    capture.reset();
+    scheduler.in(0ms, [capture = std::move(capture)] {});
+    CHECK_FALSE(capture);
     REQUIRE(entered.wait());
     CHECK(reentered);
     CHECK_FALSE(scheduler.ready_to_shut());
