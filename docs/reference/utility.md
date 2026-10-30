@@ -22,9 +22,55 @@ auto* timers = manager.find_module<ark::timer_module>();
 const auto entity = guids->create_guid();
 ```
 
-Interfaces borrow the plugin; timer member callbacks also borrow receivers. Keep both alive through use/callback completion or removal. Advance the manager on its owner with millisecond timestamps; creating timers does not advance time. The background scheduler pool remains 16. No new cancellation/hot-reload/shutdown guarantee; finish producers/callbacks under the [module lifecycle](../guides/modules.md) before unload.
+Interfaces borrow the plugin; timer member callbacks also borrow receivers. Keep both alive through use/callback completion or removal. Advance the manager on its owner with millisecond timestamps; creating timers does not advance time. The background scheduler retains 16 callback workers and one dispatcher. Follow the [module lifecycle](../guides/modules.md) and keep callback receivers alive through scheduler drain.
 
 Installation remains GUID → timer → schedule → compression, reversed on uninstall; timer `pre_shut()` closes its wheel. GUID layout, compression levels/algorithms and scheduling stay unchanged. `ark_utility_plugin` retains platform suffixes and Debug `_d`.
+
+## Scheduler shutdown
+
+The schedule module uses the existing lifecycle hooks. `stop_accepting()` closes
+new external registrations and future recurring dispatch. The existing `void`
+registration methods ignore refused requests. Registrations racing with stop are
+serialized with dispatch: admitted one-shot `in`/`at` schedules retain their due
+times and run during drain; work already submitted to the pool also runs to
+completion, including queued callbacks. Future recurring occurrences are retired.
+An interval callback that was already dispatched finishes without rearming.
+Normal interval, target-time and cron behavior is unchanged.
+
+An accepted callback may register a one-shot continuation on the same scheduler
+while draining, including from its capture destructors. This authority does not
+extend to another scheduler or to recurring registration. The schedule module
+also permits one-shot `add_at_schedule()` from the manager owner's accepted-task
+polling context. Owner-thread calls outside that context remain refused. The
+module keeps the dispatcher available until these managed tasks have drained;
+calling raw task-runtime polls does not grant this authority.
+
+`ready_to_shut()` is a nonblocking snapshot. It remains false until all admitted
+one-shots finish, future recurring schedules retire, registration capture transfers
+finish, and all dispatched callback owners have been destroyed. Capture destruction
+runs outside the scheduler mutex, before readiness is published; it can call
+stop/readiness methods. Callback exceptions are reported to stderr and destroyed
+before the work owner retires; no callback result future is exposed. A dispatcher
+failure leaves readiness closed. Repeated stop requests are safe. This covers
+captures owned by this scheduler, not caller-owned arguments or external producers.
+Stop those producers before destroying the module or its receivers.
+
+`pre_shut()` returns false until ready; only then does the owner join the pool.
+The manager keeps its existing all-module readiness gate and fixed shutdown
+deadline. A far-future accepted one-shot can reach that deadline; it is not silently
+cancelled. A timeout keeps cleanup closed even if work later completes.
+Readiness does not interrupt a callback or its destructor: both must finish
+cooperatively while required owner updates remain available. Direct scheduler
+owners can use the same three methods. Destruction without an earlier successful
+drain stops admission and joins accepted work synchronously, with no deadline;
+never destroy a scheduler from its own callback or make a callback wait for its
+owner to finish joining it. No threads are detached or forcefully terminated.
+This is a scheduler drain contract, not a general DSO unload or hot-update barrier.
+
+**Binary compatibility:** `scheduler.hpp` adds shutdown-accounting state to the
+public `ark::scheduler` helper, changing its object layout. Rebuild the Utility
+plugin and every consumer that constructs or embeds this helper together. The
+`schedule_module` interface and base-module virtual functions are unchanged.
 
 ## Timer ownership and allocation
 
@@ -192,3 +238,12 @@ resource cleanup and allocation-failure recovery. Run it separately with
 `cmake --build <build-dir> --target check-timer`. It also runs an isolated
 `NDEBUG` build of the production timer module to check allocation-failure reporting
 through its public interface.
+
+`check-scheduler-drain`, included in `check-core`, runs the production scheduler
+and schedule-module implementation with controlled callback/capture barriers.
+It checks accepted and queued work, recurring retirement, registration/stop races,
+same-instance/managed-task continuations, callback reentry, capture and exception
+destruction, owner-driven completion and sticky manager
+timeout without cleanup. Run it with
+`cmake --build <build-dir> --target check-scheduler-drain`. These checks do not
+establish general DSO unload, hosted platform or production capacity acceptance.

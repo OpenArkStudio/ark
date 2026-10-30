@@ -20,7 +20,9 @@
 
 #pragma once
 
+#include <cstdio>
 #include <iomanip>
+#include <map>
 
 #include "ark/utility/ctpl_stl.h"
 
@@ -152,27 +154,16 @@ public:
 
 class scheduler final
 {
+    friend struct scheduler_test_access;
+    friend class schedule_module_impl;
+
 public:
     using clock = std::chrono::system_clock;
 
     explicit scheduler(unsigned int max_n_tasks = 4)
         : stopping_(false)
         , threads_(max_n_tasks + 1) {
-        threads_.push([this](int) {
-            while (!stopping_)
-            {
-                if (tasks_.empty())
-                {
-                    sleeper_.sleep();
-                }
-                else
-                {
-                    auto time_of_first_task = (*tasks_.begin()).first;
-                    sleeper_.sleep_until(time_of_first_task);
-                }
-                manage_tasks();
-            }
-        });
+        threads_.push([this](int) { dispatch(); });
     }
 
     scheduler(const scheduler&) = delete;
@@ -181,12 +172,50 @@ public:
     scheduler& operator=(scheduler&&) noexcept = delete;
 
     ~scheduler() {
-        stopping_ = true;
+        stop_accepting();
+        // Owner-only fallback: joins accepted work without a deadline. A callback
+        // must never destroy its own scheduler or wait for this owner to join it.
+        // Keep idle workers alive while accepted future one-shots can still be
+        // submitted by the dispatcher or by accepted callback continuations.
+        while (!dispatcher_retired_.load())
+        {
+            dispatcher_retired_.wait(false);
+        }
+        threads_.stop(true);
+    }
+
+    void stop_accepting() {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            stopping_ = true;
+        }
         sleeper_.interrupt();
+    }
+
+    bool ready_to_shut() const {
+        // No business owners or further dispatch remain. pre_shut() still joins
+        // the framework's final notification/return path before module teardown.
+        return dispatcher_retired_.load() && outstanding_.load() == 0;
+    }
+
+    // Owner-only; never join workers while they can still need owner progress.
+    bool pre_shut() {
+        if (!ready_to_shut())
+        {
+            return false;
+        }
+        threads_.stop(true);
+        return true;
     }
 
     template<typename callable_type, typename... args_type>
     void in(const clock::time_point time, callable_type&& f, args_type&&... args) {
+        operation registration(*this);
+        if (!registration.accepted)
+        {
+            return;
+        }
+
         std::shared_ptr<scheduler_task> t =
             std::make_shared<in_task>(std::bind(std::forward<callable_type>(f), std::forward<args_type>(args)...));
         add_task(time, std::move(t));
@@ -199,6 +228,12 @@ public:
 
     template<typename callable_type, typename... args_type>
     void at(const std::string& time, callable_type&& f, args_type&&... args) {
+        operation registration(*this);
+        if (!registration.accepted)
+        {
+            return;
+        }
+
         // get current time as a tm object
         auto time_now = clock::to_time_t(clock::now());
         std::tm tm = *std::localtime(&time_now);
@@ -231,11 +266,19 @@ public:
             throw std::runtime_error("Cannot parse time string: " + time);
         }
 
-        in(tp, std::forward<callable_type>(f), std::forward<args_type>(args)...);
+        std::shared_ptr<scheduler_task> task =
+            std::make_shared<in_task>(std::bind(std::forward<callable_type>(f), std::forward<args_type>(args)...));
+        add_task(tp, std::move(task));
     }
 
     template<typename callable_type, typename... args_type>
     void every(const clock::duration time, callable_type&& f, args_type&&... args) {
+        operation registration(*this, true);
+        if (!registration.accepted)
+        {
+            return;
+        }
+
         std::shared_ptr<scheduler_task> t = std::make_shared<every_task>(
             time, std::bind(std::forward<callable_type>(f), std::forward<args_type>(args)...));
         auto next_time = t->get_new_time();
@@ -254,6 +297,12 @@ public:
     //    * * * * *
     template<typename callable_type, typename... args_type>
     void cron(const std::string& expression, callable_type&& f, args_type&&... args) {
+        operation registration(*this, true);
+        if (!registration.accepted)
+        {
+            return;
+        }
+
         std::shared_ptr<scheduler_task> t = std::make_shared<cron_task>(
             expression, std::bind(std::forward<callable_type>(f), std::forward<args_type>(args)...));
         auto next_time = t->get_new_time();
@@ -262,6 +311,12 @@ public:
 
     template<typename callable_type, typename... args_type>
     void interval(const clock::duration time, callable_type&& f, args_type&&... args) {
+        operation registration(*this, true);
+        if (!registration.accepted)
+        {
+            return;
+        }
+
         std::shared_ptr<scheduler_task> t = std::make_shared<every_task>(
             time, std::bind(std::forward<callable_type>(f), std::forward<args_type>(args)...), true);
         add_task(clock::now(), std::move(t));
@@ -269,6 +324,8 @@ public:
 
 private:
     std::atomic<bool> stopping_;
+    std::atomic<bool> dispatcher_retired_{false};
+    std::atomic<std::size_t> outstanding_{0};
 
     interruptable_sleep sleeper_;
 
@@ -276,58 +333,232 @@ private:
     std::mutex mutex_;
     ctpl::thread_pool threads_;
 
+    struct callback_context;
+    callback_context* callback_contexts_{nullptr};
+
+    // Intrusive stack records keep continuation authority on this instance,
+    // including when the callback and registration code live in different DSOs.
+    struct callback_context
+    {
+        explicit callback_context(scheduler& scheduler)
+            : owner(&scheduler)
+            , thread(std::this_thread::get_id()) {
+            std::lock_guard<std::mutex> lock(owner->mutex_);
+            next = owner->callback_contexts_;
+            owner->callback_contexts_ = this;
+        }
+
+        callback_context(const callback_context&) = delete;
+        callback_context& operator=(const callback_context&) = delete;
+
+        ~callback_context() {
+            retire();
+        }
+
+        void retire() {
+            if (!owner)
+            {
+                return;
+            }
+            auto* scheduler = owner;
+            {
+                std::lock_guard<std::mutex> lock(scheduler->mutex_);
+                auto** entry = &scheduler->callback_contexts_;
+                while (*entry != this)
+                {
+                    entry = &(*entry)->next;
+                }
+                *entry = next;
+                owner = nullptr;
+            }
+            scheduler->sleeper_.interrupt();
+        }
+
+        scheduler* owner;
+        std::thread::id thread;
+        callback_context* next{nullptr};
+    };
+
+    bool in_callback() const {
+        for (auto* context = callback_contexts_; context; context = context->next)
+        {
+            if (context->thread == std::this_thread::get_id())
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    struct operation
+    {
+        explicit operation(scheduler& owner, bool recurring = false)
+            : owner(owner) {
+            std::lock_guard<std::mutex> lock(owner.mutex_);
+            accepted = !owner.dispatcher_retired_ && (!owner.stopping_ || (!recurring && owner.in_callback()));
+            if (accepted)
+            {
+                ++owner.outstanding_;
+            }
+        }
+
+        ~operation() {
+            if (accepted)
+            {
+                --owner.outstanding_;
+                owner.sleeper_.interrupt();
+            }
+        }
+
+        scheduler& owner;
+        bool accepted{false};
+    };
+
+    struct dispatched_task
+    {
+        dispatched_task(scheduler& scheduler, std::shared_ptr<scheduler_task> task)
+            : owner(scheduler)
+            , context(scheduler)
+            , task(std::move(task)) {
+        }
+
+        scheduler& owner;
+        callback_context context;
+        std::shared_ptr<scheduler_task> task;
+
+        ~dispatched_task() {
+            // Destruct user captures before publishing completion, outside the
+            // scheduler mutex. Destructors may reenter stop/readiness methods.
+            task.reset();
+            context.retire();
+            --owner.outstanding_;
+            owner.sleeper_.interrupt();
+        }
+    };
+
     void add_task(const clock::time_point time, std::shared_ptr<scheduler_task> t) {
-        std::lock_guard<std::mutex> l(mutex_);
-        tasks_.emplace(time, std::move(t));
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (!stopping_ || !t->recurring)
+            {
+                tasks_.emplace(time, std::move(t));
+            }
+        }
         sleeper_.interrupt();
     }
 
-    void manage_tasks() {
-        std::lock_guard<std::mutex> l(mutex_);
-
-        auto end_of_tasks_to_run = tasks_.upper_bound(clock::now());
-
-        // if there are any tasks to be run and removed
-        if (end_of_tasks_to_run != tasks_.begin())
+    void dispatch() {
+        try
         {
-            // keep track of tasks that will be re-added
-            decltype(tasks_) recurred_tasks;
-
-            // for all tasks that have been triggered
-            for (auto i = tasks_.begin(); i != end_of_tasks_to_run; ++i)
+            while (true)
             {
-
-                auto& task = (*i).second;
-
-                if (task->interval)
+                decltype(tasks_) retired;
+                clock::time_point next;
+                bool empty;
+                bool finished;
                 {
-                    // if it's an interval task, only add the task back after f() is completed
-                    threads_.push([this, task](int) {
-                        task->function();
-                        // no risk of race-condition,
-                        // add_task() will wait for manage_tasks() to release lock
-                        add_task(task->get_new_time(), task);
-                    });
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    if (stopping_)
+                    {
+                        for (auto i = tasks_.begin(); i != tasks_.end();)
+                        {
+                            if (i->second->recurring)
+                            {
+                                retired.insert(tasks_.extract(i++));
+                            }
+                            else
+                            {
+                                ++i;
+                            }
+                        }
+                    }
+                    empty = tasks_.empty();
+                    finished = stopping_ && empty && outstanding_ == 0 && !callback_contexts_;
+                    if (!empty)
+                    {
+                        next = tasks_.begin()->first;
+                    }
+                }
+                retired.clear();
+                if (finished)
+                {
+                    dispatcher_retired_ = true;
+                    dispatcher_retired_.notify_all();
+                    return;
+                }
+                if (empty)
+                {
+                    sleeper_.sleep();
                 }
                 else
                 {
-                    threads_.push([task](int) { task->function(); });
-                    // calculate time of next run and add the new task to the tasks to be recurred
-                    if (task->recurring)
-                    {
-                        recurred_tasks.emplace(task->get_new_time(), std::move(task));
-                    }
+                    sleeper_.sleep_until(next);
                 }
+                manage_tasks();
             }
+        }
+        catch (...)
+        {
+            // A failed dispatcher cannot promise completion of accepted work.
+            // Keep readiness closed and preserve owners for the owner's fallback.
+            stop_accepting();
+            std::fputs("Scheduler dispatch failed; shutdown readiness remains closed.\n", stderr);
+            throw;
+        }
+    }
 
-            // remove the completed tasks
-            tasks_.erase(tasks_.begin(), end_of_tasks_to_run);
-
-            // re-add the tasks that are recurring
-            for (auto& task : recurred_tasks)
+    void manage_tasks() {
+        // Keep extracted owners alive until after releasing the dispatch lock:
+        // a fast worker can otherwise make map erasure run user destructors here.
+        decltype(tasks_) dispatched;
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto end = tasks_.upper_bound(clock::now());
+        for (auto i = tasks_.begin(); i != end;)
+        {
+            dispatched.insert(tasks_.extract(i++));
+        }
+        for (auto& entry : dispatched)
+        {
+            auto& task = entry.second;
+            if (stopping_ && task->recurring)
             {
-                tasks_.emplace(task.first, std::move(task.second));
+                continue;
             }
+            ++outstanding_;
+            try
+            {
+                threads_.push([this, task](int) mutable {
+                    dispatched_task work{*this, std::move(task)};
+                    try
+                    {
+                        work.task->function();
+                        if (work.task->interval && !stopping_)
+                        {
+                            add_task(work.task->get_new_time(), work.task);
+                        }
+                    }
+                    catch (...)
+                    {
+                        // The discarded pool future previously contained this
+                        // exception. Destroy it here before retiring business
+                        // owners, and report it instead of retaining DSO code.
+                        std::fputs("Scheduler callback failed.\n", stderr);
+                    }
+                });
+            }
+            catch (...)
+            {
+                --outstanding_;
+                throw;
+            }
+            if (task->recurring && !task->interval)
+            {
+                tasks_.emplace(task->get_new_time(), task);
+            }
+            // The worker cannot enter its context until this lock is released.
+            // Hand its dispatched owner over completely now, so a fast callback
+            // retires its last capture with that callback's continuation authority.
+            task.reset();
         }
     }
 
