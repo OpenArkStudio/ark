@@ -112,6 +112,13 @@ handler during owner-thread stop, repeated stop and endpoint reuse. The in-fligh
 shutdown case requires the admitted response to finish and new requests to receive
 503 without invoking their routes. No substitute server or transport is used.
 
+`check-http-admission` also uses the production factory and real loopback requests
+to check retention after manager timeout or a readiness exception. The listener
+and route owner remain alive while an admitted route finishes, and later business requests
+receive 503 both before and after that response completes. Repeated stop preserves
+the manager's terminal state; these tests explicitly retire the drained server
+through their test owner rather than claiming automatic recovery or forced cleanup.
+
 `check-network` suite retains its HTTP duplicate binding,
 restart, public response helper and invalid-TOML assertions through the private
 factory. `tests/consumer/http` links only `ark::http`, compiles the public header

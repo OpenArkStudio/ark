@@ -79,6 +79,10 @@ bool listen(ark::plugin_manager& manager) {
 它验证接口键、路由器身份、路径／查询路由、二进制 POST 正文、响应状态与头、无管理器更新时的 IO 工作线程派发、
 所属线程停服时等待活动处理器与响应发送、新请求返回 503 且不执行路由、重复停服及端点复用。未使用替身服务端或传输。
 
+`check-http-admission` 还通过生产工厂和真实回环请求，验证管理器超时及 readiness 异常后的资源保留。
+已接纳路由继续完成响应，监听器与路由所有者仍然存活；该响应完成前后的新业务请求均返回 503。
+重复停机保持管理器的终态；测试在请求排空后，由测试所有者显式清理服务端，不将其视为自动恢复或强制清理。
+
 `check-network` 通过私有工厂保留 HTTP 重复绑定、重启、公开响应助手与无效 TOML 断言。
 独立的 `tests/consumer/http` 仅链接 `ark::http`，在关闭应用／Protobuf 时分别编译公开头并拒绝私有头路径。
 公共接口头消费命令见[目录结构](directory-structure_CN.md)，路由 API 见 [arknet HTTP](https://openarkstudio.github.io/arknet/zh/features/)。
