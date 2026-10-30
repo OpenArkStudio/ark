@@ -4,6 +4,13 @@ Matched work through ark's private database services: **56 paired configurations
 
 Bars show the median of three runs; short whiskers show min–max. Panel scales are independent. The horizontal axis is **connections / outstanding requests**. Table changes = (coroutine median / callback median − 1) × 100%.
 
+
+<Aside type="note" title="Reading the metrics">
+
+Complete tables include P50 and exact values. P99 is the median of three per-process 99th percentiles, without pooling requests across processes. RSS is the whole-process high-water mark, including warmup and preallocated latency samples; callback mode also creates idle bridge/task objects, so it does not isolate coroutine frame cost.
+
+</Aside>
+
 ## Redis · TCP
 
 ![Throughput](assets/ark-database-redis-throughput.svg)
@@ -18,8 +25,6 @@ Across all 28 configurations, coroutine throughput medians change by **−1.37% 
 ![P99](assets/ark-database-redis-p99.svg)
 
 ![RSS](assets/ark-database-redis-rss.svg)
-
-P50 and exact values for every metric are in the complete tables below. P99 is each process’s 99th percentile over all requests, followed by the median of three process results; samples are not pooled across processes. RSS is the whole-process high-water mark, including warmup and preallocated latency samples. Callback mode also constructs idle bridge/task objects, so RSS does not isolate coroutine frame costs.
 
 </details>
 
@@ -207,8 +212,6 @@ Across all 28 configurations, coroutine throughput medians change by **−3.01% 
 ![P99](assets/ark-database-mysql-p99.svg)
 
 ![RSS](assets/ark-database-mysql-rss.svg)
-
-P50 and exact values for every metric are in the complete tables below. P99 is each process’s 99th percentile over all requests, followed by the median of three process results; samples are not pooled across processes. RSS is the whole-process high-water mark, including warmup and preallocated latency samples. Callback mode also constructs idle bridge/task objects, so RSS does not isolate coroutine frame costs.
 
 </details>
 
@@ -420,11 +423,15 @@ Individual measured intervals are 0.383–3.046 seconds, with 80/336 intervals s
 | 1 ms | 4/16 | 16,384 | 4,000 |
 | 1 ms | 4/64 | 16,384 | 4,000 |
 
-Raw records and source/binary/dependency hashes remain in the independent local measurement directory, outside the source repository, with no published download. The generator checks all 336 process outputs, exit codes and stderr, then computes all 56 paired medians/ranges/changes. [Formal C++ benchmark usage](https://github.com/OpenArkStudio/ark/blob/ab6f82f320a472869a06e155c2c73c3d7728354b/benchmarks/DATABASE.md) provides build/run instructions and metric definitions.
+Raw records and source/binary/dependency hashes stay in an independent local directory, outside the repository, without downloads. The generator checks 336 process outputs, exit codes and stderr, then calculates 56 paired medians/ranges/changes. [Formal C++ benchmark usage](https://github.com/OpenArkStudio/ark/blob/ab6f82f320a472869a06e155c2c73c3d7728354b/benchmarks/DATABASE.md) provides build/run instructions and metric definitions.
+
+</details>
+
+<Aside type="caution" title="Evidence limits">
 
 - The hash lock covers only its 2,436 recorded inputs; MySQL `@loader_path` relative dynamic libraries are not a complete transitive dependency hash closure.
 - The recorded `ninja -n` output proposes CMake regeneration; no rebuild was executed and pre-measurement hashes were not reconstructed afterward. These limits do not demonstrate a dependency change.
 
-</details>
+</Aside>
 
 These closed-loop, local short-duration results do not establish saturation capacity, cross-host behavior, production-duration endurance or cluster PCU.
