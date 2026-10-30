@@ -225,6 +225,22 @@ const site = fileURLToPath(new URL("../", import.meta.url));
 const docs = dirname(site);
 const repo = dirname(docs);
 const base = process.argv.find(arg => arg.startsWith("--base="))?.slice(7);
+// Source-derived corrections approved during the reference copy audit. These
+// are scoped to stale inventory/path prose, never measurement data or examples.
+const pluginCmake = await readFile(join(repo, "src/plugins/CMakeLists.txt"), "utf8");
+const netInventory = pluginCmake.match(/set\(ark_net_public_headers([\s\S]*?)\n\)/)?.[1];
+assert.ok(netInventory, "missing explicit Net header inventory");
+const netHeaderCount = [...netInventory.matchAll(/\/net\/[^"\n]+/g)].length;
+assert.ok((await readFile(join(repo, "src/core/CMakeLists.txt"), "utf8")).includes('"bus.hpp"'), "Bus must remain in the core public inventory");
+await readFile(join(repo, "src/core/bus.hpp"));
+const sourceCorrections = {
+  "reference/build-options.md": [["Net's 18 public headers", `Net's ${netHeaderCount} public headers`]],
+  "reference/build-options_CN.md": [["Net 的 18 个公开头", `Net 的 ${netHeaderCount} 个公开头`]],
+  "reference/directory-structure.md": [["all 18 Net public headers", `all ${netHeaderCount} Net public headers`]],
+  "reference/directory-structure_CN.md": [["分别编译 18 个 Net 公开头", `分别编译 ${netHeaderCount} 个 Net 公开头`]],
+  "reference/bus.md": [["`<ark/bus.hpp>` remain in `include/ark/`", "`<ark/bus.hpp>` live in `src/core/bus.hpp`"]],
+  "reference/bus_CN.md": [["共享地址和配置类型 `<ark/bus.hpp>` 仍位于 `include/ark/`", "共享地址和配置类型 `<ark/bus.hpp>` 源码位于 `src/core/bus.hpp`"]],
+};
 const parser = unified().use(remarkParse);
 const walk = (node, key = "children") => [node, ...(node[key] ?? []).flatMap(child => walk(child, key))];
 const text = (node, key = "children") => node.value ?? (node[key] ?? []).map(child => text(child, key)).join("");
@@ -247,6 +263,7 @@ let anchors = 0;
 let dataRows = 0;
 for (const file of documents) {
   const source = await readFile(join(docs, file), "utf8");
+  for (const [, corrected] of sourceCorrections[file] ?? []) assert.ok(source.includes(corrected), `${file}: stale source inventory/path fact`);
   const output = join(site, "dist", pageRoute(file).replace(/^\//, ""));
   const markdown = await readFile(join(output, "index.md"), "utf8");
   const htmlSource = await readFile(join(output, "index.html"), "utf8");
@@ -261,7 +278,8 @@ for (const file of documents) {
     assert.ok(visible.includes(token), `${file}: HTML lost API/default ${token}`);
   }
   const ids = new Set(htmlNodes.flatMap(node => (node.attrs ?? []).filter(attr => attr.name === "id").map(attr => attr.value)));
-  const previous = base ? execFileSync("git", ["show", `${base}:docs/${file}`], { cwd: repo, encoding: "utf8" }) : source;
+  let previous = base ? execFileSync("git", ["show", `${base}:docs/${file}`], { cwd: repo, encoding: "utf8" }) : source;
+  for (const [stale, corrected] of sourceCorrections[file] ?? []) previous = previous.replace(stale, corrected);
   const publishedHeadings = getHeadingsFromHtml(htmlSource);
   const currentHeadings = headings(source);
   for (const heading of headings(previous).filter(node => node.depth > 1)) {
@@ -296,4 +314,3 @@ for (const file of documents) {
 console.log(`Verified ${documents.length} canonical reference/performance HTML+Markdown pairs, ${examples} examples, ${anchors} anchors${base ? ` and ${dataRows} preserved measurement/environment rows against ${base}` : ""}.`);
 
 }
-
