@@ -43,7 +43,21 @@ private:
 };
 
 namespace detail {
+// Coordinate callers sharing this linked helper instance. Keep this lock
+// inside conversions: cron dispatch can already hold a Scheduler mutex, while
+// at() registers work only after the calendar conversion has returned.
+inline std::mutex& scheduler_calendar_mutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+inline std::time_t scheduler_mktime(std::tm& time) {
+    std::lock_guard<std::mutex> lock(scheduler_calendar_mutex());
+    return std::mktime(&time);
+}
+
 inline std::tm scheduler_local_time(std::time_t time) {
+    std::lock_guard<std::mutex> lock(scheduler_calendar_mutex());
     std::tm result{};
 #ifdef ARK_PLATFORM_WIN
     const bool converted = localtime_s(&result, &time) == 0;
@@ -59,7 +73,7 @@ inline std::tm scheduler_local_time(std::time_t time) {
 } // namespace detail
 
 inline void add(std::tm& tm, std::chrono::system_clock::duration time) {
-    auto tp = std::chrono::system_clock::from_time_t(std::mktime(&tm));
+    auto tp = std::chrono::system_clock::from_time_t(detail::scheduler_mktime(tm));
     auto tp_adjusted = tp + time;
     auto tm_adjusted = std::chrono::system_clock::to_time_t(tp_adjusted);
     tm = detail::scheduler_local_time(tm_adjusted);
@@ -150,7 +164,7 @@ public:
 
         // telling mktime to figure out dst
         next.tm_isdst = -1;
-        return clock::from_time_t(std::mktime(&next));
+        return clock::from_time_t(detail::scheduler_mktime(next));
     }
 
     int minute{0};

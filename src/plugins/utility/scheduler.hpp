@@ -244,7 +244,7 @@ public:
         if (try_parse(tm, time, "%H:%M:%S"))
         {
             // convert tm back to time_t, then to a time_point and assign to final
-            tp = clock::from_time_t(std::mktime(&tm));
+            tp = clock::from_time_t(detail::scheduler_mktime(tm));
 
             // if we've already passed this time, the user will mean next day, so add a day.
             if (clock::now() >= tp)
@@ -254,11 +254,11 @@ public:
         }
         else if (try_parse(tm, time, "%Y-%m-%d %H:%M:%S"))
         {
-            tp = clock::from_time_t(std::mktime(&tm));
+            tp = clock::from_time_t(detail::scheduler_mktime(tm));
         }
         else if (try_parse(tm, time, "%Y/%m/%d %H:%M:%S"))
         {
-            tp = clock::from_time_t(std::mktime(&tm));
+            tp = clock::from_time_t(detail::scheduler_mktime(tm));
         }
         else
         {

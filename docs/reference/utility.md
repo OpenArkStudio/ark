@@ -37,7 +37,11 @@ completion, including queued callbacks. Future recurring occurrences are retired
 An interval callback that was already dispatched finishes without rearming.
 Normal interval, target-time and cron behavior is unchanged. Target-time and cron
 calendar conversion use caller-owned `std::tm` storage; parsing, process-local
-timezone selection and `mktime`/DST rules remain unchanged.
+timezone selection and `mktime`/DST rules remain unchanged. The calendar helper
+serializes each C-runtime conversion, including `mktime`, for callers sharing its
+linked helper instance. It releases that lock before task registration or callback
+execution. This scope does not coordinate independent DSO/helper copies, external
+C-runtime callers or timezone environment changes.
 
 An accepted callback may register a one-shot continuation on the same scheduler
 while draining, including from its capture destructors. This authority does not
