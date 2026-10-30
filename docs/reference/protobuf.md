@@ -16,13 +16,20 @@ Generated C++ files remain in the CMake build directory under `src/proto/generat
 
 Use Protobuf, Abseil and utf8_range from one compatible installation prefix. In a manual package selection, align `Protobuf_DIR`, `absl_DIR` and `utf8_range_DIR`; a successful link alone does not validate reflection/JSON behavior.
 
-On Windows, `AFProto` / `ark::proto` builds one shared generated-message library. The host and loaded plugins import the same message classes and descriptors, including when the host creates a message for a public Kernel conversion call. CMake generates `ARK_PROTO_EXPORT` declarations with protoc and propagates import definitions through `ark::proto`; do not compile a second copy of the generated `.pb.cc` files into consumers or define the export macro manually. Other platforms retain the existing static AFProto library and unchanged generation command.
+| Linking / deployment boundary | Requirement |
+| --- | --- |
+| Windows messages | `AFProto` / `ark::proto` is one shared generated library; host/plugins share classes and descriptors, including host-created objects passed to public Kernel conversion |
+| Generated declarations | protoc supplies `ARK_PROTO_EXPORT`; `ark::proto` propagates imports. Never compile another `.pb.cc` copy into consumers or define exports manually |
+| Other platforms | Static AFProto and existing generation command retained |
+| **Windows binary migration** | Rebuild hosts/plugins together with compatible Protobuf runtime/build configuration; deploy build `bin/`’s `AFProto.dll` (`AFProto_d.dll` for Debug) |
+| Installation / compatibility | Existing RUNTIME rule installs DLL to `bin/`, import library to the library directory. Never mix old static archive/new import library despite matching `.lib` names; field numbers/wire encoding are unchanged |
+| Plugin dependencies | Loader resolves an absolute native path and finds dependencies such as `AFProto_d.dll` beside the plugin regardless of executable/working directory. Deploy them there; missing/incompatible libraries still fail with native Windows error codes |
 
-**Windows binary migration:** rebuild hosts and plugins together and deploy `AFProto.dll` (`AFProto_d.dll` for Debug) from the existing build `bin/` directory. The Windows host, plugins and message DLL must use the same compatible Protobuf runtime and build configuration. The DLL is installed to `bin/` by the existing RUNTIME rule; its import library goes to the library directory. Do not mix the previous static AFProto archive with the new import library, despite their retained `.lib` filenames. This changes Windows linking/deployment, not protocol field numbers or wire encoding.
-
-The Windows plugin loader resolves the requested path to an absolute native path before loading. Dependencies beside the plugin, such as `AFProto_d.dll`, are searched from that directory even when the executable or working directory is elsewhere. Keep plugin dependencies with the plugin; missing or incompatible libraries still fail loading and retain the native Windows error code.
-
-`check-proto-configuration` configures both CMake branches and runs the real protoc to check message/descriptor export declarations, consumer imports and unchanged native generation. It does not compile or load Windows binaries on another platform. `check-kernel-plugin` retains its host-created Protobuf object and real cross-DSO conversion. `check-native-loader` separately exercises a host and plugin in different directories with a dependency found only beside the plugin, using absolute and relative paths. Windows loader acceptance requires that platform's native run.
+| Check | Evidence scope |
+| --- | --- |
+| `check-proto-configuration` | Both CMake branches and real protoc: message/descriptor exports, consumer imports and unchanged non-Windows generation; no cross-platform Windows compile/load |
+| `check-kernel-plugin` | Host-created Protobuf object and real cross-DSO conversion |
+| `check-native-loader` | Separate host/plugin directories, dependency only beside plugin, absolute/relative paths; Windows loader acceptance requires a native run |
 
 ## Message serialization
 
@@ -55,7 +62,15 @@ Regenerate Protobuf sources and update consumers to these field names. Generated
 
 These existing JSON keys now have explicit `json_name` mappings, including the formerly implicit camelcase keys. Existing `SceneID`, `groupID`, Consul external keys and other `json_name` values stay unchanged. This change separates confirmed ID word boundaries without changing existing abbreviations, business vocabulary or spelling.
 
-The four guest-room enum symbols change from `ACTION_UNSPECIFIED`, `ACTION_DAMAGE`, `ACTION_SKILL`, `ACTION_REST` to `action_unspecified`, `action_damage`, `action_skill`, `action_rest`, retaining numeric values 0, 1, 2, 3. Update C++ constant references and regenerate C# from the same schema. Protobuf binary frames and shared wire vectors stay unchanged. Tools using Protobuf JSON/text must adopt the new enum strings; these textual names are incompatible with the former uppercase spelling.
+Guest-room enum symbols change while numeric values remain:
+
+| Previous symbol | Current symbol | Value |
+| --- | --- | ---: |
+| `ACTION_UNSPECIFIED` | `action_unspecified` | 0 |
+| `ACTION_DAMAGE` | `action_damage` | 1 |
+| `ACTION_SKILL` | `action_skill` | 2 |
+| `ACTION_REST` | `action_rest` | 3 |
+Update C++ constants and regenerate C# from the same schema. Binary frames/shared wire vectors stay unchanged; JSON/text tools must adopt new enum strings, incompatible with uppercase spelling.
 
 `check-proto-naming` uses the real protoc to build a descriptor set for `src/proto/proto/` and `resources/photon/proto/`, then checks lower_snake_case file names and hand-written messages, fields, oneofs, enums and enum values. It excludes protoc-generated map entry class names and proto3 optional synthetic oneofs, and verifies renamed field tags/types/JSON keys plus representative old binary and JSON messages. The target runs with `check-core`, or independently:
 

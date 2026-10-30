@@ -5,7 +5,14 @@ synchronous and callback APIs; migrate `connect`, `set`, `get` and command-speci
 wrappers to named configuration and `co_await command` / `pipeline`. There is no
 blocking compatibility facade. Applications must rebuild against this interface.
 
-The public interface's single source is `src/plugins/redis/redis_module.hpp`, beside the implementation and private plugin assembly. Link `ark::redis` to obtain its configure-time build-tree copy at `ark/redis/redis_module.hpp`, even when the runtime plugin is disabled. A handwritten `-I <source>/include` alone is insufficient. The implementation class lives only in `.cpp`; the former `redis_module_impl.hpp` and plugin assembly header are private implementation inputs. Rebuild the host, plugins and affected consumers together; installed consumption uses `find_package(ark CONFIG REQUIRED COMPONENTS redis)` and the same `ark::redis` target. See [installation](../get-started/installation.md#install-and-consume-the-cmake-package) for dependencies and relocatable packages. Installation does not provide an old-binary compatibility guarantee or load a runtime module.
+| Interface use | Contract |
+| --- | --- |
+| Single source | `src/plugins/redis/redis_module.hpp`, beside implementation/private assembly |
+| Build | `ark::redis` maps `ark/redis/redis_module.hpp` at configure time, even with runtime plugins disabled; handwritten `-I <source>/include` alone is insufficient |
+| Private implementation | Concrete class only in `.cpp`; `redis_module_impl.hpp` and plugin assembly header stay private |
+| Installed consumption | `find_package(ark CONFIG REQUIRED COMPONENTS redis)`, still linking `ark::redis`; dependencies/relocation in [installation](../get-started/installation.md#install-and-consume-the-cmake-package) |
+
+Rebuild host, plugins and affected consumers together. Installation promises neither old-binary compatibility nor runtime-module loading.
 
 ```cpp
 // Consumer members: ark::redis_module* redis_{}; ark::task_group* tasks_{};
@@ -38,27 +45,16 @@ ark::task<> workflow() {
 }
 ```
 
-Configuration owns its strings, credentials, pool, protocol, response limits and
-TLS settings. `configure` returns false for a duplicate name or sealed admission;
-empty names and invalid limits throw. It may run before the Redis module's own
-`init`: the installed manager already supplies its task runtime. The official plugin
-does not read database options from the application manifest's `config` path or from
-a database XML preset. Keep that plugin's `config` empty and call `configure()` with
-owning options from a business module. Configuration is owner-thread only and is
-not dynamically replaced. Set `options.tls = true` and configure certificate
-verification through `options.pool` when building with `ARKNET_ENABLE_SSL`;
-requesting TLS in a build without SSL throws. See [build and runtime activation](build-options.md#native-database-plugins)
-and [managed task lifecycle](../guides/tasks.md).
+Configuration owns strings, credentials, pool/protocol/response limits and TLS settings; owner-thread only, without dynamic replacement. `configure` returns false for duplicate/sealed admission and throws for empty names/invalid limits. It may precede module `init`: the installed manager supplies the runtime. No manifest `config` or database XML reader; leave `config` empty and pass owning options through a business module’s `configure()`. With `ARKNET_ENABLE_SSL`, use `options.tls = true` and `options.pool` certificate verification; requesting TLS without SSL throws. See [build/runtime activation](build-options.md#native-database-plugins) and [managed task lifecycle](../guides/tasks.md).
 
-Command factories take owning values and preserve inputs before the lazy task
-starts. The returned task also pins its connection state, including when the
-facade is destroyed before an unstarted task is used. Run operations on the exact
-manager task executor. A foreign executor throws before native submission.
-Unknown connection names return native `not_connected` (`closed` after sealing).
-Local bridge admission failures throw; invalid deadlines return native
-`invalid_command`. Native transport/database failures remain `arknet::redis::result`.
-Redis error replies remain values in the ordered `replies` vector. A true result
-reports operation status; it does not mean every Redis reply is successful.
+Command factories own inputs before lazy start. Returned tasks pin connection state even if the facade is destroyed before an unstarted task is used.
+
+| Request boundary | Result |
+| --- | --- |
+| Executor | Exact manager task executor required; foreign executors throw before native submission |
+| Unknown connection / sealed admission | Native `not_connected` / `closed` |
+| Bridge admission / invalid deadline | Admission throws; invalid deadlines return native `invalid_command` |
+| Native error / replies | Retains `arknet::redis::result`; error replies stay in ordered `replies`. True reports operation status, not success of every reply |
 
 `pipeline(name, commands, timeout)` returns one native result containing ordered
 replies. Its timeout covers pool acquisition and execution. `max_operations`
@@ -68,24 +64,14 @@ capacity. Input rejection reports native `queue_full`. Configure native pool,
 waiter and response bounds separately in `options.pool`. These are per-connection
 limits, not a whole-process memory limit.
 
-Cancellation requests flow from the manager's managed task group into the native
-service. A cancelled waiting acquire is known unsent; cancellation after sending
-can have `command_may_have_run == true`. No write replay or synthetic success is
-introduced. The native result, including partial replies, stays owned by its
-caller after pool retirement.
+Managed-group cancellation reaches the native service. Cancelled waiting acquires are unsent; after sending, `command_may_have_run == true` is possible. No write replay or synthetic success. Caller-owned native results, including partial replies, survive pool retirement.
 
-The Redis plugin runs `service.update()` and then bridge dispatch during manager
-updates. The manager polls its shared task runtime centrally and resumes consumer
-coroutines on its owner thread. arknet owns native
-IO and worker threads. Application code must keep updating the manager while
-stopping it: `stop()` can return false while accepted workflows finish, including
-later commands in the same workflow. Readiness only observes logical activity;
-it does not seal the service early. After all managed tasks and delivery stacks
-have returned, `pre_shut` seals admission and calls native `retire_native()` from
-the host lifecycle frame. A false return or exception preserves resources and
-prevents `shut` from releasing them. `service.stop()` is not the retirement
-barrier. Calling lifecycle functions recursively from a running task is not a
-supported teardown path; manager shutdown defers that work to its host frame.
+| Update / shutdown | Contract |
+| --- | --- |
+| Delivery | Plugin runs `service.update()` then bridge dispatch; manager centrally polls the shared runtime and resumes coroutines on its owner. arknet owns native IO/workers |
+| Drain | Keep updating while `stop()` returns false; accepted workflows may submit later commands. Readiness observes logical activity without sealing early |
+| Native retirement | After tasks/delivery stacks return, host-frame `pre_shut` seals admission and calls `retire_native()`. False/exception retains resources and prevents `shut` release; `service.stop()` is not this barrier |
+| Reentrancy | Recursive lifecycle teardown from a running task is unsupported; manager defers it to the host frame |
 
 `tests/database/public_redis_module.cpp` covers the public facade against a
 bounded loopback RESP protocol peer: owning input/results, ordered pipeline
