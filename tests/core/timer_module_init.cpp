@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdlib>
 #include <new>
+#include <string>
 
 #include "../network/doctest.h"
 
@@ -81,6 +82,41 @@ public:
     bool removed{};
     bool persistent_failure{};
     unsigned normal_stops{};
+};
+
+struct independent_resource
+{
+    unsigned releases{};
+    std::size_t wheel_storage_at_release{};
+};
+
+ark::startup_cleanup_result release_independent_resource(void* pointer) {
+    auto& resource = *static_cast<independent_resource*>(pointer);
+    ++resource.releases;
+    resource.wheel_storage_at_release = live_count();
+    return ark::startup_cleanup_result::done;
+}
+
+class enrolling_failure final : public ark::module
+{
+public:
+    bool post_init() override {
+        enrolled = manager->prepare_startup_cleanup("after_timer", "test", resource, release_independent_resource);
+        if (arm)
+        {
+            timer_id =
+                timer->add_forever_timer(ark::null_guid, std::chrono::milliseconds(10), &target, &receiver::on_timer);
+        }
+        return false;
+    }
+
+    ark::plugin_manager* manager{};
+    ark::timer_module* timer{};
+    std::shared_ptr<independent_resource> resource;
+    receiver target;
+    std::uint64_t timer_id{};
+    bool arm{};
+    bool enrolled{};
 };
 
 } // namespace
@@ -265,6 +301,83 @@ TEST_CASE("Production timer rejected enrollment acquires no wheel storage") {
     CHECK_FALSE(timer->init());
     CHECK(nothrow_calls == calls);
     CHECK(live_count() == 0);
+}
+
+TEST_CASE("Production Timer composes with independent cleanup owners and retains unsafe predecessors") {
+    for (const bool arm : {false, true})
+    {
+        ark::plugin_manager manager;
+        auto before = std::make_shared<independent_resource>();
+        auto after = std::make_shared<independent_resource>();
+        REQUIRE(manager.prepare_startup_cleanup("before_timer", "test", before, release_independent_resource));
+        auto timer = ark::detail::make_timer_module();
+        timer->set_plugin_manager(&manager);
+        enrolling_failure later;
+        later.manager = &manager;
+        later.timer = timer.get();
+        later.resource = after;
+        later.arm = arm;
+        REQUIRE(manager.add_module("Timer", timer.get()));
+        REQUIRE(manager.add_module("later", &later));
+        REQUIRE_FALSE(manager.start(1, {}, {}, {}));
+        REQUIRE(later.enrolled);
+        REQUIRE(live_count() == ark::free_timer_size + ark::tv_num);
+
+        const auto attempts = allocation_attempts;
+        fail_allocations = true;
+        const auto result = manager.cleanup_failed_startup();
+        const auto repeated = manager.cleanup_failed_startup();
+        const auto after_cleanup = allocation_attempts;
+        fail_allocations = false;
+        CHECK(after_cleanup == attempts);
+        CHECK(repeated == result);
+        CHECK(after->releases == 1);
+        CHECK(after->wheel_storage_at_release == ark::free_timer_size + ark::tv_num);
+        CHECK(later.target.calls == 0);
+        if (arm)
+        {
+            REQUIRE(later.timer_id != 0);
+            CHECK(result == ark::startup_cleanup_result::unsafe);
+            CHECK(before->releases == 0);
+            CHECK(live_count() == ark::free_timer_size + ark::tv_num);
+            // Test-only retirement with all receivers and code still alive.
+            CHECK(timer->remove_timer(later.timer_id));
+            CHECK(timer->pre_shut());
+            CHECK(manager.cleanup_failed_startup() == ark::startup_cleanup_result::unsafe);
+            CHECK(before->releases == 0);
+        }
+        else
+        {
+            CHECK(result == ark::startup_cleanup_result::done);
+            CHECK(before->releases == 1);
+            CHECK(before->wheel_storage_at_release == 0);
+        }
+        CHECK(live_count() == 0);
+    }
+}
+
+TEST_CASE("Production Timer rejects a full cleanup registry before wheel acquisition") {
+    ark::plugin_manager manager;
+    std::array<std::shared_ptr<independent_resource>, ark::startup_cleanup_capacity> resources;
+    for (std::size_t index{}; index < resources.size(); ++index)
+    {
+        resources[index] = std::make_shared<independent_resource>();
+        REQUIRE(manager.prepare_startup_cleanup(
+            "external_" + std::to_string(index), "test", resources[index], release_independent_resource));
+    }
+    auto timer = ark::detail::make_timer_module();
+    timer->set_plugin_manager(&manager);
+    REQUIRE(manager.add_module("Timer", timer.get()));
+    const auto calls = nothrow_calls;
+    CHECK_FALSE(manager.start(1, {}, {}, {}));
+    CHECK(nothrow_calls == calls);
+    CHECK(live_count() == 0);
+    CHECK(manager.cleanup_failed_startup() == ark::startup_cleanup_result::done);
+    for (const auto& resource : resources)
+    {
+        CHECK(resource->releases == 1);
+        CHECK(resource->wheel_storage_at_release == 0);
+    }
 }
 
 TEST_CASE("Production timer wheel object allocation failure leaves an independent prepared capsule") {

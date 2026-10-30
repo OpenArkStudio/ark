@@ -1,6 +1,6 @@
 # Opt-in startup-failure cleanup
 
-Startup failure defaults to immediate exit `1`. An independent owned resource explicitly enrolled through `plugin_manager::prepare_startup_cleanup()` may run its failure cleanup once first. The preallocated registry supports up to 16 independently owned resources across modules and validates private wheels without business callbacks; shared Utility Timer and IO remain outside it. Acquisition source-map baseline: [d9618a66](https://github.com/OpenArkStudio/ark/tree/d9618a663fc2069b734007812590c88736d17ed5). There is no same-process retry, normal-shutdown rollback or inferred external business/transaction rollback; Registry and hot update remain paused.
+Startup failure defaults to immediate exit `1`. An independent owned resource explicitly enrolled through `plugin_manager::prepare_startup_cleanup()` may run its failure cleanup once first. The preallocated registry supports up to 16 independently owned resources across modules and covers callback-free Utility Timer wheels; retained business callbacks and shared IO require separate retirement. Acquisition source-map baseline: [d9618a66](https://github.com/OpenArkStudio/ark/tree/d9618a663fc2069b734007812590c88736d17ed5). There is no same-process retry, normal-shutdown rollback or inferred external business/transaction rollback; Registry and hot update remain paused.
 
 ## What exists when startup fails
 
@@ -44,7 +44,7 @@ The API accepts owner and code-owner keys, a strong `shared_ptr<void>` and a pla
 
 Preparation is allowed at idle before startup or during starting/installing; cleanup is eligible only after the single `start()` returned false or threw and unwound. A finished attempt cannot start again. Embedded callers must still exit `1` after cleanup; this is no retry/recovery API. A separate constructor failure before entering start keeps its existing RAII/default-exit behavior.
 
-The constructor retains the capsule, moves the wheel handle into it without throwing, then initializes the wheel. Cleanup never accesses an incomplete module; the host retains the capsule if construction throws. The action checks absent/partial ownership, calls the **owned resource's** `time_wheel_manager::shut()`, resets the handle and returns `done`. It does not call module pre-shutdown/shutdown or invoke business callbacks. The permanent fixture owns a private wheel without threads, external publication or borrowed providers; it does not certify cleanup of shared Utility Timer consumers.
+The constructor retains the capsule, moves the wheel handle into it without throwing, then initializes the wheel. Cleanup never accesses an incomplete module; the host retains the capsule if construction throws. The action checks absent/partial ownership, calls the **owned resource's** `time_wheel_manager::shut()`, resets the handle and returns `done`. It does not call module pre-shutdown/shutdown or invoke business callbacks. The permanent fixture owns a private wheel without threads, external publication or borrowed providers; it does not certify cleanup of shared Utility Timer consumers; the guarded Timer integration below retains their business callbacks.
 
 ![Startup cleanup and retained failure exit](../assets/startup-failure-cleanup.svg)
 
@@ -64,6 +64,19 @@ The emergency diagnostic uses a 1024-byte stack buffer and native stderr writes,
 **Independent HTTP exception safety:** a cpp-private reservation owner releases only the key it successfully reserved when construction/binding/start returns false or throws. Rejected duplicate reservations cannot release another module's key. After native start, a nonthrowing string swap transfers the reservation to the module for normal `pre_shut()` release; no public API, class layout or lifecycle changes are required. Port `0` continues to bypass fixed-endpoint reservation.
 
 `check-http-startup-failure` compiles the production cpp in an isolated test translation unit. It persistently rejects allocation once the private set contains the key until the exception is caught, and verifies that the first failed allocation is the native server object, before its constructor or workers run. A native listen-failure case occupies a local port and checks reservation release after the false return. The same endpoint must then start successfully after either failure; duplicate rejection/shutdown must preserve the live owner's reservation, and shutdown permits reuse. A long-string ownership test verifies that the successful transfer is `noexcept`, preserves its storage and makes no allocation. The existing network routing/duplicate/restart regressions remain in `check-network`. This repairs local endpoint bookkeeping; it does not enroll HTTP in framework startup-failure cleanup or establish nonblocking native IO retirement.
+
+## Utility Timer
+
+Timer prepares its independent capsule before allocating the wheel object or storage. Cleanup uses `has_retained_callbacks()` to inspect every owned record, including completed timers and additions interrupted before active-ID registration.
+
+| Wheel state | Failure cleanup |
+| --- | --- |
+| No retained callbacks | Release the wheel and return `done` |
+| Any retained business callback | Return `unsafe`; retain the wheel, callback and required code until exit |
+
+Explicit timer removal permits release only if no other callback remains. Successful startup disarms enrollment while Timer keeps its wheel. No normal hooks, business polling, shared IO closure or consumer rollback run.
+
+`check-timer` and `check-startup-cleanup` cover real Timer initialization and later failures, persistent allocation failure, and composition with other cleanup owners. A retained callback stops traversal before older owners; repeated cleanup does not retry.
 
 ## IO stays outside the first slice
 
