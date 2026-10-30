@@ -7,12 +7,12 @@ foreach(argument PROGRAM UTILITY_PLUGIN SAMPLE_PLUGIN SOURCE_ROOT RUNTIME_DIR)
 endforeach()
 file(MAKE_DIRECTORY "${RUNTIME_DIR}/bin" "${RUNTIME_DIR}/conf")
 file(COPY "${PROGRAM}" "${UTILITY_PLUGIN}" "${SAMPLE_PLUGIN}" DESTINATION "${RUNTIME_DIR}/bin")
-file(COPY "${SOURCE_ROOT}/config/timers.app.toml" "${SOURCE_ROOT}/config/log.conf"
+file(COPY "${SOURCE_ROOT}/config/timers.app.toml"
     DESTINATION "${RUNTIME_DIR}/conf")
 get_filename_component(executable "${PROGRAM}" NAME)
 file(WRITE "${RUNTIME_DIR}/exit.txt" "exit\n")
 set(command "${RUNTIME_DIR}/bin/${executable}"
-    --busid=1.0.1.1 --name=timers --app_conf=conf/timers.app.toml --log_conf=conf/log.conf)
+    --busid=1.0.1.1 --name=timers --app_conf=conf/timers.app.toml)
 if(UNIX)
     list(PREPEND command sh "${SOURCE_ROOT}/tests/app/application_preset_stop.sh" "${RUNTIME_DIR}/output.pipe" 13)
 endif()

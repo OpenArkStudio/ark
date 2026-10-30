@@ -21,7 +21,7 @@ foreach(mode IN LISTS modes)
     execute_process(
         COMMAND "${PROGRAM}" --busid=1.0.1.1 --name=shutdown-deadline-test
             "--app_conf=${directory}/application.toml"
-            "--log_conf=${SOURCE_ROOT}/config/log.conf" --shutdown_timeout_ms=50
+             --shutdown_timeout_ms=50
         WORKING_DIRECTORY "${directory}" INPUT_FILE "${directory}/exit.txt"
         RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE errors TIMEOUT 5)
     file(WRITE "${directory}/output.log" "${output}\n${errors}")

@@ -16,7 +16,7 @@ Complete [Install and build](installation.md) first. The commands below use its 
 
 ## Prepare a runtime directory
 
-Stage binaries, the manifest and logger settings in a runtime directory separate from source configuration.
+Stage binaries and the application manifest in a runtime directory separate from source configuration.
 
 <Tabs syncKey="timers-platform">
 
@@ -25,7 +25,7 @@ Stage binaries, the manifest and logger settings in a runtime directory separate
 ```sh
 mkdir -p run/timers/bin run/timers/conf
 cp -R app-build/bin/. run/timers/bin/
-cp config/timers.app.toml config/log.conf run/timers/conf/
+cp config/timers.app.toml run/timers/conf/
 ```
 
 </TabItem>
@@ -35,7 +35,7 @@ cp config/timers.app.toml config/log.conf run/timers/conf/
 ```powershell
 New-Item -ItemType Directory -Path run/timers/bin, run/timers/conf -Force | Out-Null
 Copy-Item app-build/bin/* run/timers/bin/ -Recurse -Force
-Copy-Item config/timers.app.toml, config/log.conf run/timers/conf/
+Copy-Item config/timers.app.toml run/timers/conf/
 ```
 
 </TabItem>
@@ -48,8 +48,7 @@ The required runtime files are:
 run/timers/
 ├── bin/       app + ark_utility_plugin + timers_plugin from the same build
 └── conf/
-    ├── timers.app.toml
-    └── log.conf
+    └── timers.app.toml
 ```
 
 The copy includes other build artifacts; `timers.app.toml` selects only the two named libraries. No separate `timers.conf` or `resource/` is required.
@@ -69,7 +68,7 @@ Run from `run/timers/`: the manifest's `bin/` and `conf/` paths are relative to 
 ```sh
 cd run/timers
 ./bin/app --busid=1.0.1.1 --name=timers \
-  --app_conf=conf/timers.app.toml --log_conf=conf/log.conf
+  --app_conf=conf/timers.app.toml
 ```
 
 </TabItem>
@@ -79,7 +78,7 @@ cd run/timers
 ```powershell
 cd run/timers
 .\bin\app.exe --busid=1.0.1.1 --name=timers `
-  --app_conf=conf/timers.app.toml --log_conf=conf/log.conf
+  --app_conf=conf/timers.app.toml
 ```
 
 </TabItem>
@@ -94,7 +93,7 @@ Debug builds use `app_d` or `app_d.exe` and plugin filenames with `_d` before th
 
 ## Check the result
 
-The console should show a `timers_module` log with `PostInit`. The sample registers a timer that emits `timer log` at ten-second intervals, five times. The supplied logger settings also write beneath `binlog/` in the runtime directory.
+The console should show a `timers_module` log with `PostInit`. The sample registers a timer that emits `timer log` at ten-second intervals, five times. Omitted logger settings use console INFO output. Add `[logging]` to this same manifest to enable file output; see [logging settings](../service-manifests.md#embedded-logging).
 
 Stop with Ctrl+C on macOS/Linux, or enter `exit` in the Windows application console. Timers should log `PreShut`, then `Shut`.
 

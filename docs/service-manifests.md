@@ -41,12 +41,44 @@ Follow the [application build instructions](networking.md) to build `app`, `ark_
 ```sh
 mkdir -p run/timers/bin run/timers/conf
 cp -R out/bin/. run/timers/bin/
-cp config/timers.app.toml config/log.conf run/timers/conf/
+cp config/timers.app.toml run/timers/conf/
 cd run/timers
 ./bin/app --busid=1.0.0.1 --name=timers -a conf/timers.app.toml
 ```
 
-Debug builds use `app_d`. Bus, HTTP and Consul runtime settings use TOML; the application manifest only selects their paths. See the [Bus settings](reference/bus.md#configure-processes-and-relationships) and the HTTP/Consul examples below. Logging still reads the XML `conf/log.conf`; Kernel and exported business data retain their XML formats.
+Debug builds use `app_d`. Bus, HTTP and Consul runtime settings use TOML; the application manifest only selects their paths. See the [Bus settings](reference/bus.md#configure-processes-and-relationships) and the HTTP/Consul examples below. Logging uses the same application manifest; Kernel and exported business data retain their XML formats.
+
+## Embedded logging
+
+Logging is optional. Without `[logging]`, the launcher uses a synchronous console logger at INFO with a timestamp and source location, and creates no log files. It never reads `log.conf`. Add settings to the same application file:
+
+```toml
+[logging]
+console = true
+file = true
+level = "info"
+pattern = "%^[%Y%m%d %H:%M:%S.%e][%-5l]%v%$"
+output_path = "./binlog"
+queue_count = 0
+
+[logging.loggers.oss]
+output_path = "./binlog/oss"
+```
+
+| Field | Default | Contract |
+| --- | --- | --- |
+| `console` / `file` | `true` / `false` | Boolean output switches; at least one must be enabled. File output is explicit and rotates into date directories and hourly filenames. |
+| `level` | `"info"` | `trace`, `debug`, `info`, `warn`, `error`, `critical` or `off`. |
+| `pattern` | Pattern shown above | Nonempty spdlog pattern without NUL. |
+| `output_path` | `"./binlog"` | Nonempty path without NUL; relative to the process working directory. The app name and Bus ID form the filename. Parent directories are created for file output. |
+| `queue_count` | `0` | Integer 0..65535; 0 is synchronous, positive values select a dedicated asynchronous queue. |
+| `loggers` | Empty | Named tables inherit the base settings and override supplied fields. `oss` selects the OSS logger; without it OSS uses the default logger. Other names remain available through `create_logger()`. |
+
+The same settings apply in Debug and Release. XML application manifests may embed `<logging console="true" file="false" level="info" queue_count="0"><logger name="oss" level="warn"/></logging>` alongside `<plugins>`, with the same attribute names and defaults. XML booleans also accept `1` and `0`. Plugin-specific service and business configuration stays separate.
+
+**Breaking migration:** remove `--log_conf` / `-l` from launch commands; explicitly supplying either now fails with exit code `1`. Move the selected legacy XML `debug`/`release` settings into `[logging]`: `path` becomes `output_path`, numeric levels 0..6 become the named levels above, and `console` becomes a boolean. Set `file = true` to keep file output and `queue_count = 1024` to keep the old asynchronous queue. File output in this new API follows the runtime setting, independently of `ARK_OPEN_FILE_LOG`; that build option still controls legacy library defaults. Rebuild applications, plugins and consumers because `application_manifest` has a new public layout. The direct-library XML `logger::init_logger(path, filename)` overload remains available; the launcher does not use it.
+
+Logging schema errors include the application path and field and fail before plugin loading. File initialization failures also exit with code `1`. Asynchronous output retains its existing emergency-exit limits; use `queue_count = 0` when logs must complete inline. Existing startup-failure diagnostics still use their emergency stderr path.
 
 ## HTTP and Consul plugin settings
 

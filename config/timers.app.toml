@@ -1,3 +1,4 @@
+# Logging is optional: console INFO by default; add [logging] here for overrides.
 [application]
 plugin_library_dir = "bin/"
 plugin_config_dir = "conf/"

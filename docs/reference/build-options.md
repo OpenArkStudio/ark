@@ -16,6 +16,7 @@
 | `ARK_BUILD_PLUGIN_REDIS` | `OFF` | Build the native Redis coroutine plugin; enable SSL for TLS pools |
 | `ARK_BUILD_DATABASE_TESTS` | `OFF` | Build native database and public plugin regressions; requires an explicit `ARKNET_SOURCE_DIR` |
 | `ARK_BUILD_BENCHMARKS` | `OFF` | Build standalone C++ benchmark programs |
+| `ARK_OPEN_FILE_LOG` | `ON` | Default file output for the legacy logger library API; application manifests independently select output with `logging.file` |
 | `ARK_USE_GUID_32` | `OFF` | Select the 32-bit GUID configuration; consumers inherit the setting through public interface targets |
 | `ARKNET_SOURCE_DIR` | Empty | Use an independent local arknet checkout |
 | `ARKNET_REVISION` | Repository-pinned commit | Select the fetched arknet revision; an existing CMake cache retains its value |

@@ -9,5 +9,8 @@ static_assert(
 
 int main() {
     const ark::application_manifest manifest;
-    return manifest.plugins.empty() ? 0 : 1;
+    return manifest.plugins.empty() && manifest.logging.console && !manifest.logging.file &&
+                   manifest.logging.level == "info" && manifest.logging.queue_count == 0
+               ? 0
+               : 1;
 }

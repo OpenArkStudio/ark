@@ -1,4 +1,6 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
+#include <charconv>
+#include <cstdint>
 #include <initializer_list>
 #include <string_view>
 #include <utility>
@@ -59,9 +61,114 @@ std::string read_string(
     return value->get();
 }
 
+logger_settings parse_logger(
+    const toml::table& table, const std::string& path, logger_settings result, const std::string& prefix = "logging.") {
+    for (const auto& [key, node] : table)
+    {
+        const auto field = prefix + std::string(key.str());
+        const auto invalid = [&](const char* reason) {
+            throw application_manifest_error(
+                path, field + " " + reason, node.source().begin.line, node.source().begin.column);
+        };
+        if (key == "loggers")
+        {
+            continue;
+        }
+        if (key == "console" || key == "file")
+        {
+            const auto value = node.value<bool>();
+            if (!node.is_boolean() || !value)
+            {
+                invalid("must be a boolean");
+            }
+            (key == "console" ? result.console : result.file) = *value;
+        }
+        else if (key == "queue_count")
+        {
+            const auto value = node.value<std::int64_t>();
+            if (!node.is_integer() || !value || *value < 0 || *value > 65535)
+            {
+                invalid("must be an integer between 0 and 65535");
+            }
+            result.queue_count = static_cast<std::size_t>(*value);
+        }
+        else if (key == "level" || key == "pattern" || key == "output_path")
+        {
+            const auto value = node.value<std::string>();
+            if (!value || value->empty() || value->find('\0') != std::string::npos)
+            {
+                invalid("must be a non-empty string without NUL");
+            }
+            if (key == "level")
+            {
+                if (*value != "trace" && *value != "debug" && *value != "info" && *value != "warn" &&
+                    *value != "error" && *value != "critical" && *value != "off")
+                {
+                    invalid("must be trace, debug, info, warn, error, critical or off");
+                }
+                result.level = *value;
+            }
+            else if (key == "pattern")
+            {
+                result.pattern = *value;
+            }
+            else
+            {
+                result.output_path = *value;
+            }
+        }
+        else
+        {
+            invalid("is unknown");
+        }
+    }
+    if (!result.console && !result.file)
+    {
+        fail_at(path, "logging requires console or file output", table.source());
+    }
+    return result;
+}
+
+logging_settings parse_logging(const toml::node* node, const std::string& path) {
+    logging_settings result;
+    if (node == nullptr)
+    {
+        return result;
+    }
+    const auto* table = node->as_table();
+    if (table == nullptr)
+    {
+        fail_at(path, "logging must be a table", node->source());
+    }
+    static_cast<logger_settings&>(result) = parse_logger(*table, path, result);
+    if (const auto* loggers = table->get("loggers"))
+    {
+        const auto* named = loggers->as_table();
+        if (named == nullptr)
+        {
+            fail_at(path, "logging.loggers must be a table", loggers->source());
+        }
+        for (const auto& [key, entry] : *named)
+        {
+            const auto* settings = entry.as_table();
+            if (key.str().empty() || key.str().find('\0') != std::string_view::npos || settings == nullptr)
+            {
+                fail_at(path, "logging.loggers entries require a non-empty name and table", entry.source());
+            }
+            if (settings->contains("loggers"))
+            {
+                fail_at(path, "nested logging.loggers is invalid", settings->source());
+            }
+            result.loggers.emplace(std::string(key.str()),
+                parse_logger(*settings, path, result, "logging.loggers." + std::string(key.str()) + "."));
+        }
+    }
+    return result;
+}
+
 application_manifest parse_toml(const std::string& path, std::string_view contents) {
     const auto document = config_detail::parse_toml(path, contents, "invalid TOML syntax or encoding");
-    validate_keys(document, {"application", "plugins"}, path);
+    validate_keys(document, {"application", "plugins", "logging"}, path);
     const auto* application_node = document.get("application");
     if (application_node == nullptr)
     {
@@ -74,6 +181,7 @@ application_manifest parse_toml(const std::string& path, std::string_view conten
     }
     validate_keys(*application, {"plugin_library_dir", "plugin_config_dir"}, path);
     application_manifest result;
+    result.logging = parse_logging(document.get("logging"), path);
     result.plugin_library_dir = read_string(*application, "plugin_library_dir", path);
     result.plugin_config_dir = read_string(*application, "plugin_config_dir", path);
     const auto* plugins_node = document.get("plugins");
@@ -133,6 +241,90 @@ application_manifest parse_xml(const std::string& path, const std::string& conte
         return value;
     };
     application_manifest result;
+    if (const auto* logging = root->first_node("logging"))
+    {
+        if (logging->next_sibling("logging") != nullptr)
+        {
+            fail_at(path, "duplicate XML logging element", contents,
+                static_cast<std::size_t>(logging->name() - buffer.data()));
+        }
+        const auto normalize = [&](const rapidxml::xml_node<>* element, bool named_logger) {
+            toml::table table;
+            for (const auto* attribute = element->first_attribute(); attribute; attribute = attribute->next_attribute())
+            {
+                const std::string key(attribute->name(), attribute->name_size());
+                const auto value = read_attribute(element, key.c_str());
+                const auto invalid = [&] {
+                    fail_at(path, ("invalid logging." + key).c_str(), contents,
+                        static_cast<std::size_t>(attribute->value() - buffer.data()));
+                };
+                for (const auto* previous = element->first_attribute(); previous != attribute;
+                     previous = previous->next_attribute())
+                {
+                    if (key == std::string_view(previous->name(), previous->name_size()))
+                    {
+                        invalid();
+                    }
+                }
+                if (key == "name" && named_logger)
+                {
+                    continue;
+                }
+                if (key == "console" || key == "file")
+                {
+                    if (value != "true" && value != "false" && value != "1" && value != "0")
+                    {
+                        invalid();
+                    }
+                    table.insert(key, value == "true" || value == "1");
+                }
+                else if (key == "queue_count")
+                {
+                    std::int64_t number{};
+                    const auto parsed = std::from_chars(value.data(), value.data() + value.size(), number);
+                    if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size())
+                    {
+                        invalid();
+                    }
+                    table.insert(key, number);
+                }
+                else
+                {
+                    table.insert(key, value);
+                }
+            }
+            return table;
+        };
+        auto table = normalize(logging, false);
+        toml::table named;
+        for (const auto* entry = logging->first_node(); entry; entry = entry->next_sibling())
+        {
+            if (entry->type() != rapidxml::node_element)
+            {
+                continue;
+            }
+            const auto name = read_attribute(entry, "name");
+            if (std::string_view(entry->name(), entry->name_size()) != "logger" || name.empty() || named.contains(name))
+            {
+                fail_at(path, "invalid or duplicate logging.logger name", contents,
+                    static_cast<std::size_t>(entry->name() - buffer.data()));
+            }
+            if (entry->first_node() != nullptr)
+            {
+                for (const auto* child = entry->first_node(); child; child = child->next_sibling())
+                {
+                    if (child->type() == rapidxml::node_element)
+                    {
+                        fail_at(path, "nested XML logging.logger element is invalid", contents,
+                            static_cast<std::size_t>(child->name() - buffer.data()));
+                    }
+                }
+            }
+            named.insert(name, normalize(entry, true));
+        }
+        table.insert("loggers", std::move(named));
+        result.logging = parse_logging(&table, path);
+    }
     result.plugin_library_dir = read_attribute(plugins, "plugin_lib_dir");
     result.plugin_config_dir = read_attribute(plugins, "plugin_conf_dir");
     for (auto* plugin = plugins->first_node("plugin"); plugin != nullptr; plugin = plugin->next_sibling())

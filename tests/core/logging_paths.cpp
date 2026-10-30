@@ -222,3 +222,111 @@ TEST_CASE("Logging empty output directory keeps the logger and file relative to 
     CHECK(read_log(output) == std::string("relative output") + spdlog::details::os::default_eol);
 #endif
 }
+
+TEST_CASE("embedded logger defaults create only a synchronous console INFO sink") {
+    log_directory files;
+    temporary_current_directory current(files.directory);
+    ark::logger logger;
+    REQUIRE(logger.init_logger(ark::logging_settings{}, "default.log"));
+    const auto active = spdlog::get("default:" + (std::filesystem::path("./binlog") / "default.log").string());
+    REQUIRE(active != nullptr);
+    CHECK(active->level() == spdlog::level::info);
+    CHECK(active->sinks().size() == 1);
+    CHECK(std::dynamic_pointer_cast<spdlog::async_logger>(active) == nullptr);
+    CHECK_FALSE(std::filesystem::exists("binlog"));
+    logger.log_t(ark::detail::log_source_location(), spdlog::level::info, "default logger works");
+    logger.log_oss(spdlog::level::info, "fallback", "works");
+    CHECK_FALSE(logger.init_logger(ark::logging_settings{}, "second.log"));
+}
+
+TEST_CASE("embedded file logging and named async loggers honor explicit settings") {
+    log_directory files;
+    ark::logging_settings settings;
+    settings.console = false;
+    settings.file = true;
+    settings.pattern = "%v";
+    settings.output_path = (files.directory / "logs with spaces").string();
+    settings.level = "warn";
+    settings.loggers["oss"] = settings;
+    settings.loggers["oss"].queue_count = 8;
+    ark::logger logger;
+    REQUIRE(logger.init_logger(settings, "nested/application.log"));
+    const auto path = std::filesystem::path(settings.output_path) / "nested/application.log";
+    const auto active = spdlog::get("default:" + path.string());
+    REQUIRE(active != nullptr);
+    CHECK(active->sinks().size() == 1);
+    CHECK(active->level() == spdlog::level::warn);
+    active->warn("explicit file output");
+    CHECK(read_log(filename_calculator::calc_filename(native_filename(path))) ==
+          std::string("explicit file output") + spdlog::details::os::default_eol);
+    const auto oss = spdlog::get("oss:" + path.string());
+    CHECK(std::dynamic_pointer_cast<spdlog::async_logger>(oss) != nullptr);
+    REQUIRE(logger.create_logger(1, "oss", "other.log") != nullptr);
+    CHECK(logger.create_logger(2, "missing", "missing.log") == nullptr);
+}
+
+TEST_CASE("failed logger registration preserves the existing logger and default overrides apply") {
+    ark::logging_settings settings;
+    settings.loggers["default"] = settings;
+    settings.loggers["default"].level = "error";
+    ark::logger owner;
+    REQUIRE(owner.init_logger(settings, "registration.log"));
+    const auto active = spdlog::get("default:" + (std::filesystem::path("./binlog") / "registration.log").string());
+    REQUIRE(active != nullptr);
+    CHECK(active->level() == spdlog::level::err);
+    {
+        ark::logger duplicate;
+        CHECK_THROWS_AS(duplicate.init_logger(settings, "registration.log"), spdlog::spdlog_ex);
+    }
+    CHECK(spdlog::get("default:" + (std::filesystem::path("./binlog") / "registration.log").string()) == active);
+    ark::logger invalid;
+    settings.queue_count = 65536;
+    CHECK_THROWS_AS(invalid.init_logger(settings, "invalid.log"), std::invalid_argument);
+}
+
+TEST_CASE("owned asynchronous logging drains its queue when the wrapper is released") {
+    log_directory files;
+    ark::logging_settings settings;
+    settings.console = false;
+    settings.file = true;
+    settings.pattern = "%v";
+    settings.output_path = files.directory.string();
+    settings.queue_count = 8;
+    {
+        ark::logger logger;
+        REQUIRE(logger.init_logger(settings, "drain.log"));
+        for (int i = 0; i < 32; ++i)
+        {
+            logger.log_t(ark::detail::log_source_location(), spdlog::level::info, "async marker {}", i);
+        }
+    }
+    const auto content = read_log(filename_calculator::calc_filename(native_filename(files.directory / "drain.log")));
+    CHECK(content.find("async marker 0") != std::string::npos);
+    CHECK(content.find("async marker 31") != std::string::npos);
+    CHECK(spdlog::get("default:" + (files.directory / "drain.log").string()) == nullptr);
+}
+
+TEST_CASE("legacy direct-library XML logger configuration remains explicit and usable") {
+    log_directory files;
+    const auto config_path = files.directory / "legacy.xml";
+    const auto default_dir = files.directory / "legacy-default";
+    const auto oss_dir = files.directory / "legacy-oss";
+    {
+        std::ofstream output(config_path);
+        output << "<xml>";
+        for (const auto& [name, directory] : {std::pair{"default", default_dir}, std::pair{"oss", oss_dir}})
+        {
+            output << "<logger name='" << name << "' queue_count='0' path='" << directory.string() << "'>"
+                   << "<debug console='1' level='2' pattern='%v'/>"
+                   << "<release console='1' level='2' pattern='%v'/></logger>";
+        }
+        output << "</xml>";
+    }
+    ark::logger logger;
+    REQUIRE(logger.init_logger(config_path.string(), "legacy.log"));
+    CHECK(spdlog::get((default_dir / "legacy.log").string()) != nullptr);
+    CHECK(spdlog::get((oss_dir / "legacy.log").string()) != nullptr);
+    logger.log_t(ark::detail::log_source_location(), spdlog::level::info, "legacy explicit config works");
+    logger.log_oss(spdlog::level::info, "legacy", "oss works");
+    CHECK_FALSE(logger.init_logger(ark::logging_settings{}, "another.log"));
+}

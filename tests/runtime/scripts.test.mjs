@@ -15,7 +15,6 @@ function fixture(t) {
   mkdirSync(join(dir, 'bin'));
   mkdirSync(join(dir, 'conf'));
   writeFileSync(join(dir, 'conf/timers.app.toml'), '[application]\n');
-  writeFileSync(join(dir, 'conf/log.conf'), '<xml/>');
   const binary = '#!/bin/sh\nprintf "%s\\n" "$PWD" "$LC_ALL" "$0" "$@"\nexit 17\n';
   for (const name of ['app', 'app_d']) {
     writeFileSync(join(dir, 'bin', name), binary, { mode: 0o755 });
@@ -36,7 +35,6 @@ for (const [configuration, binary] of [['Release', 'app'], ['Debug', 'app_d']]) 
     assert.equal(realpathSync(resolve(cwd, executable)), realpathSync(join(dir, 'bin', binary)));
     assert.deepEqual(args, [
       '--busid=1.0.1.1', '--name=timers', '--app_conf=conf/timers.app.toml',
-      '--log_conf=conf/log.conf',
     ]);
   });
 }
@@ -53,7 +51,7 @@ test('default runtime is the script directory and ignores the caller working dir
 
 test('missing configuration or executable fails before launching', (t) => {
   const dir = fixture(t);
-  rmSync(join(dir, 'conf/log.conf'));
+  rmSync(join(dir, 'conf/timers.app.toml'));
   let result = spawnSync('sh', [run, 'Release', 'timers', '1.0.1.1', dir], { encoding: 'utf8' });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Missing configuration/);

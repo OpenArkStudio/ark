@@ -12,7 +12,7 @@ file(WRITE "${RUNTIME_DIR}/missing-provider.toml"
     "[[plugins]]\nname = 'timers_plugin'\n")
 execute_process(COMMAND "${PROGRAM}" --busid=1.0.1.1 --name=missing-provider
     "--app_conf=${RUNTIME_DIR}/missing-provider.toml"
-    "--log_conf=${SOURCE_ROOT}/config/log.conf"
+
     WORKING_DIRECTORY "${RUNTIME_DIR}"
     RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE errors TIMEOUT 15)
 file(WRITE "${RUNTIME_DIR}/output.log" "${output}\n${errors}")

@@ -8,11 +8,28 @@
 
 namespace ark {
 
+// Standard-library-only settings shared by the reader and runtime logger.
+struct logger_settings
+{
+    bool console{true};
+    bool file{false};
+    std::string level{"info"};
+    std::string pattern{"%^[%Y%m%d %H:%M:%S.%e][%-5l]%v%$"};
+    std::string output_path{"./binlog"};
+    std::size_t queue_count{0};
+};
+
+struct logging_settings : logger_settings
+{
+    std::unordered_map<std::string, logger_settings> loggers;
+};
+
 struct application_manifest
 {
     std::string plugin_library_dir;
     std::string plugin_config_dir;
     std::unordered_map<std::string, std::string> plugins;
+    logging_settings logging;
 };
 
 class application_manifest_error : public std::runtime_error

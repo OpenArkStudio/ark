@@ -41,7 +41,7 @@ foreach(mode false:init false:post_init false:check_config false:pre_update
         execute_process(
             COMMAND "${PROGRAM}" --busid=1.0.1.1 --name=startup-error-test
                 "--app_conf=${manifest}"
-                "--log_conf=${SOURCE_ROOT}/config/log.conf"
+
             WORKING_DIRECTORY "${RUNTIME_DIR}"
             RESULT_VARIABLE result
             OUTPUT_VARIABLE output

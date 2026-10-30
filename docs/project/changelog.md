@@ -2,7 +2,13 @@
 
 ## Unreleased
 
+### Features
+
+- Application and logger settings share one manifest, with console INFO defaults and optional file output, formatting and named loggers in the same file.
+
 ### Upgrade notes
+
+- Remove launcher flags `--log_conf` / `-l` and migrate legacy logger settings into `[logging]` in the application manifest; explicit old flags now fail with exit code `1`. Public `application_manifest` and logger type layouts change: rebuild applications, plugins and consumers together. See [migration](../service-manifests.md#embedded-logging).
 
 - Source runtime assets move out of `build/`: configuration samples to `config/`, business resources to `resources/`, offline tools to `tools/`, and the four launch/stop helpers to `deployment/scripts/`. Update external scripts and copy sources; runtime packages retain `bin/`, `conf/` and `resource/`. `build/` is only a user-selected CMake build directory; existing build outputs need not move.
 
