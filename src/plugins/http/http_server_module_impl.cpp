@@ -23,6 +23,7 @@
 #include <mutex>
 #include <set>
 #include <string>
+#include <utility>
 
 #include <arknet/http/http_server.hpp>
 
@@ -37,7 +38,11 @@ namespace ark {
 class http_server_module_impl final : public module_base<http_server_module>
 {
 public:
+    http_server_module_impl();
+
     bool init() override;
+    bool stop_accepting() override;
+    bool ready_to_shut() const override;
     bool pre_shut() override;
 
     bool start_server() override;
@@ -54,6 +59,8 @@ protected:
     uint8_t http_thread_num_{1};
 
 private:
+    struct admission_state;
+    std::shared_ptr<admission_state> admission_;
     arknet::http_router router_;
     std::unique_ptr<arknet::http_server> server_;
     std::string listen_key_;
@@ -83,13 +90,96 @@ void release_endpoint(std::string& key) {
     key.clear();
 }
 
+class endpoint_reservation final
+{
+public:
+    explicit endpoint_reservation(std::string key)
+        : key_(std::move(key))
+        , reserved_(key_.empty() || reserve_endpoint(key_)) {
+    }
+
+    ~endpoint_reservation() {
+        if (reserved_)
+        {
+            release_endpoint(key_);
+        }
+    }
+
+    endpoint_reservation(const endpoint_reservation&) = delete;
+    endpoint_reservation& operator=(const endpoint_reservation&) = delete;
+
+    bool is_reserved() const noexcept {
+        return reserved_;
+    }
+
+    void transfer_to(std::string& key) noexcept {
+        key_.swap(key);
+        reserved_ = false;
+    }
+
+private:
+    std::string key_;
+    bool reserved_;
+};
+
 } // namespace
+
+struct http_server_module_impl::admission_state
+{
+    struct request_lease
+    {
+        explicit request_lease(std::shared_ptr<admission_state> owner)
+            : owner_(std::move(owner)) {
+            std::lock_guard lock(owner_->mutex);
+            if (owner_->accepting)
+            {
+                ++owner_->pending;
+                admitted = true;
+            }
+        }
+
+        ~request_lease() {
+            if (admitted)
+            {
+                std::lock_guard lock(owner_->mutex);
+                --owner_->pending;
+            }
+        }
+
+        request_lease(const request_lease&) = delete;
+        request_lease& operator=(const request_lease&) = delete;
+
+        bool admitted = false;
+
+    private:
+        std::shared_ptr<admission_state> owner_;
+    };
+
+    mutable std::mutex mutex;
+    bool accepting = true;
+    std::size_t pending = 0;
+};
+
+http_server_module_impl::http_server_module_impl()
+    : admission_(std::make_shared<admission_state>()) {
+}
 
 bool http_server_module_impl::init() {
     auto ret = load_config();
     ARK_ASSERT_RET_VAL(ret, false);
 
     return true;
+}
+
+bool http_server_module_impl::stop_accepting() {
+    std::lock_guard lock(admission_->mutex);
+    admission_->accepting = false;
+    return true;
+}
+
+bool http_server_module_impl::ready_to_shut() const {
+    std::lock_guard lock(admission_->mutex);
+    return admission_->pending == 0;
 }
 
 bool http_server_module_impl::pre_shut() {
@@ -109,30 +199,46 @@ bool http_server_module_impl::start_server() {
 
 bool http_server_module_impl::start_server(
     std::string const& ip /* = "0.0.0.0"*/, uint16_t port /* = 8080 */, uint8_t thread_num /* = 1*/) {
+    {
+        std::lock_guard lock(admission_->mutex);
+        if (!admission_->accepting)
+        {
+            return false;
+        }
+    }
     if (server_ && server_->is_started())
     {
         return false;
     }
-    const auto endpoint = port == 0 ? std::string{} : endpoint_key(ip, port);
-    if (!endpoint.empty() && !reserve_endpoint(endpoint))
+    endpoint_reservation reservation(port == 0 ? std::string{} : endpoint_key(ip, port));
+    if (!reservation.is_reserved())
     {
         return false;
     }
     auto server = std::make_unique<arknet::http_server>(
         arknet::detail::http_frame_size, arknet::detail::max_buffer_size, std::max<unsigned>(thread_num, 1));
     server->bind_recv([this](std::shared_ptr<arknet::http_session>& session, arknet::http_route_request& request) {
+        auto lease = std::make_shared<admission_state::request_lease>(admission_);
+        if (!lease->admitted)
+        {
+            arknet::http_route_response response(arknet::http::status::service_unavailable, request.version());
+            response.set(arknet::http::field::server, "ARK");
+            response.keep_alive(false);
+            response.prepare_payload();
+            session->async_send(
+                std::move(response), [session](const arknet::error_code&, std::size_t) { session->stop(); });
+            return;
+        }
         auto response = router_(request);
         response.set(arknet::http::field::server, "ARK");
-        session->async_send(std::move(response));
+        session->async_send(std::move(response), [lease](const arknet::error_code&, std::size_t) {});
     });
     if (!server->start(ip, port))
     {
-        auto reserved_endpoint = endpoint;
-        release_endpoint(reserved_endpoint);
         return false;
     }
     server_ = std::move(server);
-    listen_key_ = endpoint;
+    reservation.transfer_to(listen_key_);
     return true;
 }
 

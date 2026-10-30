@@ -1,6 +1,6 @@
 # Startup and shutdown delivery status
 
-The lifecycle framework provides required-provider metadata, graph validation, ordered startup and one-shot consumer-first `stop_accepting()` hooks with a compatibility default. Only the controlled business fixture has migrated its root gate. Startup-failure cleanup has one opt-in slot, validated with a private standalone wheel. Official Net/HTTP ingress migration, complete dependency-aware teardown and shared IO startup-failure cleanup remain subsequent work. This status reflects [accepted source a0ba5edf](https://github.com/OpenArkStudio/ark/tree/a0ba5edf5e19da8d24ffab2a2bcc361b16d3728d); start with the [launcher guide](../guides/applications.md) for operating instructions.
+The lifecycle framework provides required-provider metadata, graph validation, ordered startup and one-shot consumer-first `stop_accepting()` hooks with a compatibility default. The HTTP server rejects new business routes and drains admitted response sends. The HTTP client rejects external roots while allowing trusted continuations of accepted work; other Net protocol entry points still need migration. Startup-failure cleanup has one opt-in slot, validated with a private standalone wheel. Other Net ingress migration, complete dependency-aware teardown and shared IO startup-failure cleanup remain subsequent work; start with the [launcher guide](../guides/applications.md) for operating instructions.
 
 The [startup-failure cleanup source map and minimum slice](startup-failure-cleanup.md) detail one-slot enrollment, constructor safety, one-shot release after failure and IO prerequisites.
 
@@ -41,7 +41,7 @@ On startup failure the launcher writes the phase/owner diagnostic, runs only exp
 | --- | --- | --- |
 | Managed tasks | `task_group::stop_accepting()`, module service publication, shared `manual_runtime::poll()` | Task count and handler budget do not measure native worker exit or elapsed shutdown time |
 | MySQL / Redis | `ready_to_shut()` observes service/bridge quiescence; `pre_shut()` seals admission and calls native retirement; `shut()` requires `native_retired()` before clearing connections | Retirement uses the pinned arknet pool's `close_and_wait()`; legacy service `stop()` only requests close/suppresses callbacks and is not this barrier |
-| Net HTTP client / routed HTTP server | Synchronous pool/server stop in `pre_shut()`; transport wrappers stop on destruction | These calls can block; default module readiness does not independently certify all callback receivers or retained external handles |
+| Net HTTP client / routed HTTP server | Close new request admission, drain requests/callbacks or routes/response sends, then synchronously stop the pool/server in `pre_shut()` | The client preserves trusted continuations; the server does not pause TCP accept. Independent background work needs separate ownership; normal native closure can still block |
 | Net service manager | Holds listeners, clients and callbacks; its current `shut()` does not explicitly retire those services | Object destruction and selected DSO tests cover concrete release paths, not a general dependency-aware callback barrier |
 
 The shared manual runtime executes user handlers on its owner thread; native IO pools keep their own threads. Do not destroy owners or unload their code until the corresponding callbacks have returned and the owning native retirement barrier has completed. A successful `dlclose`/`FreeLibrary` does not prove physical image unmapping.
@@ -63,7 +63,7 @@ The route has been selected; these are implementation boundaries, not pending po
 | Selected direction | Current delivery |
 | --- | --- |
 | Required module-level provider declarations, with missing/cycle validation and ordered startup | Available framework stage; Timers/Utility migrated, undeclared modules remain independent nodes |
-| Separate ingress quiescence while accepted tasks retain provider access | Available Core contract and controlled fixture; official Net/HTTP ingress has not migrated in the accepted source above |
+| Separate ingress quiescence while accepted tasks retain provider access | Core contract, HTTP request-level integration and controlled business fixture; other Net protocol ingress still needs migration |
 | Opt-in cleanup after startup failure, then exit `1` | Available single slot, latest-call record and private standalone-wheel validation; shared Utility Timer, IO and full phase history remain outside this slice |
 | Consumer-before-provider complete cleanup, after all active/task/readiness gates | Subsequent stage; no new general shutdown or unload guarantee is provided |
 
