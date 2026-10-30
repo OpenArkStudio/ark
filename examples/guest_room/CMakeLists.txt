@@ -13,6 +13,9 @@ target_compile_definitions(ark_guest_room_codec_tests PRIVATE
 if(UNIX)
     add_executable(ark_guest_room_server_tests ../../tests/guest_room/server.cpp)
     set_property(TARGET ark_guest_room_server_tests PROPERTY LINK_LIBRARIES ark::net ark::kernel ark::proto nlohmann_json::nlohmann_json)
+    # The controlled host observes this example's concrete type. Launcher child
+    # processes still load their own plugin independently through the manifest.
+    target_link_libraries(ark_guest_room_server_tests PRIVATE guest_room_plugin)
     add_custom_target(check-guest-room-server
         COMMAND ${CMAKE_COMMAND} "-DBIN_DIR=$<TARGET_FILE_DIR:guest_room_plugin>"
             "-DRUNTIME_DIR=${CMAKE_CURRENT_BINARY_DIR}/native-runtime" -DHOST=127.0.0.1 -DPORT=19191

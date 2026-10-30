@@ -263,8 +263,10 @@ unload guarantee. Message pointers remain borrowed for that invocation; avoid a
 strong service capture creating a service/callback ownership cycle. Handler
 exceptions follow the existing callback path; provide a nonthrowing rejection
 handler. This header-only addition changes no service virtual table, class layout
-or wire format. The existing guest-room and unmarked business registrations are
-not automatically migrated.
+or wire format. The [guest room](../../examples/guest_room/README.md#stop-new-business-requests)
+explicitly migrates Join/Move/Action with the existing Protobuf errors and budgets;
+heartbeats and connection events remain ordinary callbacks. Other unmarked
+business registrations are not automatically migrated.
 
 `check-net-external-root` (Core tests plus Protobuf) exercises the registered
 wrapper with a contract recorder across running, stopping, draining, timed-out,
