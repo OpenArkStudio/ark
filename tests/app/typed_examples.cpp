@@ -33,6 +33,8 @@ static_assert(std::derived_from<ark::module_lifecycle_module, ark::module_base<a
 static_assert(std::derived_from<ark::entity_operations_module, ark::module_base<ark::module>>);
 static_assert(std::same_as<decltype(&ark::entity_operations_module::update), decltype(&ark::module::update)>);
 
+#include "owner_drain.hpp"
+
 namespace {
 
 struct timer_receiver
@@ -196,8 +198,10 @@ int main(int argc, char* argv[]) {
         }
         require(timer.calls == 1 && timer.timer_id == timer_id && timer.entity_id == first_id,
             "Utility timer must fire once through owner-thread updates with original callback arguments");
-        require(manager.stop(60), "Sample shutdown did not complete");
-        require(manager.stop(61), "Repeated stop must not unregister Utility modules twice");
+        int64_t tick = 59;
+        ark::test::drain_owner(
+            manager, [&] { return ++tick; }, std::chrono::steady_clock::now() + std::chrono::seconds(5), sample);
+        require(manager.stop(++tick), "Repeated stop must not unregister Utility modules twice");
         if (sample == "entity_operations")
         {
             require(entity_events.destroyed == 4, "Shutdown must destroy each demonstration player exactly once");

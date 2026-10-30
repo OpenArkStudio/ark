@@ -10,6 +10,7 @@
 #include <ark/bus/msg_module.hpp>
 #include <ark/net/net_service_manager_module.hpp>
 #include <ark/plugin_manager.hpp>
+#include "owner_drain.hpp"
 
 namespace {
 
@@ -145,8 +146,10 @@ check_timeout = '3s'
         "Bus send did not propagate the transport's failure");
     require(network->remove_net_connection_bus(target.bus_id), "Net relation removal failed");
     require(manager.update(10), "Bus/Net owner update failed");
-    require(manager.stop(20) && manager.stop(21) &&
-                manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopped,
+    int64_t tick = 19;
+    ark::test::drain_owner(
+        manager, [&] { return ++tick; }, std::chrono::steady_clock::now() + std::chrono::seconds(5), "Bus actual DSOs");
+    require(manager.stop(++tick) && manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopped,
         "Bus normal repeated shutdown failed");
     std::cout << "Bus actual DSOs: interface keys, TOML queries, routed Protobuf header/body, send failures "
                  "and normal repeated shutdown passed\n";

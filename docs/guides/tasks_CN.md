@@ -78,7 +78,7 @@ runtime 和组须在同一线程构造、操作和销毁。`manual_runtime` 不�
 独立任务组和工具保留直接轮询 API。宿主和所有插件须一起重新构建，使用更新后的内联管理器阶段行为；
 不增加虚函数槽或对象数据。
 
-`manager.stop(timestamp)` 先关闭所有组的顶层任务准入，再按缓存拓扑反向执行[一次性模块停止接收钩子](modules_CN.md#停止接收新业务根请求)。活跃 update／完成回调会将钩子推迟到下一次外层 owner frame 的 stop。有任务或活跃栈未返回时，直接返回 `false`，不等待。服务和桥接须继续受理这些协程的后续操作。任务完成且回调栈退出后，再次 `stop()` 才同步执行 `pre_shut()`、`shut()` 和卸载；用户钩子可能阻塞。
+`manager.stop(timestamp)` 先关闭所有组的顶层任务准入，再按缓存拓扑反向执行[一次性模块停止接收钩子](modules_CN.md#停止接收新业务根请求)。活跃 update／完成回调会将钩子推迟到下一次外层 owner frame 的 stop。有任务或活跃栈未返回时，直接返回 `false`，不等待。服务和桥接须继续受理这些协程的后续操作。任务与回调栈排空后，`stop()` 仍可能因模块未就绪而返回 `false`，需要继续 owner 更新并重复调用。全部模块就绪后，才同步执行 `pre_shut()`、`shut()` 和卸载；用户钩子可能阻塞。
 
 `manager.stop_until(timestamp, deadline)` 接收 `std::chrono::steady_clock::time_point`。首次及后续调用中最早的截止时间持续生效，包括后来的 `stop(timestamp)`；无期限调用不能清除截止时间。没有传入截止时间时，`stop(timestamp)` 保留无限等待语义。时间检查发生在同步钩子边界，以及进入 `pre_shut()` 前。钩子超时返回后，不能再进入后续清理。超时状态不可恢复并返回 `false`；`get_shutdown_failure()` 保留阶段／模块，普通超时的 `get_shutdown_exception()` 为空。清理已开始时，已执行动作不回滚，`cleanup_timed_out` 还会停止更新。详见[启动器超时行为](applications_CN.md#确认启动并停止进程)。
 

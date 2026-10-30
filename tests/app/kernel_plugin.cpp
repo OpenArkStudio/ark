@@ -13,6 +13,7 @@
 #include <ark/kernel/kernel_module.hpp>
 #include <ark/kernel/map_module.hpp>
 #include <ark/plugin_manager.hpp>
+#include "owner_drain.hpp"
 
 namespace {
 
@@ -169,10 +170,12 @@ int main(int argc, char* argv[]) {
             "Kernel entity did not retain its map registration");
     }
     require(manager.update(1) && manager.update(2), "Kernel manager updates failed");
-    const bool stopped = manager.stop(3);
-    require(stopped, "Kernel plugin exit failed: " + manager.get_shutdown_failure());
+    int64_t tick = 2;
+    ark::test::drain_owner(
+        manager, [&] { return ++tick; }, std::chrono::steady_clock::now() + std::chrono::seconds(5),
+        "Kernel actual DSO");
     require(events.destroyed == 1, "Kernel shutdown did not dispatch entity destruction exactly once");
-    require(manager.stop(4), "Repeated Kernel stop failed");
+    require(manager.stop(++tick), "Repeated Kernel stop failed");
     if (retained)
     {
         require(std::get<std::string>(retained->fields.at(100)) == "Configured" &&

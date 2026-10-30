@@ -20,6 +20,7 @@
 
 #include <ark/net/http_client_module.hpp>
 #include <ark/plugin_manager.hpp>
+#include "owner_drain.hpp"
 
 namespace {
 using namespace std::chrono_literals;
@@ -227,7 +228,8 @@ int main(int argc, char* argv[]) {
         "Accepted callback continuation did not obtain its real HTTP wire response");
     require(retained.expired(), "Completed callback capture survived drain");
     require(peer.count() == 3, "An external root reached the peer or an accepted continuation was duplicated");
-    wait_for([&] { return manager.stop(++tick); }, update);
+    ark::test::drain_owner(
+        manager, [&] { return ++tick; }, std::chrono::steady_clock::now() + 5s, "HTTP-client actual Net DSOs");
     client = nullptr;
     require(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopped && manager.stop(++tick),
         "Actual Net DSO normal/repeated shutdown did not complete");
