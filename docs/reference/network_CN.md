@@ -22,13 +22,12 @@ Net 的全部源头文件与实现位于 `src/plugins/net/`。`ark::net` API 目
 `ARK_BUILD_PROTO=ON`；此时 `ark::net` 会传递 `ark::proto`。直接端点头仍可在关闭协议生成时使用。
 API 目标本身不会构建或加载运行时动态库。
 
-私有插件采用 `plugin_base`，工厂返回 `std::unique_ptr<net_service_manager_module>`，
-具体类型在 cpp 中继承 `module_base<net_service_manager_module>`。查找继续使用公开接口的
-RTTI 键。另一个私有工厂返回 `std::unique_ptr<http_client_module>`，具体类型仅在
-`http_client_module_impl.cpp` 内声明，继承 `module_base<http_client_module>`。
-HTTP 客户端仍按其公开接口键注册。两个模块仍参与更新；HTTP 先安装、最后卸载。
-库名 `ark_net_plugin` 与 `DllEntryPlugin`／`DllExitPlugin` 签名保持不变，arknet 继续拥有
-IO 工作线程与传输操作。
+| 私有构造 | 接口与行为 |
+| --- | --- |
+| 服务管理器 | `std::unique_ptr<net_service_manager_module>` 工厂；cpp 内继承 `module_base<net_service_manager_module>`，保留公开接口 RTTI 键 |
+| HTTP 客户端 | `std::unique_ptr<http_client_module>` 工厂；仅 `http_client_module_impl.cpp` 声明 `module_base<http_client_module>` 实现，按公开接口键注册 |
+
+私有插件用 `plugin_base`；两模块均更新，HTTP 先装后卸。库名 `ark_net_plugin`、`DllEntryPlugin`／`DllExitPlugin` 签名不变；IO 工作线程与传输仍归 arknet。
 
 **头文件迁移：**移除 `<ark/net/net_service_manager_module_impl.hpp>`、
 `<ark/net/net_plugin.hpp>` 和 `<ark/net/http_client_module_impl.hpp>` 的包含。通过应用清单加载插件，再获取已注册的
@@ -45,11 +44,12 @@ IO 工作线程与传输操作。
 
 ## HTTP 客户端停止接收与排空
 
-官方 `http_client_module` 覆盖现有模块生命周期钩子。`stop_accepting()` 停止接收新的请求根，
-保留已接收的 HTTP IO；重复调用成功。基于 future 的 `get`、`post`、`async_request`，
-以及两种回调 `post` 重载，对新请求根返回 `{false, operation_aborted.message()}`。
-被拒绝的 future 立即就绪；被拒绝的回调仍等待所属线程的 `update()` 派发。
-拒绝结果的回调不获得排空期间提交后续请求的权限。
+官方 `http_client_module` 的 `stop_accepting()` 关闭新请求根，不取消已接收 HTTP IO，重复调用成功。
+
+| 停止接收后的新请求根 | 拒绝交付 |
+| --- | --- |
+| future `get`、`post`、`async_request` | `{false, operation_aborted.message()}`，立即就绪 |
+| 两种回调 `post` 重载 | 相同拒绝结果，等待所属线程 `update()`；拒绝回调不授予排空期间续接权限 |
 
 请求接口没有显式的工作流标记，只识别两种续接范围：在本客户端已接收的 HTTP 回调中同步调用，
 以及所属线程的 `manager.update()` 中由关联管理器统一轮询任务的阶段。
