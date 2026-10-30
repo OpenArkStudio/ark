@@ -22,9 +22,9 @@ auto* timers = manager.find_module<ark::timer_module>();
 const auto entity = guids->create_guid();
 ```
 
-接口指针借用于已加载插件，使用期间必须保持插件存活。定时器成员回调还借用接收者，接收者应保留到回调完成或被移除。在所属线程以毫秒时间戳推进管理器；创建定时器本身不会推进时间。schedule 模块继续使用已有后台调度器，线程池配置保持为 16。本次迁移不增加回调取消、热更新或新的停机保证。卸载前，按[模块生命周期](../guides/modules_CN.md)完成生产者和回调的收尾。
+接口借用于插件；定时器成员回调还借用接收者，均须存活至使用／回调完成或移除。所属线程用毫秒时间戳推进管理器，创建定时器不推进时间。后台 scheduler 线程池仍为 16；不增加取消、热更新或停机保证，卸载前按[模块生命周期](../guides/modules_CN.md)完成生产者／回调收尾。
 
-插件按 GUID、timer、schedule、compress 顺序安装模块，卸载顺序相反。timer 的 `pre_shut()` 仍关闭时间轮。GUID 布局、压缩级别与算法、scheduler 行为不变。动态库主体名称仍为 `ark_utility_plugin`，保留平台扩展名和 Debug `_d` 后缀。
+安装顺序仍为 GUID、timer、schedule、compress，卸载相反；timer `pre_shut()` 关闭时间轮。GUID 布局、压缩级别／算法及调度行为不变；`ark_utility_plugin` 保留平台后缀及 Debug `_d`。
 
 ## 定时器所有权与分配
 
@@ -44,17 +44,19 @@ const auto entity = guids->create_guid();
 
 ## 压缩缓冲区与并发
 
-核心辅助头 `<ark/compress/zlib.hpp>`、`<ark/compress/zstd.hpp>` 和
-`<ark/compress/lz4.hpp>` 为每次调用分配独立的堆缓冲区。成功时向输出字符串追加结果；
-拒绝输入时保留输出字符串。调用方须提供可读的输入范围，并同步对共享输出字符串的访问。
-压缩保留既有限制：算法计算的最坏输出大小必须严格小于 1 MiB。解压输出最大为
-1 MiB，包含恰好 1 MiB 的情况。Zstandard 要求帧声明已知内容大小；大小超限、未知或
-无效的帧在解码前被拒绝。无效压缩数据返回 `false`。LZ4 对空块解压仍返回 `false`。
+`<ark/compress/zlib.hpp>`、`<ark/compress/zstd.hpp>`、`<ark/compress/lz4.hpp>` 每次调用持有独立堆缓冲。成功追加输出，拒绝输入则不改输出；调用方提供可读输入并同步共享输出。
 
-zlib、LZ4 和 Zstandard 普通调用不再共享可写输出缓冲区。Zstandard 字典调用仍会修改
-实例缓存的上下文；每个线程须使用独立的 `zstd_compress` 实例，或由调用方串行执行
-字典初始化、字典调用和析构。字典初始化、所有权和复制行为保留既有约定。
-本次修改不建立同一实例的字典并发保证，也不建立插件卸载安全保证。
+| 压缩边界 | 契约 |
+| --- | --- |
+| 压缩 | 算法最坏输出必须严格小于 1 MiB |
+| 解压 | 输出最多 1 MiB，含恰好 1 MiB；Zstandard 解码前拒绝超限、未知大小或无效帧 |
+| 失败 | 无效数据返回 `false`；LZ4 空块解压仍返回 `false` |
+
+<Aside type="caution" title="字典上下文仍需串行协调">
+
+普通 zlib／LZ4／Zstandard 调用无共享可写输出；字典调用仍修改缓存上下文。每线程独立 `zstd_compress`，或串行执行字典初始化／调用／析构。初始化、所有权、复制合同不变，不保证同实例字典并发或插件卸载安全。
+
+</Aside>
 
 启用 `ARK_BUILD_COMPRESSION_TESTS=ON` 和 vcpkg 的 `compression-tests` feature 后，
 执行 `cmake --build <build-dir> --target check-compression`。启用时，`check-core` 也包含

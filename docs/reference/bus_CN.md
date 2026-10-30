@@ -7,7 +7,7 @@ Bus 为进程分配逻辑地址，读取应用类型、进程端点和连接关�
 `bus_module.hpp` 与 `msg_module.hpp` 和实现共置于 `src/plugins/bus/`。
 CMake 通过显式映射，由 `ark::bus` 保留 `<ark/bus/bus_module.hpp>` 与
 `<ark/bus/msg_module.hpp>` 路径。消息接口需要 `ARK_BUILD_PROTO=ON`；API 目标会传递
-Net 与协议头依赖。共享地址和配置类型 `<ark/bus.hpp>` 仍位于 `include/ark/`，供核心与 Net 使用。
+Net 与协议头依赖。共享地址和配置类型 `<ark/bus.hpp>` 源码位于 `src/core/bus.hpp`，供核心与 Net 使用。
 
 两个具体模块定义均位于 cpp，继承 `module_base<接口>`。私有工厂返回公开接口，
 `plugin_base` 先注册 Bus 接口，再注册消息接口，并按逆序卸载。两个模块均不注册更新回调，
@@ -98,13 +98,15 @@ check_interval = "10s"
 check_timeout = "3s"
 ```
 
-应用加载 Bus、Net 和 Utility，设置部署分配的 Bus ID，并通过 `create_server()` 启动监听。Net 在 `post_init()` 中按有向关系选择目标类型，并仅连接与本进程渠道和区域相同的静态进程。排除自身后，每个目标 Bus ID 只加入一次既有 SS 客户端服务。关系没有匹配的进程记录时，不加入连接。Bus 查询语义不变；`get_other_proc(type, list)` 本身不筛选渠道或区域。
+应用加载 Bus、Net、Utility，设置部署分配的 Bus ID，并显式 `create_server()`。Net `post_init()` 按关系选择同渠道／区域的目标类型，排除自身，每个目标 Bus ID 通过 SS 客户端排队一次；无匹配配置则不排队。`get_other_proc(type, list)` 本身不筛渠道／区域。
 
-选中目标的 `intranet_endpoint` 必须包含可拨号的 TCP 或 UDP 主机地址、非零端口，且不能带路径。端点缺失、传输协议不受支持或拨号地址为通配地址（`0.0.0.0`、`::`）时，Net 启动失败，诊断包含目标 Bus ID 和字段。支持主机名。监听仍可使用通配地址：需要通配绑定时，用 `server_endpoint` 监听，并为 SS 流量配置可达的 `intranet_endpoint`。目前 `intranet_endpoint` 同时用于 SS 监听和对外提供的拨号地址，没有独立的绑定地址与通告地址字段。
-
-连接请求在后续管理器更新中处理；启动成功不代表目标已经连接。目标可以稍后启动，也可以沿用相同身份和端点重启。连接生命周期继续使用既有客户端状态机、SS 注册和心跳。配置是启动时的快照，不支持热重载、动态成员管理、自动分配 ID 或全局唯一性校验。包括 Kubernetes 在内的部署环境须分配稳定的 Bus ID 和可达端点；这不表示已接入 Kubernetes API。
-
-`bus.registry` 有配置项不等于已启用动态注册或发现。当前网络服务管理模块中的 Consul 注册 / 健康检查发现路径仍为注释，不能依靠这份配置自动获得目标进程。
+| 连接边界 | 要求／行为 |
+| --- | --- |
+| `intranet_endpoint` | 可拨号 TCP／UDP 主机、非零端口、无路径；支持主机名。缺失、不支持传输或拨号通配地址（`0.0.0.0`、`::`）使 Net 启动失败，诊断含目标 Bus ID／字段 |
+| 绑定与发布 | 通配监听使用 `server_endpoint`，SS 使用可达 `intranet_endpoint`；后者同时作为 SS 监听和拨号目标，没有独立 bind／advertise 字段 |
+| 启动／重连 | 后续 manager 更新处理连接，启动成功不等于已连接；目标可延后启动或以同标识／端点重启，沿用客户端状态机、SS 注册及心跳 |
+| 配置范围 | 启动快照，无热加载、动态成员、自动 ID 或全局唯一保证；含 Kubernetes 的部署须分配稳定 Bus ID／可达端点，不代表 Kubernetes API 集成 |
+| `bus.registry` | 不启用动态注册／发现；当前服务管理器的 Consul 注册与健康发现路径仍注释，不能据此发现目标 |
 
 ## 迁移 XML 运行设置
 

@@ -9,7 +9,7 @@ Bus gives processes logical addresses and loads application types, process endpo
 `<ark/bus/bus_module.hpp>` and `<ark/bus/msg_module.hpp>` through `ark::bus`.
 The message interface requires `ARK_BUILD_PROTO=ON`; the API target carries its
 Net and protocol-header dependencies. The shared address/configuration types in
-`<ark/bus.hpp>` remain in `include/ark/` for core and Net consumers.
+`<ark/bus.hpp>` live in `src/core/bus.hpp` for core and Net consumers.
 
 Both concrete module definitions live in cpp files and derive from
 `module_base<interface>`. Private factories return the public interfaces;
@@ -113,13 +113,15 @@ check_interval = "10s"
 check_timeout = "3s"
 ```
 
-Applications load Bus, Net and Utility, set a deployment-assigned Bus ID, and start listeners with `create_server()`. During Net `post_init()`, each directed relation selects configured target processes of that type in the local channel and zone. Self is excluded, and each target Bus ID is queued once through the existing SS client service. A relation with no eligible process records queues nothing. Bus queries retain their existing semantics; `get_other_proc(type, list)` itself does not filter channel or zone.
+Load Bus, Net and Utility, assign a deployment Bus ID and explicitly call `create_server()`. Net `post_init()` selects each relation’s target type in the local channel/zone, excludes self and queues each target Bus ID once through the SS client. No eligible record means no request. `get_other_proc(type, list)` itself does not filter channel/zone.
 
-The selected target's `intranet_endpoint` must contain a dialable TCP or UDP host, a nonzero port and no path. Missing endpoints, unsupported transports and wildcard dial addresses (`0.0.0.0`, `::`) fail Net startup with the target Bus ID and field in the diagnostic. Hostnames remain supported. Wildcard addresses remain valid for listening: where a wildcard bind is needed, use `server_endpoint` for that listener and a reachable `intranet_endpoint` for SS traffic. `intranet_endpoint` currently serves both as the SS listener address and the advertised dial target; there is no separate bind/advertise field.
-
-Connection requests run on subsequent manager updates; successful startup does not mean the target is connected. Targets can start later or restart at the same configured identity and endpoint. The existing client state machine, SS registration and heartbeat handle the connection lifecycle. Configuration is a startup snapshot: it does not support hot reload, dynamic membership, automatic ID assignment or global uniqueness enforcement. Deployments, including Kubernetes, must assign stable Bus IDs and reachable endpoints; no Kubernetes API integration is implied.
-
-Configuring `bus.registry` does not enable dynamic registration or discovery. The Consul registration and health-based discovery paths in the current network service manager remain commented out. This configuration alone cannot discover target processes.
+| Connection boundary | Requirement / behavior |
+| --- | --- |
+| `intranet_endpoint` | Dialable TCP/UDP host, nonzero port, no path; hostnames supported. Missing endpoints, unsupported transports or wildcard dial hosts (`0.0.0.0`, `::`) fail Net startup with target Bus ID/field diagnostics |
+| Bind / advertise | Use `server_endpoint` for wildcard listening and reachable `intranet_endpoint` for SS. The latter serves both SS listening and dialing; no separate bind/advertise field |
+| Startup / restart | Subsequent manager updates process connections; startup success is not connection success. Targets may start later/restart with the same identity/endpoint through existing client state, SS registration and heartbeat |
+| Configuration scope | Startup snapshot: no hot reload, dynamic membership, automatic IDs or global uniqueness. Deployments including Kubernetes must assign stable Bus IDs/reachable endpoints; no Kubernetes API integration |
+| `bus.registry` | Does not enable dynamic discovery: current manager Consul registration/health-discovery paths remain commented out |
 
 ## Migrate XML runtime settings
 

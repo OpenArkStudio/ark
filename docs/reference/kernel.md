@@ -1,6 +1,6 @@
 # Kernel plugin
 
-Kernel manages runtime entities, entity schemas, static configuration and map instances. Application modules use `kernel_module` to create, find and destroy entities, then use `entity` to access fields, tables and containers.
+Kernel manages entities, schemas, static configuration and map instances. `kernel_module` creates/finds/destroys entities; `entity` exposes their fields, tables and containers.
 
 ## Modules and data model
 
@@ -13,19 +13,19 @@ Kernel manages runtime entities, entity schemas, static configuration and map in
 | `entity` | Runtime fields, tables, containers and spatial position | `get_int32()`, `set_int32()`, `find_table()`, `find_container()` |
 | `static_entity` | A configuration record loaded from resource files | `get_config_id()`, `get_int32()`, `get_string()` |
 
-Schemas and configuration values are separate data: a schema defines field names, types, indices and attributes; static configuration supplies values for a configuration ID; runtime entities have their own IDs and mutable data.
+Schemas define field names/types/indices/attributes; static configuration supplies values by configuration ID; runtime entities have separate IDs and mutable data.
 
 ### Resource loading
 
 When no JSON schema is selected, the metadata module loads `resource/meta/config_class.config` and `resource/meta/entity_class.config` during `init()`. These files reference individual schema files; configuration schemas may also specify data resources. During `post_init()`, `config_module` loads static records using this metadata.
 
-XML configuration loading releases its temporary ID node on normal return or C++ exception unwinding. Debug assertions and process exit do not guarantee stack unwinding. A rejected later row does not roll back records already added to the configuration manager; normal `shut()` still releases the manager. Shared configuration records held by callers remain valid until their last owner releases them. Failures after plugin installation retain the existing application exit policy.
+XML loading releases temporary ID nodes on normal return/C++ unwinding; Debug assertions/process exit do not guarantee unwinding. Rejected later rows do not roll back earlier records. Normal `shut()` releases the manager; shared records survive until their last owner releases them. Post-installation startup failures retain the process-exit policy.
 
 Query configuration after the framework has completed the relevant initialization. Creating a runtime entity requires its class schema, map and map instance to exist. Register class event callbacks before creating entities of that class. See [Create a module](../guides/modules.md) for module integration.
 
 ## JSON Entity schema and business data
 
-Kernel selects `resource/meta/entity_schema.json` when that file exists. It validates the complete versioned document during metadata `init()` and retains static rows as an owning startup snapshot. Configuration `post_init()` consumes that same snapshot; replacing the file between phases does not mix schemas and rows. Invalid selected JSON reports its source path and JSON pointer and fails startup, with no XML fallback. When the JSON file is absent, the existing XML resource paths and readers remain available.
+If `resource/meta/entity_schema.json` exists, metadata `init()` validates the complete versioned document and owns a static-row snapshot consumed by configuration `post_init()`. Replacing files between phases cannot mix schemas/rows. Invalid selected JSON fails startup with source path/JSON pointer, without XML fallback; absent JSON retains XML paths/readers.
 
 The file defines classes, scalar fields, tables, containers and configuration profiles. Indices are explicit and stable: array order does not assign indices, and JSON loading does not depend on generated `meta_name_index`. Inheritance must be flattened by the authoring/export step. The following example keeps application fields above the legacy BaseEntity indices `1..4`:
 
