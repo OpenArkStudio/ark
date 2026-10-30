@@ -1,4 +1,5 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
+#include <array>
 #include <atomic>
 #include <barrier>
 #include <chrono>
@@ -262,6 +263,30 @@ TEST_CASE("Scheduler callback exception owners retire before readiness") {
     REQUIRE(eventually([&] { return scheduler.ready_to_shut(); }));
 }
 
+TEST_CASE("Scheduler reports standard exception cause before retiring its callback frame") {
+    ark::scheduler scheduler(1);
+    std::atomic<bool> reported{};
+
+    struct callback_error final : std::exception
+    {
+        std::atomic<bool>& reported;
+
+        explicit callback_error(std::atomic<bool>& reported)
+            : reported(reported) {
+        }
+
+        const char* what() const noexcept override {
+            reported = true;
+            return "scheduler callback diagnostic";
+        }
+    };
+
+    scheduler.in(0ms, [&] { throw callback_error(reported); });
+    scheduler.stop_accepting();
+    REQUIRE(eventually([&] { return scheduler.ready_to_shut(); }));
+    CHECK(reported);
+}
+
 TEST_CASE("Scheduler capture destruction can schedule same-instance one-shot completion") {
     gate entered, release;
     ark::scheduler scheduler(1);
@@ -399,6 +424,38 @@ TEST_CASE("Scheduler every retains overlapping dispatch during normal operation"
     release.open();
     REQUIRE(eventually([&] { return scheduler.ready_to_shut(); }));
     CHECK(calls >= 2);
+}
+
+TEST_CASE("Scheduler concurrent accepted at continuations and cron use caller-owned calendar storage") {
+    constexpr unsigned workers = 8;
+    constexpr unsigned rounds = 32;
+    ark::scheduler scheduler(workers);
+    ark::cron expression("17 3 * * *");
+    std::barrier start(workers + 1);
+    std::array<ark::scheduler::clock::time_point, workers> from, expected;
+    std::atomic<unsigned> calls{};
+    std::atomic<bool> calendars_match{true};
+    for (unsigned i = 0; i < workers; ++i)
+    {
+        from[i] = ark::scheduler::clock::from_time_t(1700000000 + i * 86400);
+        expected[i] = expression.cron_to_next(from[i]);
+        scheduler.in(0ms, [&, i] {
+            start.arrive_and_wait();
+            for (unsigned round = 0; round < rounds; ++round)
+            {
+                if (expression.cron_to_next(from[i]) != expected[i])
+                {
+                    calendars_match = false;
+                }
+                scheduler.at("2000-01-01 00:00:00", [&] { ++calls; });
+            }
+        });
+    }
+    scheduler.stop_accepting();
+    start.arrive_and_wait();
+    REQUIRE(eventually([&] { return scheduler.ready_to_shut(); }));
+    CHECK(calendars_match);
+    CHECK(calls == workers * rounds);
 }
 
 TEST_CASE("Scheduler concurrent registration and stop retires every admitted capture") {

@@ -42,11 +42,27 @@ private:
     std::string msg_;
 };
 
+namespace detail {
+inline std::tm scheduler_local_time(std::time_t time) {
+    std::tm result{};
+#ifdef ARK_PLATFORM_WIN
+    const bool converted = localtime_s(&result, &time) == 0;
+#else
+    const bool converted = localtime_r(&time, &result) != nullptr;
+#endif
+    if (!converted)
+    {
+        throw std::runtime_error("Cannot convert scheduler local time");
+    }
+    return result;
+}
+} // namespace detail
+
 inline void add(std::tm& tm, std::chrono::system_clock::duration time) {
     auto tp = std::chrono::system_clock::from_time_t(std::mktime(&tm));
     auto tp_adjusted = tp + time;
     auto tm_adjusted = std::chrono::system_clock::to_time_t(tp_adjusted);
-    tm = *std::localtime(&tm_adjusted);
+    tm = detail::scheduler_local_time(tm_adjusted);
 }
 
 class cron
@@ -74,7 +90,7 @@ public:
     clock::time_point cron_to_next(const clock::time_point from = clock::now()) const {
         // get current time as a tm object
         auto now = clock::to_time_t(from);
-        std::tm next(*std::localtime(&now));
+        std::tm next = detail::scheduler_local_time(now);
         // it will always at least run the next minute
         next.tm_sec = 0;
         add(next, std::chrono::minutes(1));

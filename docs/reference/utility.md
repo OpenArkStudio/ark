@@ -35,7 +35,9 @@ serialized with dispatch: admitted one-shot `in`/`at` schedules retain their due
 times and run during drain; work already submitted to the pool also runs to
 completion, including queued callbacks. Future recurring occurrences are retired.
 An interval callback that was already dispatched finishes without rearming.
-Normal interval, target-time and cron behavior is unchanged.
+Normal interval, target-time and cron behavior is unchanged. Target-time and cron
+calendar conversion use caller-owned `std::tm` storage; parsing, process-local
+timezone selection and `mktime`/DST rules remain unchanged.
 
 An accepted callback may register a one-shot continuation on the same scheduler
 while draining, including from its capture destructors. This authority does not
@@ -50,8 +52,12 @@ one-shots finish, future recurring schedules retire, registration capture transf
 finish, and all dispatched callback owners have been destroyed. Capture destruction
 runs outside the scheduler mutex, before readiness is published; it can call
 stop/readiness methods. Callback exceptions are reported to stderr and destroyed
-before the work owner retires; no callback result future is exposed. A dispatcher
-failure leaves readiness closed. Repeated stop requests are safe. This covers
+before the work owner retires; standard exceptions retain their `what()` text
+in the diagnostic and nonstandard exceptions use a generic message. No callback
+result future is exposed. A dispatcher submission, recurrence calculation or
+recurrence-insertion failure returns untransferred owners to scheduler storage
+without allocating and leaves readiness closed; it does not retry automatically.
+Repeated stop requests are safe. This covers
 captures owned by this scheduler, not caller-owned arguments or external producers.
 Stop those producers before destroying the module or its receivers.
 
@@ -247,3 +253,8 @@ destruction, owner-driven completion and sticky manager
 timeout without cleanup. Run it with
 `cmake --build <build-dir> --target check-scheduler-drain`. These checks do not
 establish general DSO unload, hosted platform or production capacity acceptance.
+The target also runs isolated allocation-failure tests against the actual
+`dispatch()`/`manage_tasks()` helpers after quiescing their initial dispatcher.
+They inject persistent allocation rejection or recurrence failure, verify retained
+owners and closed readiness, then use explicit test-only recovery to terminate
+the fixture. This does not establish production recovery from dispatch failure.

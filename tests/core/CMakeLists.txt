@@ -224,10 +224,14 @@ add_executable(ark_scheduler_drain_tests main.cpp scheduler_drain.cpp
     ../../src/plugins/utility/schedule_module_impl.cpp)
 set_property(TARGET ark_scheduler_drain_tests PROPERTY LINK_LIBRARIES ark::core ark::utility Threads::Threads)
 target_include_directories(ark_scheduler_drain_tests PRIVATE "${PROJECT_SOURCE_DIR}/src/plugins/utility")
+add_executable(ark_scheduler_failure_tests main.cpp scheduler_failure.cpp)
+set_property(TARGET ark_scheduler_failure_tests PROPERTY LINK_LIBRARIES ark::core ark::utility Threads::Threads)
 add_custom_target(check-scheduler-drain
     COMMAND ${CMAKE_COMMAND} "-DPROGRAM=$<TARGET_FILE:ark_scheduler_drain_tests>"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/scheduler_drain.cmake"
-    DEPENDS ark_scheduler_drain_tests USES_TERMINAL VERBATIM)
+    COMMAND ${CMAKE_COMMAND} "-DPROGRAM=$<TARGET_FILE:ark_scheduler_failure_tests>"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/scheduler_drain.cmake"
+    DEPENDS ark_scheduler_drain_tests ark_scheduler_failure_tests USES_TERMINAL VERBATIM)
 add_dependencies(check-core check-scheduler-drain)
 
 add_executable(ark_task_contract_tests ../database/task_group_contract.cpp)

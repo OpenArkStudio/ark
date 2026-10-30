@@ -236,7 +236,7 @@ public:
 
         // get current time as a tm object
         auto time_now = clock::to_time_t(clock::now());
-        std::tm tm = *std::localtime(&time_now);
+        std::tm tm = detail::scheduler_local_time(time_now);
 
         // our final time as a time_point
         clock::time_point tp;
@@ -497,6 +497,14 @@ private:
                 manage_tasks();
             }
         }
+        catch (const std::exception& error)
+        {
+            stop_accepting();
+            std::fputs("Scheduler dispatch failed: ", stderr);
+            std::fputs(error.what(), stderr);
+            std::fputs("; shutdown readiness remains closed.\n", stderr);
+            throw;
+        }
         catch (...)
         {
             // A failed dispatcher cannot promise completion of accepted work.
@@ -517,48 +525,80 @@ private:
         {
             dispatched.insert(tasks_.extract(i++));
         }
-        for (auto& entry : dispatched)
+        try
         {
-            auto& task = entry.second;
-            if (stopping_ && task->recurring)
+            for (auto& entry : dispatched)
             {
-                continue;
-            }
-            ++outstanding_;
-            try
-            {
-                threads_.push([this, task](int) mutable {
-                    dispatched_task work{*this, std::move(task)};
-                    try
-                    {
-                        work.task->function();
-                        if (work.task->interval && !stopping_)
+                auto& task = entry.second;
+                if (stopping_ && task->recurring)
+                {
+                    continue;
+                }
+                ++outstanding_;
+                try
+                {
+#ifdef ARK_SCHEDULER_SUBMISSION_TEST_HOOK
+                    ARK_SCHEDULER_SUBMISSION_TEST_HOOK();
+#endif
+                    threads_.push([this, task](int) mutable {
+                        dispatched_task work{*this, std::move(task)};
+                        try
                         {
-                            add_task(work.task->get_new_time(), work.task);
+                            work.task->function();
+                            if (work.task->interval && !stopping_)
+                            {
+                                add_task(work.task->get_new_time(), work.task);
+                            }
                         }
-                    }
-                    catch (...)
-                    {
-                        // The discarded pool future previously contained this
-                        // exception. Destroy it here before retiring business
-                        // owners, and report it instead of retaining DSO code.
-                        std::fputs("Scheduler callback failed.\n", stderr);
-                    }
-                });
+                        catch (const std::exception& error)
+                        {
+                            std::fputs("Scheduler callback failed: ", stderr);
+                            std::fputs(error.what(), stderr);
+                            std::fputc('\n', stderr);
+                        }
+                        catch (...)
+                        {
+                            // The discarded pool future previously contained this
+                            // exception. Destroy it here before retiring business
+                            // owners, and report it instead of retaining DSO code.
+                            std::fputs("Scheduler callback failed.\n", stderr);
+                        }
+                    });
+                }
+                catch (...)
+                {
+                    --outstanding_;
+                    throw;
+                }
+                if (task->recurring && !task->interval)
+                {
+                    tasks_.emplace(task->get_new_time(), task);
+                }
+                // The worker cannot enter its context until this lock is released.
+                // Hand its dispatched owner over completely now, so a fast callback
+                // retires its last capture with that callback's continuation authority.
+                task.reset();
             }
-            catch (...)
+        }
+        catch (...)
+        {
+            // Successful handoffs left empty nodes. Return every remaining
+            // owner, including unsubmitted callbacks, to instance storage before
+            // unlocking. Equal allocators and the time-point comparator let
+            // merge transfer these existing nodes without allocating.
+            for (auto i = dispatched.begin(); i != dispatched.end();)
             {
-                --outstanding_;
-                throw;
+                if (!i->second)
+                {
+                    i = dispatched.erase(i);
+                }
+                else
+                {
+                    ++i;
+                }
             }
-            if (task->recurring && !task->interval)
-            {
-                tasks_.emplace(task->get_new_time(), task);
-            }
-            // The worker cannot enter its context until this lock is released.
-            // Hand its dispatched owner over completely now, so a fast callback
-            // retires its last capture with that callback's continuation authority.
-            task.reset();
+            tasks_.merge(dispatched);
+            throw;
         }
     }
 
