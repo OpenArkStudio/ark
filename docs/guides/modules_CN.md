@@ -148,7 +148,7 @@ class dependent_module final
 
 通过 `stop_until(timestamp, deadline)` 传入截止时间后，管理器在停止接收／就绪钩子返回后及清理前检查时间；后续 `stop()` 不能绕过超时保留。清理前的 `timed_out` 保留资源并允许更新；清理开始后的 `cleanup_timed_out` 保留剩余资源并停止更新。检查不能抢占钩子，也不能回滚已经执行的动作。详见[超时状态](tasks_CN.md#模块共用业务执行器)。
 
-**迁移边界：** 本阶段只有受控业务 runtime 测试插件实现了新的外部根请求入口。官方 Net／HTTP 监听器和其他官方业务入口仍使用默认钩子。固定版本 arknet 的 [TCP 服务端](https://github.com/OpenArkStudio/arknet/blob/a0dfe09cd543e75cfb5996e537ce2fa49f2a758f/include/arknet/tcp/tcp_server.hpp) 提供 stop／wait 和原始 acceptor，但没有承诺保留已接收会话与流程的独立停止接收 API；HTTP 使用同一传输生命周期。直接 stop 或操作 acceptor 不能替代这一合同。因此，Core 钩子测试通过不代表真实网络应用已停止接收新业务请求。
+**迁移边界：** 官方 HTTP 服务端按业务请求执行停止接收：新请求返回 503，已接收路由及响应发送继续排空。TCP 监听器在该阶段保留，最终清理才关闭；这不等于暂停传输层 accept。其他 Net TCP／WebSocket／RUDP 业务入口仍需逐项迁移，不能直接 stop 传输或操作 acceptor 来代替业务停止接收。参见 [HTTP 停服](../reference/http_CN.md#路由请求)。
 
 ## 保证回调不超出对象生命周期
 

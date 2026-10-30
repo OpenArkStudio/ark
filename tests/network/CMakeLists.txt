@@ -45,3 +45,14 @@ add_custom_target(check-http-startup-failure
     COMMAND $<TARGET_FILE:ark_http_startup_failure_tests>
     DEPENDS ark_http_startup_failure_tests USES_TERMINAL VERBATIM)
 add_dependencies(check-network check-http-startup-failure)
+
+add_executable(ark_http_admission_tests main.cpp http_admission.cpp
+    ../../src/plugins/net/http_client_module_impl.cpp
+    ../../src/plugins/http/http_server_module_impl.cpp
+    ../../src/plugins/http/http_plugin.cpp)
+target_link_libraries(ark_http_admission_tests PRIVATE ark::config tomlplusplus::tomlplusplus)
+target_include_directories(ark_http_admission_tests PRIVATE "${PROJECT_SOURCE_DIR}/src/plugins")
+add_custom_target(check-http-admission
+    COMMAND $<TARGET_FILE:ark_http_admission_tests>
+    DEPENDS ark_http_admission_tests USES_TERMINAL VERBATIM)
+add_dependencies(check-network check-http-admission)
