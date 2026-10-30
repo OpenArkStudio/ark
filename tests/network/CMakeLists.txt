@@ -34,3 +34,14 @@ add_custom_target(check-net-message
     DEPENDS ark_net_message_tests ark_net_message_failure_tests
     USES_TERMINAL VERBATIM)
 add_dependencies(check-network check-net-message)
+
+# Observe private HTTP reservations in a separate production translation unit;
+# global allocation replacement must not affect the other network regressions.
+add_executable(ark_http_startup_failure_tests main.cpp http_startup_failure.cpp
+    ../../src/plugins/http/http_plugin.cpp)
+target_link_libraries(ark_http_startup_failure_tests PRIVATE ark::config tomlplusplus::tomlplusplus)
+target_include_directories(ark_http_startup_failure_tests PRIVATE "${PROJECT_SOURCE_DIR}/src/plugins")
+add_custom_target(check-http-startup-failure
+    COMMAND $<TARGET_FILE:ark_http_startup_failure_tests>
+    DEPENDS ark_http_startup_failure_tests USES_TERMINAL VERBATIM)
+add_dependencies(check-network check-http-startup-failure)
