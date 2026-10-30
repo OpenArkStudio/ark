@@ -205,3 +205,5 @@ for (const prefix of ["", "zh/"]) {
   }
 }
 console.log(`Checked ${pages.length} static HTML pages and ${references.size} internal references, language switching, cards, callouts, highlighting and AI Markdown; verified examples and component labels on ${componentPages.length * 2} bilingual guide outputs.`);
+
+await import("./check-reference-performance.mjs");
