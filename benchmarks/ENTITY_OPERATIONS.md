@@ -22,6 +22,13 @@ For a small correctness smoke, use `--smoke` instead of `--iterations N`. It run
 cmake --build app-build --target check-entity-benchmark-smoke -j2
 ```
 
+After either mode finishes, the CLI cooperatively drains accepted plugin work before
+exiting, with a fixed five-second shutdown deadline. Owner updates keep the synthetic
+clock used at startup. A terminal failure or expired deadline exits with status `1`
+and a shutdown diagnostic; it is not reported as a completed workload. Deadline
+checks cannot interrupt a synchronous hook. The smoke's outer 20-second process
+observation bound remains unchanged.
+
 No benchmark measurement or speedup result is published with this extraction. Compiling and passing the smoke do not establish performance. Any later report must identify machine, OS, toolchain, dependency and source/binary revisions, explicit iteration count and units; retain raw measurements locally until separately authorized for publication.
 
 The existing Applications CI job explicitly enables benchmark builds and runs this smoke as a separate step. It does not execute measurement mode; `check-core` remains independent of the optional benchmark.
