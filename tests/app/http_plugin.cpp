@@ -82,7 +82,9 @@ int main(int argc, char* argv[]) {
     const auto port = reservation.local_endpoint().port();
     reservation.close();
     std::ofstream config("http.toml");
-    config << "[http]\nhost = '127.0.0.1'\nport = " << port << "\nthreads = 2\n";
+    // The listener owns one context; two session workers allow the controlled
+    // blocked route and the rejection response to progress independently.
+    config << "[http]\nhost = '127.0.0.1'\nport = " << port << "\nthreads = 3\n";
     config.close();
     ark::logger log;
     ark::logger::init(&log);
@@ -98,10 +100,12 @@ int main(int argc, char* argv[]) {
     require(&router == &server->get_router(), "get_router must return the same owned router reference");
     const auto owner_thread = std::this_thread::get_id();
     std::atomic<bool> worker_routed{};
+    std::atomic<unsigned> handled{};
     std::atomic<bool> retired{};
     auto state = std::make_shared<route_state>(retired);
     std::weak_ptr weak = state;
     router.add(arknet::http::verb::get, "/users/:id", [&](const auto& route, auto& response) {
+        ++handled;
         worker_routed.store(std::this_thread::get_id() != owner_thread);
         response.body() = "user:" + std::string(route.param("id")) + ":" + std::string(route.query);
     });
@@ -137,26 +141,35 @@ int main(int argc, char* argv[]) {
     require(helper.body() == "ready" && helper[arknet::http::field::content_length] == "5",
         "Public HTTP response helper changed");
 
-    std::thread pending([&] { (void)request(port, arknet::http::verb::get, "/retire"); });
+    wire_result pending_result;
+    std::thread pending([&] { pending_result = request(port, arknet::http::verb::get, "/retire"); });
     const auto deadline = std::chrono::steady_clock::now() + 5s;
     while (!state->active.load() && std::chrono::steady_clock::now() < deadline)
     {
         std::this_thread::sleep_for(1ms);
     }
     require(state->active.load(), "Pending HTTP wire request never entered its route");
-    std::atomic<bool> stopping{};
-    std::thread release([&] {
-        while (!stopping.load())
-        {
-            std::this_thread::yield();
-        }
-        std::this_thread::sleep_for(5ms);
-        state->release.store(true);
-    });
-    stopping.store(true);
-    require(manager.stop(1), "HTTP owner-thread shutdown did not complete");
-    release.join();
+    require(!manager.stop(1) && manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::draining,
+        "HTTP shutdown must wait for its admitted route");
+    require(!server->ready_to_shut(), "Active HTTP route was reported drained");
+    const auto rejected = request(port, arknet::http::verb::get, "/users/99");
+    require(!rejected.error && rejected.response.result() == arknet::http::status::service_unavailable &&
+                !rejected.response.keep_alive() && handled.load() == 1,
+        "HTTP stop admission must return 503 without invoking the business route");
+    require(!manager.stop(1), "Repeated stop released an active route");
+    state->release.store(true);
     pending.join();
+    require(!pending_result.error && pending_result.response.result() == arknet::http::status::ok &&
+                pending_result.response.body() == "retired",
+        "An admitted route lost its response during drain");
+    const auto drain_deadline = std::chrono::steady_clock::now() + 5s;
+    while (!manager.stop(1) && std::chrono::steady_clock::now() < drain_deadline)
+    {
+        manager.update(1);
+        std::this_thread::sleep_for(1ms);
+    }
+    require(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopped,
+        "HTTP owner-thread shutdown did not complete after its response send");
     require(state->finished.load(), "HTTP stop returned before its running handler retired");
     state.reset();
     require(weak.expired() && retired.load(), "HTTP router retained its handler owner after module unregistration");
@@ -168,5 +181,5 @@ int main(int argc, char* argv[]) {
     require(restarted.find_module<ark::http_server_module>()->start_server(), "HTTP endpoint was not reusable");
     require(restarted.stop(1), "Restarted HTTP DSO shutdown failed");
     std::cout << "HTTP actual DSO/wire: interface key, router identity, routes/binary bodies, IO-worker dispatch, "
-                 "active-handler retirement, owner shutdown and endpoint reuse passed\n";
+                 "request admission rejection, accepted-response drain, owner shutdown and endpoint reuse passed\n";
 }

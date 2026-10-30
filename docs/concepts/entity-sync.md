@@ -1,6 +1,6 @@
 # Entity incremental synchronization
 
-Kernel provides owning scalar captures and revisioned publisher/replica APIs. The guest room connects them to Protobuf and Godot C# through an explicit public projection. Owning nested capture and a trusted-binding C++ nested publisher/replica are available; a nested wire codec and general subscriptions remain future work.
+Kernel provides owning scalar/nested captures and bounded revisioned C++ baseline/delta/replica APIs. The guest room connects scalar state to Protobuf and Godot C# through an explicit public projection. Nested state uses a fixed trusted binding in process; a nested wire codec, client adapter and general subscriptions remain future work. Room scalar v1 is unchanged.
 
 ![Scalar synchronization flow](../assets/entity-sync-flow.svg)
 
@@ -16,7 +16,7 @@ Kernel provides owning scalar captures and revisioned publisher/replica APIs. Th
 
 Native checks cover the C++ state loop and room transport; local two-engine Godot tests cover movement, HP/MP, removal and reconnect. Main CI passed on Linux, macOS and Windows. These results do not establish production capacity or general replication.
 
-## Next design boundary
+## Nested state and remaining work
 
 Owning nested capture records stable row lifetimes and separates child identity from container slots. The nested C++ publisher/replica commits one authorized root projection in order. Row numbers can be reused; deleting a row changes presentation positions without renumbering surviving row keys. Existing borrowed delayed-sync callbacks cannot provide owning nested publications.
 
