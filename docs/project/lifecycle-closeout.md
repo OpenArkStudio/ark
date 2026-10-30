@@ -1,12 +1,17 @@
 # Startup and shutdown delivery status
 
-The lifecycle framework provides required-provider metadata, graph validation, ordered startup and one-shot consumer-first `stop_accepting()` hooks with a compatibility default. The HTTP server rejects new business routes and drains admitted response sends. The HTTP client rejects external roots while allowing trusted continuations of accepted work; other Net protocol entry points still need migration. Startup-failure cleanup has one opt-in slot, validated with a private standalone wheel. Other Net ingress migration, complete dependency-aware teardown and shared IO startup-failure cleanup remain subsequent work; start with the [launcher guide](../guides/applications.md) for operating instructions.
+Ordered startup, one-shot ingress closure and accepted-task drain are available. Full dependency-aware teardown and shared IO startup-failure cleanup remain future work.
 
-The [startup-failure cleanup source map and minimum slice](startup-failure-cleanup.md) detail one-slot enrollment, constructor safety, one-shot release after failure and IO prerequisites.
+<CardGrid>
+
+<LinkCard title="Operate the launcher" href="../guides/applications.md" description="Startup, shutdown and timeout handling." />
+<LinkCard title="Prepare failure cleanup" href="startup-failure-cleanup.md" description="Independent ownership, one-slot enrollment and IO prerequisites." />
+
+</CardGrid>
 
 ## Current startup and resource ownership
 
-`plugin_manager` stores the current failure description and a bounded latest-call record, not a full per-module startup ledger. Plugin and module storage remains unordered. After installation, the manager snapshots declared provider keys, rejects missing providers/cycles and uses a stable topological order for all four startup phases. Modules without declarations are independent; ready-node ties use lexicographic registration keys. Manifest order determines neither this order nor teardown dependencies. See [startup dependencies and rebuild requirements](../guides/modules.md#declare-startup-dependencies).
+After installation, `plugin_manager` uses declared provider keys to order all four startup phases topologically. Missing providers/cycles fail validation; undeclared modules are independent. Ready-node ties use lexicographic registration keys, not manifest order. Plugin/module storage remains unordered. The manager retains a failure description and bounded latest-call record, not a complete phase ledger. See [dependencies and rebuild requirements](../guides/modules.md#declare-startup-dependencies).
 
 | Boundary reached | Resources that may already exist | Failure behavior |
 | --- | --- | --- |
@@ -17,23 +22,81 @@ The [startup-failure cleanup source map and minimum slice](startup-failure-clean
 | `post_init()`, `check_config()`, `pre_update()` | Earlier completed phases, callbacks, timers, listeners, outbound clients and any submitted work | Same first-failure rule; no later phase runs |
 | `start()` succeeds | The selected modules have completed all four phases | Enter owner updates; only then create the Windows command thread |
 
-Concrete acquisition points matter: Net's HTTP client starts an IO pool in its constructor, Net queues clients and a health timer in `post_init()`, and Game registers Kernel callbacks and starts listeners in `post_init()`. Database connection configuration can construct native pools; its lifetime cannot be inferred from a module's last completed hook.
+Resource ownership follows acquisition: the HTTP-client constructor starts IO; Net queues clients/timers in `post_init()`; Game registers Kernel callbacks and listeners there; database configuration can create pools. A completed-hook record cannot prove resource lifetime.
 
-On startup failure the launcher writes the phase/owner diagnostic, runs only explicitly prepared independent-resource cleanup and exits `1` through `_Exit` (plus `TerminateProcess` on Windows), bypassing object/static destruction. It neither runs normal shutdown hooks nor retries. A library whose entry is missing remains loaded until process exit. `register_plugin` releases its local candidate before `install()` and records the plugin only after installation returns: recording only successful installation would miss resources published by a throwing installation. This is a cleanup-design constraint, not an existing rollback guarantee.
+<Aside type="caution" title="Startup failure exits the process">
+
+The launcher reports phase/owner, runs only prepared independent cleanup, then exits `1` through `_Exit` (plus Windows `TerminateProcess`). No normal hooks, object/static destruction or retry run. Missing-entry libraries remain loaded. `register_plugin` releases its candidate before `install()` and records success afterward, so that table cannot inventory resources published by a throwing installation.
+
+</Aside>
 
 ## Current normal shutdown
 
-| Step | Gate and action | Resources that must remain available |
-| --- | --- | --- |
-| Request stop | Seal managed roots and enter `stopping_acceptance`; defer hooks while a callback stack is active | Providers, services, bridges and the shared owner runtime |
-| Stop new external roots | On an outer owner frame, call reached `stop_accepting()` hooks once in reverse cached topology, then enter `draining` | Accepted workflows retain provider operations and completions; this is not pool/transport retirement |
-| Complete accepted tasks | Continue enabled module updates, then one bounded owner-runtime poll; do not cancel accepted work | Later awaits in an accepted task may submit additional provider operations |
-| Return from active stacks | Zero pending tasks is insufficient while update/poll/final-completion code is active | The final completion removes group membership before calling user code |
-| Check all modules | Every `ready_to_shut()` must return true before any `pre_shut()` | A false result waits and permits owner updates; an exception enters sticky `failed` |
-| Tear down | Run every `pre_shut()`, then every `shut()`, plugin exits/uninstallation, then native library closes | Each called hook must preserve dependencies until it returns |
-| Finish | All stages succeed; repeated `stop()` returns true | Emit the synchronous stop message and exit `0` |
+<Steps>
 
-`ready_to_shut()` defaults to true and cannot certify unmanaged work; there is no `drain_ready()` API. The `stop_accepting()` phase also defaults to true and does not itself migrate official ingress. It uses reverse cached topology; readiness, `pre_shut()`/`shut()` and plugin/library release retain their previous order. The teardown loops do not establish provider-before/after-consumer order; explicit unregistration order inside one plugin does not order separate plugins.
+<Step title="Request stop">
+
+Seal managed roots and enter `stopping_acceptance`; defer hooks while a callback stack is active
+
+Keep: Providers, services, bridges and the shared owner runtime
+
+</Step>
+
+<Step title="Stop new external roots">
+
+On an outer owner frame, call reached `stop_accepting()` hooks once in reverse cached topology, then enter `draining`
+
+Keep: Accepted workflows retain provider operations and completions; this is not pool/transport retirement
+
+</Step>
+
+<Step title="Complete accepted tasks">
+
+Continue enabled module updates, then one bounded owner-runtime poll; do not cancel accepted work
+
+Keep: Later awaits in an accepted task may submit additional provider operations
+
+</Step>
+
+<Step title="Return from active stacks">
+
+Zero pending tasks is insufficient while update/poll/final-completion code is active
+
+Keep: The final completion removes group membership before calling user code
+
+</Step>
+
+<Step title="Check all modules">
+
+Every `ready_to_shut()` must return true before any `pre_shut()`
+
+Keep: A false result waits and permits owner updates; an exception enters sticky `failed`
+
+</Step>
+
+<Step title="Tear down">
+
+Run every `pre_shut()`, then every `shut()`, plugin exits/uninstallation, then native library closes
+
+Keep: Each called hook must preserve dependencies until it returns
+
+</Step>
+
+<Step title="Finish">
+
+All stages succeed; repeated `stop()` returns true
+
+Keep: Emit the synchronous stop message and exit `0`
+
+</Step>
+
+</Steps>
+
+<Aside type="caution" title="Admission order is not complete teardown order">
+
+`stop_accepting()` and `ready_to_shut()` default to true; they do not migrate ingress or certify unmanaged work. There is no `drain_ready()` API. Only admission hooks use reverse topology. Readiness, `pre_shut()`, `shut()`, plugin/library release retain their previous order; one plugin’s unregistration order cannot order another plugin.
+
+</Aside>
 
 ### Native work and retention
 
@@ -47,15 +110,34 @@ On startup failure the launcher writes the phase/owner diagnostic, runs only exp
 
 The shared manual runtime executes user handlers on its owner thread; native IO pools keep their own threads. Do not destroy owners or unload their code until the corresponding callbacks have returned and the owning native retirement barrier has completed. A successful `dlclose`/`FreeLibrary` does not prove physical image unmapping.
 
-The default shutdown wait is unlimited. A positive `--shutdown_timeout_ms` supplies a monotonic `stop_until()` deadline, retained across later stop calls. Time is checked after admission/readiness hooks return and before `pre_shut()`: a successful slow hook cannot skip retention even with zero pending tasks. Before cleanup, expiry enters sticky `timed_out`; owner updates may continue but later completion cannot resume cleanup. After cleanup begins, hook/close boundary checks enter `cleanup_timed_out`, retaining remaining resources without further updates or cleanup. No check can interrupt a blocking update, hook or native close, or undo work performed before that call returned. Drain update failure also latches launcher retention. A hook/close failure enters sticky `failed`; updates and further teardown stop. No timeout authorizes forced cancellation, destroying pending frames or successful process exit.
+The default wait is unlimited. A positive `--shutdown_timeout_ms` sets a monotonic `stop_until()` deadline retained across stop calls. Checks run after admission/readiness hooks return, before `pre_shut()`, and at cleanup hook/close return boundaries. Zero pending tasks does not excuse a slow hook.
+
+| Result | Retained behavior |
+| --- | --- |
+| `timed_out`, before cleanup | Owner updates may continue; late completion cannot resume cleanup |
+| `cleanup_timed_out`, after cleanup begins | Retain remaining resources; no further updates or cleanup |
+| `failed`, hook/close failure | No further updates or teardown |
+| Drain-update failure | Launcher retention stays latched even if updates later recover |
+
+<Aside type="caution" title="Deadlines do not preempt blocking work">
+
+These states are irreversible. Checks cannot interrupt blocking updates, hooks or native closes, or undo completed actions. Expiry never permits forced cancellation, pending-frame destruction or successful exit.
+
+</Aside>
 
 ## Selected route and remaining implementation
 
-1. **Prepare independent cleanup before acquisition.** The current bounded latest-call record and single resource slot support an owning capsule enrolled before acquisition. The private standalone-wheel fixture releases that resource once after startup failure; every outcome still exits `1`, without normal shutdown or DSO unload. A complete acquisition/phase ledger remains future work and must distinguish entered from completed phases: a failing hook may have acquired resources. Preserve the original failure and report cleanup results separately. Shared Utility Timer consumers and IO require their own ownership and retirement proof; this slice provides no generic rollback or same-process restart.
-2. **Declare providers at module granularity.** Stage 1 provides `module::get_dependencies()` and `module_base<interface, providers...>`, validates all declared keys/cycles after installation and before `init()`, then orders each startup phase provider-first. Timers plus Utility is the first migrated application; other official modules have not been assigned guessed dependencies. The graph validates registration keys, not the dynamic type of arbitrary raw `add_module()` entries. Extend declarations from actual retained pointers/callbacks before using them for teardown. For example, Game retains Kernel/Guid/Bus/Msg/Net/Map providers; Net's service manager retains Bus/Timer; Kernel retains Map/metadata/config/Guid. Installation can already acquire resources, so validation cannot replace acquisition cleanup. Callback ownership, missing lifetime edges and phase cycles still need explicit treatment before safe teardown can be claimed.
-3. **Separate ingress quiescence from provider retirement.** Stage 2 implements the explicit module action that stops new external business roots while preserving completions and follow-up provider calls for accepted tasks. Hooks run consumer-first once, with default compatibility and sticky failure. Successful startup caches topology; a manual manager or legal idle registry mutation triggers one validated rebuild before the first hook, never during poll/reentry. Keep declarations stable while registered. The existing task/active-stack and all-module readiness gates remain. Ordering `pre_shut()`/`shut()` consumers before providers is a subsequent stage. If one readiness check requires another module to tear down first, that is a cycle between phases: resolve it in the earlier ingress-quiescence action or bring a separate phase change back for approval. Include callback receivers, timer registrations and cross-plugin captures in the lifetime inventory. Uninstall a plugin and close its library only after all objects/callables depending on its code are retired. Preserve the current sticky retention behavior on any failure or wait-limit expiry. Introduce this as an opt-in migrated set; do not silently reinterpret legacy hooks.
+| Next implementation boundary | Required evidence |
+| --- | --- |
+| Independent cleanup before acquisition | Owning capsule and one-slot enrollment; preserve the first failure and report cleanup separately. Entered phases can own resources even if incomplete. Private-wheel validation does not cover shared Utility Timer or IO; no general rollback, normal shutdown, DSO unload or same-process restart |
+| Extend provider declarations | `module::get_dependencies()` / `module_base<interface, providers...>` validate keys before `init()`, not dynamic types of raw `add_module()` entries. Timers/Utility is migrated; derive further edges from actual retained pointers/callbacks |
+| Complete dependency-aware teardown | Retire callbacks, timer registrations and cross-plugin captures before unloading their code; keep task/active-stack/readiness gates and sticky retention. Resolve readiness/cleanup phase cycles during ingress closure or review the phase change separately |
 
-These are internal lifecycle changes, not Registry, hot-update, service-discovery or network-protocol work.
+Provider inventory: Game retains Kernel/Guid/Bus/Msg/Net/Map; Net’s manager retains Bus/Timer; Kernel retains Map/metadata/config/Guid. Installation can already acquire resources, so graph validation cannot replace acquisition cleanup. Do not guess edges or silently reinterpret legacy hooks.
+
+Successful startup caches topology. Manual managers and legal idle registry changes trigger one validated rebuild before admission hooks, never during poll/reentry; declarations remain stable while registered. Complete `pre_shut()`/`shut()` ordering is still future work.
+
+Registry, hot update, service discovery and network protocols are outside this lifecycle change.
 
 ## Delivery stages
 

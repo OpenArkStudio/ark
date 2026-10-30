@@ -204,4 +204,21 @@ for (const prefix of ["", "zh/"]) {
     }
   }
 }
-console.log(`Checked ${pages.length} static HTML pages and ${references.size} internal references, language switching, cards, callouts, highlighting and AI Markdown; verified examples and component labels on ${componentPages.length * 2} bilingual guide outputs.`);
+for (const prefix of ["", "zh/"]) {
+  const route = prefix + "project/lifecycle-closeout/";
+  const html = await readFile(join(root, route, "index.html"), "utf8");
+  const markdown = await readFile(join(root, route, "index.md"), "utf8");
+  const source = await readFile(new URL(`../../project/lifecycle-closeout${prefix ? "_CN" : ""}.md`, import.meta.url), "utf8");
+  assert.match(html, /data-steps/, `${route}: shutdown procedure did not render`);
+  for (const step of source.matchAll(/<Step title="([^"]+)">/g)) {
+    assert.ok(markdown.includes(`**${step[1]}**`), `${route}: lost exported shutdown step`);
+  }
+  for (const token of ["stopping_acceptance", "draining", "timed_out", "cleanup_timed_out", "failed", "close_and_wait()", "reg_external_root_callback()", "17", "12", "--shutdown_timeout_ms"]) {
+    assert.ok(markdown.includes(token), `${route}: missing lifecycle constraint ${token}`);
+  }
+  for (const target of ["guides/applications", "project/startup-failure-cleanup"]) {
+    assert.ok(markdown.includes(`](/ark/${prefix}${target})`), `${route}: missing procedure card destination`);
+  }
+  assert.doesNotMatch(markdown, /<(?:CardGrid|LinkCard|Aside|Steps|Step)[\s/>]/, `${route}: raw component in Markdown`);
+}
+console.log(`Checked ${pages.length} static HTML pages and ${references.size} internal references, language switching, cards, callouts, highlighting and AI Markdown; verified examples and component labels on ${componentPages.length * 2} bilingual guide outputs, plus lifecycle procedures and retention constraints.`);
