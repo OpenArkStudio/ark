@@ -50,7 +50,52 @@ to Net and is not an application API. Rebuild Net and consumers together, using
 a fresh install prefix so obsolete headers from older installations do not linger.
 `net_client_service_impl.hpp`, `net_server_service_impl.hpp`, endpoint classes
 and callback templates remain public. Request overloads, timeout defaults,
-future results, owner-update callback dispatch and shutdown behavior are unchanged.
+future results and owner-update callback dispatch are unchanged. The official
+HTTP client participates in the admission and drain phases described below.
+
+## HTTP client admission and drain
+
+The official `http_client_module` overrides the existing module lifecycle hooks.
+`stop_accepting()` closes new request roots without cancelling accepted HTTP IO.
+Repeated calls succeed. Future-based `get`, `post` and `async_request`, and both
+callback `post` overloads, reject new roots with `{false, operation_aborted.message()}`.
+Rejected futures are ready immediately; rejected callbacks still wait for the
+owner's `update()`. Rejected callback delivery does not grant permission to submit
+another request during drain.
+
+The untagged request interface recognizes two bounded continuation scopes: a
+synchronous call inside this client's accepted HTTP callback, and execution on
+the associated manager's shared task executor on the owner thread. This preserves
+Etcd's callback retry and provider requests initiated by previously accepted
+managed tasks. Merely running a module's `update()` does not grant admission.
+Calls deferred outside these scopes to another thread or an external scheduler
+carry no accepted-work identity and are rejected after admission closes. The
+interface does not infer arbitrary application workflow ownership. The shared
+executor is a trusted continuation scope: application ingress must not post new
+roots onto it during drain. Keep lifecycle and callback dispatch on the module's
+owner thread, and close application ingress before draining tasks.
+
+`ready_to_shut()` waits for every accepted native request to publish its result,
+all queued callback results to be delivered, and active callback invocations to
+return and release their captures. Callback exceptions propagate to the owner;
+the active scope is restored and later queued results remain available to a
+subsequent update. Continue manager updates while shutdown is draining. Only then
+can normal manager shutdown call `pre_shut()`, which retains its existing request
+cancellation and IO-runtime stop behavior. Direct `pre_shut()` or destruction
+still cancels pending IO; it is not a graceful-drain shortcut.
+
+Manager deadlines and failure states retain their existing semantics. A drain
+timeout does not cancel HTTP IO or make callback receivers safe to destroy;
+continue owner updates while retaining the module, receivers and implementation
+library. A failed manager does not resume updates automatically. Request IO and
+connect timeout defaults remain 20 and 5 seconds. This integration covers the Net
+HTTP client, not TCP/WebSocket/RUDP ingress or the separate HTTP server plugin.
+
+`check-network` exercises the production factory, active request completion,
+rejection through all request overloads, callback and managed-task follow-ups,
+manager drain ordering, repeated stop, callback exceptions and capture release
+using loopback HTTP. These local checks do not establish external Etcd/Consul
+acceptance or arbitrary application continuation safety.
 
 ## Server and client service examples
 

@@ -9,6 +9,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -18,6 +19,7 @@
 #include <arknet/http/http_server.hpp>
 #include <arknet/http/request.hpp>
 
+#include "ark/plugin_manager.hpp"
 #include "http/http_plugin.hpp"
 #include "net/http_client_factory.hpp"
 
@@ -86,12 +88,7 @@ public:
     explicit http_peer(bool reply = true)
         : reply_(reply) {
         server_.bind_recv([this](auto& session, http_request& request) {
-            {
-                std::lock_guard lock(mutex_);
-                requests_.push_back(request);
-            }
-            if (reply_)
-            {
+            auto reply = [this, session, request] {
                 http_response response(arknet::http::status::ok, request.version());
                 response.keep_alive(request.keep_alive());
                 if (respond)
@@ -104,12 +101,27 @@ public:
                 }
                 response.prepare_payload();
                 session->async_send(std::move(response));
+            };
+            if (reply_)
+            {
+                {
+                    std::lock_guard lock(mutex_);
+                    requests_.push_back(request);
+                }
+                reply();
+            }
+            else
+            {
+                std::lock_guard lock(mutex_);
+                replies_.push_back(std::move(reply));
+                requests_.push_back(request);
             }
         });
     }
 
     ~http_peer() {
         server_.stop();
+        replies_.clear();
     }
 
     bool start() {
@@ -130,12 +142,25 @@ public:
         return requests_.size();
     }
 
+    void reply_pending() {
+        std::vector<std::function<void()>> replies;
+        {
+            std::lock_guard lock(mutex_);
+            replies.swap(replies_);
+        }
+        for (auto& reply : replies)
+        {
+            reply();
+        }
+    }
+
     std::function<void(const http_request&, http_response&)> respond;
 
 private:
     const bool reply_;
     std::mutex mutex_;
     std::vector<http_request> requests_;
+    std::vector<std::function<void()>> replies_;
     arknet::http_server server_{1024, 16 * 1024 * 1024, 2};
 };
 
@@ -160,6 +185,14 @@ struct http_callbacks
     std::mutex mutex;
     std::vector<http_result> results;
 };
+
+ark::task<> managed_http_request(
+    ark::http_client_module& client, std::uint16_t port, std::future<http_result>& result) {
+    // Rejection delivery must not inherit the task executor's continuation scope.
+    client.update();
+    result = client.get("127.0.0.1", port, "/managed-follow-up");
+    co_return;
+}
 
 std::uint16_t http_port() {
     asio::io_context context;
@@ -394,6 +427,275 @@ TEST_CASE("HTTP shutdown cancels all pending requests and settles futures withou
     }
     CHECK(destroyed.wait_for(0ms) == std::future_status::ready);
     CHECK(await_http(destroyed).second == aborted);
+}
+
+TEST_CASE("HTTP admission stop rejects roots while accepted requests and callbacks drain") {
+    http_peer peer(false);
+    REQUIRE(peer.start());
+    auto owned_client = ark::detail::make_http_client_module();
+    auto& client = *owned_client;
+    auto lifetime = std::make_shared<int>(42);
+    std::weak_ptr<int> retained = lifetime;
+    std::future<http_result> follow_up;
+    unsigned completed = 0;
+    auto accepted = client.get("127.0.0.1", peer.port(), "/accepted-future");
+    client.post(
+        [&, lifetime](http_result result) {
+            CHECK(result.first);
+            CHECK_FALSE(client.ready_to_shut());
+            CHECK(*lifetime == 42);
+            ++completed;
+            follow_up = client.get("127.0.0.1", peer.port(), "/callback-follow-up");
+        },
+        "127.0.0.1", peer.port(), "/accepted-callback");
+    lifetime.reset();
+    REQUIRE(wait_http([&] { return peer.count() == 2; }));
+    CHECK(client.stop_accepting());
+    CHECK(client.stop_accepting());
+    CHECK_FALSE(client.ready_to_shut());
+    CHECK_FALSE(retained.expired());
+    const auto aborted = arknet::error_code(asio::error::operation_aborted).message();
+    auto get = client.get("127.0.0.1", peer.port(), "/rejected-get");
+    auto post = client.post("127.0.0.1", peer.port(), "/rejected-post");
+    auto request = client.async_request(arknet::http::verb::put, "127.0.0.1", peer.port(), "/rejected-request");
+    for (auto* future : {&get, &post, &request})
+    {
+        REQUIRE(future->wait_for(0ms) == std::future_status::ready);
+        CHECK(await_http(*future) == http_result{false, aborted});
+    }
+    unsigned rejected = 0;
+    auto rejection = [&](http_result result) {
+        CHECK(result == http_result{false, aborted});
+        CHECK_FALSE(client.ready_to_shut());
+        auto nested = client.get("127.0.0.1", peer.port(), "/rejection-follow-up");
+        CHECK(await_http(nested) == http_result{false, aborted});
+        ++rejected;
+    };
+    client.post(rejection, "127.0.0.1", peer.port(), "/rejected-callback-port");
+    client.post(rejection, "127.0.0.1", std::to_string(peer.port()), "/rejected-callback-service");
+    CHECK(rejected == 0);
+    REQUIRE(client.update());
+    CHECK(rejected == 2);
+    CHECK(completed == 0);
+    CHECK(peer.count() == 2);
+    peer.reply_pending();
+    CHECK(await_http(accepted).first);
+    REQUIRE(wait_http([&] { return completed == 1; }, [&] { client.update(); }));
+    CHECK(retained.expired());
+    REQUIRE(wait_http([&] { return peer.count() == 3; }));
+    CHECK_FALSE(client.ready_to_shut());
+    peer.reply_pending();
+    CHECK(await_http(follow_up).first);
+    REQUIRE(wait_http([&] { return client.ready_to_shut(); }));
+    CHECK(client.pre_shut());
+    CHECK(client.pre_shut());
+    CHECK(client.ready_to_shut());
+    CHECK(peer.count() == 3);
+}
+
+TEST_CASE("HTTP manager drain permits provider work from an accepted managed task") {
+    http_peer peer(false);
+    REQUIRE(peer.start());
+    auto owned_client = ark::detail::make_http_client_module();
+    auto& client = *owned_client;
+    ark::plugin_manager manager;
+    client.set_name("http-client");
+    client.set_plugin_manager(&manager);
+    REQUIRE(manager.add_module(client.get_name(), &client));
+    auto& tasks = manager.create_task_group(client);
+    std::future<http_result> accepted;
+    REQUIRE(tasks.start(managed_http_request(client, peer.port(), accepted)) != 0);
+    CHECK_FALSE(manager.stop(1));
+    CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::draining);
+    auto rejected = client.get("127.0.0.1", peer.port(), "/external-root");
+    CHECK_FALSE(await_http(rejected).first);
+    unsigned rejected_callbacks = 0;
+    client.post(
+        [&](http_result result) {
+            CHECK_FALSE(result.first);
+            auto nested = client.get("127.0.0.1", peer.port(), "/rejected-from-task-delivery");
+            REQUIRE(nested.wait_for(0ms) == std::future_status::ready);
+            CHECK_FALSE(await_http(nested).first);
+            ++rejected_callbacks;
+        },
+        "127.0.0.1", peer.port(), "/rejected-callback");
+    REQUIRE(manager.update(2));
+    CHECK(rejected_callbacks == 1);
+    REQUIRE(accepted.valid());
+    REQUIRE(wait_http([&] { return peer.count() == 1; }));
+    CHECK(manager.pending_tasks() == 0);
+    CHECK_FALSE(manager.stop(3));
+    CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::draining);
+    CHECK_FALSE(client.ready_to_shut());
+    peer.reply_pending();
+    CHECK(await_http(accepted).first);
+    REQUIRE(wait_http([&] { return manager.stop(4); }));
+    CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopped);
+    CHECK(manager.stop(5));
+    CHECK_FALSE(manager.update(6));
+    CHECK(peer.count() == 1);
+}
+
+TEST_CASE("HTTP manager timeout retains requests and callback owners for later updates") {
+    http_peer peer(false);
+    REQUIRE(peer.start());
+    auto owned_client = ark::detail::make_http_client_module();
+    auto& client = *owned_client;
+    ark::plugin_manager manager;
+    client.set_name("http-client");
+    client.set_plugin_manager(&manager);
+    REQUIRE(manager.add_module(client.get_name(), &client));
+    REQUIRE(manager.add_update_module(&client));
+    auto lifetime = std::make_shared<int>(1);
+    std::weak_ptr<int> retained = lifetime;
+    unsigned delivered = 0;
+    client.post(
+        [&, lifetime](http_result result) {
+            CHECK(result.first);
+            CHECK(*lifetime == 1);
+            CHECK_FALSE(client.ready_to_shut());
+            ++delivered;
+        },
+        "127.0.0.1", peer.port(), "/timeout-retention");
+    lifetime.reset();
+    REQUIRE(wait_http([&] { return peer.count() == 1; }));
+    CHECK_FALSE(manager.stop(1));
+    CHECK_FALSE(manager.stop_until(2, std::chrono::steady_clock::now()));
+    CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::timed_out);
+    CHECK_FALSE(retained.expired());
+    CHECK_FALSE(client.ready_to_shut());
+    CHECK(delivered == 0);
+    peer.reply_pending();
+    REQUIRE(wait_http([&] { return delivered == 1; }, [&] { CHECK(manager.update(3)); }));
+    CHECK(retained.expired());
+    REQUIRE(wait_http([&] { return client.ready_to_shut(); }));
+    CHECK_FALSE(manager.stop(4));
+    CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::timed_out);
+    CHECK(client.pre_shut());
+}
+
+TEST_CASE("HTTP manager failure retains IO results and callback receivers without automatic dispatch") {
+    struct failed_readiness : ark::module
+    {
+        bool ready_to_shut() const override {
+            throw std::runtime_error("readiness failure");
+        }
+    } failure;
+
+    http_peer peer(false);
+    REQUIRE(peer.start());
+    auto owned_client = ark::detail::make_http_client_module();
+    auto& client = *owned_client;
+    ark::plugin_manager manager;
+    client.set_name("http-client");
+    client.set_plugin_manager(&manager);
+    REQUIRE(manager.add_module(client.get_name(), &client));
+    REQUIRE(manager.add_update_module(&client));
+    REQUIRE(manager.add_module("failure", &failure));
+    auto lifetime = std::make_shared<int>(1);
+    std::weak_ptr<int> retained = lifetime;
+    unsigned delivered = 0;
+    auto future = client.get("127.0.0.1", peer.port(), "/failed-manager-future");
+    client.post(
+        [&, lifetime](http_result result) {
+            CHECK(result.first);
+            CHECK(*lifetime == 1);
+            CHECK_FALSE(client.ready_to_shut());
+            ++delivered;
+        },
+        "127.0.0.1", peer.port(), "/failed-manager-callback");
+    lifetime.reset();
+    REQUIRE(wait_http([&] { return peer.count() == 2; }));
+    CHECK_FALSE(manager.stop(1));
+    CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::failed);
+    CHECK_FALSE(client.ready_to_shut());
+    CHECK_FALSE(retained.expired());
+    peer.reply_pending();
+    CHECK(await_http(future).first);
+    CHECK_FALSE(manager.update(2));
+    CHECK(delivered == 0);
+    CHECK_FALSE(retained.expired());
+    REQUIRE(wait_http([&] { return delivered == 1; }, [&] { client.update(); }));
+    CHECK(retained.expired());
+    REQUIRE(wait_http([&] { return client.ready_to_shut(); }));
+    CHECK_FALSE(manager.stop(3));
+    CHECK(client.pre_shut());
+}
+
+TEST_CASE("HTTP rejected callback exceptions retain later results and cannot gain admission") {
+    auto owned_client = ark::detail::make_http_client_module();
+    auto& client = *owned_client;
+    CHECK(client.stop_accepting());
+    auto lifetime = std::make_shared<int>(1);
+    std::weak_ptr<int> retained = lifetime;
+    unsigned delivered = 0;
+    client.post(
+        [&](http_result result) {
+            CHECK_FALSE(result.first);
+            CHECK_FALSE(client.ready_to_shut());
+            auto nested = client.get("127.0.0.1", 1, "/must-reject");
+            REQUIRE(nested.wait_for(0ms) == std::future_status::ready);
+            CHECK_FALSE(await_http(nested).first);
+            throw std::runtime_error("callback failure");
+        },
+        "127.0.0.1", 1, "/rejected-throw");
+    client.post(
+        [&, lifetime](http_result result) {
+            CHECK_FALSE(result.first);
+            CHECK_FALSE(client.ready_to_shut());
+            CHECK(*lifetime == 1);
+            ++delivered;
+        },
+        "127.0.0.1", 1, "/retained-result");
+    lifetime.reset();
+    CHECK_THROWS_AS(client.update(), std::runtime_error);
+    CHECK_FALSE(client.ready_to_shut());
+    CHECK_FALSE(retained.expired());
+    CHECK(delivered == 0);
+    CHECK(client.update());
+    CHECK(delivered == 1);
+    CHECK(retained.expired());
+    CHECK(client.ready_to_shut());
+    auto rejected = client.get("127.0.0.1", 1, "/after-exception");
+    CHECK_FALSE(await_http(rejected).first);
+    CHECK(client.update());
+    CHECK(delivered == 1);
+}
+
+TEST_CASE("HTTP accepted callback exceptions release active ownership and restore admission scope") {
+    http_peer peer;
+    REQUIRE(peer.start());
+    auto owned_client = ark::detail::make_http_client_module();
+    auto& client = *owned_client;
+    auto lifetime = std::make_shared<int>(1);
+    std::weak_ptr<int> retained = lifetime;
+    unsigned delivered = 0;
+    client.post(
+        [&, lifetime](http_result result) {
+            CHECK(result.first);
+            CHECK_FALSE(client.ready_to_shut());
+            CHECK(*lifetime == 1);
+            ++delivered;
+            throw std::runtime_error("accepted callback failure");
+        },
+        "127.0.0.1", peer.port(), "/throw");
+    lifetime.reset();
+    REQUIRE(wait_http([&] { return peer.count() == 1; }));
+    CHECK(client.stop_accepting());
+    bool caught = false;
+    REQUIRE(wait_http([&] { return caught; },
+        [&] {
+            try
+            { client.update(); }
+            catch (const std::runtime_error&)
+            { caught = true; }
+        }));
+    CHECK(delivered == 1);
+    CHECK(retained.expired());
+    REQUIRE(wait_http([&] { return client.ready_to_shut(); }));
+    auto rejected = client.get("127.0.0.1", peer.port(), "/after-accepted-exception");
+    CHECK_FALSE(await_http(rejected).first);
+    CHECK(peer.count() == 1);
 }
 
 TEST_CASE("HTTP validates host headers target and timeout before network IO") {
