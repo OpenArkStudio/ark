@@ -17,7 +17,7 @@ Database real-service acceptance records identify the tested macOS revisions and
 
 ## Priority design
 
-General Entity subscriptions, nested wire/client adaptation and the remaining lifecycle stages share discussion priority. [Synchronization design boundaries](../concepts/entity-sync.md) cover authorization, nested identity/order, events and recovery. The trusted-binding nested C++ baseline/delta/replica is available; room v1 retains its scalar wire contract. Performance claims require measured payload and owner-thread cost.
+Official-module admission closure, startup-failure cleanup and documentation synchronization are the current delivery priorities. General Entity subscriptions and nested wire/client adaptation remain deferred for later discussion. [Synchronization design boundaries](../concepts/entity-sync.md) cover authorization, nested identity/order, events and recovery. The trusted-binding nested C++ baseline/delta/replica is available; room v1 retains its scalar wire contract. Performance claims require measured payload and owner-thread cost.
 
 ## Deferred directions
 
