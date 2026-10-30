@@ -67,6 +67,24 @@ Private database bridges share this executor through `manager.get_task_runtime()
 1. Module `update()`: call `service.update()`, then `bridge.dispatch()`.
 2. `manager.update(timestamp, maximum_handlers = 64)`: poll once, sharing the handler budget across all groups. Modules must not also poll their group/runtime.
 
+`manager.is_polling_tasks()` is an owner-thread query that is true only while
+`manager.update()` dispatches its central task poll, including task completions.
+It is false during ordinary module updates and after the poll returns or throws.
+Direct `task_group::poll()` or retained `manual_runtime::poll()` calls outside
+`manager.update()` do not establish this phase.
+The marker belongs to the manager object, so providers in another shared library
+can inspect this phase without relying on that library's Asio thread-local
+context. It is a trusted execution scope, not an identity token for arbitrary
+external workflows; application ingress must not post fresh roots onto this
+executor during drain.
+
+**Migration:** raw group/runtime polls keep executing ready work and retain their
+existing teardown/reentry guards, but no longer authorize Net HTTP follow-up
+requests after admission closes. Drive manager-owned tasks with `manager.update()`.
+Standalone groups and tools retain their direct-poll API. Rebuild the host and
+all plugins together for the inline manager phase behavior; no virtual slots or
+object data are added.
+
 `manager.stop(timestamp)` first seals new top-level tasks in every group, then runs [one-shot module admission hooks](modules.md#stop-new-business-roots) in reverse cached topology. Active update/completion stacks defer those hooks to the next outer owner-frame stop. It returns `false` without waiting while tasks or active stacks remain. Keep services and bridges accepting for accepted coroutines' later operations. After completion and stack unwinding, another `stop()` synchronously runs `pre_shut()`, `shut()` and unloading; user hooks may block.
 
 `manager.stop_until(timestamp, deadline)` accepts a `std::chrono::steady_clock::time_point`. The earliest deadline supplied remains active across later calls, including `stop(timestamp)`; an unlimited call cannot clear it. Without a supplied deadline, `stop(timestamp)` retains its unlimited behavior. Time checks occur at synchronous hook boundaries and before `pre_shut()`. A hook that returns after expiry cannot enter later cleanup. Expiry is sticky and returns `false`; `get_shutdown_failure()` identifies the phase/module, while `get_shutdown_exception()` remains empty for a plain timeout. Once cleanup has begun, completed actions are not undone and `cleanup_timed_out` also disables updates. See [launcher timeout behavior](applications.md#check-startup-and-stop-the-process).
@@ -95,7 +113,7 @@ Use manager/groups on their constructing thread. In update/shutdown hooks or exe
 
 <Aside type="caution" title="Task completion does not release native IO resources">
 
-The check covers only managed groups' accepted top-level tasks. The new admission hook is a module contract with a default no-op; official Net/HTTP listeners are not yet migrated. Safe code unloading also requires external callbacks to return, pool workers to exit and background cleanup to finish; zero tasks proves none of these. Unmanaged work must not reference a module being destroyed.
+The task check covers only managed groups' accepted top-level tasks. Each module's admission/readiness hooks have their documented native scope; see the [Net HTTP client](../reference/network.md#http-client-admission-and-drain) and [HTTP server](../reference/http.md). Safe code unloading also requires external callbacks to return, pool workers to exit and background cleanup to finish; zero tasks proves none of these. Unmanaged work must not reference a module being destroyed.
 
 </Aside>
 

@@ -292,8 +292,7 @@ bool http_client_module_impl::is_continuation() const {
         return state::callback_context == state_.get() && state::callback_accepted;
     }
     auto* manager = get_plugin_manager();
-    return manager && std::this_thread::get_id() == owner_ &&
-           manager->get_task_runtime()->get_executor().running_in_this_thread();
+    return manager && std::this_thread::get_id() == owner_ && manager->is_polling_tasks();
 }
 
 bool http_client_module_impl::update() {
