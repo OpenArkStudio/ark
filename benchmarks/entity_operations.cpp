@@ -1,11 +1,14 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
 #include <charconv>
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
+#include <exception>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 
 #include <ark/kernel/data_list_impl.hpp>
 #include <ark/kernel/kernel_module.hpp>
@@ -294,10 +297,51 @@ int main(int argc, char* argv[]) {
     }
     const auto id = player->get_id();
     player.reset();
-    if (!kernel->destroy_entity(id) || !manager.stop(1))
+    if (!kernel->destroy_entity(id))
     {
         std::_Exit(1);
     }
+    const auto shutdown_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    std::int64_t tick = 0;
+    const auto fail_shutdown = [&](const char* reason) {
+        std::cerr << "Benchmark dependency shutdown failed: " << reason
+                  << "; state=" << static_cast<int>(manager.get_shutdown_state())
+                  << "; phase=" << manager.get_shutdown_failure() << std::endl;
+        // Do not unwind retained callbacks/DSOs or report timeout as success.
+        std::_Exit(1);
+    };
+    try
+    {
+        while (!manager.stop_until(++tick, shutdown_deadline))
+        {
+            if (const auto error = manager.get_shutdown_exception())
+            {
+                std::rethrow_exception(error);
+            }
+            const auto state = manager.get_shutdown_state();
+            if ((state != ark::plugin_manager::shutdown_state::draining &&
+                    state != ark::plugin_manager::shutdown_state::stopping_acceptance) ||
+                !manager.get_shutdown_failure().empty())
+            {
+                fail_shutdown("terminal shutdown state");
+            }
+            if (std::chrono::steady_clock::now() >= shutdown_deadline)
+            {
+                fail_shutdown("cooperative deadline reached");
+            }
+            // Startup used the synthetic timestamp zero. Keep its clock domain
+            // while pumping accepted completions; never jump to wall-clock time.
+            if (!manager.update(++tick))
+            {
+                fail_shutdown("owner update failed during drain");
+            }
+            std::this_thread::yield();
+        }
+    }
+    catch (const std::exception& error)
+    { fail_shutdown(error.what()); }
+    catch (...)
+    { fail_shutdown("nonstandard exception during drain"); }
     std::cout << (smoke ? "Entity workload smoke passed: 8 iterations per loop; timing disabled"
                         : "Entity workload completed")
               << std::endl;
