@@ -146,7 +146,7 @@ The route has been selected; these are implementation boundaries, not pending po
 | Selected direction | Current delivery |
 | --- | --- |
 | Required module-level provider declarations, with missing/cycle validation and ordered startup | Available framework stage; Timers/Utility migrated, undeclared modules remain independent nodes |
-| Separate ingress quiescence while accepted tasks retain provider access | Core contract, HTTP request-level integration, opt-in Net root registration and controlled business fixture; application callbacks still need explicit classification and migration |
+| Separate ingress quiescence while accepted tasks retain provider access | Core contract, HTTP request-level integration, opt-in Net root registration, guest-room Join/Move/Action and controlled business fixture; other application callbacks still need explicit classification and migration |
 | Opt-in cleanup after startup failure, then exit `1` | Available single slot, latest-call record and private standalone-wheel validation; shared Utility Timer, IO and full phase history remain outside this slice |
 | Consumer-before-provider complete cleanup, after all active/task/readiness gates | Subsequent stage; no new general shutdown or unload guarantee is provided |
 
@@ -165,6 +165,8 @@ The [launcher suite](https://github.com/OpenArkStudio/ark/blob/main/tests/app/bu
 | `update_throw`, `update_throw_unknown` | Updates can later resume, but the earlier drain failure still prevents teardown |
 
 The suite's owned-child observation timeout terminates retained test processes; that is not successful framework shutdown. It also checks four invalid deadline values. [Startup-failure tests](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/tests/app/startup_failures.cmake) separately cover 12 failure modes in TOML and XML, including a real listener started before failure. [Core startup](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/tests/core/plugin_manager_startup.cpp) and [business-runtime](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/tests/core/business_runtime.cpp) cases cover first failure, callback/reentrancy guards and all-module readiness.
+
+The guest room refuses new Join/Move/Action through its [actual business entry points](../../examples/guest_room/README.md#stop-new-business-requests), using existing `server_stopping` errors with Action sequence correlation while preserving state and the existing work/output limits. Heartbeats, disconnect tombstones and accepted-task completion continue. A separate child with an observation deadline loads actual Room/Kernel/Net DSOs, but its controlled host keeps the room DSO linked: this does not verify library unmapping or guarantee native send delivery. Shared IO, Registry, hot update, nested wire changes and the TCP 5000 workstream remain paused.
 
 Core admission tests cover cached reverse order, one-shot/reentrant behavior, manual stop, legal idle additions/removals, same-key replacement, invalid graphs and metadata/hook failures. The [module guide](../guides/modules.md#stop-new-business-roots) records the pinned arknet ingress-only API gap; server stop/acceptor mutation is not a safe substitute.
 

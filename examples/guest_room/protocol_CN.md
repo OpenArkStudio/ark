@@ -17,7 +17,9 @@ TCP 帧使用固定的 12 字节头部：第 `0..3` 字节为 ASCII `ARK2`，第
 | 60008 | 客户端 → 服务端 | `action_request`：sequence 与操作枚举 |
 | 60009 | 服务端 → 已加入者 | `room_delta`：新增基线及修改／删除增量 |
 
-60007 仅用于内部不支持消息的分发，不向网络发出。客户端仅可发送 Join、Move、Ping 和 Action。未知／方向错误的消息 ID 及畸形 Protobuf 会关闭连接。允许 Protobuf 未知字段以支持向前兼容；未知操作枚举返回业务错误。错误码包括 `room_full`、`already_joined`、`not_joined`、`invalid_message`、`stale_sequence` 和 `insufficient_resource`。未超过工作量／输出限制时，业务错误保留连接。操作错误携带 `action_sequence`，缺少序列号时为零；其他错误不携带该字段。
+60007 仅用于内部不支持消息的分发，不向网络发出。客户端仅可发送 Join、Move、Ping 和 Action。未知／方向错误的消息 ID 及经解析的畸形 Protobuf 会关闭连接；停止接收时 Join／Move 的例外见下文。允许 Protobuf 未知字段以支持向前兼容；未知操作枚举返回业务错误。错误码包括 `room_full`、`already_joined`、`not_joined`、`invalid_message`、`stale_sequence`、`insufficient_resource` 和 `server_stopping`。未超过工作量／输出限制时，业务错误保留连接。操作错误携带 `action_sequence`，缺少序列号时为零；其他错误不携带该字段。
+
+管理器离开 `running` 后，在所属线程回调入口拒绝 Join、Move、Action，错误码为 `server_stopping`，不修改成员关系或 Entity 字段。Action 拒绝仅解析正文以回传 `action_sequence`；畸形 Action 仍关闭连接。Join／Move 拒绝不解析正文，因此即使正文畸形也返回停止接收错误。Ping、不支持消息及连接事件继续普通派发，工作量／输出限制同样约束拒绝路径。客户端通过匹配的错误结束操作等待；重连后重新加入，不自动重放。此约定不增加 schema 字段或修改线格式，不保证原生发送交付、TCP 停止接收或动态库卸载。
 
 仅提供一个 `lobby`，最多容纳 16 名玩家，不进行账号认证。名称须为 `1..64` 个有效 UTF-8 字节，且不含 Unicode C0／C1 控制字符。坐标须为有限值，分别位于 `0..960`／`0..540` 内；出生位置由服务端确定。移动及属性操作分别使用从 1 开始、独立递增的 uint32 序列号。玩家 ID 是进程内唯一的不透明十进制字符串；Entity GUID 标识实际 Kernel 实例。Accepted 将请求会话的两个标识绑定。请求不能通过提供身份选择或授权修改 Entity。
 

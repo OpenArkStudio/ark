@@ -146,7 +146,7 @@ Provider 清点：Game 保留 Kernel／Guid／Bus／Msg／Net／Map；Net 管理
 | 已选方向 | 当前交付 |
 | --- | --- |
 | 模块级必需 provider 声明、缺失／环验证与有序启动 | 框架阶段已提供；已迁移 Timers／Utility，无声明模块仍作为独立节点 |
-| 独立停止接收，已接收任务继续访问 provider | Core 合同、HTTP 请求级接入、Net 根回调显式注册与受控业务插件已提供；应用回调仍须显式分类和迁移 |
+| 独立停止接收，已接收任务继续访问 provider | Core 合同、HTTP 请求级接入、Net 根回调显式注册、访客房间 Join／Move／Action 与受控业务插件已提供；其他应用回调仍须显式分类和迁移 |
 | 启动失败时可选清理，随后退出 `1` | 已提供单槽、最近调用记录及私有独立时间轮验证；共享 Utility Timer、IO 和完整阶段历史仍在本切片之外 |
 | 通过全部活跃栈／任务／就绪检查后，先消费者、后 provider 完整清理 | 后续阶段；不提供新的通用停机或卸载保证 |
 
@@ -165,6 +165,8 @@ Provider 清点：Game 保留 Kernel／Guid／Bus／Msg／Net／Map；Net 管理
 | `update_throw`、`update_throw_unknown` | 后续 update 可以恢复，先前的排空失败仍阻止清理 |
 
 测试用观察超时终止自己创建的保留进程，不代表框架正常停机。测试还检查四个无效截止时间参数。[启动失败测试](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/tests/app/startup_failures.cmake) 分别用 TOML 和 XML 检查 12 种失败模式，包括失败前已启动的真实监听器。[Core 启动测试](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/tests/core/plugin_manager_startup.cpp) 和[业务 runtime 测试](https://github.com/OpenArkStudio/ark/blob/988dfbc048425cdb56cbe5f14314320fe698d07d/tests/core/business_runtime.cpp) 覆盖首个失败、回调／重入限制和全部模块就绪检查。
+
+访客房间通过[实际业务入口](../../examples/guest_room/README_CN.md#停止接收业务请求)拒绝新的 Join／Move／Action，使用现有 `server_stopping` 错误并关联 Action 序列号，保持状态不变及既有工作量／输出限制。心跳、断线墓碑和已接纳任务完成继续执行。受控宿主在有观察期限的独立子进程内加载真实 Room／Kernel／Net 动态库，但通过链接保留房间 DSO，不验证库映像卸载，也不提供原生发送交付保证。共享 IO、Registry、热更新、嵌套线格式及 TCP 5000 专项继续暂停。
 
 Core 停止接收测试覆盖缓存反向顺序、一次性／重入、手动 stop、合法 idle 新增／移除、同键替换、无效图，以及元数据／钩子失败。[模块指南](../guides/modules_CN.md#停止接收新业务根请求)记录固定版本 arknet 缺少独立停止接收 API 的边界；stop 服务端或修改 acceptor 都不能安全替代。
 

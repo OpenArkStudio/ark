@@ -17,6 +17,10 @@
 每个目录中的 hpp/cpp 继续并排存放。可从 [timers 快速开始](../get-started/quick-start_CN.md)入手。
 通用启动脚本选择 `conf/<name>.app.toml`，因此进程名称和应用清单都应使用能力名称。Kernel 示例仍需要业务元数据。
 
+## 访客房间停止接收
+
+访客房间将 Join、Move、Action 显式注册为外部业务根。管理器离开 `running` 后，在回调入口返回 `server_stopping`；Action 携带关联序列号，拒绝不修改成员关系或 Entity 状态，并沿用既有工作量／输出限制。心跳、连接事件和断线墓碑继续派发，已接纳工作可以完成。真实 Room／Kernel／Net 的受控原生测试在独立、有观察期限的子进程中覆盖此行为；不提供原生发送、卸载或 Godot 验收保证。见[示例验证范围](../../examples/guest_room/README_CN.md#原生验证)。
+
 ## 迁移编号示例名称
 
 | 原目录、应用名和标识符前缀 | 新前缀 |
