@@ -15,6 +15,11 @@ add_library(ark_construction_header_checks OBJECT headers/module_base.cpp header
 set_property(TARGET ark_construction_header_checks PROPERTY LINK_LIBRARIES ark::core)
 add_dependencies(ark_core_tests ark_construction_header_checks)
 if(ARK_BUILD_PROTO)
+    add_executable(ark_net_external_root_tests main.cpp net_external_root.cpp)
+    set_property(TARGET ark_net_external_root_tests PROPERTY LINK_LIBRARIES ark::net)
+    add_custom_target(check-net-external-root
+        COMMAND $<TARGET_FILE:ark_net_external_root_tests>
+        DEPENDS ark_net_external_root_tests USES_TERMINAL VERBATIM)
     target_sources(ark_core_tests PRIVATE protobuf_messages.cpp)
     target_link_libraries(ark_core_tests PRIVATE ark::bus ark::proto)
     file(GLOB_RECURSE ark_proto_contract_files CONFIGURE_DEPENDS
@@ -52,6 +57,9 @@ add_custom_target(check-core
     COMMAND $<TARGET_FILE:ark_core_tests>
     DEPENDS ark_core_tests
     USES_TERMINAL)
+if(TARGET check-net-external-root)
+    add_dependencies(check-core check-net-external-root)
+endif()
 
 # Keep singleton shutdown terminal within its own process, including the logger specialization.
 add_executable(ark_singleton_tests ../test_singleton.cpp)
