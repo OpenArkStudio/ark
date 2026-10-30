@@ -30,6 +30,13 @@ foreach(manifest missing.toml invalid.toml invalid.app.conf wrong-type.toml)
     message(STATUS "${manifest}: normal exit 1 with manifest diagnostic")
 endforeach()
 
+# Keep each logging check run independent from earlier launcher output.
+# Preserve prior runs for diagnosis rather than deleting their files.
+string(RANDOM LENGTH 16 ALPHABET 0123456789abcdef logging_run)
+set(RUNTIME_DIR "${RUNTIME_DIR}/embedded-logging-${logging_run}")
+file(MAKE_DIRECTORY "${RUNTIME_DIR}")
+message(STATUS "Embedded logging runtime: ${RUNTIME_DIR}")
+
 # Embedded logging errors are rejected before attempting plugin loads.
 foreach(case bad-level bad-console bad-queue bad-sinks bad-path)
     if(case STREQUAL "bad-level")
