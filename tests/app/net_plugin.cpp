@@ -15,6 +15,7 @@
 #include <ark/net/http_client_module.hpp>
 #include <ark/net/net_service_manager_module.hpp>
 #include <ark/plugin_manager.hpp>
+#include "owner_drain.hpp"
 
 namespace {
 using namespace std::chrono_literals;
@@ -230,7 +231,7 @@ int main(int argc, char* argv[]) {
         "Root gate admitted new work or closed the ordinary callback session");
     hold.ready = true;
     server.reset();
-    require(manager.stop(++tick), "Net DSO shutdown did not complete");
+    ark::test::drain_owner(manager, [&] { return ++tick; }, std::chrono::steady_clock::now() + 5s, "Net actual DSOs");
     require(endpoint.expired(), "Net listener survived normal module unregistration");
     require(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopped,
         "Net resources were retained instead of normally stopped");

@@ -17,6 +17,7 @@
 #include <ark/net/net_service_manager_module.hpp>
 #include <ark/plugin_manager.hpp>
 #include <ark/time/date_time.hpp>
+#include "owner_drain.hpp"
 
 namespace {
 using namespace std::chrono_literals;
@@ -159,7 +160,11 @@ int peer(const std::string& role, const std::string& plugins, int generation) {
                     diagnostic.find("static Bus target 1.1.30.1") != std::string::npos &&
                     diagnostic.find("intranet_endpoint") != std::string::npos,
             "Invalid static target lacked a specific startup diagnostic: " + diagnostic);
-        require(manager.stop(ark::date_time::get_now_time()), "Invalid static target cleanup failed");
+        // Fixture hygiene only: every DSO/owner remains loaded after failed
+        // start, and this child exits immediately; no production rollback or
+        // same-process retry contract is being exercised.
+        ark::test::drain_owner(manager, ark::date_time::get_now_time, std::chrono::steady_clock::now() + 5s,
+            "Invalid static target fixture cleanup");
         return 0;
     }
     require(started, "Actual plugin startup failed: " + manager.get_startup_failure());
@@ -215,8 +220,9 @@ int peer(const std::string& role, const std::string& plugins, int generation) {
     require(role == "server" ? stopping != 0 : received.replies == 2, "Bounded SS peer acceptance timed out");
     // Drop public shared services while their DSO implementations remain loaded.
     clients.reset();
-    require(manager.stop(ark::date_time::get_now_time()) && manager.stop(ark::date_time::get_now_time()),
-        "Actual plugin normal repeated stop failed");
+    ark::test::drain_owner(
+        manager, ark::date_time::get_now_time, std::chrono::steady_clock::now() + 5s, "Static Bus actual DSOs");
+    require(manager.stop(ark::date_time::get_now_time()), "Actual plugin normal repeated stop failed");
     return 0;
 }
 
