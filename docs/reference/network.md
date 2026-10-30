@@ -97,6 +97,17 @@ manager drain ordering, repeated stop, callback exceptions and capture release
 using loopback HTTP. These local checks do not establish external Etcd/Consul
 acceptance or arbitrary application continuation safety.
 
+Application-enabled `check-core` also runs `check-net-http-drain`, which loads
+actual Net, Bus and Utility DSOs. Its host-side managed coroutine suspends before
+admission stop, then resumes on the shared owner task executor and calls the
+loaded HTTP interface. Controlled loopback responses check the accepted request,
+rejection of a fresh external root, a callback retry during drain, binary owning
+results, receiver release and normal manager teardown/unload. The host does not
+compile the private HTTP implementation or substitute a client. DSO-created
+futures are consumed before unload; only their owning result values are retained.
+This test covers the shared-executor boundary in the configured host/DSO toolchain;
+it does not establish arbitrary deferred workflow identity or external services.
+
 ## Server and client service examples
 
 `msg_header::max_body_size() const` defines the locally configured protocol's

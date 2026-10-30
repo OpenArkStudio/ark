@@ -526,6 +526,19 @@ if(ARK_BUILD_PROTO AND TARGET ark_bus_plugin AND TARGET ark_net_plugin AND TARGE
 endif()
 
 if(ARK_BUILD_PROTO AND TARGET ark_bus_plugin AND TARGET ark_net_plugin AND TARGET ark_utility_plugin)
+    add_executable(ark_http_client_drain_tests ../app/http_client_drain.cpp)
+    set_property(TARGET ark_http_client_drain_tests PROPERTY LINK_LIBRARIES ark::net)
+    add_custom_target(check-net-http-drain
+        COMMAND ${CMAKE_COMMAND} "-DPROGRAM=$<TARGET_FILE:ark_http_client_drain_tests>"
+            "-DPLUGIN_DIR=$<TARGET_FILE_DIR:ark_net_plugin>"
+            "-DRUNTIME_DIR=${CMAKE_CURRENT_BINARY_DIR}/http client drain runtime"
+            -P "${PROJECT_SOURCE_DIR}/tests/app/http_client_drain.cmake"
+        DEPENDS ark_http_client_drain_tests ark_net_plugin ark_bus_plugin ark_utility_plugin
+        USES_TERMINAL VERBATIM)
+    add_dependencies(check-core check-net-http-drain)
+endif()
+
+if(ARK_BUILD_PROTO AND TARGET ark_bus_plugin AND TARGET ark_net_plugin AND TARGET ark_utility_plugin)
     add_executable(ark_bus_plugin_tests ../app/bus_plugin.cpp)
     set_property(TARGET ark_bus_plugin_tests PROPERTY LINK_LIBRARIES ark::bus)
     add_custom_target(check-bus-plugin
