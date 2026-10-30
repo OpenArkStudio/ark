@@ -18,7 +18,7 @@
 ## API 与私有创建
 
 Net 的全部源头文件与实现位于 `src/plugins/net/`。`ark::net` API 目标通过显式清单，
-将 18 个公开头映射到 `<ark/net/...>`，并传递公开依赖。包含协议消息的服务头需要
+将 19 个公开头映射到 `<ark/net/...>`，并传递公开依赖。包含协议消息的服务头需要
 `ARK_BUILD_PROTO=ON`；此时 `ark::net` 会传递 `ark::proto`。直接端点头仍可在关闭协议生成时使用。
 API 目标本身不会构建或加载运行时动态库。
 
@@ -132,6 +132,49 @@ pending.write("next", 4);                 // 重新申请存储
 **升级要求：**容量记录改变 `net_msg` 布局，须同时重编译 Net、消费方及插件。这些消息、事件和原生包头工厂使用标准分配，`ARK_NEW` / `ARK_DELETE` 覆盖不再定制它们。公开签名、CS/SS 报文字节和平台类型不变。
 
 启用 `ARK_BUILD_NETWORK_TESTS=ON` 后，`check-net-message` 无需套接字即可验证所有权、拆包和确定性分配失败；`check-network` 包含该目标。本地检查不代表共享服务或容量验收。
+
+## 显式注册外部业务根回调
+
+包含 `<ark/net/external_root_callback.hpp>`，仅为发起新外部业务流程的回调使用
+`reg_external_root_callback(server, manager, id, on_accept, on_reject)`。
+两个处理器都必填；任一为空时，在调用服务注册前返回 `false`。重复 ID 保留服务原有的
+`false` 结果和原回调。
+
+```cpp
+#include <utility>
+#include <ark/net/external_root_callback.hpp>
+
+bool register_request(ark::net_server_service& server, ark::plugin_manager& manager,
+    ark::net_msg_functor handle_request, unsigned& rejected) {
+    return ark::reg_external_root_callback(server, manager, 45001,
+        std::move(handle_request),
+        [&rejected](const ark::net_msg*, ark::conv_id_t) { ++rejected; });
+}
+```
+
+示例显式选择在本地记录拒绝次数。应用自行提供拒绝处理器；助手不增加错误消息、报文格式、
+断开会话或丢弃输出策略。计数器及其他借用状态必须保持有效。
+
+包装器在 owner 线程进入回调时检查管理器状态：`running` 调用 `on_accept`，其他状态调用
+`on_reject`。接纳点不是 socket 收包或拆包：已经排队、尚未进入业务回调的帧仍可能被拒绝。
+已接纳的处理器可以调用 `manager.stop()`；当前处理器继续执行，后续根入口被拒绝。
+现有 `reg_msg_callback` 注册、完成／控制回调、注册与心跳处理、发送和 provider 操作保持原有行为。
+不得根据传输、CS／SS 头、Bus ID 或连接角色推断业务根。同一 ID 混用根请求和完成消息时，
+应在业务处理器内分类，不应包装整个 ID。
+
+在 `draining` 和清理前的 `timed_out` 状态继续执行 owner 更新，以投递已接纳流程的结果。
+`failed`、`stopped` 和 `cleanup_timed_out` 状态不再更新；状态判断不保证这些状态下仍有回调投递。
+
+注册和派发必须在管理器 owner 线程执行。助手借用管理器；管理器和捕获的接收对象必须在服务的
+回调注册生存期内保持有效。助手不提供取消注册、独立移除模块或动态库卸载保证。消息指针仅在
+当前调用中有效；避免强捕获服务，形成服务与回调之间的所有权环。处理器异常沿用现有回调路径；
+拒绝处理器应不抛异常。这个纯头文件扩展不改变服务虚表、类布局或报文格式；现有访客房间和
+未标注的业务注册不会自动迁移。
+
+`check-net-external-root`（启用 Core 测试和 Protobuf）通过合同记录器调用实际注册的包装器，
+覆盖运行、停止接收、排空、超时、失败、已停止状态，以及空处理器、重复注册和重入停止。
+`check-net-plugin` 另加载真实 Bus／Utility／Net 动态库，验证 TCP 根请求接纳、排空期间拒绝，
+以及同一会话继续投递普通回调。记录器用例不是传输证据；这两项检查均不证明生产容量或全部应用迁移。
 
 ## 成员回调与借用参数
 

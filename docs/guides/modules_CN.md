@@ -148,7 +148,7 @@ class dependent_module final
 
 通过 `stop_until(timestamp, deadline)` 传入截止时间后，管理器在停止接收／就绪钩子返回后及清理前检查时间；后续 `stop()` 不能绕过超时保留。清理前的 `timed_out` 保留资源并允许更新；清理开始后的 `cleanup_timed_out` 保留剩余资源并停止更新。检查不能抢占钩子，也不能回滚已经执行的动作。详见[超时状态](tasks_CN.md#模块共用业务执行器)。
 
-**迁移边界：** 本阶段只有受控业务 runtime 测试插件实现了新的外部根请求入口。官方 Net／HTTP 监听器和其他官方业务入口仍使用默认钩子。固定版本 arknet 的 [TCP 服务端](https://github.com/OpenArkStudio/arknet/blob/a0dfe09cd543e75cfb5996e537ce2fa49f2a758f/include/arknet/tcp/tcp_server.hpp) 提供 stop／wait 和原始 acceptor，但没有承诺保留已接收会话与流程的独立停止接收 API；HTTP 使用同一传输生命周期。直接 stop 或操作 acceptor 不能替代这一合同。因此，Core 钩子测试通过不代表真实网络应用已停止接收新业务请求。
+**迁移边界：** 受控业务 runtime 测试插件已提供外部根请求入口。Net 另提供主动选择的[外部根回调注册助手](../reference/network_CN.md#显式注册外部业务根回调)，在业务回调入口检查管理器状态，并要求应用显式提供拒绝处理器。现有注册和访客房间行为保持不变，不代表全部官方入口已迁移。Net／HTTP 监听器仍使用默认模块钩子。固定版本 arknet 的 [TCP 服务端](https://github.com/OpenArkStudio/arknet/blob/a0dfe09cd543e75cfb5996e537ce2fa49f2a758f/include/arknet/tcp/tcp_server.hpp) 提供 stop／wait 和原始 acceptor，但没有承诺保留已接收会话与流程的独立停止接收 API；HTTP 使用同一传输生命周期。直接 stop 或操作 acceptor 不能替代这一合同。因此，Core 钩子测试通过不代表真实网络应用已停止接收新业务请求。
 
 ## 保证回调不超出对象生命周期
 

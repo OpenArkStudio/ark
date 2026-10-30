@@ -49,6 +49,7 @@ set(ark_utility_public_headers
     "${CMAKE_CURRENT_SOURCE_DIR}/utility/ctpl_stl.h"
 )
 set(ark_net_public_headers
+    "${CMAKE_CURRENT_SOURCE_DIR}/net/external_root_callback.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/net/http_client_module.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/net/http_server.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/net/net.hpp"

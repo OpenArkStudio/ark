@@ -18,7 +18,7 @@ The optional routed [HTTP server plugin](http.md) exposes `http_server_module`; 
 ## API and private construction
 
 All Net source headers and implementations live in `src/plugins/net/`. The
-`ark::net` API target maps 18 explicit public headers to `<ark/net/...>` and
+`ark::net` API target maps 19 explicit public headers to `<ark/net/...>` and
 propagates their public dependencies. Enable `ARK_BUILD_PROTO=ON` for the service
 headers that include protocol messages; `ark::net` then carries `ark::proto`.
 Direct endpoint headers remain usable with protocol generation disabled.
@@ -152,6 +152,63 @@ Growth/copy allocation failure throws `std::bad_alloc`; allocation and clone fai
 **Upgrade:** capacity tracking changes `net_msg` layout; rebuild Net and consumers/plugins together. These message/event and native-header factories use standard allocation; `ARK_NEW` / `ARK_DELETE` overrides no longer customize them. Public signatures, CS/SS wire bytes and platform types remain unchanged.
 
 With `ARK_BUILD_NETWORK_TESTS=ON`, `check-net-message` covers ownership, framing and deterministic allocation failures without sockets; `check-network` includes it. Local checks do not establish shared-service or capacity acceptance.
+
+## Explicit external-root registration
+
+Include `<ark/net/external_root_callback.hpp>` and use
+`reg_external_root_callback(server, manager, id, on_accept, on_reject)` only for
+callbacks that begin new external business workflows. Both handlers are required;
+an empty handler returns `false` before service registration. Duplicate IDs retain
+the service's existing `false` result and original callback.
+
+```cpp
+#include <utility>
+#include <ark/net/external_root_callback.hpp>
+
+bool register_request(ark::net_server_service& server, ark::plugin_manager& manager,
+    ark::net_msg_functor handle_request, unsigned& rejected) {
+    return ark::reg_external_root_callback(server, manager, 45001,
+        std::move(handle_request),
+        [&rejected](const ark::net_msg*, ark::conv_id_t) { ++rejected; });
+}
+```
+
+This example explicitly records refusal locally. Applications supply their own
+rejection handler; the helper adds no error message, wire format, session close
+or output discard policy. Keep the counter and other borrowed state alive.
+
+The wrapper checks the manager state at owner-thread callback entry: `running`
+invokes `on_accept`; every other state invokes `on_reject`. Admission is not at
+socket receipt or framing: a queued frame that has not entered its business
+callback can still be refused. An accepted handler can request `manager.stop()`;
+that handler continues while later root entries are refused. Existing
+`reg_msg_callback` registrations, completion/control callbacks, registration and
+heartbeat processing, sends and provider operations retain their behavior.
+Do not classify roots from the transport, CS/SS header, Bus ID or connection role.
+For an ID mixing roots and completions, classify inside the business handler
+instead of wrapping the entire ID.
+
+Continue owner updates during `draining` and pre-cleanup `timed_out` to deliver
+accepted workflows' results. `failed`, `stopped` and `cleanup_timed_out` managers
+do not update; the predicate is not a promise of delivery in those states.
+
+Register and dispatch on the manager owner thread. The helper borrows the manager;
+the manager and every captured receiver must outlive the service's callback
+registration. It supplies no unregister, independent module-removal or library
+unload guarantee. Message pointers remain borrowed for that invocation; avoid a
+strong service capture creating a service/callback ownership cycle. Handler
+exceptions follow the existing callback path; provide a nonthrowing rejection
+handler. This header-only addition changes no service virtual table, class layout
+or wire format. The existing guest-room and unmarked business registrations are
+not automatically migrated.
+
+`check-net-external-root` (Core tests plus Protobuf) exercises the registered
+wrapper with a contract recorder across running, stopping, draining, timed-out,
+failed and stopped states, invalid/duplicate registration and reentrant stop.
+`check-net-plugin` additionally loads real Bus/Utility/Net DSOs and verifies TCP
+root acceptance, refusal during drain and continuing ordinary callbacks on the
+same session. Recorder cases are not transport proof; neither check establishes
+production capacity or complete application migration.
 
 ## Member callbacks and borrowed arguments
 
