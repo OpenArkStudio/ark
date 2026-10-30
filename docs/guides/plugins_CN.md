@@ -205,17 +205,16 @@ module_update::enabled)` 启用 update；`disabled` 则不参与 update，即使
 原有宏和插件仍可使用。入口函数继续显式使用平台导出宏。插件边界仍传递 C++ 类型，
 不承诺纯 C ABI 或跨版本 ABI 稳定性。生命周期阶段、排空和动态库卸载规则保持不变。
 
-Net 通过私有工厂返回 `std::unique_ptr<http_client_module>`，并启用该模块的 update 注册。应用使用 `<ark/net/http_client_module.hpp>` 和管理器的类型化查找；旧 `http_client_module_impl.hpp` 从公开／安装接口移除。受影响的消费者需要一起重建，详见 [Net 迁移](../reference/network_CN.md#api-与私有创建)。
+以下插件使用类型化构造。表中公开布局发生变化的插件与消费者必须一起重建；Net 移除公开实现头，也须重建受影响消费者。各项约束始终可见：
 
-Kernel 同样使用类型化构造，并保留公开 `*_impl`、`kernel_plugin` 类型与头路径；私有工厂头不安装。公开类布局发生变化，Kernel 与消费者需要一起重建。[Kernel 迁移表](../reference/kernel_CN.md#kernel-类型化构造)记录保持不变的接口键、update 选择与注册顺序。
-
-Consul 使用相同构造方式，保留全部三个公开头与类型。私有工厂不安装；模块保留接口 RTTI 键和禁用 update 的选择。公开实现／插件布局发生变化，Consul 与消费者必须一起重建。测试入口与依赖条件见 [Consul 构造迁移](../reference/directory-structure_CN.md#consul-类型化构造)。
-
-Etcd Client 使用类型化基类、返回接口的私有工厂与显式入口／出口，保留全部五个公开头与类型。接口 RTTI 键和禁用 update 的选择不变。公开实现／插件布局发生变化，插件与消费者必须一起重建。可选 JSON 依赖与无需 Etcd 服务的测试见 [Etcd Client 构造迁移](../reference/directory-structure_CN.md#etcd-client-类型化构造)。
-
-OSS SDK 使用相同的类型化基类和返回接口的私有工厂，保留全部三个公开头／类型、接口 RTTI 键和禁用 update 的选择。公开布局发生变化，插件与消费者必须一起重建。类型化注销替代未定义的旧注销调用；实现仍为 TODO 骨架。构建与测试边界见 [OSS SDK 构造迁移](../reference/directory-structure_CN.md#oss-sdk-类型化构造)。
-
-Kafka 使用类型化构造与显式入口，保留原有四个公开头和两个 RdKafka 回调基类。接口键与启用逐帧 update 的选择不变，运行时插件继续默认关闭。公开布局发生变化，Kafka 与消费者必须一起重建。驱动要求及无需连接 broker 的测试见 [Kafka 构造迁移](../reference/directory-structure_CN.md#kafka-类型化构造)。
+| 插件 | 公开接口与构造 | 保留行为与迁移边界 |
+| --- | --- | --- |
+| [Net](../reference/network_CN.md#api-与私有创建) | 私有工厂返回 `std::unique_ptr<http_client_module>`；应用使用 `<ark/net/http_client_module.hpp>` 与类型化查找 | 启用 update；旧 `http_client_module_impl.hpp` 从公开／安装接口移除 |
+| [Kernel](../reference/kernel_CN.md#kernel-类型化构造) | 保留公开 `*_impl`、`kernel_plugin` 类型与头路径；私有工厂头不安装 | 公开类布局改变；接口键、update 选择和注册顺序不变 |
+| [Consul](../reference/directory-structure_CN.md#consul-类型化构造) | 保留全部三个公开头与类型；私有工厂不安装 | 公开实现／插件布局改变；接口 RTTI 键、禁用 update 不变；链接说明测试入口与依赖条件 |
+| [Etcd Client](../reference/directory-structure_CN.md#etcd-client-类型化构造) | 保留全部五个公开头与类型；类型化基类、返回接口的私有工厂与显式入口／出口 | 公开实现／插件布局改变；接口 RTTI 键、禁用 update 不变；链接说明可选 JSON 依赖与无需 Etcd 服务的测试 |
+| [OSS SDK](../reference/directory-structure_CN.md#oss-sdk-类型化构造) | 保留全部三个公开头／类型；类型化基类和返回接口的私有工厂 | 公开布局改变；接口 RTTI 键、禁用 update 不变；类型化注销替代未定义的旧调用；仍为 TODO 骨架；链接说明构建与测试边界 |
+| [Kafka](../reference/directory-structure_CN.md#kafka-类型化构造) | 保留四个公开头、两个 RdKafka 回调基类；类型化构造与显式入口 | 公开布局改变；接口键、启用逐帧 update 不变；运行时插件默认关闭；链接说明驱动要求与无需 broker 连接的测试 |
 
 ## 日志对象与单例生命周期
 

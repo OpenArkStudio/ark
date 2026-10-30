@@ -1,6 +1,6 @@
 # Create a module
 
-A module exposes an application service through a C++ interface. A plugin creates and registers its implementation; the plugin manager invokes its lifecycle callbacks. Use modules for services such as entity access, timers or application rules. Use a plugin to package and install a group of modules.
+A module exposes a C++ service interface. Its plugin creates and registers the implementation; the manager invokes lifecycle callbacks. Use modules for services such as entity access, timers or application rules. Use a plugin to package and install a group of modules.
 
 This example separates a counter interface from its implementation and calls it from a second module. Pair it with [Create a plugin](plugins.md) to build the shared library.
 
@@ -80,9 +80,12 @@ The example keeps the three types in one file so their relationship is visible. 
 
 Register `counter_module_impl` under `counter_module`, then retrieve it with `find_module<counter_module>()`. The registration key comes from the interface type's RTTI name; an implementation name or a shared-library filename is a different key. Register one implementation per interface in a manager. The macros do not turn duplicate registration into a supported multi-provider model.
 
-The returned pointer is borrowed. Do not delete it or retain it after the owning plugin unregisters the module. While any managed business task is pending, the manager refuses to unregister any module: another module's task may still borrow that provider. A missing interface or failed dynamic cast triggers an assertion when assertions are enabled; with assertions disabled, `find_module<T>()` returns `nullptr`. Check the result before use, and do not use a failed lookup as an optional-service probe in Debug. Build consumers and plugins with compatible headers, compiler/ABI settings and RTTI enabled.
+Returned pointers are borrowed: do not delete them or retain them after module unregistration. The manager refuses any module removal while managed business tasks remain, since another module's task may borrow that provider. Build consumers/plugins with compatible headers, compiler/ABI settings and RTTI enabled.
 
-`plugin_manager::try_find_module<T>()` provides a nullable dependency lookup. It returns `nullptr` when the interface RTTI key is absent or its registered object has a different runtime type, without logging, asserting or changing registration. Call it only on the manager's owner thread; a foreign-thread call throws `std::logic_error`. Existing `find_module<T>()` keeps its assertion-based contract. Server startup uses the nullable lookup to report missing required modules through the normal startup failure path.
+| Lookup | Missing interface RTTI key or runtime-type mismatch | Calling constraints |
+| --- | --- | --- |
+| `find_module<T>()` | Asserts with assertions enabled; returns `nullptr` otherwise | Check before use; do not probe optional services through failed lookup in Debug; existing assertion contract unchanged |
+| `plugin_manager::try_find_module<T>()` | Returns `nullptr` without logging, asserting or changing registration | Manager owner thread only; foreign-thread calls throw `std::logic_error`. Server startup uses it to report missing required modules through normal startup failure |
 
 The two example modules share the application update thread. The counter is deliberately not atomic; it does not support calls from arbitrary worker threads. Queue worker completions for the owning module thread or use a service's documented asynchronous API. See the [network reference](../reference/network.md) for network callback dispatch.
 
@@ -158,10 +161,14 @@ The manager tracks roots accepted by its task groups, but not arbitrary callback
 
 ## Continue
 
-- [Create a plugin](plugins.md): registration pairs, DLL entry points, build and runtime selection.
-- [Application launcher](applications.md): process arguments and configuration paths.
-- [Coroutine tasks](tasks.md): explicit task ownership, admission and owner-thread polling.
-- [Kernel reference](../reference/kernel.md): entity and data services exposed by official modules.
+<CardGrid>
+
+<LinkCard title="Create a plugin" href="plugins.md" description="Registration pairs, DLL entry points, build and runtime selection." />
+<LinkCard title="Application launcher" href="applications.md" description="Process arguments and configuration paths." />
+<LinkCard title="Coroutine tasks" href="tasks.md" description="Task ownership, admission and owner-thread polling." />
+<LinkCard title="Kernel reference" href="../reference/kernel.md" description="Entity and data services from official modules." />
+
+</CardGrid>
 
 ## Use a base class with a private implementation
 

@@ -2,15 +2,25 @@
 
 Run Timers to check that the application can load plugins and enter the module lifecycle. It uses `ark_utility_plugin` and `timers_plugin`; it does not require Consul, a database service or Excel configuration generation.
 
+<Steps>
+
+<Step>
+
 ## Build the application and plugins
 
 Complete [Install and build](installation.md) first. The commands below use its Release output directory, `app-build/bin/`, from the repository root. Keep the executable and plugin files from the same build together.
 
+</Step>
+
+<Step>
+
 ## Prepare a runtime directory
 
-Create a separate runtime directory with the binaries, application manifest and logger settings. This keeps runtime files separate from the source configuration.
+Stage binaries, the manifest and logger settings in a runtime directory separate from source configuration.
 
-On macOS/Linux:
+<Tabs syncKey="timers-platform">
+
+<TabItem label="macOS/Linux">
 
 ```sh
 mkdir -p run/timers/bin run/timers/conf
@@ -18,13 +28,19 @@ cp -R app-build/bin/. run/timers/bin/
 cp config/timers.app.toml config/log.conf run/timers/conf/
 ```
 
-On Windows, in PowerShell:
+</TabItem>
+
+<TabItem label="Windows PowerShell">
 
 ```powershell
 New-Item -ItemType Directory -Path run/timers/bin, run/timers/conf -Force | Out-Null
 Copy-Item app-build/bin/* run/timers/bin/ -Recurse -Force
 Copy-Item config/timers.app.toml, config/log.conf run/timers/conf/
 ```
+
+</TabItem>
+
+</Tabs>
 
 The required runtime files are:
 
@@ -36,13 +52,19 @@ run/timers/
     └── log.conf
 ```
 
-The copy commands also stage the build's other artifacts. Only the two libraries named by `timers.app.toml` are selected by this sample. No separate `timers.conf` or `resource/` directory is required for it.
+The copy includes other build artifacts; `timers.app.toml` selects only the two named libraries. No separate `timers.conf` or `resource/` is required.
+
+</Step>
+
+<Step>
 
 ## Start Timers
 
 Run from `run/timers/`: the manifest's `bin/` and `conf/` paths are relative to the working directory.
 
-On macOS/Linux:
+<Tabs syncKey="timers-platform">
+
+<TabItem label="macOS/Linux">
 
 ```sh
 cd run/timers
@@ -50,7 +72,9 @@ cd run/timers
   --app_conf=conf/timers.app.toml --log_conf=conf/log.conf
 ```
 
-On Windows:
+</TabItem>
+
+<TabItem label="Windows PowerShell">
 
 ```powershell
 cd run/timers
@@ -58,7 +82,15 @@ cd run/timers
   --app_conf=conf/timers.app.toml --log_conf=conf/log.conf
 ```
 
+</TabItem>
+
+</Tabs>
+
 Debug builds use `app_d` or `app_d.exe` and plugin filenames with `_d` before the platform suffix. Use the complete Debug output in its own runtime directory; the XML plugin names stay unchanged.
+
+</Step>
+
+<Step>
 
 ## Check the result
 
@@ -71,6 +103,10 @@ Stop with Ctrl+C on macOS/Linux, or enter `exit` in the Windows application cons
 A failed plugin load or module startup callback stops later startup stages and updates. The launcher reports the failing stage and exits with code `1`. Use [Application launcher](../guides/applications.md#troubleshoot-startup) to diagnose configuration and library errors.
 
 </Aside>
+
+</Step>
+
+</Steps>
 
 ## Continue with your application
 

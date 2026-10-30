@@ -1,6 +1,6 @@
 # 应用架构
 
-ark 应用是由选定插件库组成的进程。一个插件可以注册多个模块，模块通过已注册的接口互相调用。这种组合发生在进程内；跨进程通信使用 [Bus 与网络接口](../reference/bus_CN.md)。
+ark 应用在一个进程中加载插件库；每个插件可注册多个模块，模块通过注册接口调用。跨进程通信使用 [Bus 与网络接口](../reference/bus_CN.md)。
 
 ![应用组合与调用边界](../assets/application-composition_CN.svg)
 
@@ -26,13 +26,13 @@ config = ""
 
 加载器依次加载库并调用导出的插件入口。`timers_plugin::install()` 注册 `timers_module`，Utility 插件提供定时器等服务。模块通过 `find_module<timer_module>()` 获取这些服务，不需要再创建一份 Utility 插件。
 
-清单名称是运行时库名。现有 `ark_utility_plugin`、`timers_plugin` 不等同于 C++ 类名拼写，必须与构建产物匹配。Debug 库使用配置的 `_d` 后缀。空 `config` 不提供配置文件名，加载器本身不解析插件专属内容。
+清单名称须匹配运行时库名，如 `ark_utility_plugin`、`timers_plugin`，不等同于 C++ 类名。Debug 库使用配置的 `_d` 后缀。空 `config` 不提供文件名，加载器不解析插件专属内容。
 
 ## 路径与运行入口
 
 现有启动器从工作目录解析这些路径。库目录、插件配置目录前缀与文件名直接拼接，因此 `bin/`、`conf/` 需要保留末尾分隔符。清单所在目录不会自动成为相对路径基准。
 
-按照[安装说明](../get-started/installation_CN.md)构建并准备运行目录后，在 `build/` 中执行：
+按[安装说明](../get-started/installation_CN.md)构建并准备运行目录后，在 `run/timers/` 中执行：
 
 ```sh
 ./bin/app --busid=1.0.1.1 --name=timers --app_conf=conf/timers.app.toml
@@ -59,4 +59,10 @@ config = ""
 
 `find_module()` 返回的指针属于已加载插件。释放前先停止异步生产者，插件卸载后不再保留这些指针。在业务函数执行期间替换插件，同时保留连接和状态，需要另外的协调机制，不是这种组合方式自动提供的能力。
 
-继续阅读[框架边界](architecture_CN.md)、[模块实现](../guides/modules_CN.md)或 [Kernel 数据](../reference/kernel_CN.md)。
+<CardGrid>
+
+<LinkCard title="框架边界" href="architecture_CN.md" description="各层职责与进程内调用。" />
+<LinkCard title="模块实现" href="../guides/modules_CN.md" description="接口、生命周期与借用指针。" />
+<LinkCard title="Kernel 数据" href="../reference/kernel_CN.md" description="元数据、实体与数据接口。" />
+
+</CardGrid>

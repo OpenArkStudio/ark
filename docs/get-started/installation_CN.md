@@ -15,7 +15,13 @@ cd ark
 
 安装 vcpkg，将环境变量 `VCPKG_ROOT` 指向对应目录。网络依赖选择 Boost。
 
-macOS/Linux 使用 POSIX shell。下方的 [macOS 编译器与 SDK 示例](#macos-编译器与-sdk)显式选择 Apple 工具链。
+ark 的公开目标会启用 MSVC 标准预处理器模式（`/Zc:preprocessor`）。自定义目标通过 `ark::core` 继承该选项；手动编译 ark 头文件时，需要同时启用 C++20 和此选项。
+
+<Tabs syncKey="build-platform">
+
+<TabItem label="macOS/Linux">
+
+使用 POSIX shell。下方的 [macOS 编译器与 SDK 示例](#macos-编译器与-sdk)显式选择 Apple 工具链。
 
 ```sh
 cmake -S . -B app-build -G Ninja \
@@ -24,9 +30,9 @@ cmake -S . -B app-build -G Ninja \
   -DASIO_STANDALONE=OFF -DCMAKE_BUILD_TYPE=Release
 ```
 
-Windows 使用 Visual Studio 2022 Developer PowerShell：
+</TabItem>
 
-ark 的公开目标会启用 MSVC 标准预处理器模式（`/Zc:preprocessor`）。自定义目标通过 `ark::core` 继承该选项；手动编译 ark 头文件时，需要同时启用 C++20 和此选项。
+<TabItem label="Windows PowerShell">
 
 ```powershell
 cmake -S . -B app-build -G Ninja `
@@ -34,6 +40,10 @@ cmake -S . -B app-build -G Ninja `
   "-DVCPKG_MANIFEST_FEATURES=application;boost;etcd-client" `
   -DASIO_STANDALONE=OFF -DCMAKE_BUILD_TYPE=Release
 ```
+
+</TabItem>
+
+</Tabs>
 
 </Step>
 <Step title="构建">

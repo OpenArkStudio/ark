@@ -221,17 +221,16 @@ explicitly with the existing platform visibility macro. The plugin boundary
 still passes C++ types; this API does not promise a pure C ABI or cross-version
 ABI stability. Lifecycle phases, draining and library unload rules are unchanged.
 
-Net constructs its HTTP client through a private factory returning `std::unique_ptr<http_client_module>` and registers it with updates enabled. Applications consume `<ark/net/http_client_module.hpp>` and typed manager lookup; the old `http_client_module_impl.hpp` is removed from the public/install interfaces. Rebuild affected consumers together; see [Net migration](../reference/network.md#api-and-private-construction).
+These plugins use typed construction. Rebuild plugins with changed public layouts and their consumers together; Net's public implementation-header removal also requires rebuilding affected consumers.
 
-Kernel also uses typed construction while retaining its public `*_impl` and `kernel_plugin` types and header paths. Its private factory header is not installed. Rebuild Kernel and consumers together because those public class layouts change; the [Kernel migration table](../reference/kernel.md#typed-kernel-construction) records unchanged interface keys, update selection and registration order.
-
-Consul follows the same construction pattern while retaining all three public headers and types. Its private factory is not installed; the module keeps its interface RTTI key and disabled updates. Rebuild Consul and consumers together because its public implementation/plugin layouts change. See [Consul construction migration](../reference/directory-structure.md#typed-consul-construction) for test entry points and dependency conditions.
-
-Etcd Client also retains all five public headers and types while using typed bases, a private interface-returning factory and explicit entry/exit functions. Its interface RTTI key and disabled updates are unchanged. Rebuild the plugin and consumers together because the public implementation/plugin layouts change. The [Etcd Client construction migration](../reference/directory-structure.md#typed-etcd-client-construction) describes optional JSON dependencies and tests without an Etcd service.
-
-OSS SDK uses the same typed bases and private interface-returning factory while retaining all three public headers/types, its interface RTTI key and disabled updates. Rebuild the plugin and consumers together for the public layout change. Typed unregistration replaces its undefined legacy deregistration call; the implementation remains a TODO scaffold. See [OSS SDK construction migration](../reference/directory-structure.md#typed-oss-sdk-construction) for build and test boundaries.
-
-Kafka retains all four public headers and both RdKafka callback bases while adopting typed construction and explicit entries. Its interface key and enabled frame updates remain unchanged, and the runtime plugin stays off by default. Rebuild Kafka and consumers together after the public layout change. See [Kafka construction migration](../reference/directory-structure.md#typed-kafka-construction) for driver requirements and tests without a broker connection.
+| Plugin | Public surface and construction | Preserved behavior and migration limits |
+| --- | --- | --- |
+| [Net](../reference/network.md#api-and-private-construction) | Private factory returns `std::unique_ptr<http_client_module>`; applications use `<ark/net/http_client_module.hpp>` and typed lookup | Updates enabled; old `http_client_module_impl.hpp` removed from public/install interfaces |
+| [Kernel](../reference/kernel.md#typed-kernel-construction) | Public `*_impl`, `kernel_plugin` types and header paths retained; private factory header not installed | Public class layouts change; interface keys, update selection and registration order unchanged |
+| [Consul](../reference/directory-structure.md#typed-consul-construction) | All three public headers/types retained; private factory not installed | Public implementation/plugin layouts change; interface RTTI key and disabled updates unchanged; linked guide covers test entry points and dependencies |
+| [Etcd Client](../reference/directory-structure.md#typed-etcd-client-construction) | All five public headers/types retained; typed bases, private interface-returning factory and explicit entry/exit functions | Public implementation/plugin layouts change; interface RTTI key and disabled updates unchanged; linked guide covers optional JSON dependencies and tests without an Etcd service |
+| [OSS SDK](../reference/directory-structure.md#typed-oss-sdk-construction) | All three public headers/types retained; typed bases and private interface-returning factory | Public layouts change; interface RTTI key and disabled updates unchanged; typed unregistration replaces the undefined legacy call; still a TODO scaffold; linked guide covers build/test limits |
+| [Kafka](../reference/directory-structure.md#typed-kafka-construction) | All four public headers and both RdKafka callback bases retained; typed construction and explicit entries | Public layouts change; interface key and enabled frame updates unchanged; runtime plugin off by default; linked guide covers driver requirements and tests without a broker connection |
 
 ## Logger and singleton lifetime
 

@@ -63,3 +63,70 @@ test("component examples inside code blocks and inline code stay plain Markdown"
   assert.doesNotMatch(result, /import \{/);
   assert.ok(result.includes('```md\n<Aside type="note">'));
 });
+
+test("routing cards and parallel tabs import vendored component groups", () => {
+  const source = `# Guide
+
+<CardGrid>
+<LinkCard title="安装 > 构建" href="installation_CN.md#构建" description="Use href='literal.md' as text." />
+</CardGrid>
+
+<Tabs syncKey="platform">
+<TabItem label="macOS/Linux">
+
+[Install](installation_CN.md)
+
+</TabItem>
+<TabItem label="Windows PowerShell">
+
+\`\`\`powershell
+# <LinkCard href="unchanged.md" />
+\`\`\`
+
+</TabItem>
+</Tabs>
+`;
+  const result = convertPage(source, "get-started/guide_CN.md", new Set(["get-started/installation_CN.md"]));
+  assert.equal(pageExtension(source), ".mdx");
+  assert.match(result, /import \{ CardGrid \} from "@\/components\/ui\/card-grid"/);
+  assert.match(result, /import \{ LinkCard \} from "@\/components\/ui\/link-card"/);
+  assert.match(result, /import \{ TabItem, Tabs \} from "@\/components\/ui\/tabs"/);
+  assert.ok(result.includes('href="/zh/get-started/installation#%E6%9E%84%E5%BB%BA"'));
+  assert.ok(result.includes('description="Use href=\'literal.md\' as text."'));
+  assert.ok(result.includes('[Install](/zh/get-started/installation)'));
+  assert.ok(result.includes('# <LinkCard href="unchanged.md" />'));
+});
+
+test("HTML attributes resolve aliases and assets without editing unrelated attributes", () => {
+  const source = `# Paths
+
+<a href='../project-layout_CN.md?view=full#目录'>Layout</a>
+<img src='../assets/diagram.svg' alt="diagram" />
+<a href="../../src/core/module.hpp">Source</a>
+<LinkCard title="Same page" href="#section" data-href="literal.md" />
+<a href="https://example.com/guide.md">External</a>
+<a href="/guides/modules">Root route</a>
+
+<!-- <LinkCard href="missing.md" /> -->
+
+Use \`<LinkCard href="missing.md" />\`.
+`;
+  const result = convertPage(source, "guides/paths_CN.md", new Set(["project-layout_CN.md"]));
+  assert.ok(result.includes("href='/zh/reference/directory-structure?view=full#%E7%9B%AE%E5%BD%95'"));
+  assert.ok(result.includes("src='/ark/assets/diagram.svg'"));
+  assert.ok(result.includes('href="https://github.com/OpenArkStudio/ark/blob/main/src/core/module.hpp"'));
+  assert.ok(result.includes('href="#section" data-href="literal.md"'));
+  assert.ok(result.includes('href="https://example.com/guide.md"'));
+  assert.ok(result.includes('href="/guides/modules"'));
+  assert.ok(result.includes('<!-- <LinkCard href="missing.md" /> -->'));
+  assert.equal(pageExtension('# Plain\n\n<!-- <Tabs> -->\n\n`<Card>`\n\n```mdx\n<LinkCard href="missing.md" />\n```'), ".md");
+  assert.throws(() => convertPage('# Missing\n\n<LinkCard href="missing.md" title="Missing" />', "page.md", new Set()), /missing document/);
+});
+
+test("other vendored card and disclosure components import their complete families", () => {
+  const source = '# Details\n\n<Card title="Summary">\n\nVisible summary.\n\n</Card>\n\n<Collapsible>\n<CollapsibleTrigger>Optional detail</CollapsibleTrigger>\n<CollapsibleContent>\n\nDetail.\n\n</CollapsibleContent>\n</Collapsible>';
+  const result = convertPage(source, "details.md", new Set());
+  assert.equal(pageExtension(source), ".mdx");
+  assert.match(result, /import \{ Card \} from "@\/components\/ui\/card"/);
+  assert.match(result, /import \{ Collapsible, CollapsibleTrigger, CollapsibleContent \} from "@\/components\/ui\/collapsible"/);
+});
