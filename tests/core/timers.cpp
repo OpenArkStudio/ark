@@ -85,3 +85,31 @@ TEST_CASE("Time wheel shutdown is idempotent and can be initialized again") {
     manager.update(120);
     CHECK(calls == 1);
 }
+
+TEST_CASE("Time wheel callback predicate covers active cancelled and completed storage") {
+    ark::time_wheel_manager manager;
+    CHECK_FALSE(manager.has_retained_callbacks());
+    manager.init(0);
+    CHECK_FALSE(manager.has_retained_callbacks());
+    auto state = std::make_shared<int>(1);
+    std::weak_ptr<int> retained = state;
+    const auto cancelled = manager.add_timer(ark::null_guid, 1, 1h, [state](auto, const auto&) {});
+    CHECK(manager.has_retained_callbacks());
+    state.reset();
+    CHECK_FALSE(retained.expired());
+    CHECK(manager.remove_timer(cancelled));
+    CHECK(retained.expired());
+    CHECK_FALSE(manager.has_retained_callbacks());
+
+    state = std::make_shared<int>(2);
+    retained = state;
+    const auto completed = manager.add_timer(ark::null_guid, 1, 10ms, [state](auto, const auto&) {});
+    state.reset();
+    manager.update(20);
+    CHECK_FALSE(manager.remove_timer(completed));
+    CHECK_FALSE(retained.expired());
+    CHECK(manager.has_retained_callbacks());
+    manager.shut();
+    CHECK(retained.expired());
+    CHECK_FALSE(manager.has_retained_callbacks());
+}

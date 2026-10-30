@@ -113,6 +113,19 @@ public:
         return tw_vecs_[0] != nullptr;
     }
 
+    bool has_retained_callbacks() const noexcept {
+        // Active IDs omit completed timers and additions interrupted by a
+        // container exception. Only the owning pool covers every callback.
+        for (const auto& timer : timer_storage_)
+        {
+            if (timer->callback)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void update(int64_t now_time) {
         if (tw_vecs_[0])
         {

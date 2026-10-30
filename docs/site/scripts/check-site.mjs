@@ -344,6 +344,13 @@ for (const prefix of ["", "zh/"]) {
     assert.ok(rendered.includes(token), `${route}: missing rendered startup constraint ${token}`);
     assert.ok(markdown.includes(token), `${route}: missing exported startup constraint ${token}`);
   }
+  for (const token of ["Utility Timer", "has_retained_callbacks()", "check-timer"]) {
+    assert.ok(rendered.includes(token), `${route}: missing rendered Timer cleanup constraint ${token}`);
+    assert.ok(markdown.includes(token), `${route}: missing exported Timer cleanup constraint ${token}`);
+  }
+  const timerRetention = prefix ? "保留任意业务回调" : "Any retained business callback";
+  assert.ok(rendered.includes(timerRetention), `${route}: missing rendered Timer callback retention`);
+  assert.ok(markdown.includes(timerRetention), `${route}: missing exported Timer callback retention`);
   const order = prefix ? "动作按成功登记的逆序执行" : "reverse successful enrollment order";
   const halt = prefix ? "保留该所有者及全部更早所有者" : "retains that owner and every older owner";
   const retry = prefix ? "不继续遍历" : "without resuming traversal";

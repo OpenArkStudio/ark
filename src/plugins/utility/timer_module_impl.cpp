@@ -25,6 +25,29 @@
 
 namespace ark {
 
+namespace {
+
+struct startup_timer_capsule
+{
+    std::unique_ptr<time_wheel_manager> wheel;
+};
+
+startup_cleanup_result release_startup_timer(void* context) {
+    auto& capsule = *static_cast<startup_timer_capsule*>(context);
+    if (capsule.wheel && capsule.wheel->has_retained_callbacks())
+    {
+        return startup_cleanup_result::unsafe;
+    }
+    if (capsule.wheel)
+    {
+        capsule.wheel->shut();
+        capsule.wheel.reset();
+    }
+    return startup_cleanup_result::done;
+}
+
+} // namespace
+
 class timer_module_impl final : public module_base<timer_module>
 {
 public:
@@ -41,38 +64,49 @@ protected:
         const guid_t& entity_id, const std::chrono::milliseconds interval, timer_functor&& cb) override;
 
 private:
-    std::shared_ptr<time_wheel_manager> timer_manager_{nullptr};
+    std::shared_ptr<startup_timer_capsule> timer_capsule_;
 };
 
 bool timer_module_impl::init() {
-    timer_manager_ = std::make_shared<time_wheel_manager>();
-    timer_manager_->init(get_plugin_manager()->get_now_time());
+    // The manager owns this capsule independently of the module. Enroll before
+    // acquiring wheel storage; cleanup never captures an incomplete module.
+    auto capsule = std::make_shared<startup_timer_capsule>();
+    if (!get_plugin_manager()->prepare_startup_cleanup("Timer", "ark_utility_plugin", capsule, release_startup_timer))
+    {
+        return false;
+    }
+    timer_capsule_ = std::move(capsule);
+    timer_capsule_->wheel = std::make_unique<time_wheel_manager>();
+    timer_capsule_->wheel->init(get_plugin_manager()->get_now_time());
 
-    return timer_manager_->initialized();
+    return timer_capsule_->wheel->initialized();
 }
 
 bool timer_module_impl::pre_shut() {
-    timer_manager_->shut();
+    if (timer_capsule_ && timer_capsule_->wheel)
+    {
+        timer_capsule_->wheel->shut();
+    }
     return true;
 }
 
 bool timer_module_impl::update() {
-    timer_manager_->update(get_plugin_manager()->get_now_time());
+    timer_capsule_->wheel->update(get_plugin_manager()->get_now_time());
     return true;
 }
 
 bool timer_module_impl::remove_timer(const uint64_t timer_id) {
-    return timer_manager_->remove_timer(timer_id);
+    return timer_capsule_->wheel->remove_timer(timer_id);
 }
 
 uint64_t timer_module_impl::add_single_timer(
     const guid_t& entity_id, const std::chrono::milliseconds interval, const uint32_t count, timer_functor&& cb) {
-    return timer_manager_->add_timer(entity_id, count, interval, std::move(cb));
+    return timer_capsule_->wheel->add_timer(entity_id, count, interval, std::move(cb));
 }
 
 uint64_t timer_module_impl::add_forever_timer(
     const guid_t& entity_id, const std::chrono::milliseconds interval, timer_functor&& cb) {
-    return timer_manager_->add_timer(entity_id, 0, interval, std::move(cb));
+    return timer_capsule_->wheel->add_timer(entity_id, 0, interval, std::move(cb));
 }
 
 namespace detail {
