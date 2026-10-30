@@ -12,7 +12,7 @@
     "build": "npm run prepare:content && astro build && node scripts/redirects.mjs",
     "preview": "astro preview",
     "typecheck": "npm run prepare:content && astro check",
-    "check": "node --test scripts/content.test.mjs scripts/legacy-source.test.mjs && npm run typecheck && npm run build && node scripts/check-site.mjs",
+    "check": "node --test scripts/content.test.mjs scripts/legacy-source.test.mjs && npm run typecheck && npm run build && node scripts/check-site.mjs && node scripts/check-reference-performance.mjs",
     "lint:docs": "nimbus-docs lint",
     "lint:docs:fix": "nimbus-docs lint --fix"
   },
