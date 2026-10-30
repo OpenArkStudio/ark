@@ -1,67 +1,77 @@
 # 创建插件
 
-插件负责安装和卸载一组模块。动态库导出供 ark 启动器调用的入口，模块则提供供业务代码使用的接口。核心与官方插件放在 ark 仓库，业务插件放在应用仓库。
-
-本文把[创建模块](modules_CN.md)中的计数器和调用模块组成一个业务插件。示例将 `sample_module.hpp`、`sample_plugin.hpp`、`sample_plugin.cpp` 和 `CMakeLists.txt` 放在同一个目录中。
+插件装配一组模块，并导出启动器调用的动态库入口。官方插件放在 ark；业务插件与应用同仓库。使用[模块示例](modules_CN.md#定义接口与实现)的 `sample_module.hpp`、`sample_factory.hpp`、`sample_module.cpp`，加上本页的 `sample_plugin.cpp`、`CMakeLists.txt`，全部按功能共置。
 
 ## 声明插件
 
-保存为 `sample_plugin.hpp`：
-
-```cpp
-#pragma once
-
-#include <ark/plugin.hpp>
-#include <ark/plugin_manager.hpp>
-
-namespace ark {
-
-ARK_DECLARE_PLUGIN(sample_plugin)
-
-} // namespace ark
-```
-
-`ARK_DECLARE_PLUGIN` 生成插件类、管理器与配置访问方法，以及 `install()` 和 `uninstall()` 声明。下面的宏使用未限定命名空间的 ark 类型，因此示例在 `namespace ark` 中声明这些类型。
+将 `sample_plugin` 具体类放在下面的 cpp，不需要公开插件头。`plugin_base<derived_type>` 提供版本 `0`、`typeid(derived_type).name()` 标识、manager 访问及 `get_plugin_conf()`／`set_plugin_conf()`。配置在同一派生类型的实例间共享，不同类型间隔离；安装前设置 manager，注册期间不得更换。
 
 ## 配对注册与注销
 
-保存为 `sample_plugin.cpp`：
+保存为 `sample_plugin.cpp`。工厂独占返回接口，安装时显式指定 update，注销时先消费者、后 provider：
 
 ```cpp
-#include "sample_module.hpp"
-#include "sample_plugin.hpp"
+#include <stdexcept>
+
+#include <ark/plugin_base.hpp>
+
+#include "sample_factory.hpp"
 
 namespace ark {
+namespace {
 
-ARK_DECLARE_PLUGIN_DLL_FUNCTION(sample_plugin)
+class sample_plugin final : public plugin_base<sample_plugin>
+{
+public:
+    void install() override {
+        if (!register_module<counter_module>(make_counter(), module_update::disabled))
+        {
+            throw std::runtime_error("counter registration rejected");
+        }
+        if (!register_module<sample_module>(make_sample(), module_update::enabled))
+        {
+            throw std::runtime_error("sample registration rejected");
+        }
+    }
 
-void sample_plugin::install() {
-    ARK_REGISTER_MODULE(counter_module, counter_module_impl);
-    ARK_REGISTER_MODULE(sample_module, sample_module);
+    void uninstall() override {
+        if (!unregister_module<sample_module>())
+        {
+            throw std::runtime_error("sample unregistration rejected");
+        }
+        if (!unregister_module<counter_module>())
+        {
+            throw std::runtime_error("counter unregistration rejected");
+        }
+    }
+};
+
+} // namespace
+
+ARK_EXPORT_FUNC void DllEntryPlugin(plugin_manager* manager,
+    const std::string& stem, logger* log) {
+    logger::init(log);
+    manager->register_plugin<sample_plugin>(stem);
 }
 
-void sample_plugin::uninstall() {
-    ARK_UNREGISTER_MODULE(sample_module, sample_module);
-    ARK_UNREGISTER_MODULE(counter_module, counter_module_impl);
+ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
+    manager->unregister_plugin<sample_plugin>();
 }
 
 } // namespace ark
 ```
 
-| 操作 | 含义 |
+| 操作 | 契约 |
 | --- | --- |
-| `ARK_REGISTER_MODULE(counter_module, counter_module_impl)` | 创建实现对象，设置管理器和名称，以公开接口注册 |
-| `ARK_REGISTER_MODULE(sample_module, sample_module)` | 简单模块可以使用同一个类型作为接口和实现 |
-| `ARK_UNREGISTER_MODULE(...)` | 移除对应模块与更新列表中的记录，并删除模块对象 |
-| `ARK_DECLARE_PLUGIN_DLL_FUNCTION(sample_plugin)` | 定义导出的 `DllEntryPlugin`、`DllExitPlugin` 和插件配置存储 |
+| `register_module<interface_type>(unique_ptr, module_update)` | 消耗独占候选对象，保留接口地址，以 `typeid(interface_type).name()` 注册；省略模板参数时由工厂返回类型决定接口 |
+| `module_update::enabled`／`disabled` | 必须显式选择；`disabled` 即使实现覆写 `update()` 也不更新，不检测覆写、不提供默认值 |
+| `unregister_module<interface_type>()` | 与成功注册配对，成功时移除记录并删除对象一次；按模块所需顺序实现 `uninstall()`，析构插件本身不卸载模块 |
 
-<Aside type="note" title="每个动态库只定义一组入口">
+<Aside type="note" title="每个库只导出一对入口">
 
-每个动态库只在一个翻译单元中使用 DLL 宏。它生成固定的 C 入口名称；在多个模块源文件中重复使用，或在同一个库中定义两个独立插件入口，都会造成重复定义。C 入口仍传递 C++ 类型，不代表跨编译器的稳定 ABI。
+每个动态库仅在一个翻译单元中定义 `DllEntryPlugin`／`DllExitPlugin`，使用必要的 `ARK_EXPORT_FUNC` 平台导出宏。重复定义会造成符号冲突。入口仍传递 C++ 类型，不提供纯 C、跨编译器或跨版本 ABI 保证。此处注销顺序只约束本插件，不建立跨插件清理顺序。
 
 </Aside>
-
-`install()` 只负责注册，跨模块依赖放在[创建模块](modules_CN.md)说明的生命周期阶段中处理。每个接口与实现的注册都应有对应的注销。示例先移除调用模块，再移除计数器；这个局部顺序不代表不同插件之间具有依赖排序。
 
 ## 构建动态库
 
@@ -79,7 +89,7 @@ set(ARK_BUILD_CORE_TESTS OFF CACHE BOOL "Build core tests" FORCE)
 set(ARK_BUILD_EXAMPLES OFF CACHE BOOL "Build ark examples" FORCE)
 add_subdirectory("${ARK_SOURCE_DIR}" ark)
 
-add_library(sample_plugin SHARED sample_plugin.cpp)
+add_library(sample_plugin SHARED sample_plugin.cpp sample_module.cpp)
 target_link_libraries(sample_plugin PRIVATE ark::core)
 set_target_properties(sample_plugin PROPERTIES
     PREFIX ""
@@ -130,7 +140,7 @@ Windows 库路径使用 UTF-8。加载器先转换为使用本地分隔符的绝
 | 现象 | 检查项 |
 | --- | --- |
 | 无法打开动态库 | 部署工作目录、文件名前缀与扩展名、Debug 后缀及动态库依赖 |
-| 找不到入口 | DLL 宏是否只定义一次，导出符号是否可见 |
+| 找不到入口 | 显式入口是否只定义一次，导出符号是否可见 |
 | 查找模块触发断言，或关闭断言时返回 `nullptr` | 运行清单是否包含提供模块的库，`install()` 是否以 `T` 注册，调用方与提供方是否使用兼容接口 |
 | 头文件可以编译，但没有可用服务 | 接口目标只提供头文件，不会在运行时安装模块 |
 
@@ -138,72 +148,26 @@ Windows 库路径使用 UTF-8。加载器先转换为使用本地分隔符的绝
 
 ## 用类型化注册和显式入口
 
-`<ark/plugin_base.hpp>` 中的 `ark::plugin_base<derived_type>` 可替代
-`ARK_DECLARE_PLUGIN`。它提供版本 `0`、原有的 `typeid(derived_type).name()` 标识、manager
-访问函数和 `get_plugin_conf()` / `set_plugin_conf()`。同一派生类型的实例共享配置，
-不同派生类型的配置相互隔离。安装前设置 manager，模块注册期间不要更换 manager。
+上面的[完整示例](#配对注册与注销)是推荐写法。已有宏与插件仍受支持；迁移时保持接口键、update 选择、生命周期、排空与卸载合同：
 
-私有工厂可返回接口，无需暴露具体类
-（[模块示例](modules_CN.md#用基类隐藏具体实现)）：
+| 旧写法 | 推荐替换 |
+| --- | --- |
+| `ARK_DECLARE_MODULE_FUNCTIONS` | cpp 内继承 `module_base<interface_type, providers...>`，公开头只保留接口 |
+| `ARK_DECLARE_PLUGIN` | cpp 内继承 `plugin_base<derived_type>`；保留 manager／配置语义 |
+| `ARK_REGISTER_MODULE`／`ARK_UNREGISTER_MODULE` | 私有工厂返回 `std::unique_ptr<interface_type>`；将旧宏按覆写检测 update 的行为改为显式开关，反向配对注销 |
+| `ARK_DECLARE_PLUGIN_DLL_FUNCTION` | 显式定义入口／出口，继续使用 `ARK_EXPORT_FUNC` |
 
-```cpp
-#include <stdexcept>
-#include <ark/plugin_base.hpp>
-#include "counter_factory.hpp"
+### 注册失败与资源保留
 
-class counter_plugin final : public ark::plugin_base<counter_plugin>
-{
-public:
-    void install() override {
-        if (!register_module(make_counter(), ark::module_update::disabled)) {
-            throw std::runtime_error("counter registration rejected");
-        }
-    }
-    void uninstall() override {
-        if (!unregister_module<ark::counter_module>()) {
-            throw std::runtime_error("counter unregistration rejected");
-        }
-    }
-};
-
-ARK_EXPORT_FUNC void DllEntryPlugin(ark::plugin_manager* manager,
-    const std::string& stem, ark::logger* log) {
-    ark::logger::init(log);
-    manager->register_plugin<counter_plugin>(stem);
-}
-
-ARK_EXPORT_FUNC void DllExitPlugin(ark::plugin_manager* manager) {
-    manager->unregister_plugin<counter_plugin>();
-}
-```
-
-两个辅助函数均为受保护的模板。`register_module<interface_type>(candidate,
-module_update::enabled)` 启用 update；`disabled` 则不参与 update，即使具体实现覆写了
-`update()`。没有默认开关，也不推断覆写。省略模板参数时，工厂返回类型决定注册的
-接口。注册成功后保留工厂返回的接口地址，查找标识为 `typeid(interface_type).name()`。
-
-候选指针须独占一个尚未向 registry 发布的对象；若此前通过旧接口注册了借用指针，
-先移除该记录再转交所有权。注册会接收 `unique_ptr` 的所有权。空指针、重复模块标识、已占用的 update 标识或
-已注册的地址返回 false，被拒绝的候选对象只析构一次。元数据和内存分配异常，以及
-现有的 owner 线程、回调阶段和停服限制继续向上传播；未完成的注册不会留下指向
-被拒绝对象的借用指针。辅助函数不撤销此前成功的注册，也不运行清理钩子。
-
-注册成功后沿用旧宏的显式注销/删除路径。`unregister_module<interface_type>()` 在没有
-对应的自有记录或 registry 标识不匹配时返回 false。活跃回调或未完成的受管任务会
-通过原有检查阻止移除，模块和记录均保留；成功移除只删除对象一次。按所需的模块
-顺序实现 `uninstall()`；仅析构插件不会注销或删除已注册模块。后续安装失败时，
-此前资源按现有启动失败退出进程策略保留，不支持同进程回滚或重试。
-
-`plugin_manager::register_plugin<T>()` 保留 `ARK_NEW`/`ARK_DELETE` 分配和释放钩子，
-包括可返回空指针的 nothrow 分配。空分配直接返回，不执行安装，并记录启动失败信息
-`allocate_plugin: <library stem>`。管理器随后从 `start()` 返回 false，不再加载后续库，
-也不进入模块启动阶段。进入 `install()`
-之前，元数据异常会使插件候选对象只析构一次；开始安装后，仍遵循上述退出进程策略。
-动态库包装器在写入管理器前也由局部作用域持有。原生加载失败时，即使日志抛出异常，
-也会释放包装器；已加载句柄仍按现有显式卸载规则处理。调用方无需迁移。
-
-原有宏和插件仍可使用。入口函数继续显式使用平台导出宏。插件边界仍传递 C++ 类型，
-不承诺纯 C ABI 或跨版本 ABI 稳定性。生命周期阶段、排空和动态库卸载规则保持不变。
+| 边界 | 行为与调用方责任 |
+| --- | --- |
+| 候选所有权 | 对象尚未发布且由 `unique_ptr` 独占；转交前移除旧的借用观察记录 |
+| 注册被拒绝 | 空候选、重复模块标识、已占用 update 标识或已注册地址返回 false；候选析构一次，不留下借用指针 |
+| 注册异常 | 元数据／分配异常及 owner 线程、回调阶段、停服检查向上传播；不撤销此前成功注册，也不运行清理钩子 |
+| 注销被拒绝 | 缺少自有标识或 registry 标识不匹配返回 false；活跃回调或未完成受管任务触发原有保护，保留对象与记录 |
+| 后续安装失败 | 已注册资源保留至启动失败退出，不在同进程回滚或重试；[启动器](applications_CN.md#确认启动并停止进程)报告失败并退出 `1` |
+| 插件分配／元数据 | `register_plugin<T>()` 保留 `ARK_NEW`／`ARK_DELETE`（含可空 nothrow 分配）；空分配不安装，记录 `allocate_plugin: <library stem>`，`start()` 返回 false，不加载后续库或进入模块阶段；安装前元数据异常只析构候选一次，安装后遵循失败退出策略 |
+| 动态库包装器 | 发布至管理器前局部持有；原生加载失败即释放，即使日志抛异常；已加载句柄仍显式卸载，调用方无需迁移 |
 
 以下插件使用类型化构造。表中公开布局发生变化的插件与消费者必须一起重建；Net 移除公开实现头，也须重建受影响消费者。各项约束始终可见：
 
@@ -218,20 +182,16 @@ module_update::enabled)` 启用 update；`disabled` 则不参与 update，即使
 
 ## 日志对象与单例生命周期
 
-`logger::init(log)` 借用宿主日志对象。只要插件仍可能写日志，就必须保持宿主日志对象
-存活，最终由创建方销毁。`logger::init(nullptr)` 使用日志单例的延迟创建路径；重复
-调用保留当前实例。
-
-`singleton<T>::set_instance(pointer)` 只切换当前指针，不接管所有权。延迟创建的
-内部实例始终由单例持有，临时注入借用指针也不会释放内部实例。借用对象销毁前，
-恢复保存的指针，或调用 `set_instance(nullptr)` 解除关联。`shutdown()` 清空当前
-指针，并且只销毁内部持有的对象一次；此后不再自动创建实例，即使停机发生在首次
-调用 `instance()` 之前。停机后，`instance()` 返回空指针，除非显式注入对象；
-`get_instance()` 要求当前实例有效。`set_instance(nullptr)` 解除关联，但不阻止
-尚未执行的延迟初始化。构造异常继续向上传播，后续仍可重试初始化；分配失败保留
-原有返回空指针的行为。并发首次访问的延迟初始化由初始化保护机制同步；
-注入和停机须与访问串行协调，不提供进程退出时的
-自动清理。不得自行删除内部持有的对象，也不得在停机后恢复其旧指针。
+| 操作 | 所有权与生命周期 |
+| --- | --- |
+| `logger::init(log)` | 借用宿主日志对象；创建方在插件仍可能写日志时保持对象存活，并负责销毁 |
+| `logger::init(nullptr)` | 延迟创建单例；重复调用保留当前 logger |
+| `singleton<T>::set_instance(pointer)` | 只切换当前指针，不接管所有权；延迟创建对象仍持有至 `shutdown()`，包括临时借用替换期间 |
+| 借用替换 | 销毁借用对象前恢复保存指针，或 `set_instance(nullptr)` 解除关联；不得删除内部自有对象或在停机后恢复其旧指针 |
+| `shutdown()` | 清空当前指针，只销毁内部自有对象一次，并阻止延迟创建（包括首次 `instance()` 前）；无进程退出自动清理 |
+| 停机后访问 | `instance()` 返回空，除非显式注入；`get_instance()` 要求当前实例有效 |
+| `set_instance(nullptr)` | 解除关联，但不阻止尚未执行的延迟初始化 |
+| 失败／并发 | 构造异常传播并允许重试；分配失败仍返回空。首次延迟访问同步；注入／停机须与访问串行协调 |
 
 开启 `ARK_BUILD_CORE_TESTS=ON` 后，`check-core` 包含 `check-singleton`，在独立
 进程中运行所有权、注入、构造重试、并发初始化、停机和日志对象用例。30 秒进程保护
