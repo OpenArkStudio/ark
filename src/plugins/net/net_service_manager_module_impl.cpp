@@ -20,6 +20,7 @@
 
 #include <set>
 #include <stdexcept>
+#include <utility>
 
 #include "ark/bus/bus_module.hpp"
 #include "ark/container/map.hpp"
@@ -41,6 +42,7 @@ public:
     bool init() override;
     bool post_init() override;
     bool update() override;
+    bool pre_shut() override;
     bool shut() override;
 
     bool create_server(
@@ -97,8 +99,9 @@ private:
     //bus id <--> session id
     std::map<bus_id_t, conv_id_t> bus_session_list_;
 
-    bus_module* bus_module_;
-    timer_module* timer_module_;
+    bus_module* bus_module_{};
+    timer_module* timer_module_{};
+    uint64_t health_timer_id_{};
 };
 
 bool net_service_manager_module_impl::init() {
@@ -111,9 +114,10 @@ bool net_service_manager_module_impl::init() {
 bool net_service_manager_module_impl::post_init() {
     start_configured_clients();
     // start health check timer
-    timer_module_->add_forever_timer(0, std::chrono::seconds(20), this, &net_service_manager_module_impl::health_check);
+    health_timer_id_ = timer_module_->add_forever_timer(
+        0, std::chrono::seconds(20), this, &net_service_manager_module_impl::health_check);
 
-    return true;
+    return health_timer_id_ != 0;
 }
 
 void net_service_manager_module_impl::start_configured_clients() {
@@ -261,7 +265,19 @@ bool net_service_manager_module_impl::update() {
     return true;
 }
 
+bool net_service_manager_module_impl::pre_shut() {
+    // All module objects are still alive in the explicit pre-shutdown phase.
+    // A provider may already have cleared its wheel; a missing ID is retired.
+    const auto timer_id = std::exchange(health_timer_id_, 0);
+    if (timer_id != 0 && timer_module_)
+    {
+        timer_module_->remove_timer(timer_id);
+    }
+    return true;
+}
+
 bool net_service_manager_module_impl::shut() {
+    pre_shut();
     for (auto iter : server_services_)
     {
         auto server_data_ptr = iter.second;

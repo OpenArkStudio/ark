@@ -50,6 +50,23 @@ and callback templates remain public. Request overloads, timeout defaults,
 future results and owner-update callback dispatch are unchanged. The official
 HTTP client participates in the admission and drain phases described below.
 
+## Service-manager health timer
+
+The service manager owns its 20-second health timer registration and fails
+startup if Timer returns ID `0`. Normal `pre_shut()` retires that registration
+while the Timer provider object is still alive. Repeated `pre_shut()` and
+`shut()` succeed, including when the provider has already cleared its wheel;
+explicit `shut()` also performs the same retirement for direct lifecycle callers.
+Other timer registrations and shared IO keep their existing lifetimes.
+
+Direct lifecycle callers must retire the health callback before destroying its
+Net receiver. The destructor does not call a borrowed Timer provider that may
+already have been destroyed. `check-net-health-timer` uses the production private
+factory and service-manager implementation with a provider backed by the real
+time wheel. It checks callback-storage release, unrelated timers, repeated
+retirement and registration failure. This scope does not establish arbitrary
+callback retirement or DSO unload safety.
+
 ## HTTP client admission and drain
 
 `http_client_module` overrides `stop_accepting()` to close new request roots without cancelling accepted HTTP IO; repeated calls succeed.

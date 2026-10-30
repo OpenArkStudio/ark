@@ -20,6 +20,17 @@ if(ARK_BUILD_PROTO)
     add_custom_target(check-net-external-root
         COMMAND $<TARGET_FILE:ark_net_external_root_tests>
         DEPENDS ark_net_external_root_tests USES_TERMINAL VERBATIM)
+    add_executable(ark_net_health_timer_tests main.cpp net_health_timer.cpp
+        ../../src/plugins/net/net_service_manager_module_impl.cpp
+        ../../src/plugins/net/net_client_service_impl.cpp
+        ../../src/plugins/net/net_server_service_impl.cpp
+        ../../src/plugins/net/tcp_client.cpp ../../src/plugins/net/tcp_server.cpp
+        ../../src/plugins/net/rudp_client.cpp ../../src/plugins/net/rudp_server.cpp)
+    set_property(TARGET ark_net_health_timer_tests PROPERTY LINK_LIBRARIES ark::net ark::bus ark::utility)
+    target_include_directories(ark_net_health_timer_tests PRIVATE "${PROJECT_SOURCE_DIR}/src/plugins")
+    add_custom_target(check-net-health-timer
+        COMMAND $<TARGET_FILE:ark_net_health_timer_tests>
+        DEPENDS ark_net_health_timer_tests USES_TERMINAL VERBATIM)
     target_sources(ark_core_tests PRIVATE protobuf_messages.cpp)
     target_link_libraries(ark_core_tests PRIVATE ark::bus ark::proto)
     file(GLOB_RECURSE ark_proto_contract_files CONFIGURE_DEPENDS
@@ -58,7 +69,7 @@ add_custom_target(check-core
     DEPENDS ark_core_tests
     USES_TERMINAL)
 if(TARGET check-net-external-root)
-    add_dependencies(check-core check-net-external-root)
+    add_dependencies(check-core check-net-external-root check-net-health-timer)
 endif()
 
 # Keep singleton shutdown terminal within its own process, including the logger specialization.
