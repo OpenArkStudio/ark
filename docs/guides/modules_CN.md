@@ -150,6 +150,8 @@ class dependent_module final
 
 Timers 在 `init()` 查找 Timer／Guid；Utility 的 Timer、Guid、Schedule、Compress 无必需 provider。其他应用保留原声明与查询检查，不代表完整回调生命周期图。
 
+Kernel 配置模块声明元数据依赖；Kernel 声明元数据、配置与 Guid 依赖。Map 与 Kernel 在运行时仍互相依赖，双向关系尚未纳入当前排序图。详见 [Kernel 依赖边界](../reference/kernel_CN.md)。
+
 **升级要求：** `module` 新增元数据与 `stop_accepting()` 虚方法，改变虚表；管理器缓存改变对象布局，Timers 的公开基类特化也改变。使用兼容头文件／编译器同时重建启动器、全部官方／业务插件与受影响消费者，不混用旧二进制。查找键不变，不提供跨编译器 ABI 保证。依赖图只控制启动与反向停止接收钩子，update、就绪、`pre_shut()`、`shut()`、卸载顺序不变。官方入口迁移、反向完整清理及可选启动失败补偿仍见[后续路线](../project/lifecycle-closeout_CN.md)。
 
 ## 选择生命周期阶段

@@ -150,6 +150,8 @@ class dependent_module final
 
 Timers looks up Timer/Guid in `init()`; Utility’s Timer, Guid, Schedule and Compress require no providers. Other applications retain existing declarations/checks, without a complete callback-lifetime graph.
 
+Kernel configuration declares metadata; Kernel declares metadata, configuration and Guid. Map and Kernel still require each other at runtime, so their mutual relationship is outside the current ordering graph. See the [Kernel dependency boundary](../reference/kernel.md).
+
 **Upgrade:** metadata and `stop_accepting()` change `module`’s vtable; cached order changes manager layout, and Timers changes its public base specialization. Rebuild the launcher, all official/business plugins and affected consumers together with compatible headers/compiler settings; do not mix older binaries. Lookup keys stay unchanged; no cross-compiler ABI is promised. Dependencies govern startup and reverse admission-stop hooks, not update, readiness, `pre_shut()`, `shut()` or unloading. Official ingress migration, reverse complete cleanup and opt-in startup-failure compensation remain on the [subsequent route](../project/lifecycle-closeout.md).
 
 ## Choose lifecycle stages

@@ -4,9 +4,13 @@
 
 ### 功能
 
+- Kernel 与配置模块在初始化前检查已声明的元数据、配置与 Guid 依赖；Map／Kernel 的运行时双向关系保留为独立设计议题。
+
 - 应用与日志设置共用一个清单；省略日志设置时提供控制台 INFO 默认日志，可在同一文件启用文件输出、格式和具名日志。
 
 ### 升级说明
+
+- `config_module_impl` 与 `kernel_module_impl` 的具体基类特化现在包含已声明的依赖。更新源码对原 `module_base` 类型的引用，并重新编译使用这些实现类的程序；详见 [Kernel 迁移](../reference/kernel_CN.md)。
 
 - 移除启动参数 `--log_conf` / `-l`，将旧日志配置迁入应用清单的 `[logging]`；显式传入旧参数会以退出码 `1` 结束。公开 `application_manifest` 和日志类型布局改变，应用、插件及使用方必须一起重新编译。详见[迁移说明](../service-manifests_CN.md#内嵌日志配置)。
 

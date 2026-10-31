@@ -4,9 +4,13 @@
 
 ### Features
 
+- Kernel and configuration startup validate their declared metadata, configuration and Guid providers before initialization. The Map/Kernel runtime cycle remains a separate design boundary.
+
 - Application and logger settings share one manifest, with console INFO defaults and optional file output, formatting and named loggers in the same file.
 
 ### Upgrade notes
+
+- The concrete `config_module_impl` and `kernel_module_impl` base specializations now include declared providers. Update source references to their former `module_base` types and rebuild consumers of these implementation classes; see [Kernel migration](../reference/kernel.md).
 
 - Remove launcher flags `--log_conf` / `-l` and migrate legacy logger settings into `[logging]` in the application manifest; explicit old flags now fail with exit code `1`. Public `application_manifest` and logger type layouts change: rebuild applications, plugins and consumers together. See [migration](../service-manifests.md#embedded-logging).
 
