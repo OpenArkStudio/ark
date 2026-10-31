@@ -26,7 +26,7 @@
 
 namespace ark {
 
-class config_module_impl final : public module_base<config_module>
+class config_module_impl final : public module_base<config_module, class_meta_module>
 {
 public:
     bool init() override;
