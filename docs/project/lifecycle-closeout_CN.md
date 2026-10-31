@@ -130,8 +130,10 @@
 | 后续实施边界 | 所需证明 |
 | --- | --- |
 | 获取前登记独立清理 | owning capsule 与 16 个 owner 的预分配登记；保留首个失败，单独报告清理结果。已进入但未完成的阶段也可持有资源。Utility Timer 仅释放无保留回调的时间轮；业务回调与共享 IO 不在自动清理范围内，不提供通用回滚、正常停机、DSO 卸载或同进程重启 |
-| 补齐 provider 声明 | `module::get_dependencies()`／`module_base<interface, providers...>` 在 `init()` 前验证键，不验证原始 `add_module()` 条目的动态类型。已迁移 Timers／Utility；其他边须来自实际保留的指针／回调 |
+| 补齐 provider 声明 | `module::get_dependencies()`／`module_base<interface, providers...>` 在 `init()` 前验证键，不验证原始 `add_module()` 条目的动态类型。具体接入范围见下文；其他边须来自实际保留的指针／回调 |
 | 完整依赖感知清理 | 先退役回调、定时器登记及跨插件捕获，再卸载代码；保留任务／活跃栈／就绪检查和不可恢复的保留规则。就绪依赖其他模块先清理形成阶段环，应在停止接收时解除，或另行评审阶段变更 |
+
+Net 显式声明必需的 Bus 与 Timer，在启动钩子前检查缺失，并按声明顺序安排停止接收阶段的回调。这不退役 Net 传输，也不改变完整清理顺序。详见[网络参考](../reference/network_CN.md)。
 
 Provider 清点：Game 保留 Kernel／Guid／Bus／Msg／Net／Map；Net 管理器保留 Bus／Timer；Kernel 保留 Map／元数据／配置／Guid。安装即可获取资源，依赖验证不能替代获取点清理；不猜测依赖或静默改变旧钩子语义。
 
@@ -145,7 +147,7 @@ Provider 清点：Game 保留 Kernel／Guid／Bus／Msg／Net／Map；Net 管理
 
 | 已选方向 | 当前交付 |
 | --- | --- |
-| 模块级必需 provider 声明、缺失／环验证与有序启动 | 框架阶段已提供；已迁移 Timers／Utility，无声明模块仍作为独立节点 |
+| 模块级必需 provider 声明、缺失／环验证与有序启动 | 框架阶段已提供；具体声明见上文，无声明模块仍作为独立节点 |
 | 独立停止接收，已接收任务继续访问 provider | Core 合同、HTTP 请求级接入、Net 根回调显式注册、访客房间 Join／Move／Action 与受控业务插件已提供；其他应用回调仍须显式分类和迁移 |
 | 启动失败时可选清理，随后退出 `1` | 已提供 16 个 owner 的预分配登记、逆序清理与提前停止、最近调用记录及 Utility Timer 受限清理；保留的业务回调、共享 IO 和完整阶段历史仍在本切片之外 |
 | 通过全部活跃栈／任务／就绪检查后，先消费者、后 provider 完整清理 | 后续阶段；不提供新的通用停机或卸载保证 |

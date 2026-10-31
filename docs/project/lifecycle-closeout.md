@@ -130,8 +130,10 @@ These states are irreversible. Checks cannot interrupt blocking updates, hooks o
 | Next implementation boundary | Required evidence |
 | --- | --- |
 | Independent cleanup before acquisition | Owning capsule and 16-owner enrollment; preserve the first failure and report cleanup separately. Entered phases can own resources even if incomplete. Utility Timer releases only callback-free wheel ownership and retains any business callbacks; shared IO remains outside the contract; no general rollback, normal shutdown, DSO unload or same-process restart |
-| Extend provider declarations | `module::get_dependencies()` / `module_base<interface, providers...>` validate keys before `init()`, not dynamic types of raw `add_module()` entries. Timers/Utility is migrated; derive further edges from actual retained pointers/callbacks |
+| Extend provider declarations | `module::get_dependencies()` / `module_base<interface, providers...>` validate keys before `init()`, not dynamic types of raw `add_module()` entries. Module-specific coverage is listed below; derive further edges from actual retained pointers/callbacks |
 | Complete dependency-aware teardown | Retire callbacks, timer registrations and cross-plugin captures before unloading their code; keep task/active-stack/readiness gates and sticky retention. Resolve readiness/cleanup phase cycles during ingress closure or review the phase change separately |
+
+Net declares Bus and Timer as required providers. Their absence is checked before startup hooks, and their declared order also controls admission-stop callbacks. This does not retire Net transports or change complete teardown order. See the [network reference](../reference/network.md).
 
 Provider inventory: Game retains Kernel/Guid/Bus/Msg/Net/Map; Net’s manager retains Bus/Timer; Kernel retains Map/metadata/config/Guid. Installation can already acquire resources, so graph validation cannot replace acquisition cleanup. Do not guess edges or silently reinterpret legacy hooks.
 
@@ -145,7 +147,7 @@ The route has been selected; these are implementation boundaries, not pending po
 
 | Selected direction | Current delivery |
 | --- | --- |
-| Required module-level provider declarations, with missing/cycle validation and ordered startup | Available framework stage; Timers/Utility migrated, undeclared modules remain independent nodes |
+| Required module-level provider declarations, with missing/cycle validation and ordered startup | Available framework stage; see module-specific declarations above. Undeclared modules remain independent nodes |
 | Separate ingress quiescence while accepted tasks retain provider access | Core contract, HTTP request-level integration, opt-in Net root registration, guest-room Join/Move/Action and controlled business fixture; other application callbacks still need explicit classification and migration |
 | Opt-in cleanup after startup failure, then exit `1` | Available preallocated 16-owner registry with reverse cleanup and early halt, latest-call record and guarded Utility Timer cleanup; retained business callbacks, shared IO and full phase history remain outside this slice |
 | Consumer-before-provider complete cleanup, after all active/task/readiness gates | Subsequent stage; no new general shutdown or unload guarantee is provided |

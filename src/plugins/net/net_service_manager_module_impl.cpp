@@ -36,7 +36,7 @@
 
 namespace ark {
 
-class net_service_manager_module_impl final : public module_base<net_service_manager_module>
+class net_service_manager_module_impl final : public module_base<net_service_manager_module, bus_module, timer_module>
 {
 public:
     bool init() override;

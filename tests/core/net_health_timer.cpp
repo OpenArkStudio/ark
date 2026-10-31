@@ -19,7 +19,49 @@
 namespace {
 using namespace std::chrono_literals;
 
-class bus_provider final : public ark::module_base<ark::bus_module>
+template<typename interface_type>
+class observed_provider : public ark::module_base<interface_type>
+{
+public:
+    std::vector<std::string> get_dependencies() const override {
+        return dependencies;
+    }
+
+    bool init() override {
+        phases.emplace_back("init");
+        return true;
+    }
+
+    bool post_init() override {
+        phases.emplace_back("post_init");
+        return true;
+    }
+
+    bool check_config() override {
+        phases.emplace_back("check_config");
+        return true;
+    }
+
+    bool pre_update() override {
+        phases.emplace_back("pre_update");
+        return true;
+    }
+
+    bool stop_accepting() override {
+        if (dependent_stopped)
+        {
+            CHECK(*dependent_stopped);
+        }
+        phases.emplace_back("stop_accepting");
+        return true;
+    }
+
+    std::vector<std::string> dependencies;
+    std::vector<std::string> phases;
+    const bool* dependent_stopped{};
+};
+
+class bus_provider final : public observed_provider<ark::bus_module>
 {
 public:
     const std::string get_app_whole_name(ark::bus_id_t) override {
@@ -59,6 +101,7 @@ public:
     }
 
     bool get_target_bus_relations(std::vector<ark::app_type>&) override {
+        ++configuration_reads;
         if (throw_before_registration)
         {
             throw std::runtime_error("controlled Bus configuration failure");
@@ -75,6 +118,7 @@ public:
     }
 
     bool throw_before_registration{};
+    unsigned configuration_reads{};
 
 private:
     std::string name_;
@@ -90,7 +134,7 @@ struct registration
     std::weak_ptr<int> callback_lifetime;
 };
 
-class timer_provider final : public ark::module_base<ark::timer_module>
+class timer_provider final : public observed_provider<ark::timer_module>
 {
 public:
     using ark::timer_module::add_forever_timer;
@@ -173,7 +217,126 @@ struct fixture
     std::unique_ptr<ark::net_service_manager_module> network{ark::detail::make_net_service_manager_module()};
 };
 
+class net_dependent final : public ark::module_base<ark::module, ark::net_service_manager_module>
+{
+public:
+    explicit net_dependent(fixture& state)
+        : state_(state) {
+    }
+
+    bool init() override {
+        check_provider_phases({"init"});
+        CHECK(state_.bus.configuration_reads == 0);
+        CHECK(state_.timer.attempts == 0);
+        return true;
+    }
+
+    bool post_init() override {
+        check_provider_phases({"init", "post_init"});
+        CHECK(state_.bus.configuration_reads == 1);
+        CHECK(state_.timer.attempts == 1);
+        CHECK(state_.timer.registrations.size() == 1);
+        return true;
+    }
+
+    bool check_config() override {
+        check_provider_phases({"init", "post_init", "check_config"});
+        return true;
+    }
+
+    bool pre_update() override {
+        check_provider_phases({"init", "post_init", "check_config", "pre_update"});
+        return true;
+    }
+
+    bool stop_accepting() override {
+        check_provider_phases({"init", "post_init", "check_config", "pre_update"});
+        stopped = true;
+        return true;
+    }
+
+    bool stopped{};
+
+private:
+    void check_provider_phases(const std::vector<std::string>& expected) {
+        CHECK(state_.bus.phases == expected);
+        CHECK(state_.timer.phases == expected);
+    }
+
+    fixture& state_;
+};
+
 } // namespace
+
+TEST_CASE("Net declares its actual required Bus and Timer interfaces") {
+    const auto network = ark::detail::make_net_service_manager_module();
+    CHECK(network->get_dependencies() ==
+          std::vector<std::string>{typeid(ark::bus_module).name(), typeid(ark::timer_module).name()});
+}
+
+TEST_CASE("Net missing providers fail real manager startup before module side effects") {
+    for (const bool missing_bus : {true, false})
+    {
+        CAPTURE(missing_bus);
+        fixture state;
+        const std::string missing = missing_bus ? typeid(ark::bus_module).name() : typeid(ark::timer_module).name();
+        state.manager.remove_module(missing);
+        CHECK_FALSE(state.manager.start(0, {}, {}, {}));
+        CHECK(state.manager.get_startup_failure() == std::string("dependencies: ") +
+                                                         typeid(ark::net_service_manager_module).name() +
+                                                         " requires missing module '" + missing + "'");
+        CHECK(state.manager.get_startup_call().phase.data() == std::string("dependencies"));
+        CHECK(state.manager.get_startup_call().result == ark::startup_call_result::returned_false);
+        CHECK(state.bus.phases.empty());
+        CHECK(state.timer.phases.empty());
+        CHECK(state.bus.configuration_reads == 0);
+        CHECK(state.timer.attempts == 0);
+        CHECK(state.network->pre_shut());
+        CHECK(state.timer.removals.empty());
+    }
+}
+
+TEST_CASE("Net required providers participate in cycle validation before initialization") {
+    for (const bool cycle_via_bus : {true, false})
+    {
+        CAPTURE(cycle_via_bus);
+        fixture state;
+        auto& dependencies = cycle_via_bus ? state.bus.dependencies : state.timer.dependencies;
+        dependencies = {typeid(ark::net_service_manager_module).name()};
+        CHECK_FALSE(state.manager.start(0, {}, {}, {}));
+        CHECK(state.manager.get_startup_failure().find("dependencies: cycle prevents startup;") == 0);
+        CHECK(state.bus.phases.empty());
+        CHECK(state.timer.phases.empty());
+        CHECK(state.bus.configuration_reads == 0);
+        CHECK(state.timer.attempts == 0);
+        CHECK(state.timer.removals.empty());
+    }
+}
+
+TEST_CASE("Net declared graph orders startup and admission stop with actual health registration") {
+    fixture state;
+    ark::module readiness_provider;
+    net_dependent dependent(state);
+    dependent.set_plugin_manager(&state.manager);
+    // Without Net's required edges it would run before these blocked providers,
+    // and the early-sorting dependent would observe missing provider phases.
+    state.bus.dependencies = {"zz_provider_ready"};
+    state.timer.dependencies = {"zz_provider_ready"};
+    REQUIRE(state.manager.add_module("zz_provider_ready", &readiness_provider));
+    REQUIRE(state.manager.add_module("!net_dependent", &dependent));
+    state.bus.dependent_stopped = &dependent.stopped;
+    state.timer.dependent_stopped = &dependent.stopped;
+    REQUIRE(state.manager.start(0, {}, {}, {}));
+    REQUIRE(state.timer.registrations.size() == 1);
+    const auto health = state.timer.registrations.front();
+    CHECK_FALSE(health.callback_lifetime.expired());
+    state.timer.pump(20010);
+    CHECK(state.timer.invoked == std::vector<std::uint64_t>{health.id});
+    REQUIRE(state.manager.stop(20010));
+    CHECK(dependent.stopped);
+    CHECK(health.callback_lifetime.expired());
+    CHECK(state.timer.removals == std::vector<std::uint64_t>{health.id});
+}
 
 TEST_CASE("Net retires only its owned health callback before receiver teardown") {
     fixture state;

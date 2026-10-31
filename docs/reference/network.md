@@ -50,6 +50,23 @@ and callback templates remain public. Request overloads, timeout defaults,
 future results and owner-update callback dispatch are unchanged. The official
 HTTP client participates in the admission and drain phases described below.
 
+## Service-manager required providers
+
+`net_service_manager_module` requires the registered `bus_module` and
+`timer_module` interfaces. The private implementation declares both through
+`module_base`; these are module dependencies, independent of plugin load order.
+The manager rejects a missing provider or a dependency cycle before any module
+`init()` hook runs. A valid graph puts each provider before Net in `init()`,
+`post_init()`, `check_config()` and `pre_update()`, so Net reads initialized Bus
+configuration and registers its health timer after provider initialization.
+`stop_accepting()` follows the reverse dependency order. The other shutdown
+hooks and shared IO retain their existing ordering and lifetime rules.
+
+`check-net-health-timer` exercises the production private factory with controlled
+Bus and Timer providers. It checks both required interface keys, missing-provider
+and cycle rejection before module side effects, startup and admission-stop
+ordering, and the actual health registration and retirement described below.
+
 ## Service-manager health timer
 
 The service manager owns its 20-second health timer registration and fails

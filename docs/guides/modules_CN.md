@@ -148,6 +148,8 @@ class dependent_module final
 | 缓存 | 安装后在 owner 线程读取一次并缓存顺序；合法 idle 新增／移除使缓存失效，首次停止接收阶段按需重建；声明在注册期间稳定，轮询与重入 stop 不重读 |
 | 排序 | 当前可启动节点按注册键稳定排序；只在兼容构建内定义，不保证跨编译器 RTTI 顺序 |
 
+Net 服务管理器显式声明必需的 `bus_module` 与 `timer_module`；缺少时在启动钩子前报错，启动按依赖顺序执行，停止接收阶段按反向顺序执行。详见 [Net 依赖声明](../reference/network_CN.md)。
+
 Timers 在 `init()` 查找 Timer／Guid；Utility 的 Timer、Guid、Schedule、Compress 无必需 provider。其他应用保留原声明与查询检查，不代表完整回调生命周期图。
 
 **升级要求：** `module` 新增元数据与 `stop_accepting()` 虚方法，改变虚表；管理器缓存改变对象布局，Timers 的公开基类特化也改变。使用兼容头文件／编译器同时重建启动器、全部官方／业务插件与受影响消费者，不混用旧二进制。查找键不变，不提供跨编译器 ABI 保证。依赖图只控制启动与反向停止接收钩子，update、就绪、`pre_shut()`、`shut()`、卸载顺序不变。官方入口迁移、反向完整清理及可选启动失败补偿仍见[后续路线](../project/lifecycle-closeout_CN.md)。
