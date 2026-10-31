@@ -6,6 +6,8 @@
 
 - Application and logger settings share one manifest, with console INFO defaults and optional file output, formatting and named loggers in the same file.
 
+- Net startup validates its required Bus and Timer modules before initialization; declared dependencies also order admission-stop callbacks.
+
 ### Upgrade notes
 
 - Remove launcher flags `--log_conf` / `-l` and migrate legacy logger settings into `[logging]` in the application manifest; explicit old flags now fail with exit code `1`. Public `application_manifest` and logger type layouts change: rebuild applications, plugins and consumers together. See [migration](../service-manifests.md#embedded-logging).
