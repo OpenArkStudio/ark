@@ -15,6 +15,28 @@ Kernel manages entities, schemas, static configuration and map instances. `kerne
 
 Schemas define field names/types/indices/attributes; static configuration supplies values by configuration ID; runtime entities have separate IDs and mutable data.
 
+### Required providers
+
+`config_module` declares `class_meta_module` as a required provider. `kernel_module`
+declares `class_meta_module`, `config_module` and Utility's `guid_module`. The
+manager validates these providers before any module startup hook and runs each
+startup phase in provider-first order. Admission stops in the reverse order;
+this does not change the existing entity destruction or DSO teardown order.
+Register Utility with the official Kernel plugin. `config_module_impl` and
+`kernel_module_impl` now use provider-parameterized `module_base` specializations;
+source code naming their former base types must update, and consumers of these
+retained implementation types must rebuild.
+
+Map and Kernel also require each other at runtime: Kernel uses Map for entity
+creation, removal and recipients; Map uses Kernel for entity lookup and instance
+release. Their `init()` hooks retain these pointers without calling the peer. Neither edge
+is declared in the single lifecycle dependency graph, because declaring both
+would create a startup cycle. These pointers are required, not optional: keep
+both modules registered and call their entity APIs only after startup. The
+current graph does not validate their mutual presence or impose their relative
+admission-stop order. A complete declaration requires a separate decision about
+required-presence versus ordering semantics, or removal of the runtime cycle.
+
 ### Resource loading
 
 When no JSON schema is selected, the metadata module loads `resource/meta/config_class.config` and `resource/meta/entity_class.config` during `init()`. These files reference individual schema files; configuration schemas may also specify data resources. During `post_init()`, `config_module` loads static records using this metadata.

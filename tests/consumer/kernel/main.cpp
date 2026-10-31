@@ -12,7 +12,7 @@
 #include <ark/kernel/node_impl.hpp>
 
 static_assert(std::is_base_of_v<ark::module_base<ark::class_meta_module>, ark::class_meta_module_impl>);
-static_assert(std::is_base_of_v<ark::module_base<ark::config_module>, ark::config_module_impl>);
+static_assert(std::is_base_of_v<ark::module_base<ark::config_module, ark::class_meta_module>, ark::config_module_impl>);
 static_assert(std::is_base_of_v<ark::plugin_base<ark::kernel_plugin>, ark::kernel_plugin>);
 static_assert(std::is_same_v<decltype(&ark::class_meta_module_impl::update), decltype(&ark::module::update)>);
 static_assert(std::is_same_v<decltype(&ark::config_module_impl::update), decltype(&ark::module::update)>);
@@ -21,7 +21,9 @@ static_assert(std::is_same_v<decltype(&ark::config_module_impl::update), decltyp
 #include <ark/kernel/kernel_module_impl.hpp>
 #include <ark/kernel/map_module_impl.hpp>
 
-static_assert(std::is_base_of_v<ark::module_base<ark::kernel_module>, ark::kernel_module_impl>);
+static_assert(std::is_base_of_v<
+    ark::module_base<ark::kernel_module, ark::class_meta_module, ark::config_module, ark::guid_module>,
+    ark::kernel_module_impl>);
 static_assert(std::is_base_of_v<ark::module_base<ark::map_module>, ark::map_module_impl>);
 static_assert(!std::is_same_v<decltype(&ark::kernel_module_impl::update), decltype(&ark::module::update)>);
 static_assert(std::is_same_v<decltype(&ark::map_module_impl::update), decltype(&ark::module::update)>);

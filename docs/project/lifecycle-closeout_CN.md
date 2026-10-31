@@ -137,6 +137,8 @@ Net 显式声明必需的 Bus 与 Timer，在启动钩子前检查缺失，并�
 
 Provider 清点：Game 保留 Kernel／Guid／Bus／Msg／Net／Map；Net 管理器保留 Bus／Timer；Kernel 保留 Map／元数据／配置／Guid。安装即可获取资源，依赖验证不能替代获取点清理；不猜测依赖或静默改变旧钩子语义。
 
+Kernel 配置模块声明元数据依赖，Kernel 声明元数据／配置／Guid 依赖。Map／Kernel 必需的运行时双向关系仍在排序图之外；这些声明不验证缺少 Map 的情形，也不确定二者的相对停机顺序。详见 [Kernel 参考](../reference/kernel_CN.md)。
+
 成功启动后缓存拓扑；手动管理器或合法 idle registry 变化在首个停止接收钩子前重建／验证一次，不在 poll／重入中重读。声明在注册期间保持稳定。完整 `pre_shut()`／`shut()` 顺序仍待后续实施。
 
 本项不涉及 Registry、热更新、服务发现或网络协议。

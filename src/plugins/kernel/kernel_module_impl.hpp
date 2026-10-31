@@ -37,7 +37,7 @@
 
 namespace ark {
 
-class kernel_module_impl final : public module_base<kernel_module>
+class kernel_module_impl final : public module_base<kernel_module, class_meta_module, config_module, guid_module>
 {
 public:
     explicit kernel_module_impl();

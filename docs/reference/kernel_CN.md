@@ -15,6 +15,22 @@ Kernel 管理实体、结构、静态配置和地图实例。`kernel_module` 创
 
 结构定义字段名、类型、索引与属性；静态配置按配置 ID 提供值；运行时实体另有 ID 和可修改数据。
 
+### 必需提供方
+
+`config_module` 声明 `class_meta_module` 为必需提供方。`kernel_module` 声明
+`class_meta_module`、`config_module` 和 Utility 的 `guid_module` 为必需提供方。
+manager 在任何模块启动钩子执行前校验这些提供方，并在每个启动阶段按提供方先于消费方的顺序调用。
+停止接入采用相反顺序；实体销毁与 DSO 拆卸仍采用既有顺序。
+使用官方 Kernel 插件时应同时注册 Utility。`config_module_impl` 与 `kernel_module_impl`
+改用带提供方参数的 `module_base` 特化；直接引用旧基类类型的代码须更新，使用这些保留实现类型的消费方须重新构建。
+
+Map 与 Kernel 在运行时也互相依赖：Kernel 通过 Map 创建和移除实体、查找接收者；
+Map 通过 Kernel 查找实体、释放实例。两者在 `init()` 中保存对方的指针，不调用对方。
+当前单一生命周期依赖图未声明这两个方向的边，因为同时声明会形成启动环。
+这些指针是必需依赖，不能视为可选项：两个模块都必须注册，且实体相关 API 应在启动完成后调用。
+当前依赖图不校验两者是否同时存在，也不约束两者之间的停止接入顺序。
+完整声明需要另行确定「必需模块存在」与「阶段调用顺序」的语义边界，或先解除运行时依赖环。
+
 ### 资源加载
 
 没有选择 JSON 结构时，元数据模块在 `init()` 中加载 `resource/meta/config_class.config` 和 `resource/meta/entity_class.config`。这两个文件引用具体的结构文件；配置结构还可指定数据资源文件。`config_module` 在 `post_init()` 中按元数据加载静态记录。
