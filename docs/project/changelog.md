@@ -6,6 +6,8 @@
 
 - Login, Master, Proxy, World, Dir and Router reject missing Bus or Net providers before startup hooks and use declared dependency ordering.
 
+- Game validates the providers used by its Player metadata, entity callbacks and listener setup before startup hooks.
+
 - Bus messaging validates its required Bus and Net modules before startup hooks and uses declared provider order for startup and admission-stop callbacks.
 
 - Kernel and configuration startup validate their declared metadata, configuration and Guid providers before initialization. The Map/Kernel runtime cycle remains a separate design boundary.
@@ -17,6 +19,8 @@
 ### Upgrade notes
 
 - Login, Master, Proxy, World, Dir and Router concrete bases now include Bus/Net providers. Update references to the old base specializations and rebuild concrete consumers; see [server migration](../concepts/server-architecture.md).
+
+- Game's concrete implementation base now includes its required providers. Update references to its former `module_base` specialization and rebuild source consumers of `game_net_module_impl`; interface keys and wire formats are unchanged.
 
 - The concrete `config_module_impl` and `kernel_module_impl` base specializations now include declared providers. Update source references to their former `module_base` types and rebuild consumers of these implementation classes; see [Kernel migration](../reference/kernel.md).
 

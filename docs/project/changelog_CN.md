@@ -6,6 +6,8 @@
 
 - Login、Master、Proxy、World、Dir、Router 在启动钩子前拒绝缺少 Bus 或 Net 的组合，并按已声明的依赖排序。
 
+- Game 在启动钩子前检查 Player 元数据、实体回调和监听初始化所需的依赖。
+
 - Bus 消息模块在启动钩子前检查必需的 Bus 与 Net，并按依赖关系安排启动和停止接收阶段的回调顺序。
 
 - Kernel 与配置模块在初始化前检查已声明的元数据、配置与 Guid 依赖；Map／Kernel 的运行时双向关系保留为独立设计议题。
@@ -17,6 +19,8 @@
 ### 升级说明
 
 - Login、Master、Proxy、World、Dir、Router 的具体基类加入 Bus／Net 依赖。更新原基类特化引用并重新编译具体类使用方；详见[服务角色迁移](../concepts/server-architecture_CN.md)。
+
+- Game 具体实现的基类加入必需依赖。更新原 `module_base` 特化引用，并重新编译使用 `game_net_module_impl` 的源码使用方；接口键和线格式保持不变。
 
 - `config_module_impl` 与 `kernel_module_impl` 的具体基类特化现在包含已声明的依赖。更新源码对原 `module_base` 类型的引用，并重新编译使用这些实现类的程序；详见 [Kernel 迁移](../reference/kernel_CN.md)。
 
