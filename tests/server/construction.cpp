@@ -12,7 +12,7 @@
 #include "startup_checks.hpp"
 
 static_assert(std::derived_from<server_plugin, ark::plugin_base<server_plugin>>);
-static_assert(std::derived_from<server_implementation, ark::module_base<server_module>>);
+static_assert(std::derived_from<server_implementation, server_module>);
 static_assert(std::same_as<decltype(&server_implementation::update), decltype(&ark::module::update)>);
 
 namespace {
@@ -68,7 +68,7 @@ int main(int argc, char* argv[]) {
     owner.install();
     owner.uninstall();
     require(manager.update(1), "Uninstall left invalid update bookkeeping");
-    check_role_startup(std::string(argv[1]) == "ark_game_plugin");
+    check_role_startup(std::string(argv[1]));
     std::cout << argv[1]
               << ": actual factory, interface key, disabled update, duplicate rejection, reinstall and startup failure "
                  "propagation passed\n";
