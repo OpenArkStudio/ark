@@ -4,25 +4,13 @@
 
 ### Features
 
-- Login, Master, Proxy, World, Dir and Router reject missing Bus or Net providers before startup hooks and use declared dependency ordering.
-
-- Game validates the providers used by its Player metadata, entity callbacks and listener setup before startup hooks.
-
-- Bus messaging validates its required Bus and Net modules before startup hooks and uses declared provider order for startup and admission-stop callbacks.
-
-- Kernel and configuration startup validate their declared metadata, configuration and Guid providers before initialization. The Map/Kernel runtime cycle remains a separate design boundary.
+- Net, Bus messaging, Kernel/configuration and built-in server roles, including Game, validate declared providers before startup hooks. Startup follows provider order and admission-stop reverses it; complete teardown ordering and the Map/Kernel runtime cycle remain separate design boundaries. See [module dependencies](../guides/modules.md#declare-startup-dependencies).
 
 - Application and logger settings share one manifest, with console INFO defaults and optional file output, formatting and named loggers in the same file.
 
-- Net startup validates its required Bus and Timer modules before initialization; declared dependencies also order admission-stop callbacks.
-
 ### Upgrade notes
 
-- Login, Master, Proxy, World, Dir and Router concrete bases now include Bus/Net providers. Update references to the old base specializations and rebuild concrete consumers; see [server migration](../concepts/server-architecture.md).
-
-- Game's concrete implementation base now includes its required providers. Update references to its former `module_base` specialization and rebuild source consumers of `game_net_module_impl`; interface keys and wire formats are unchanged.
-
-- The concrete `config_module_impl` and `kernel_module_impl` base specializations now include declared providers. Update source references to their former `module_base` types and rebuild consumers of these implementation classes; see [Kernel migration](../reference/kernel.md).
+- Required-provider declarations change the concrete bases of `config_module_impl`, `kernel_module_impl`, `game_net_module_impl` and the Login/Proxy/Master/World/Dir/Router implementations. Update references to their former `module_base` specializations and rebuild affected consumers/plugins together; interface keys and wire formats remain unchanged. See [Kernel migration](../reference/kernel.md) and [server migration](../concepts/server-architecture.md).
 
 - Remove launcher flags `--log_conf` / `-l` and migrate legacy logger settings into `[logging]` in the application manifest; explicit old flags now fail with exit code `1`. Public `application_manifest` and logger type layouts change: rebuild applications, plugins and consumers together. See [migration](../service-manifests.md#embedded-logging).
 
