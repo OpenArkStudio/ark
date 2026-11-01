@@ -135,6 +135,10 @@ These states are irreversible. Checks cannot interrupt blocking updates, hooks o
 
 Net declares Bus and Timer as required providers. Their absence is checked before startup hooks, and their declared order also controls admission-stop callbacks. This does not retire Net transports or change complete teardown order. See the [network reference](../reference/network.md).
 
+Msg declares Bus and Net as required providers. Bus configuration remains independent, so the message-routing graph is acyclic. Missing-provider checks precede startup hooks; transport retirement and complete teardown order are unchanged. See the [Bus reference](../reference/bus.md).
+
+Login, Master, Proxy, World, Dir and Router declare Bus and Net for listener setup. Their unused retained lookups remain non-mandatory. See the [server roles and rebuild requirement](../concepts/server-architecture.md).
+
 Provider inventory: Game retains Kernel/Guid/Bus/Msg/Net/Map; Net’s manager retains Bus/Timer; Kernel retains Map/metadata/config/Guid. Installation can already acquire resources, so graph validation cannot replace acquisition cleanup. Do not guess edges or silently reinterpret legacy hooks.
 
 Kernel configuration declares metadata, and Kernel declares metadata/configuration/Guid. The required Map/Kernel runtime cycle remains outside this ordering graph; missing Map and their relative shutdown order are not validated by these declarations. See the [Kernel reference](../reference/kernel.md).
