@@ -148,17 +148,28 @@ class dependent_module final
 | Cache | Read once on the owner after installation. Legal idle additions/removals invalidate order; first admission-stop rebuilds when needed. Declarations stay stable while registered; polling/reentrant stop never reread them |
 | Ordering | Stable registration-key order among ready nodes within compatible builds, not across compiler RTTI encodings |
 
-The Net service manager declares `bus_module` and `timer_module` as required providers. Missing providers fail before startup hooks; provider-first startup and reverse admission-stop order also apply to Net. See [Net declarations](../reference/network.md).
+Each row lists **direct declarations**, not every runtime lookup. Missing declared providers fail before startup hooks.
 
-Bus messaging declares `bus_module` and `net_service_manager_module` as required providers. The Bus configuration module remains an independent node; Msg → Net → Bus does not form a cycle. See [Bus messaging](../reference/bus.md).
+| Consumer | Required provider interfaces | Purpose / boundary |
+| --- | --- | --- |
+| [Net service manager](../reference/network.md) | `bus_module`, `timer_module` | Network service setup |
+| [Bus messaging](../reference/bus.md) (`msg_module`) | `bus_module`, `net_service_manager_module` | Msg → Net → Bus is acyclic; Bus configuration (`bus_module`) is a separate node with no required providers |
+| Timers sample | `timer_module`, `guid_module` | Looked up in `init()` |
+| Utility Timer, Guid, Schedule, Compress | None | No required-provider declarations |
+| Login, Master, Proxy, World, Dir, Router | `bus_module`, `net_service_manager_module` | Listener setup |
+| [Kernel configuration](../reference/kernel.md#required-providers) (`config_module`) | `class_meta_module` | Configuration metadata |
+| Kernel (`kernel_module`) | `class_meta_module`, `config_module`, `guid_module` | Register Utility with Kernel |
+| Map (`map_module`) | None declared | Required Map ↔ Kernel runtime cycle stays outside the ordering graph; register both and use entity APIs after startup. The graph does not validate their mutual presence or relative admission-stop order |
+| Game | `kernel_module`, `bus_module`, `net_service_manager_module`, `map_module`, `class_meta_module` | Active callbacks and Player setup. Guid is required transitively through Kernel; retained Guid/Msg lookups add no direct declarations |
 
-Timers looks up Timer/Guid in `init()`; Utility’s Timer, Guid, Schedule and Compress require no providers. Login, Master, Proxy, World, Dir and Router declare Bus/Net for their listener setup. These declarations do not establish a complete callback-lifetime graph; rebuild concrete role consumers and update references to their former `module_base` specializations.
+The graph controls startup and reverse `stop_accepting()` order only. It does not change update, readiness, `pre_shut()`, `shut()` or unloading order, establish a complete callback-lifetime graph, or retire IO. See the [lifecycle route](../project/lifecycle-closeout.md) for remaining ingress migration, full reverse cleanup and startup-failure compensation boundaries.
 
-Kernel configuration declares metadata; Kernel declares metadata, configuration and Guid. Map and Kernel still require each other at runtime, so their mutual relationship is outside the current ordering graph. See the [Kernel dependency boundary](../reference/kernel.md).
+<Aside type="caution" title="Rebuild modules and consumers together">
 
-Game declares Kernel, Bus, Net, Map and metadata for its active callbacks and Player setup. Its retained Guid/Msg lookups do not make those modules mandatory. Rebuild consumers of the concrete Game implementation and update references to its old `module_base` specialization.
+- Metadata and `stop_accepting()` change `module`’s vtable; cached order changes manager layout. Rebuild the launcher, all official/business plugins and affected consumers with compatible headers/compiler settings; do not mix older binaries. Lookup keys stay unchanged; no cross-compiler ABI is promised.
+- Update references to former `module_base` specializations for Timers and the concrete role, Game, Kernel configuration and Kernel implementations, then rebuild their consumers.
 
-**Upgrade:** metadata and `stop_accepting()` change `module`’s vtable; cached order changes manager layout, and Timers changes its public base specialization. Rebuild the launcher, all official/business plugins and affected consumers together with compatible headers/compiler settings; do not mix older binaries. Lookup keys stay unchanged; no cross-compiler ABI is promised. Dependencies govern startup and reverse admission-stop hooks, not update, readiness, `pre_shut()`, `shut()` or unloading. Official ingress migration, reverse complete cleanup and opt-in startup-failure compensation remain on the [subsequent route](../project/lifecycle-closeout.md).
+</Aside>
 
 ## Choose lifecycle stages
 
