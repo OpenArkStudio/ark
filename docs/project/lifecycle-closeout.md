@@ -139,7 +139,7 @@ Msg declares Bus and Net as required providers. Bus configuration remains indepe
 
 Login, Master, Proxy, World, Dir and Router declare Bus and Net for listener setup. Their unused retained lookups remain non-mandatory. See the [server roles and rebuild requirement](../concepts/server-architecture.md).
 
-Provider inventory: Game retains Kernel/Guid/Bus/Msg/Net/Map; Net’s manager retains Bus/Timer; Kernel retains Map/metadata/config/Guid. Installation can already acquire resources, so graph validation cannot replace acquisition cleanup. Do not guess edges or silently reinterpret legacy hooks.
+Game declares Kernel/Bus/Net/Map/metadata for active runtime use and Player callback setup; its retained Guid/Msg lookups remain non-mandatory. Installation can already acquire resources, so graph validation cannot replace acquisition cleanup or retire those callbacks.
 
 Kernel configuration declares metadata, and Kernel declares metadata/configuration/Guid. The required Map/Kernel runtime cycle remains outside this ordering graph; missing Map and their relative shutdown order are not validated by these declarations. See the [Kernel reference](../reference/kernel.md).
 

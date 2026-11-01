@@ -156,6 +156,8 @@ Timers looks up Timer/Guid in `init()`; Utility’s Timer, Guid, Schedule and Co
 
 Kernel configuration declares metadata; Kernel declares metadata, configuration and Guid. Map and Kernel still require each other at runtime, so their mutual relationship is outside the current ordering graph. See the [Kernel dependency boundary](../reference/kernel.md).
 
+Game declares Kernel, Bus, Net, Map and metadata for its active callbacks and Player setup. Its retained Guid/Msg lookups do not make those modules mandatory. Rebuild consumers of the concrete Game implementation and update references to its old `module_base` specialization.
+
 **Upgrade:** metadata and `stop_accepting()` change `module`’s vtable; cached order changes manager layout, and Timers changes its public base specialization. Rebuild the launcher, all official/business plugins and affected consumers together with compatible headers/compiler settings; do not mix older binaries. Lookup keys stay unchanged; no cross-compiler ABI is promised. Dependencies govern startup and reverse admission-stop hooks, not update, readiness, `pre_shut()`, `shut()` or unloading. Official ingress migration, reverse complete cleanup and opt-in startup-failure compensation remain on the [subsequent route](../project/lifecycle-closeout.md).
 
 ## Choose lifecycle stages

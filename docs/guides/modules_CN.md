@@ -156,6 +156,8 @@ Timers 在 `init()` 查找 Timer／Guid；Utility 的 Timer、Guid、Schedule、
 
 Kernel 配置模块声明元数据依赖；Kernel 声明元数据、配置与 Guid 依赖。Map 与 Kernel 在运行时仍互相依赖，双向关系尚未纳入当前排序图。详见 [Kernel 依赖边界](../reference/kernel_CN.md)。
 
+Game 为实际回调和 Player 初始化声明 Kernel、Bus、Net、Map、元数据依赖；保留的 Guid／Msg 查询不使它们成为必需模块。使用 Game 具体实现类的代码须更新原 `module_base` 特化引用并重新编译。
+
 **升级要求：** `module` 新增元数据与 `stop_accepting()` 虚方法，改变虚表；管理器缓存改变对象布局，Timers 的公开基类特化也改变。使用兼容头文件／编译器同时重建启动器、全部官方／业务插件与受影响消费者，不混用旧二进制。查找键不变，不提供跨编译器 ABI 保证。依赖图只控制启动与反向停止接收钩子，update、就绪、`pre_shut()`、`shut()`、卸载顺序不变。官方入口迁移、反向完整清理及可选启动失败补偿仍见[后续路线](../project/lifecycle-closeout_CN.md)。
 
 ## 选择生命周期阶段

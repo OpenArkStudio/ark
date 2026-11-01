@@ -22,6 +22,7 @@
 
 #include "ark/bus/bus_module.hpp"
 #include "ark/bus/msg_module.hpp"
+#include "ark/kernel/class_meta_module.hpp"
 #include "ark/kernel/kernel_module.hpp"
 #include "ark/kernel/map_module.hpp"
 #include "ark/module_base.hpp"
@@ -32,7 +33,9 @@
 
 namespace ark {
 
-class game_net_module_impl final : public module_base<game_net_module>
+class game_net_module_impl final
+    : public module_base<game_net_module, kernel_module, bus_module, net_service_manager_module, map_module,
+          class_meta_module>
 {
 public:
     bool init() override;
