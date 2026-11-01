@@ -18,6 +18,7 @@
 #include <ark/module_base.hpp>
 #include <ark/net/net_service_manager_module.hpp>
 #include "bus/bus_plugin.hpp"
+#include "game_module_factory.hpp"
 #include "game_net_module.hpp"
 #include "game_plugin.hpp"
 #include "utility/utility_plugin.hpp"
@@ -72,6 +73,59 @@ public:
         std::shared_ptr<const ark::msg_header>) override {
         return false;
     }
+};
+
+// These key-only providers isolate the real Game factory's own declarations.
+// They deliberately do not emulate provider interfaces or business behavior.
+// The ordering control consequently stops at Game init's existing type checks.
+class provider_hook_probe final : public ark::module
+{
+public:
+    bool init() override {
+        ++init_calls;
+        return true;
+    }
+
+    bool post_init() override {
+        ++later_calls;
+        return true;
+    }
+
+    bool check_config() override {
+        ++later_calls;
+        return true;
+    }
+
+    bool pre_update() override {
+        ++later_calls;
+        return true;
+    }
+
+    unsigned init_calls{}, later_calls{};
+};
+
+std::vector<std::string> game_provider_keys() {
+    return {typeid(ark::kernel_module).name(), typeid(ark::bus_module).name(),
+        typeid(ark::net_service_manager_module).name(), typeid(ark::map_module).name(),
+        typeid(ark::class_meta_module).name()};
+}
+
+class quiet_logger
+{
+public:
+    quiet_logger()
+        : previous_(ark::logger::instance()) {
+        ark::logger::init(&log_);
+        log_.set_log_func([](spdlog::level::level_enum, const std::string&) {});
+    }
+
+    ~quiet_logger() {
+        ark::logger::set_instance(previous_);
+    }
+
+private:
+    ark::logger* previous_;
+    ark::logger log_;
 };
 
 class game_world
@@ -212,4 +266,66 @@ TEST_CASE("Game missing Player metadata fails before registering callbacks or cr
     CHECK_FALSE(world.game->post_init());
     CHECK(world.network.create_calls == 0);
     CHECK(world.player_online_calls() == 0);
+}
+
+TEST_CASE("Game factory rejects each missing provider before any startup hook") {
+    quiet_logger log;
+    const auto keys = game_provider_keys();
+    for (const auto& missing : keys)
+    {
+        CAPTURE(missing);
+        ark::plugin_manager manager;
+        auto game = ark::detail::make_game_net_module();
+        game->set_plugin_manager(&manager);
+        auto declared = game->get_dependencies();
+        auto expected = keys;
+        std::sort(declared.begin(), declared.end());
+        std::sort(expected.begin(), expected.end());
+        CHECK(declared == expected);
+        REQUIRE(manager.add_module(typeid(ark::game_net_module).name(), game.get()));
+        provider_hook_probe observer;
+        REQUIRE(manager.add_module("!independent-startup-observer", &observer));
+        std::vector<provider_hook_probe> providers(keys.size());
+        for (size_t i = 0; i < keys.size(); ++i)
+        {
+            if (keys[i] != missing)
+            {
+                REQUIRE(manager.add_module(keys[i], &providers[i]));
+            }
+        }
+        CHECK_FALSE(manager.start(0, {}, {}, {}));
+        CHECK(manager.get_startup_failure() == "dependencies: " + std::string(typeid(ark::game_net_module).name()) +
+                                                   " requires missing module '" + missing + "'");
+        CHECK(std::string(manager.get_startup_call().phase.data()) == "dependencies");
+        CHECK(observer.init_calls == 0);
+        CHECK(observer.later_calls == 0);
+        for (const auto& provider : providers)
+        {
+            CHECK(provider.init_calls == 0);
+            CHECK(provider.later_calls == 0);
+        }
+    }
+}
+
+TEST_CASE("Game factory orders every declared provider before its init hook") {
+    quiet_logger log;
+    ark::plugin_manager manager;
+    auto game = ark::detail::make_game_net_module();
+    game->set_plugin_manager(&manager);
+    // A deliberately early consumer key makes the default lexical order wrong
+    // for every provider, independently of RTTI spelling and registration order.
+    REQUIRE(manager.add_module("!game-consumer", game.get()));
+    const auto keys = game_provider_keys();
+    std::vector<provider_hook_probe> providers(keys.size());
+    for (size_t i = keys.size(); i-- > 0;)
+    {
+        REQUIRE(manager.add_module(keys[i], &providers[i]));
+    }
+    CHECK_FALSE(manager.start(0, {}, {}, {}));
+    CHECK(manager.get_startup_failure() == "init: !game-consumer");
+    for (const auto& provider : providers)
+    {
+        CHECK(provider.init_calls == 1);
+        CHECK(provider.later_calls == 0);
+    }
 }

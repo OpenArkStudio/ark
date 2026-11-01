@@ -63,9 +63,13 @@ Login、Proxy、Router、Master、World 和 Dir 的网络启动路径先检查 B
 
 Kernel 插件目标可用时，POSIX 平台的 `check-server-startup` 还包含 Game。`check-server-startup-game` 只选择这两个场景：使用真实 Utility、Bus、Net、Kernel 和 Game 动态库，配备私有 Bus 身份 `1.1.31.1` 和最小 `Player` JSON 结构。健康启动必须接受回环连接，配合 `SIGTERM` 完成停服，关闭客户端连接和监听器，并以退出码 0 结束。测试持有端口时，必须输出 Game 的 `post_init` 失败诊断，并以退出码 1 结束。现有启动与停服观察时限保持不变。测试不创建 Entity，也不发送玩法消息。
 
-Game 在 `init()` 获取并验证依赖，在所有模块完成 `init()` 后，于 `post_init()` 注册既有 Player 回调，不要求 Kernel 自身的 `post_init()` 先执行。注册前检查 Player 元数据，并逐项检查注册结果；只有四次调用全部成功，才创建监听器。缺少 Player 元数据或注册被拒绝时返回 `false`，不创建监听器。部分完成的注册不会回滚。
+Game 通过具体实现的 `module_base` 声明 Kernel、Bus、Net、Map 和类元数据为必需提供方。缺少任意提供方时，管理器在执行任何启动钩子之前拒绝启动；每个启动阶段均先执行已声明的提供方，再执行 Game。场景与视野操作需要 Map，Player 回调注册需要元数据。Game 仍保留 Guid 与 Msg 查询，但当前有效实现未使用这两个模块，因此不声明直接依赖；Kernel 既有的 Guid 依赖仍然传递生效。Map 与 Kernel 必需的双向运行时耦合仍未声明；本次变更不解决该环，也不建立完整的提供方或清理顺序图。接口 RTTI 键、生命周期函数体与线协议保持不变。
 
-`check-game-initialization` 在真实 Metadata、Map、Config 和 Guid 已注册时，强制真实 Game 装配先于真实 Kernel 实现执行初始化。测试覆盖 Game／Kernel `post_init()` 的两种顺序，通过元数据事件分发观察真实 Player 类回调，并验证缺少 Player 元数据时拒绝创建监听器。定向测试只控制监听器返回值，独立 DSO 场景覆盖真实网络栈。这些检查不验收其他类／场景回调行为或玩法。
+**升级要求：** 保留的具体类型 `game_net_module_impl` 从 `module_base<game_net_module>` 改为继承 `module_base<game_net_module, kernel_module, bus_module, net_service_manager_module, map_module, class_meta_module>`。引用旧模板特化的源码须更新，使用该具体类型的消费者须重新编译，包括通过兼容路径 `game/include/game_net_module_impl.hpp` 引用的消费者。本次变更不保证具体类型布局不变，也不作一般 ABI 兼容承诺。接口类型与注册键保持稳定。
+
+Game 继续在 `init()` 获取模块指针，在 `post_init()` 注册既有 Player 回调。函数体仍支持在所有 `init()` 完成后直接调用 Game／Kernel 两种 `post_init()` 顺序；管理器驱动启动时，则依据声明先执行 Kernel。注册前检查 Player 元数据，并逐项检查注册结果；只有四次调用全部成功，才创建监听器。缺少 Player 元数据或注册被拒绝时返回 `false`，不创建监听器。部分完成的注册不会回滚。
+
+`check-game-initialization` 使用生产 Game 工厂，逐一省略声明的提供方，并验证所有提供方与独立观察模块的启动钩子均未执行。独立的注册键调度对照为 Game 指定字典序靠前的键，验证每个声明提供方的 `init()` 都先于真实 Game `init()` 中的既有类型检查执行；这些对照不模拟提供方接口。既有手动阶段测试另使用真实 Metadata、Map、Config、Guid 实现和真实 Game 装配，观察真实 Player 回调，仅控制监听器返回值，并保留 Game／Kernel 两种 `post_init()` 顺序，以及缺少 Player 时拒绝启动的检查。独立 DSO 场景覆盖真实网络栈。这些检查不验收其他类／场景回调行为或玩法。
 
 未启用的 Simulate 源码采用相同的失败传播方式，并在注册回调前检查模拟模块。其 PhysX 3/MessagePack 集成仍不受当前构建支持，因此没有本套测试的原生运行验收。依赖检查只覆盖现有启动代码实际解引用的模块，不能证明尚未完成的角色操作已经就绪。
 
