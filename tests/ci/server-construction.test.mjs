@@ -65,7 +65,11 @@ test('all eight server assemblies use typed factories, disabled updates and expl
       assert.match(assembly, new RegExp(`register_module\\(detail::make_${module}\\(\\), module_update::disabled\\)`));
       assert.match(assembly, new RegExp(`unregister_module<${module}>\\(\\)`));
       const implementation = source(`src/server/${family}/${module}_impl.hpp`);
-      assert.match(implementation, new RegExp(`public module_base<${module}>`));
+      const requiredProviders = ['login', 'proxy', 'master', 'world', 'dir', 'router'].includes(family)
+        ? ',\\s*bus_module,\\s*net_service_manager_module'
+        // Keep the accepted Game base valid until its separate provider migration.
+        : family === 'game' ? '(?:,\\s*kernel_module,\\s*bus_module,\\s*net_service_manager_module,\\s*map_module,\\s*class_meta_module)?' : '';
+      assert.match(implementation, new RegExp(`public module_base<${module}${requiredProviders}>`));
       assert.doesNotMatch(implementation, /ARK_DECLARE_MODULE_FUNCTIONS|bool update\(\)/);
       assert.match(source(`src/server/${family}/${module}_impl.cpp`), new RegExp(`return std::make_unique<${module}_impl>\\(\\)`));
     }

@@ -30,7 +30,7 @@
 
 namespace ark {
 
-class proxy_net_module_impl final : public module_base<proxy_net_module>
+class proxy_net_module_impl final : public module_base<proxy_net_module, bus_module, net_service_manager_module>
 {
 public:
     bool init() override;

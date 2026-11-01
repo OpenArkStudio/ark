@@ -57,9 +57,13 @@ cmake --build out/server-construction --target check-server-plugins --parallel 2
 
 ### 角色启动错误
 
-Login、Proxy、Router、Master、World 和 Dir 的网络启动路径先检查 Bus 与 Net。Game 还会在 `init()` 检查 Kernel，供后续阶段使用。缺少启动必需的模块时，`init()` 返回 `false`；创建监听器失败或找不到服务端网络服务时，`post_init()` 返回 `false`。管理器保留失败的角色与生命周期阶段并停止启动，启动器输出诊断后以退出码 1 结束。监听器设置成功时返回 `true`。这些路径不再以退出码 0 终止进程。启动失败后的回滚和部分启动资源清理顺序尚未定义。
+Login、Proxy、Master、World、Dir 和 Router 通过 `module_base<Role, bus_module, net_service_manager_module>` 声明必需的 `bus_module` 与 `net_service_manager_module`。缺少任一接口时，管理器在任何启动钩子运行前，于 `dependencies` 阶段拒绝启动；正常启动时，两个提供方均先于角色执行。既有 `init()` 检查仍适用于直接调用生命周期方法的场景。Game 还会在 `init()` 检查 Kernel，供后续阶段使用。创建监听器失败或找不到服务端网络服务时，`post_init()` 返回 `false`。管理器保留失败的角色与生命周期阶段并停止启动，启动器输出诊断后以退出码 1 结束。监听器设置成功时返回 `true`。这些路径不再以退出码 0 终止进程。这些声明不新增回滚，也不改变既有正常清理钩子。
 
-真实工厂测试还会通过公共角色装配和管理器运行受控的 Bus/Net 场景：缺少依赖、创建失败、服务缺失，以及六条仅设置监听器的启动路径成功。Game 的创建测试进程覆盖缺少依赖的场景，包括缺少 Kernel；健康监听器的生命周期由下文的真实组合检查。在 macOS 和 Linux 上，`check-server-startup` 另使用独立的最小 Bus 测试配置运行六个角色各自的真实 Utility、Bus、Net 和角色动态库，检查健康回环启动，以及测试持有的端口被占用时的失败角色、阶段与启动器退出码 1。这些检查不验收仓库内的角色预设或业务处理器。
+Master 保留的 Timer/Msg 指针、Proxy 的 Msg 指针和 World 的 Kernel/Msg 指针在这些实现中没有实际解引用，因此不声明为必需提供方。仅因保留指针而增加依赖会改变受支持的组合。依赖边指向接口节点；Net 自身对 Bus/Timer 的依赖不会形成反向角色依赖。
+
+公开的 Login、Proxy、Master、World、Dir 和 Router 具体实现改用了不同的 `module_base` 特化。对显式引用旧具体基类的调用方，这是不兼容的源码／ABI 变更。需将旧基类引用更新为新的特化或角色接口，并一同重新编译受影响的调用方与插件。角色接口 RTTI 注册键、工厂返回类型、消息格式与监听器生命周期阶段保持不变；不保证具体类型布局不变。
+
+真实工厂测试还会通过公共角色装配和管理器运行受控的 Bus/Net 场景：缺少依赖、创建失败、服务缺失，以及六条仅设置监听器的启动路径成功。六个仅设置监听器的角色测试检查两个接口键，分别移除必需提供方并确认任何提供方钩子均未执行；还将两个提供方阻塞在排序靠后的前置节点上，以排序靠前的角色依赖方检查四个启动阶段，以及反向停止接收顺序。测试也覆盖未注册闲置可选指针时的成功启动。Game 的创建测试进程覆盖缺少依赖的场景，包括缺少 Kernel；健康监听器的生命周期由下文的真实组合检查。在 macOS 和 Linux 上，`check-server-startup` 另使用独立的最小 Bus 测试配置运行六个角色各自的真实 Utility、Bus、Net 和角色动态库，检查健康回环启动，以及测试持有的端口被占用时的失败角色、阶段与启动器退出码 1。这些检查不验收仓库内的角色预设或业务处理器。
 
 Kernel 插件目标可用时，POSIX 平台的 `check-server-startup` 还包含 Game。`check-server-startup-game` 只选择这两个场景：使用真实 Utility、Bus、Net、Kernel 和 Game 动态库，配备私有 Bus 身份 `1.1.31.1` 和最小 `Player` JSON 结构。健康启动必须接受回环连接，配合 `SIGTERM` 完成停服，关闭客户端连接和监听器，并以退出码 0 结束。测试持有端口时，必须输出 Game 的 `post_init` 失败诊断，并以退出码 1 结束。现有启动与停服观察时限保持不变。测试不创建 Entity，也不发送玩法消息。
 
