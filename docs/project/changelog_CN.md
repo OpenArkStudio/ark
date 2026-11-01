@@ -4,6 +4,8 @@
 
 ### 功能
 
+- Login、Master、Proxy、World 在启动钩子前拒绝缺少 Bus 或 Net 的组合，并按已声明的依赖排序。
+
 - Bus 消息模块在启动钩子前检查必需的 Bus 与 Net，并按依赖关系安排启动和停止接收阶段的回调顺序。
 
 - Kernel 与配置模块在初始化前检查已声明的元数据、配置与 Guid 依赖；Map／Kernel 的运行时双向关系保留为独立设计议题。
@@ -13,6 +15,8 @@
 - Net 在初始化前检查必需的 Bus 与 Timer 模块，并按依赖关系安排停止接收阶段的回调顺序。
 
 ### 升级说明
+
+- Login、Master、Proxy、World 的具体基类加入 Bus／Net 依赖。更新原基类特化引用并重新编译具体类使用方；详见[服务角色迁移](../concepts/server-architecture_CN.md)。
 
 - `config_module_impl` 与 `kernel_module_impl` 的具体基类特化现在包含已声明的依赖。更新源码对原 `module_base` 类型的引用，并重新编译使用这些实现类的程序；详见 [Kernel 迁移](../reference/kernel_CN.md)。
 
