@@ -148,17 +148,28 @@ class dependent_module final
 | 缓存 | 安装后在 owner 线程读取一次并缓存顺序；合法 idle 新增／移除使缓存失效，首次停止接收阶段按需重建；声明在注册期间稳定，轮询与重入 stop 不重读 |
 | 排序 | 当前可启动节点按注册键稳定排序；只在兼容构建内定义，不保证跨编译器 RTTI 顺序 |
 
-Net 服务管理器显式声明必需的 `bus_module` 与 `timer_module`；缺少时在启动钩子前报错，启动按依赖顺序执行，停止接收阶段按反向顺序执行。详见 [Net 依赖声明](../reference/network_CN.md)。
+下表只列出**直接声明**，不列出全部运行时查询。缺少已声明的 provider 时，在启动钩子前报错。
 
-Bus 消息模块声明必需的 `bus_module` 与 `net_service_manager_module`。Bus 配置模块仍是独立节点，Msg → Net → Bus 不构成环。详见 [Bus 消息](../reference/bus_CN.md)。
+| 消费者 | 必需 provider 接口 | 用途／边界 |
+| --- | --- | --- |
+| [Net 服务管理器](../reference/network_CN.md) | `bus_module`、`timer_module` | 网络服务初始化 |
+| [Bus 消息](../reference/bus_CN.md)（`msg_module`） | `bus_module`、`net_service_manager_module` | Msg → Net → Bus 不成环；Bus 配置（`bus_module`）是独立节点，无必需 provider |
+| Timers 示例 | `timer_module`、`guid_module` | 在 `init()` 中查询 |
+| Utility Timer、Guid、Schedule、Compress | 无 | 未声明必需 provider |
+| Login、Master、Proxy、World、Dir、Router | `bus_module`、`net_service_manager_module` | 监听初始化 |
+| [Kernel 配置](../reference/kernel_CN.md#必需提供方)（`config_module`） | `class_meta_module` | 配置元数据 |
+| Kernel（`kernel_module`） | `class_meta_module`、`config_module`、`guid_module` | 与 Kernel 一起注册 Utility |
+| Map（`map_module`） | 未声明 | 必需的 Map ↔ Kernel 运行时环仍在排序图之外；同时注册两者，启动后再调用实体 API。Map／Kernel 自身的声明不验证两者是否同时存在，也不约束两者的停止接收顺序 |
+| Game | `kernel_module`、`bus_module`、`net_service_manager_module`、`map_module`、`class_meta_module` | 实际回调与 Player 初始化。Guid 通过 Kernel 成为传递依赖；保留的 Guid／Msg 查询不增加直接声明 |
 
-Timers 在 `init()` 查找 Timer／Guid；Utility 的 Timer、Guid、Schedule、Compress 无必需 provider。Login、Master、Proxy、World、Dir、Router 为监听初始化声明 Bus／Net 依赖。这些声明不代表完整回调生命周期图；具体角色类使用方须更新原 `module_base` 特化引用并重新编译。
+依赖图只控制启动与反向 `stop_accepting()` 顺序，不改变 update、就绪、`pre_shut()`、`shut()` 或卸载顺序，也不代表完整回调生命周期图或 IO 退役。其余入口迁移、完整反向清理与启动失败补偿边界见[生命周期路线](../project/lifecycle-closeout_CN.md)。
 
-Kernel 配置模块声明元数据依赖；Kernel 声明元数据、配置与 Guid 依赖。Map 与 Kernel 在运行时仍互相依赖，双向关系尚未纳入当前排序图。详见 [Kernel 依赖边界](../reference/kernel_CN.md)。
+<Aside type="caution" title="同时重建模块与消费者">
 
-Game 为实际回调和 Player 初始化声明 Kernel、Bus、Net、Map、元数据依赖；保留的 Guid／Msg 查询不使它们成为必需模块。使用 Game 具体实现类的代码须更新原 `module_base` 特化引用并重新编译。
+- 元数据与 `stop_accepting()` 改变 `module` 的虚表，缓存顺序改变管理器布局。使用兼容头文件／编译器设置重建启动器、全部官方／业务插件与受影响消费者，不混用旧二进制。查找键不变，不提供跨编译器 ABI 保证。
+- 更新 Timers 及角色、Game、Kernel 配置、Kernel 具体实现中原 `module_base` 特化的引用，并重建其消费者。
 
-**升级要求：** `module` 新增元数据与 `stop_accepting()` 虚方法，改变虚表；管理器缓存改变对象布局，Timers 的公开基类特化也改变。使用兼容头文件／编译器同时重建启动器、全部官方／业务插件与受影响消费者，不混用旧二进制。查找键不变，不提供跨编译器 ABI 保证。依赖图只控制启动与反向停止接收钩子，update、就绪、`pre_shut()`、`shut()`、卸载顺序不变。官方入口迁移、反向完整清理及可选启动失败补偿仍见[后续路线](../project/lifecycle-closeout_CN.md)。
+</Aside>
 
 ## 选择生命周期阶段
 
