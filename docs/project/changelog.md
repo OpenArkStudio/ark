@@ -4,6 +4,8 @@
 
 ### Features
 
+- Bus messaging validates its required Bus and Net modules before startup hooks and uses declared provider order for startup and admission-stop callbacks.
+
 - Kernel and configuration startup validate their declared metadata, configuration and Guid providers before initialization. The Map/Kernel runtime cycle remains a separate design boundary.
 
 - Application and logger settings share one manifest, with console INFO defaults and optional file output, formatting and named loggers in the same file.
