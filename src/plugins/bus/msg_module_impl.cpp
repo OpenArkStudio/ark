@@ -28,7 +28,7 @@
 
 namespace ark {
 
-class msg_module_impl final : public module_base<msg_module>
+class msg_module_impl final : public module_base<msg_module, bus_module, net_service_manager_module>
 {
 public:
     bool init() override;
