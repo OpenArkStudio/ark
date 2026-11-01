@@ -4,7 +4,7 @@
 
 ### Features
 
-- Login, Master, Proxy and World reject missing Bus or Net providers before startup hooks and use declared dependency ordering.
+- Login, Master, Proxy, World, Dir and Router reject missing Bus or Net providers before startup hooks and use declared dependency ordering.
 
 - Bus messaging validates its required Bus and Net modules before startup hooks and uses declared provider order for startup and admission-stop callbacks.
 
@@ -16,7 +16,7 @@
 
 ### Upgrade notes
 
-- Login, Master, Proxy and World concrete bases now include Bus/Net providers. Update references to the old base specializations and rebuild concrete consumers; see [server migration](../concepts/server-architecture.md).
+- Login, Master, Proxy, World, Dir and Router concrete bases now include Bus/Net providers. Update references to the old base specializations and rebuild concrete consumers; see [server migration](../concepts/server-architecture.md).
 
 - The concrete `config_module_impl` and `kernel_module_impl` base specializations now include declared providers. Update source references to their former `module_base` types and rebuild consumers of these implementation classes; see [Kernel migration](../reference/kernel.md).
 

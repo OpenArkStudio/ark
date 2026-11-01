@@ -137,7 +137,7 @@ Net 显式声明必需的 Bus 与 Timer，在启动钩子前检查缺失，并�
 
 Msg 声明必需的 Bus 与 Net。Bus 配置仍是独立节点，消息路由依赖图不成环；缺失检查发生在启动钩子前，传输回收与完整清理顺序保持不变。详见 [Bus 参考](../reference/bus_CN.md)。
 
-Login、Master、Proxy、World 为监听初始化声明 Bus 与 Net，未使用的保留查询不设为必需项。详见[服务角色与重编译要求](../concepts/server-architecture_CN.md)。
+Login、Master、Proxy、World、Dir、Router 为监听初始化声明 Bus 与 Net，未使用的保留查询不设为必需项。详见[服务角色与重编译要求](../concepts/server-architecture_CN.md)。
 
 Provider 清点：Game 保留 Kernel／Guid／Bus／Msg／Net／Map；Net 管理器保留 Bus／Timer；Kernel 保留 Map／元数据／配置／Guid。安装即可获取资源，依赖验证不能替代获取点清理；不猜测依赖或静默改变旧钩子语义。
 

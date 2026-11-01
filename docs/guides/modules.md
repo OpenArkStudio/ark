@@ -152,7 +152,7 @@ The Net service manager declares `bus_module` and `timer_module` as required pro
 
 Bus messaging declares `bus_module` and `net_service_manager_module` as required providers. The Bus configuration module remains an independent node; Msg → Net → Bus does not form a cycle. See [Bus messaging](../reference/bus.md).
 
-Timers looks up Timer/Guid in `init()`; Utility’s Timer, Guid, Schedule and Compress require no providers. Login, Master, Proxy and World declare Bus/Net for their listener setup. These declarations do not establish a complete callback-lifetime graph; rebuild concrete role consumers and update references to their former `module_base` specializations.
+Timers looks up Timer/Guid in `init()`; Utility’s Timer, Guid, Schedule and Compress require no providers. Login, Master, Proxy, World, Dir and Router declare Bus/Net for their listener setup. These declarations do not establish a complete callback-lifetime graph; rebuild concrete role consumers and update references to their former `module_base` specializations.
 
 Kernel configuration declares metadata; Kernel declares metadata, configuration and Guid. Map and Kernel still require each other at runtime, so their mutual relationship is outside the current ordering graph. See the [Kernel dependency boundary](../reference/kernel.md).
 

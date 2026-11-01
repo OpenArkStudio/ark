@@ -137,7 +137,7 @@ Net declares Bus and Timer as required providers. Their absence is checked befor
 
 Msg declares Bus and Net as required providers. Bus configuration remains independent, so the message-routing graph is acyclic. Missing-provider checks precede startup hooks; transport retirement and complete teardown order are unchanged. See the [Bus reference](../reference/bus.md).
 
-Login, Master, Proxy and World declare Bus and Net for listener setup. Their unused retained lookups remain non-mandatory. See the [server roles and rebuild requirement](../concepts/server-architecture.md).
+Login, Master, Proxy, World, Dir and Router declare Bus and Net for listener setup. Their unused retained lookups remain non-mandatory. See the [server roles and rebuild requirement](../concepts/server-architecture.md).
 
 Provider inventory: Game retains Kernel/Guid/Bus/Msg/Net/Map; Net’s manager retains Bus/Timer; Kernel retains Map/metadata/config/Guid. Installation can already acquire resources, so graph validation cannot replace acquisition cleanup. Do not guess edges or silently reinterpret legacy hooks.
 
