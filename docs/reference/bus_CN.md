@@ -9,7 +9,7 @@ CMake 通过显式映射，由 `ark::bus` 保留 `<ark/bus/bus_module.hpp>` 与
 `<ark/bus/msg_module.hpp>` 路径。消息接口需要 `ARK_BUILD_PROTO=ON`；API 目标会传递
 Net 与协议头依赖。共享地址和配置类型 `<ark/bus.hpp>` 源码位于 `src/core/bus.hpp`，供核心与 Net 使用。
 
-两个具体模块定义均位于 cpp，继承 `module_base<接口>`。私有工厂返回公开接口，
+两个具体模块定义均位于 cpp。私有工厂返回公开接口，
 `plugin_base` 先注册 Bus 接口，再注册消息接口，并按逆序卸载。两个模块均不注册更新回调，
 与原有继承的默认更新行为一致。公开虚接口、RTTI 查找键、`ark_bus_plugin` 库名与
 `DllEntryPlugin`／`DllExitPlugin` 签名保持不变；Registry、IO 所有权与网络行为维持既有边界。
@@ -35,6 +35,21 @@ config = "bus.plugin.toml"
 既有 Bus 配置测试通过私有接口工厂保留全部断言，也覆盖不启用 Protobuf 的配置构建。
 `tests/consumer/bus` 仅链接 `ark::bus`，分别编译两个公开模块头，并拒绝私有实现／配置头。
 消费者命令见[目录结构](directory-structure_CN.md)。
+
+## 必需模块提供者
+
+消息模块的私有实现声明
+`module_base<msg_module, bus_module, net_service_manager_module>`，因为 `init()`
+会保留两个提供者的指针，供后续发送使用。`bus_module` 仍是叶节点；Net 则依赖 Bus 和 Timer。
+虽然 Bus 插件同时安装 Bus 与消息模块，这些接口级依赖并不构成环。
+加载 Bus 插件时还需加载 Net 与 Utility，包括仅通过该运行时插件查询 Bus 配置的应用。
+
+缺少消息模块提供者或依赖成环时，管理器会在任何模块启动钩子执行前拒绝启动。
+各启动阶段均先执行提供者，再执行消息模块；`stop_accepting()` 按依赖逆序执行。
+插件安装顺序不能替代依赖校验。正常销毁钩子、公开接口和消息帧格式维持既有行为。
+
+`check-msg-dependencies` 通过真实的私有消息模块工厂，验证接口键、启动前缺失提供者与环检测、
+各阶段提供者先启动，以及逆序停止接收。既有动态库测试覆盖真实 Bus／Net／Utility 依赖图与消息行为。
 
 ## 地址与职责
 

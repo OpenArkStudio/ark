@@ -11,8 +11,8 @@ The message interface requires `ARK_BUILD_PROTO=ON`; the API target carries its
 Net and protocol-header dependencies. The shared address/configuration types in
 `<ark/bus.hpp>` live in `src/core/bus.hpp` for core and Net consumers.
 
-Both concrete module definitions live in cpp files and derive from
-`module_base<interface>`. Private factories return the public interfaces;
+Both concrete module definitions live in cpp files. Private factories return the
+public interfaces;
 `plugin_base` registers the Bus interface before the message interface and removes
 them in reverse order. Neither module registers an update callback, matching their
 inherited default update behavior. The public virtual interfaces, RTTI lookup
@@ -50,6 +50,27 @@ the private interface factory, including configuration-only builds without
 Protobuf. `tests/consumer/bus` links only `ark::bus`, compiles each public module
 header separately and rejects private implementation/configuration headers.
 See [directory structure](directory-structure.md) for the consumer command.
+
+## Required module providers
+
+The private message implementation declares
+`module_base<msg_module, bus_module, net_service_manager_module>` because its
+`init()` retains both provider pointers for later sends. `bus_module` remains a
+leaf module; Net separately requires Bus and Timer. These interface-level edges
+are acyclic even though the Bus plugin installs both Bus and Message modules.
+Load Net and Utility alongside the Bus plugin, including for applications that
+only query Bus configuration through that runtime plugin.
+
+The manager rejects a missing message provider or a dependency cycle before any
+module startup hook. It starts providers before Message in each startup phase and
+runs `stop_accepting()` in reverse dependency order. Plugin installation order
+does not replace this validation. Normal teardown hooks, public interfaces and
+message framing retain their existing behavior.
+
+`check-msg-dependencies` uses the real private message factory to verify required
+interface keys, missing-provider and cycle rejection before startup, provider-first
+startup phases and reverse admission stop. Existing DSO checks cover the real
+Bus/Net/Utility graph and message behavior.
 
 ## Addresses and responsibilities
 

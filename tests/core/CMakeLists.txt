@@ -31,6 +31,13 @@ if(ARK_BUILD_PROTO)
     add_custom_target(check-net-health-timer
         COMMAND $<TARGET_FILE:ark_net_health_timer_tests>
         DEPENDS ark_net_health_timer_tests USES_TERMINAL VERBATIM)
+    add_executable(ark_msg_dependencies_tests main.cpp msg_dependencies.cpp
+        ../../src/plugins/bus/msg_module_impl.cpp)
+    set_property(TARGET ark_msg_dependencies_tests PROPERTY LINK_LIBRARIES ark::bus)
+    target_include_directories(ark_msg_dependencies_tests PRIVATE "${PROJECT_SOURCE_DIR}/src/plugins")
+    add_custom_target(check-msg-dependencies
+        COMMAND $<TARGET_FILE:ark_msg_dependencies_tests>
+        DEPENDS ark_msg_dependencies_tests USES_TERMINAL VERBATIM)
     target_sources(ark_core_tests PRIVATE protobuf_messages.cpp)
     target_link_libraries(ark_core_tests PRIVATE ark::bus ark::proto)
     file(GLOB_RECURSE ark_proto_contract_files CONFIGURE_DEPENDS
@@ -69,7 +76,7 @@ add_custom_target(check-core
     DEPENDS ark_core_tests
     USES_TERMINAL)
 if(TARGET check-net-external-root)
-    add_dependencies(check-core check-net-external-root check-net-health-timer)
+    add_dependencies(check-core check-net-external-root check-net-health-timer check-msg-dependencies)
 endif()
 
 # Keep singleton shutdown terminal within its own process, including the logger specialization.

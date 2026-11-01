@@ -150,6 +150,8 @@ class dependent_module final
 
 Net 服务管理器显式声明必需的 `bus_module` 与 `timer_module`；缺少时在启动钩子前报错，启动按依赖顺序执行，停止接收阶段按反向顺序执行。详见 [Net 依赖声明](../reference/network_CN.md)。
 
+Bus 消息模块声明必需的 `bus_module` 与 `net_service_manager_module`。Bus 配置模块仍是独立节点，Msg → Net → Bus 不构成环。详见 [Bus 消息](../reference/bus_CN.md)。
+
 Timers 在 `init()` 查找 Timer／Guid；Utility 的 Timer、Guid、Schedule、Compress 无必需 provider。其他应用保留原声明与查询检查，不代表完整回调生命周期图。
 
 Kernel 配置模块声明元数据依赖；Kernel 声明元数据、配置与 Guid 依赖。Map 与 Kernel 在运行时仍互相依赖，双向关系尚未纳入当前排序图。详见 [Kernel 依赖边界](../reference/kernel_CN.md)。

@@ -150,6 +150,8 @@ class dependent_module final
 
 The Net service manager declares `bus_module` and `timer_module` as required providers. Missing providers fail before startup hooks; provider-first startup and reverse admission-stop order also apply to Net. See [Net declarations](../reference/network.md).
 
+Bus messaging declares `bus_module` and `net_service_manager_module` as required providers. The Bus configuration module remains an independent node; Msg → Net → Bus does not form a cycle. See [Bus messaging](../reference/bus.md).
+
 Timers looks up Timer/Guid in `init()`; Utility’s Timer, Guid, Schedule and Compress require no providers. Other applications retain existing declarations/checks, without a complete callback-lifetime graph.
 
 Kernel configuration declares metadata; Kernel declares metadata, configuration and Guid. Map and Kernel still require each other at runtime, so their mutual relationship is outside the current ordering graph. See the [Kernel dependency boundary](../reference/kernel.md).
