@@ -159,7 +159,7 @@ class dependent_module final
 | Login、Master、Proxy、World、Dir、Router | `bus_module`、`net_service_manager_module` | 监听初始化 |
 | [Kernel 配置](../reference/kernel_CN.md#必需提供方)（`config_module`） | `class_meta_module` | 配置元数据 |
 | Kernel（`kernel_module`） | `class_meta_module`、`config_module`、`guid_module` | 与 Kernel 一起注册 Utility |
-| Map（`map_module`） | 未声明 | 必需的 Map ↔ Kernel 运行时环仍在排序图之外；同时注册两者，启动后再调用实体 API。依赖图不验证两者是否同时存在，也不约束两者的停止接收顺序 |
+| Map（`map_module`） | 未声明 | 必需的 Map ↔ Kernel 运行时环仍在排序图之外；同时注册两者，启动后再调用实体 API。Map／Kernel 自身的声明不验证两者是否同时存在，也不约束两者的停止接收顺序 |
 | Game | `kernel_module`、`bus_module`、`net_service_manager_module`、`map_module`、`class_meta_module` | 实际回调与 Player 初始化。Guid 通过 Kernel 成为传递依赖；保留的 Guid／Msg 查询不增加直接声明 |
 
 依赖图只控制启动与反向 `stop_accepting()` 顺序，不改变 update、就绪、`pre_shut()`、`shut()` 或卸载顺序，也不代表完整回调生命周期图或 IO 退役。其余入口迁移、完整反向清理与启动失败补偿边界见[生命周期路线](../project/lifecycle-closeout_CN.md)。

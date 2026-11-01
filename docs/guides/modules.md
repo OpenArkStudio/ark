@@ -159,7 +159,7 @@ Each row lists **direct declarations**, not every runtime lookup. Missing declar
 | Login, Master, Proxy, World, Dir, Router | `bus_module`, `net_service_manager_module` | Listener setup |
 | [Kernel configuration](../reference/kernel.md#required-providers) (`config_module`) | `class_meta_module` | Configuration metadata |
 | Kernel (`kernel_module`) | `class_meta_module`, `config_module`, `guid_module` | Register Utility with Kernel |
-| Map (`map_module`) | None declared | Required Map ↔ Kernel runtime cycle stays outside the ordering graph; register both and use entity APIs after startup. The graph does not validate their mutual presence or relative admission-stop order |
+| Map (`map_module`) | None declared | Required Map ↔ Kernel runtime cycle stays outside the ordering graph; register both and use entity APIs after startup. Map/Kernel declarations alone do not validate their mutual presence or relative admission-stop order |
 | Game | `kernel_module`, `bus_module`, `net_service_manager_module`, `map_module`, `class_meta_module` | Active callbacks and Player setup. Guid is required transitively through Kernel; retained Guid/Msg lookups add no direct declarations |
 
 The graph controls startup and reverse `stop_accepting()` order only. It does not change update, readiness, `pre_shut()`, `shut()` or unloading order, establish a complete callback-lifetime graph, or retire IO. See the [lifecycle route](../project/lifecycle-closeout.md) for remaining ingress migration, full reverse cleanup and startup-failure compensation boundaries.
