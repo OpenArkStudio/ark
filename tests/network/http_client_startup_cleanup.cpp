@@ -15,6 +15,16 @@
 #include <utility>
 #include <vector>
 
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 #define DOCTEST_CONFIG_IMPLEMENT
 #include "doctest.h"
 #include <arknet/http/http_server.hpp>
@@ -81,6 +91,18 @@ void operator delete[](void* pointer, const std::nothrow_t&) noexcept {
 namespace {
 using namespace std::chrono_literals;
 using access = ark::http_client_startup_test_access;
+
+[[noreturn]] void exit_startup_probe(int status) noexcept {
+    std::fflush(stderr);
+#if defined(_WIN32)
+    // Match the launcher's failure exit: retained DLLs must not receive process
+    // detach callbacks, which can wait on native cleanup threads during exit.
+    ::TerminateProcess(::GetCurrentProcess(), static_cast<UINT>(status));
+    std::_Exit(3); // A failed termination request must never pass the controller.
+#else
+    std::_Exit(status);
+#endif
+}
 
 struct failing_module : ark::module
 {
@@ -385,7 +407,7 @@ int main(int argc, char** argv) {
         auto older = std::make_shared<unsigned>(0);
         if (!manager.prepare_startup_cleanup("older", "test", older, release_older))
         {
-            std::_Exit(2);
+            exit_startup_probe(2);
         }
         auto client = ark::detail::make_http_client_module(&manager);
         auto capsule = access::capsule(*client);
@@ -394,13 +416,13 @@ int main(int argc, char** argv) {
         manager.add_module("failure", &failure);
         if (manager.start(0, {}, {}, {}))
         {
-            std::_Exit(2);
+            exit_startup_probe(2);
         }
         fail_allocations = true;
         client.reset(); // Candidate unwinding must leave the enrolled owner intact.
         if (capsule.expired() || !runtime->started())
         {
-            std::_Exit(2);
+            exit_startup_probe(2);
         }
         const auto result = manager.cleanup_failed_startup();
         const auto repeated = manager.cleanup_failed_startup();
@@ -409,10 +431,10 @@ int main(int argc, char** argv) {
         {
             std::fprintf(stderr, "HTTP allocation probe: result=%d repeated=%d stopped=%d older=%u\n",
                 static_cast<int>(result), static_cast<int>(repeated), runtime->stopped(), *older);
-            std::_Exit(2);
+            exit_startup_probe(2);
         }
         std::fputs("HTTP startup allocation failure: idle runtime joined; candidate gone; exit 1\n", stderr);
-        std::_Exit(1); // Failure cleanup never becomes same-process recovery.
+        exit_startup_probe(1); // Failure cleanup never becomes same-process recovery.
     }
     if (argc == 3 && std::string_view(argv[1]) == "--install-failure")
     {
@@ -433,7 +455,7 @@ int main(int argc, char** argv) {
         if (!failed || std::string_view(manager.get_startup_call().phase.data()) != "install" ||
             !library.load(directory))
         {
-            std::_Exit(2);
+            exit_startup_probe(2);
         }
         const auto started = reinterpret_cast<bool (*)()>(library.get_symbol("http_fixture_runtime_started"));
         const auto stopped = reinterpret_cast<bool (*)()>(library.get_symbol("http_fixture_runtime_stopped"));
@@ -441,10 +463,10 @@ int main(int argc, char** argv) {
             manager.cleanup_failed_startup() != ark::startup_cleanup_result::done || !stopped() ||
             manager.cleanup_failed_startup() != ark::startup_cleanup_result::done)
         {
-            std::_Exit(2);
+            exit_startup_probe(2);
         }
         std::fputs("HTTP install failure: idle runtime joined once; retained DSO and owners; exit 1\n", stderr);
-        std::_Exit(1);
+        exit_startup_probe(1);
     }
     doctest::Context context(argc, argv);
     return context.run();

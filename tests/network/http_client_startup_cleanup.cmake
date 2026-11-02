@@ -18,7 +18,7 @@ foreach(mode allocation-failure install-failure)
         RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE errors)
     message("${output}${errors}")
     if(NOT "${result}" STREQUAL "1" OR NOT "${errors}" MATCHES "${expected}" OR
-        "${errors}" MATCHES "forbidden HTTP fixture uninstall")
+        "${errors}" MATCHES "forbidden HTTP fixture (uninstall|destruction)")
         message(FATAL_ERROR "Net HTTP startup ${mode} regression failed: ${result}")
     endif()
 endforeach()
