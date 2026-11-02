@@ -51,6 +51,21 @@ bash scripts/test_databases.sh database-build local
 ./database-build/tests/database/ark_database_queue_tests --list-test-cases
 ```
 
+`check-database-service-construction`（也是 `check-database` 的依赖）为构造线程的每个
+分配预算启动独立进程，分配失败持续到构造函数栈展开结束。测试使用真实的空闲原生连接池，
+启动 IO 工作线程，但不连接数据库。关闭 SSL 时覆盖明文 Redis，启用 SSL 时增加 TLS Redis
+和 MySQL。成功对照验证逻辑排空和原生资源退出。每个进程必须在 15 秒内正常退出；
+terminate、信号及超时均判为失败。
+
+默认分配配置拦截全局标量、数组及对齐 new。非 MSVC 平台还构建第二个可执行文件，
+通过 `BOOST_ASIO_DISABLE_STD_ALIGNED_ALLOC`、`BOOST_ASIO_DISABLE_BOOST_ALIGN`
+及对应的 `ASIO_` 宏选择 Asio 支持的 operator-new 分配路径。这些宏仅影响该测试程序；
+默认 Asio 可能通过 C 对齐分配为队列处理器分配内存，全局 new 注入无法覆盖。
+new 分配配置复现工作线程启动后，服务请求状态分配失败导致连接池析构失败的问题。
+因此两种私有服务均先构造全部请求状态成员，最后构造原生连接池。
+此检查仅覆盖私有服务构造，不代表完整 MySQL 模块连接构造已安全：后续事务协调器和桥接
+分配仍是独立的所有权边界。测试不验证 malloc 失败、真实服务启动或整个应用的启动失败清理。
+
 队列用例覆盖操作数和拥有输入的配额、已完成未派发的操作、并发完成生产者、拥有线程派发、
 回调异常、重入，以及停止时释放捕获。Redis 停止回归验证捕获对象析构时销毁服务的场景；
 不需要运行中的数据库，仅使用 IPv4 回环端口 1。

@@ -483,11 +483,13 @@ private:
     }
 
     std::shared_ptr<queue_type> completions_;
-    std::shared_ptr<pool_type> pool_;
     std::shared_ptr<request_registry> requests_{std::make_shared<request_registry>()};
     std::shared_ptr<database_service_activity> activity_{std::make_shared<database_service_activity>()};
     const std::thread::id owner_{std::this_thread::get_id()};
     bool accepting_{true};
+    // Allocate all service bookkeeping before starting the native IO worker.
+    // No later member construction may unwind this pool under allocation failure.
+    std::shared_ptr<pool_type> pool_;
 };
 
 using redis_service = basic_redis_service<arknet::redis::pool>;
