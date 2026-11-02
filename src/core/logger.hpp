@@ -21,6 +21,7 @@
 #pragma once
 
 #include <filesystem>
+#include <functional>
 #include <source_location>
 #include <string_view>
 
@@ -330,7 +331,7 @@ public:
         default_logger_->init(log_filename);
 
         // set log function for local logger
-        auto func = std::bind(&logger::log, this, std::placeholders::_1, std::placeholders::_2);
+        auto func = std::bind_front(&logger::log, this);
         set_log_func(std::move(func));
 
         // init oss logger
@@ -381,7 +382,7 @@ public:
         }
         else
         {
-            auto func = std::bind(&logger::log, this, std::placeholders::_1, std::placeholders::_2);
+            auto func = std::bind_front(&logger::log, this);
             log_func_ = func;
         }
     }

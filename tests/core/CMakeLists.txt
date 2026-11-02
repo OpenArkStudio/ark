@@ -149,6 +149,10 @@ add_dependencies(check-entity-stream check-nested-stream-allocation)
 
 add_executable(ark_logging_tests main.cpp logging_paths.cpp logging_source.cpp)
 target_link_libraries(ark_logging_tests PRIVATE ark::core)
+if(ARK_BUILD_CONFIG)
+    target_link_libraries(ark_logging_tests PRIVATE ark::config)
+    target_compile_definitions(ark_logging_tests PRIVATE ARK_LOGGING_CONFIG_TESTS)
+endif()
 add_dependencies(ark_logging_tests ark_core_header_checks)
 add_custom_target(check-logging
     COMMAND $<TARGET_FILE:ark_logging_tests>
