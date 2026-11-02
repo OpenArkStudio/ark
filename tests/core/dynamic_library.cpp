@@ -633,6 +633,7 @@ public:
         {
             return false;
         }
+        tasks_ = &get_plugin_manager()->create_task_group(*this);
         provider_->callback = [this] {
             CHECK_FALSE(active_cleanup->consumer_destroyed);
             CHECK(provider_->value == 42);
@@ -642,6 +643,12 @@ public:
     }
 
     ~lifetime_consumer_impl() override {
+        REQUIRE(tasks_ != nullptr);
+        CHECK(tasks_->pending() == 0);
+        CHECK(tasks_->closed());
+        CHECK_NOTHROW(tasks_->close());
+        CHECK_FALSE(get_plugin_manager()->stop(1));
+        CHECK_THROWS_AS(get_plugin_manager()->remove_module(typeid(lifetime_provider).name()), std::logic_error);
         check_provider();
         CHECK(active_cleanup->provider_cleaned);
         CHECK_FALSE(provider_->callback);
@@ -672,6 +679,7 @@ private:
     }
 
     lifetime_provider* provider_{};
+    ark::task_group* tasks_{};
 };
 
 class lifetime_provider_plugin final : public ark::plugin_base<lifetime_provider_plugin>
