@@ -310,8 +310,8 @@ public:
     mysql_service(arknet::mysql::pool_options options, std::size_t max_operations = 64,
         std::size_t max_input_bytes = 1024 * 1024, arknet::mysql::query_options limits = {})
         : completions_(std::make_shared<queue_type>(max_operations, max_input_bytes))
-        , pool_(std::make_shared<arknet::mysql::pool>(std::move(options)))
-        , limits_(limits) {
+        , limits_(limits)
+        , pool_(std::make_shared<arknet::mysql::pool>(std::move(options))) {
     }
 
     ~mysql_service() {
@@ -620,12 +620,14 @@ private:
     }
 
     std::shared_ptr<queue_type> completions_;
-    std::shared_ptr<arknet::mysql::pool> pool_;
     std::shared_ptr<request_registry> requests_{std::make_shared<request_registry>()};
     std::shared_ptr<database_service_activity> activity_{std::make_shared<database_service_activity>()};
     const arknet::mysql::query_options limits_;
     const std::thread::id owner_{std::this_thread::get_id()};
     bool accepting_{true};
+    // Allocate all service bookkeeping before starting the native IO worker.
+    // No later member construction may unwind this pool under allocation failure.
+    std::shared_ptr<arknet::mysql::pool> pool_;
 };
 
 } // namespace ark::detail
