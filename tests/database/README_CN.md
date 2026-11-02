@@ -259,6 +259,10 @@ INSERT 权限、强制 TLS 与可信 CA。该模式使用相同的 MySQL 环境�
 
 可选 `redis-stop`／`mysql-stop` 使用独立观察者管理器与运行时，确认服务端请求已执行后，由外层所属线程调用目标 `manager.stop()` 发起取消；观察者继续运行，验证原连接退出、有限窗口内计数为一、仅一次完成及安全资源关闭。它们不向已关闭目标恢复请求，不改变原有四种显式取消模式。见[管理器 stop 验收](cancellation_CN.md#管理器-stop-发起取消)。
 
+`mysql-transaction-stop`／`mysql-statement-stop` 另覆盖进程 stop 对已发送事务查询／预处理 execute 发起取消：独立观察者先确认原会话正在执行且未提交写入不可见，随后继续观察会话退出与最终外部计数；结果仍为未知／未确认，不伪造 rollback 回复。见[管理器 stop 事务验收](cancellation_CN.md#管理器-stop-取消事务)。
+
+仅启用 SSL 时可选的 `redis-tls-stop` 在 TLS-only 自有服务上执行证书拒绝对照及 stop-first 流水线取消，独立观察者确认 TLS 会话退出与有界无重放效果；不从明文结果推断 TLS。见 [Redis TLS stop 说明](cancellation_CN.md#redis-tls-管理器-stop-取消)。
+
 ## 公开模块真实服务负面验收
 
 独立的 `ark_database_public_failure_service_tests` 验证 Redis/MySQL 错误密码、
