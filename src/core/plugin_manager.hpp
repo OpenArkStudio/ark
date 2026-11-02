@@ -61,6 +61,7 @@ class plugin_manager final : private noncopyable
     {
         void* instance;
         bool (*destroy)(void*, const std::string&);
+        std::weak_ptr<void> lifetime;
     };
 
     enum class call_phase
@@ -932,7 +933,7 @@ private:
                 return false;
             }
             const auto owner = module_owners_.find(name);
-            if (owner != module_owners_.end())
+            if (owner != module_owners_.end() && !owner->second.lifetime.expired())
             {
                 const auto release = owner->second;
                 phase_guard releasing(*this, call_phase::uninstalling);

@@ -23,6 +23,12 @@ template<typename derived_type>
 class plugin_base : public plugin
 {
 public:
+    plugin_base() = default;
+    plugin_base(const plugin_base&) = delete;
+    plugin_base& operator=(const plugin_base&) = delete;
+    plugin_base(plugin_base&&) = delete;
+    plugin_base& operator=(plugin_base&&) = delete;
+
     int get_plugin_version() override {
         return 0;
     }
@@ -69,9 +75,11 @@ protected:
         try
         {
             if (!get_plugin_manager()->register_owned_module(name, *candidate, update == module_update::enabled,
-                    {this, [](void* owner, const std::string& key) {
-                         return static_cast<plugin_base*>(owner)->destroy_named_module(key);
-                     }}))
+                    {this,
+                        [](void* owner, const std::string& key) {
+                            return static_cast<plugin_base*>(owner)->destroy_named_module(key);
+                        },
+                        lifetime_}))
             {
                 modules_.erase(entry);
                 return false;
@@ -131,6 +139,9 @@ private:
     }
 
     std::unordered_map<std::string, module*> modules_;
+    // Standalone plugin destruction keeps the legacy explicit ownership path;
+    // it must not leave a callable manager pointer into the destroyed plugin.
+    std::shared_ptr<void> lifetime_ = std::make_shared<int>(0);
     plugin_manager* plugin_manager_{nullptr};
     inline static std::string plugin_conf_;
 };
