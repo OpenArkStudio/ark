@@ -4,7 +4,7 @@ if(ENABLE_SSL)
     list(APPEND protocols redis-tls mysql)
 endif()
 foreach(protocol IN LISTS protocols)
-    execute_process(COMMAND "${PROGRAM}" "${protocol}" -1
+    execute_process(COMMAND "${PROGRAM}" "${protocol}" -1 ${PROBE_ARGS}
         RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error TIMEOUT 15)
     if(NOT "${result}" STREQUAL "0" OR NOT "${error}" STREQUAL ""
         OR NOT output MATCHES "^constructed ${protocol} allocations=([0-9]+)\n$")
@@ -16,14 +16,14 @@ foreach(protocol IN LISTS protocols)
     endif()
     math(EXPR last "${count} - 1")
     foreach(budget RANGE 0 ${last})
-        execute_process(COMMAND "${PROGRAM}" "${protocol}" "${budget}"
+        execute_process(COMMAND "${PROGRAM}" "${protocol}" "${budget}" ${PROBE_ARGS}
             RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error TIMEOUT 15)
         if(NOT "${result}" STREQUAL "0" OR NOT "${error}" STREQUAL ""
             OR NOT "${output}" STREQUAL "caught ${protocol} budget=${budget} allocations=${budget}\n")
             message(FATAL_ERROR "Construction fault ${protocol} budget=${budget}: ${result}\n${output}${error}")
         endif()
     endforeach()
-    execute_process(COMMAND "${PROGRAM}" "${protocol}" "${count}"
+    execute_process(COMMAND "${PROGRAM}" "${protocol}" "${count}" ${PROBE_ARGS}
         RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error TIMEOUT 15)
     if(NOT "${result}" STREQUAL "0" OR NOT "${error}" STREQUAL ""
         OR NOT "${output}" STREQUAL "constructed ${protocol} allocations=${count}\n")

@@ -73,10 +73,25 @@ through C aligned allocation, which global-new injection cannot cover. The
 new-based profile reproduces failure of pool destruction when service bookkeeping
 allocation fails after the worker starts. Both private services therefore construct
 all bookkeeping before constructing their native pool as the last member.
-This check covers private service construction, not the complete MySQL module
-connection constructor: its later transaction coordinator and bridge allocations
-remain a separate ownership boundary. It does not validate malloc failure,
-real-service startup or whole-application startup-failure cleanup.
+
+`check-database-module-construction` applies the same bounded process controller,
+persistent allocation injection and default/Asio new profiles to the real public
+`configure()` paths. It tests both empty and populated module maps, same-name
+retry after each injected exception, a healthy fallback, allocation-free duplicate
+rejection, and ordinary idle `pre_shut()`/`shut()`. Caller arguments are owned
+before injection starts. MySQL allocates transaction state and both coroutine
+bridges before creating its query pool, then binds that same pool without an
+allocation. Both modules allocate the destination map node before native IO and
+remove the empty entry on construction failure. These checks require no servers.
+
+This repairs ARK-owned construction and publication after a successful native
+pool constructor. It does not cover MSVC's `_aligned_malloc` or other allocation
+mechanisms that bypass global new, every native partial-start/thread-creation
+failure, or accepted query/transaction cleanup during failed startup. MSVC test
+executables disable iterator-debug proxy allocations for these injected paths;
+production targets retain their normal iterator settings. Existing
+owner-thread coroutine and normal-stop regressions remain separate. No startup
+cleanup capsule or native retirement policy is introduced.
 
 The queue cases cover count/retained-input admission, completed-but-undispatched
 operations, concurrent producers, owner-thread dispatch, callback exceptions,

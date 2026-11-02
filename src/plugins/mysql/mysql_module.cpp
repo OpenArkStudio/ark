@@ -1,5 +1,6 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <thread>
 #include <unordered_map>
@@ -43,20 +44,23 @@ struct mysql_module_impl::state
 {
     struct connection
     {
-        detail::mysql_service queries;
+        std::optional<detail::mysql_service> queries;
         detail::mysql_transaction_service transactions;
         detail::database_awaitable<detail::mysql_service_reply> query_bridge;
         detail::database_awaitable<detail::mysql_transaction_reply> transaction_bridge;
 
         connection(mysql_options options, const std::shared_ptr<arknet::manual_runtime>& runtime)
-            : queries(std::move(options.pool), options.max_operations, options.max_input_bytes, options.queries)
-            , transactions(queries.borrow_pool(), {options.max_transactions, options.max_input_bytes}, options.queries)
+            : transactions(detail::mysql_transaction_service::prepared_t{},
+                  {options.max_transactions, options.max_input_bytes}, options.queries)
             , query_bridge(runtime, options.max_operations)
             , transaction_bridge(runtime, options.max_operations) {
+            // All connection bookkeeping exists before the native worker starts.
+            queries.emplace(std::move(options.pool), options.max_operations, options.max_input_bytes, options.queries);
+            transactions.bind_pool(queries->borrow_pool());
         }
 
         bool quiescent() const {
-            return queries.quiescent() && transactions.quiescent() && query_bridge.quiescent() &&
+            return queries->quiescent() && transactions.quiescent() && query_bridge.quiescent() &&
                    transaction_bridge.quiescent();
         }
     };
@@ -149,14 +153,14 @@ struct mysql_module_impl::state
     static task<mysql_reply> run_query(std::shared_ptr<state> shared, std::shared_ptr<connection> node, std::string sql,
         std::chrono::milliseconds timeout) {
         shared->check_open();
-        co_return adapt(co_await detail::mysql_query(node->queries, node->query_bridge, std::move(sql), timeout));
+        co_return adapt(co_await detail::mysql_query(*node->queries, node->query_bridge, std::move(sql), timeout));
     }
 
     static task<mysql_reply> run_execute(std::shared_ptr<state> shared, std::shared_ptr<connection> node,
         std::string sql, std::vector<arknet::mysql::field_value> parameters, std::chrono::milliseconds timeout) {
         shared->check_open();
         co_return adapt(co_await detail::mysql_execute(
-            node->queries, node->query_bridge, std::move(sql), std::move(parameters), timeout));
+            *node->queries, node->query_bridge, std::move(sql), std::move(parameters), timeout));
     }
 
     static task<mysql_transaction_reply> run_begin(
@@ -247,8 +251,23 @@ bool mysql_module_impl::configure(std::string name, mysql_options options) {
         return false;
     }
     shared->runtime = get_plugin_manager()->get_task_runtime();
-    auto node = std::make_shared<state::connection>(std::move(options), shared->runtime);
-    shared->connections.emplace(std::move(name), std::move(node));
+    // Allocate the destination node and buckets before starting native IO.
+    auto [entry, inserted] = shared->connections.try_emplace(std::move(name), nullptr);
+    if (!inserted)
+    {
+        return false;
+    }
+    try
+    {
+        auto node = std::make_shared<state::connection>(std::move(options), shared->runtime);
+        entry->second = std::move(node);
+    }
+    catch (...)
+    {
+        // This unpublished entry is still empty; preserve same-name retry.
+        shared->connections.erase(entry);
+        throw;
+    }
     return true;
 }
 
@@ -257,7 +276,7 @@ bool mysql_module_impl::update() {
     shared->check_owner();
     for (const auto& [name, node] : shared->connections)
     {
-        node->queries.update();
+        node->queries->update();
         node->transactions.update();
         node->query_bridge.dispatch();
         node->transaction_bridge.dispatch();
@@ -301,13 +320,13 @@ bool mysql_module_impl::pre_shut() {
     {
         node->query_bridge.stop_accepting();
         node->transaction_bridge.stop_accepting();
-        node->queries.stop_accepting();
+        node->queries->stop_accepting();
         node->transactions.stop_accepting();
     }
     for (const auto& [name, node] : shared->connections)
     {
-        if (!node->transactions.logically_drained() || !node->queries.logically_drained() ||
-            !node->queries.retire_native())
+        if (!node->transactions.logically_drained() || !node->queries->logically_drained() ||
+            !node->queries->retire_native())
         {
             return false;
         }
@@ -324,7 +343,7 @@ bool mysql_module_impl::shut() {
     }
     for (const auto& [name, node] : shared->connections)
     {
-        if (!node->queries.native_retired())
+        if (!node->queries->native_retired())
         {
             return false;
         }
