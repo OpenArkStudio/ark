@@ -267,8 +267,10 @@ add_dependencies(check-core check-scheduler-startup-cleanup)
 
 add_executable(ark_thread_pool_construction_tests thread_pool_construction.cpp)
 target_link_libraries(ark_thread_pool_construction_tests PRIVATE Threads::Threads)
-if(WIN32)
-    target_link_libraries(ark_thread_pool_construction_tests PRIVATE Dbghelp)
+if(MSVC)
+    # Global allocation fault injection must not target the Debug STL's
+    # noexcept container-proxy bookkeeping instead of the scheduler itself.
+    target_compile_definitions(ark_thread_pool_construction_tests PRIVATE _ITERATOR_DEBUG_LEVEL=0)
 endif()
 add_custom_target(check-scheduler-construction
     COMMAND $<TARGET_FILE:ark_thread_pool_construction_tests>
