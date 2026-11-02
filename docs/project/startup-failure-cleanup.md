@@ -1,6 +1,6 @@
 # Opt-in startup-failure cleanup
 
-Startup failure defaults to immediate exit `1`. An independent owned resource explicitly enrolled through `plugin_manager::prepare_startup_cleanup()` may run its failure cleanup once first. The preallocated registry supports up to 16 independently owned resources across modules and covers callback-free Utility Timer wheels and a quiet Net HTTP client runtime; accepted work and other shared IO require separate retirement. Acquisition source-map baseline: [d9618a66](https://github.com/OpenArkStudio/ark/tree/d9618a663fc2069b734007812590c88736d17ed5). There is no same-process retry, normal-shutdown rollback or inferred external business/transaction rollback; Registry and hot update remain paused.
+Startup failure defaults to immediate exit `1`. An independent owned resource explicitly enrolled through `plugin_manager::prepare_startup_cleanup()` may run its failure cleanup once first. The preallocated registry supports up to 16 independently owned resources across modules and covers callback-free Utility Timer wheels, Schedule workers before callback registration and a quiet Net HTTP client runtime; accepted work and other shared IO require separate retirement. Acquisition source-map baseline: [d9618a66](https://github.com/OpenArkStudio/ark/tree/d9618a663fc2069b734007812590c88736d17ed5). There is no same-process retry, normal-shutdown rollback or inferred external business/transaction rollback; Registry and hot update remain paused.
 
 ## What exists when startup fails
 
@@ -77,6 +77,26 @@ Timer prepares its independent capsule before allocating the wheel object or sto
 Explicit timer removal permits release only if no other callback remains. Successful startup disarms enrollment while Timer keeps its wheel. No normal hooks, business polling, shared IO closure or consumer rollback run.
 
 `check-timer` and `check-startup-cleanup` cover real Timer initialization and later failures, persistent allocation failure, and composition with other cleanup owners. A retained callback stops traversal before older owners; repeated cleanup does not retry.
+
+## Utility Schedule
+
+Schedule enrolls its independent owner before creating its 16 callback workers
+and internal dispatcher. Cleanup uses one registry slot and follows this policy:
+
+| State | Failure cleanup |
+| --- | --- |
+| No callback registration has begun | Seal registration, close the internal dispatcher, observe its completion and join workers |
+| Any registration has begun, even if it failed or the queue is now empty | `unsafe`; retain the scheduler, captures and older owners without dispatching or cancelling business callbacks |
+| Internal dispatcher failed | `failed`; preserve its owner and exception after native worker retirement |
+
+Successful startup preserves ordinary Schedule behavior. Direct initialization
+without a manager remains caller-owned. Cleanup may synchronously wait for the
+internal dispatcher and native joins; it is not a preemptible time budget.
+Worker construction retires partially created threads on exception, and queue
+publication owns its callback until insertion succeeds. The permanent
+`check-scheduler-startup-cleanup` and `check-scheduler-construction` entries are
+included in `check-core`; their process deadlines remain failed observations,
+not permission to destroy unfinished production work.
 
 ## Quiet Net HTTP client cleanup
 

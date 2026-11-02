@@ -256,6 +256,22 @@ add_custom_target(check-scheduler-drain
     DEPENDS ark_scheduler_drain_tests ark_scheduler_failure_tests USES_TERMINAL VERBATIM)
 add_dependencies(check-core check-scheduler-drain)
 
+add_executable(ark_scheduler_startup_cleanup_tests scheduler_startup_cleanup.cpp)
+set_property(TARGET ark_scheduler_startup_cleanup_tests PROPERTY LINK_LIBRARIES ark::core ark::utility Threads::Threads)
+target_include_directories(ark_scheduler_startup_cleanup_tests PRIVATE "${PROJECT_SOURCE_DIR}/src/plugins/utility")
+add_custom_target(check-scheduler-startup-cleanup
+    COMMAND ${CMAKE_COMMAND} "-DPROGRAM=$<TARGET_FILE:ark_scheduler_startup_cleanup_tests>"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/scheduler_startup_cleanup.cmake"
+    DEPENDS ark_scheduler_startup_cleanup_tests USES_TERMINAL VERBATIM)
+add_dependencies(check-core check-scheduler-startup-cleanup)
+
+add_executable(ark_thread_pool_construction_tests thread_pool_construction.cpp)
+target_link_libraries(ark_thread_pool_construction_tests PRIVATE Threads::Threads)
+add_custom_target(check-scheduler-construction
+    COMMAND $<TARGET_FILE:ark_thread_pool_construction_tests>
+    DEPENDS ark_thread_pool_construction_tests USES_TERMINAL VERBATIM)
+add_dependencies(check-core check-scheduler-construction)
+
 add_executable(ark_task_contract_tests ../database/task_group_contract.cpp)
 set_property(TARGET ark_task_contract_tests PROPERTY LINK_LIBRARIES ark::core Threads::Threads)
 add_custom_target(check-task-sdk

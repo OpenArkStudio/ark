@@ -38,6 +38,8 @@ const auto entity = guids->create_guid();
 
 **二进制兼容性：** scheduler 停机计数影响公开辅助类型布局；`module::stop_accepting()` 移除还改变模块虚表。Utility、宿主与直接构造／内嵌该辅助类型的消费者须一起重建。
 
+Schedule 启动失败清理使用独立所有者：从未开始回调登记时，结束内部派发并等待工作线程退出；一旦开始登记，就保留完整调度器并返回不安全状态。见[启动失败清理](../project/startup-failure-cleanup_CN.md#utility-schedule)。构造参数的线程数溢出会在创建线程前抛出 `std::length_error`。
+
 ## 定时器所有权与分配
 
 时间轮持有所有已分配的定时器，包括取消后仍留在轮槽中的条目。关闭或析构会释放
@@ -88,7 +90,7 @@ const auto entity = guids->create_guid();
 
 ## 源码与构建树 SDK 迁移
 
-公开头文件的唯一源码现在位于 `src/plugins/utility/`。CMake 将显式列出的七个公开头复制到构建树的 `src/plugins/sdk-include/ark/utility/`：四个模块接口，以及 `scheduler.hpp`、`ctpl.h`、`ctpl_stl.h`。通过 `ark::utility` 消费，保留现有 `<ark/utility/...>` 公开接口与辅助头路径，关闭运行时插件时同样有效。不要把私有插件目录加入使用方的包含路径。上游线程池头文件保留原字节和格式规则。安装后的消费方式见 [CMake 包安装说明](../get-started/installation_CN.md#安装并消费-cmake-包)：使用 `find_package(ark CONFIG REQUIRED COMPONENTS utility)` 和相同的 `ark::utility` 目标。安装头保留 `<ark/utility/...>` 路径；运行时插件仍需在应用清单中选择。
+公开头文件的唯一源码现在位于 `src/plugins/utility/`。CMake 将显式列出的七个公开头复制到构建树的 `src/plugins/sdk-include/ark/utility/`：四个模块接口，以及 `scheduler.hpp`、`ctpl.h`、`ctpl_stl.h`。通过 `ark::utility` 消费，保留现有 `<ark/utility/...>` 公开接口与辅助头路径，关闭运行时插件时同样有效。不要把私有插件目录加入使用方的包含路径。内置线程池头文件保留上游声明与格式约定；`ctpl_stl.h` 包含本地构造及任务发布的异常安全修复。安装后的消费方式见 [CMake 包安装说明](../get-started/installation_CN.md#安装并消费-cmake-包)：使用 `find_package(ark CONFIG REQUIRED COMPONENTS utility)` 和相同的 `ark::utility` 目标。安装头保留 `<ark/utility/...>` 路径；运行时插件仍需在应用清单中选择。
 
 **源码不兼容变更：** SDK 移除 `ark/utility/{guid,timer,schedule,compress}_module_impl.hpp` 和 `ark/utility/utility_plugin.hpp`。实现类定义在各自 cpp 文件中，插件类型及返回接口的工厂属于私有装配。将直接构造实现类的代码改为公开接口查找，或应用自行维护实现。仅手写 `-I <ark-source>/include` 的调用需改用目标传递的包含目录。插件和使用方应一起重新编译；公开虚函数及动态入口签名保持不变，不代表兼容旧实现类二进制。
 

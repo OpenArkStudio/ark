@@ -8,5 +8,6 @@
 | fmt | Text formatting | [MIT](https://github.com/fmtlib/fmt/blob/main/LICENSE) |
 | nlohmann/json | JSON | [MIT](https://github.com/nlohmann/json/blob/v3.12.0/LICENSE.MIT) |
 | toml++ | TOML configuration | [MIT](https://github.com/marzer/tomlplusplus/blob/v3.4.0/LICENSE) |
+| CTPL | Schedule workers; local exception-safety fixes | [Apache-2.0 notice](https://github.com/OpenArkStudio/ark/blob/main/src/plugins/utility/ctpl_stl.h) |
 
 See [project dependencies and assets](../project/third-party-notices.md) for the exporter and documentation tools. Original notices from the previous bundled dependencies remain in the [source archive](https://github.com/OpenArkStudio/ark/blob/main/docs/licenses/legacy-dependency-notices.txt).

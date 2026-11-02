@@ -16,6 +16,8 @@
 *
 *********************************************************/
 
+// OpenArkStudio modifications: retire partial constructor workers and preserve
+// callback/future ownership until queue publication succeeds.
 #ifndef __ctpl_stl_thread_pool_H__
 #define __ctpl_stl_thread_pool_H__
 
