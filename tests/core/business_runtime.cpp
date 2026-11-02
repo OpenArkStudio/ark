@@ -354,7 +354,7 @@ TEST_CASE("Final completion cannot teardown or mutate owners even during an exte
     CHECK(module.pre_shut_calls == 1);
 }
 
-TEST_CASE("Update and completion exceptions preserve the owner and release reentrancy guards") {
+TEST_CASE("Update and cancellation completion exceptions preserve owner reentrancy guards") {
     ark::plugin_manager manager;
     observed_module module("throwing");
     REQUIRE(manager.add_module(module.get_name(), &module));
@@ -362,7 +362,11 @@ TEST_CASE("Update and completion exceptions preserve the owner and release reent
     auto& tasks = manager.create_task_group(module);
     module.on_update = [] { throw std::runtime_error("module update failed"); };
     REQUIRE(tasks.start(ready_task(), [&](std::exception_ptr error) {
-        CHECK_FALSE(error);
+        CHECK(error);
+        if (error)
+        {
+            CHECK_THROWS_AS(std::rethrow_exception(error), arknet::system_error);
+        }
         CHECK_FALSE(manager.stop(3));
         throw std::runtime_error("completion failed");
     }) != 0);
