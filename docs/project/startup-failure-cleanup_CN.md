@@ -24,7 +24,7 @@
 | [Utility Timer init](https://github.com/OpenArkStudio/ark/blob/d9618a663fc2069b734007812590c88736d17ed5/src/plugins/utility/timer_module_impl.cpp#L48)创建并初始化时间轮；Timers 的 [post_init](https://github.com/OpenArkStudio/ark/blob/d9618a663fc2069b734007812590c88736d17ed5/examples/timers/timers_module.cpp)登记回调 | [时间轮初始化](https://github.com/OpenArkStudio/ark/blob/d9618a663fc2069b734007812590c88736d17ed5/src/core/time/timer.hpp#L79)先用局部所有者构建，再提交。清空时间轮释放自有存储，不等于模块停机契约。 |
 | [HTTP 客户端构造](https://github.com/OpenArkStudio/ark/blob/d9618a663fc2069b734007812590c88736d17ed5/src/plugins/net/http_client_module_impl.cpp#L244)启动 IO 池 | install 期间、任何 init 之前就可能有工作线程；其析构／正常停机调用同步 runtime stop。 |
 | Net [post_init](https://github.com/OpenArkStudio/ark/blob/d9618a663fc2069b734007812590c88736d17ed5/src/plugins/net/net_service_manager_module_impl.cpp#L111)排队配置客户端并登记健康定时器；[update](https://github.com/OpenArkStudio/ark/blob/d9618a663fc2069b734007812590c88736d17ed5/src/plugins/net/net_client_service_impl.cpp#L248)才启动排队客户端 | 排队不等于连接完成。[create_server](https://github.com/OpenArkStudio/ark/blob/d9618a663fc2069b734007812590c88736d17ed5/src/plugins/net/net_service_manager_module_impl.cpp#L282)可在调用它的启动钩子中获取监听器，须记录真实调用点，不能假定统一阶段。 |
-| HTTP [端点预约](https://github.com/OpenArkStudio/ark/blob/main/src/plugins/http/http_server_module_impl.cpp)先于原生构造／启动 | cpp 私有的局部所有者在原生构造／绑定／启动期间持有预约，成功后才以无异常字符串 swap 转交。独立 HTTP 异常安全边界见下文。 |
+| HTTP [端点预约](https://github.com/OpenArkStudio/ark/blob/main/src/plugins/http/http_server_module_impl.cpp)先于原生构造／启动 | 完整、独立的 HTTP 所有者在获取原生资源前登记。每次原生尝试和预约跨绑定／启动异常及候选模块析构保持所有权；受保护的 HTTP 所有权边界见下文。 |
 | MySQL [构造／init／configure](https://github.com/OpenArkStudio/ark/blob/d9618a663fc2069b734007812590c88736d17ed5/src/plugins/mysql/mysql_module.cpp#L218) | 构造持有状态，init 绑定所属 runtime；`configure()` 在写入具名连接表**之前**构造原生池，后续插入抛异常时线程可能已启动。固定版 arknet `a0dfe09c` 在池构造中启动 IO。 |
 
 ## 独立资源登记与执行
@@ -61,9 +61,17 @@ API 接收 owner 键、代码所有者键、强持有的 `shared_ptr<void>` 和�
 
 **兼容性：** 不增加 module 虚方法，不改变正常停服顺序；扩大的内联登记表改变 `plugin_manager` 公开类布局，宿主和全部插件／消费方须使用同一头文件重新构建。不得混用旧二进制。
 
-**独立 HTTP 异常安全：** cpp 私有的预约所有者在构造／绑定／启动返回 false 或抛异常时，只释放自己成功预约的键。重复预约被拒绝时，不会释放其他模块的键。原生启动成功后，通过无异常字符串 swap 将预约转交模块，由正常 `pre_shut()` 释放；无需改变公开 API、类布局或生命周期。端口 `0` 继续跳过固定端点预约。
+## 受保护的 HTTP 监听器所有权
 
-`check-http-startup-failure` 在隔离测试翻译单元中编译生产 cpp。测试在私有集合已包含该键后持续拒绝分配，直到捕获异常，并验证首次失败分配属于原生服务器对象，发生在其构造函数和工作线程运行前。原生监听失败用例占用本地端口，检查 false 返回后的预约释放。两类失败后均要求同端点成功启动，重复预约被拒绝及其停服不能释放活跃所有者的预约，停服后端点可复用。长字符串所有权测试验证成功转交为 `noexcept`、保留原存储且不分配；原有网络路由／重复所有者／重启回归继续由 `check-network` 覆盖。该修复只处理本地端点记账，不将 HTTP 监听器接入框架启动失败清理，也不证明原生 IO 可非阻塞回收。
+官方 HTTP 插件在获取原生资源前登记 `HTTPServer` capsule，持有每次尝试的完整端点所有者、端点预约及独立路由／回调状态。原生接收回调捕获路由状态，不捕获模块 `this`；构造／安装／启动失败期间，候选模块析构不调用正常停服。宿主启动成功后解除登记，模块继续持有资源状态，恢复普通析构／停服行为。公开模块接口和虚函数表不变。
+
+只要存在任何原生端点对象，即使端点报告 stopped，或可变 router 已暴露、可能保留业务 handler，动作就返回 `unsafe`。动作不停止原生 IO、不封闭活跃路由、不清除捕获、不取消已受理工作，也不派发回调。端点 stopped 不证明线程池已退役，也不证明析构不需要分配。只有不存在原生对象、暴露的 router 或活跃 lease 的 capsule 才被封闭并返回 `done`；所有 capsule 和必要代码仍保留到强制 exit1。结果不可重试，不安全的 HTTP 所有者会阻止清理更早所有者。
+
+每次尝试在原生构造／绑定／启动前接入完整所有者。端点对象尚未形成时，构造失败只释放本次预约。原生 start 返回 false 时保留原有普通同步 stop，stop 完成后释放预约，允许本次启动中回退到同一或其他端点；start 或该普通 stop 抛异常时，所有权跨展开保留。受管启动尝试期间，失败的原生对象跨回退保留，既不析构也不被覆盖，由正常 `pre_shut()` 退役全部尝试。独立使用或宿主已启动成功时，保留普通失败端点析构，之后的失败／重试不会累积原生历史。这保留调用方回退行为，不把原生 stop 加入失败清理动作。重复预约被拒绝时不会释放其他所有者的键；端口 `0` 继续跳过固定端点预约。成功预约的键在绑定／启动可能抛异常前以无异常字符串 swap 转交。
+
+`check-http-startup-failure` 保留构造前分配失败、原生监听 false、重复所有者、字符串转交和本地端点复用检查。`check-http-server-startup-ownership` 增加四个后续启动阶段的 false／异常、空所有者封闭、登记表满拒绝、成功解除登记、受管同端点回退和业务捕获保留。候选模块析构后的显式测试请求验证独立回调状态；清理本身不发请求。真实 DSO 在销毁候选模块后从 install 抛异常，须保留原生工作线程、回调捕获和代码，不执行普通卸载或析构。
+
+独立子进程仅在全部原生工作 lane 报告已初始化线程 ID 后，才持续拒绝所属线程的 C++ 分配。原实现会在到达失败清理入口前因原生析构终止；修复后必须到达入口、保留工作线程和更早所有者、返回缓存的 `unsafe`，并以 `1` 退出。普通测试进程限 20 秒；两个保留所有者的子进程各须在 10 秒内完成断言／标记并 exit1。这些检查证明所有权与异常展开，不证明原生退役或清理硬期限。
 
 ## Utility Timer
 
@@ -95,7 +103,7 @@ Net 在 HTTP 客户端构造函数启动自有 IO 池前登记一个 `NetHttpCli
 
 ## 其他 IO 边界
 
-Net 监听器／客户端、HTTP 监听器、MySQL／Redis 池及其他 IO 接入前，先证明构造／成员展开不会丢失活跃所有者，也不会在失败清理入口前阻塞。线程创建前就须有独立上下文，回调持有完整状态，不能依赖未完成模块的 `this`。回调代码、接收者、bridge／runtime 和原生所有者须存活到可证明的回收屏障完成。普通模块 update 可能运行部分启动的业务代码，不能作为清理 pump。
+Net 监听器／客户端、原生 HTTP 退役、MySQL／Redis 池及其他 IO 接入前，先证明构造／成员展开不会丢失活跃所有者，也不会在失败清理入口前阻塞。线程创建前就须有独立上下文，回调持有完整状态，不能依赖未完成模块的 `this`。回调代码、接收者、bridge／runtime 和原生所有者须存活到可证明的回收屏障完成。普通模块 update 可能运行部分启动的业务代码，不能作为清理 pump。
 
 固定版 arknet 的 `io_pool::stop()` 可能等待／join；MySQL 的[回收](https://github.com/OpenArkStudio/ark/blob/d9618a663fc2069b734007812590c88736d17ed5/src/plugins/mysql/detail/mysql_service.hpp#L432)使用 `close_and_wait()`，服务 `stop()` 仅请求关闭／抑制回调。见[固定版原生池](https://github.com/OpenArkStudio/arknet/blob/a0dfe09cd543e75cfb5996e537ce2fa49f2a758f/include/arknet/mysql/pool.hpp#L972)。上述空闲 HTTP 客户端切片只允许回收已无工作的私有池；这些调用本身仍不是通用非阻塞启动失败清理契约。登记前必须有现成或单独评审的「请求／已回收」观察、有界宿主驱动及回调策略；不能用分离线程隐藏阻塞关闭，也不在这里增加 promise 或补偿事务。关闭本地池不证明 SQL／业务回滚，也不改写未知原生结果。
 
@@ -109,7 +117,7 @@ Net 监听器／客户端、HTTP 监听器、MySQL／Redis 池及其他 IO 接�
 
 受控子进程使用启动器的立即失败退出策略：Windows 调用 `TerminateProcess`，其他平台调用 `_Exit`。刻意保留所有者时不得执行 Windows DLL 进程分离回调；DSO fixture 会报告禁止发生的静态析构或卸载。控制器要求资源断言、成功标记和退出码 `1` 全部在原有 10 秒子进程期限内满足；输出标记后挂起仍然失败。这只验证测试子进程的退出契约，不构成通用 DLL 清理策略。
 
-这些是有限正确性检查，不证明通用 IO 回收、业务回滚、硬清理期限或托管平台通过。HTTP 监听器验证仍限于预约异常安全和普通本地监听器复用。原始日志留在本地 receipt。
+这些是有限正确性检查，不证明通用 IO 回收、业务回滚、硬清理期限或托管平台通过。HTTP 监听器验证覆盖预约异常安全、启动所有权保留和普通本地监听器复用；活跃原生监听器仍为 unsafe。原始日志留在本地 receipt。
 
 其他 IO 所有者仍需明确两项决策：
 
