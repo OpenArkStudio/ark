@@ -447,6 +447,7 @@ if(ARK_BUILD_PROTO)
         ../../src/plugins/kernel/static_entity_impl.cpp
         ../../src/plugins/kernel/table_impl.cpp
         ../../src/plugins/kernel/table_meta.cpp)
+    target_sources(ark_kernel_initialization_tests PRIVATE kernel_common_class_callbacks.cpp)
     target_link_libraries(ark_kernel_initialization_tests PRIVATE ark::kernel ark::utility ark::proto ark::kernel_json)
     if(TARGET ark_game_plugin AND TARGET ark_kernel_plugin AND TARGET ark_bus_plugin AND TARGET ark_utility_plugin)
         target_sources(ark_kernel_initialization_tests PRIVATE ../server/game_initialization.cpp
