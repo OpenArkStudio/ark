@@ -91,14 +91,19 @@ if(TARGET check-proto-configuration)
     add_dependencies(check-core check-proto-configuration check-proto-naming)
 endif()
 
-set(ark_node_copy_test_sources main.cpp node_copy_ownership.cpp
+# These ordinary Kernel runners use the same compile contract. Keep GUID32,
+# NDEBUG and forced-include runners separate, including their main.cpp objects.
+add_library(ark_kernel_test_main OBJECT main.cpp)
+set_property(TARGET ark_kernel_test_main PROPERTY LINK_LIBRARIES ark::kernel)
+
+set(ark_node_copy_test_sources node_copy_ownership.cpp
     ../../src/plugins/kernel/node_manager.cpp
     ../../src/plugins/kernel/class_meta.cpp
     ../../src/plugins/kernel/class_call_back_manager.cpp
     ../../src/plugins/kernel/table_meta.cpp)
-add_executable(ark_node_copy_tests ${ark_node_copy_test_sources})
+add_executable(ark_node_copy_tests $<TARGET_OBJECTS:ark_kernel_test_main> ${ark_node_copy_test_sources})
 set_property(TARGET ark_node_copy_tests PROPERTY LINK_LIBRARIES ark::kernel)
-add_executable(ark_node_copy_hook_tests ${ark_node_copy_test_sources})
+add_executable(ark_node_copy_hook_tests main.cpp ${ark_node_copy_test_sources})
 set_property(TARGET ark_node_copy_hook_tests PROPERTY LINK_LIBRARIES ark::kernel)
 target_compile_definitions(ark_node_copy_hook_tests PRIVATE NDEBUG ARK_NODE_COPY_TEST_HOOKS)
 # Identical hook expansion in every TU avoids mixing different inline definitions.
@@ -114,9 +119,9 @@ add_custom_target(check-node-copy
 add_dependencies(check-core check-node-copy)
 
 # Default nothrow new[] failure injection stays isolated from ordinary Core tests.
-add_executable(ark_data_allocation_tests main.cpp data_allocation_failure.cpp)
+add_executable(ark_data_allocation_tests $<TARGET_OBJECTS:ark_kernel_test_main> data_allocation_failure.cpp)
 set_property(TARGET ark_data_allocation_tests PROPERTY LINK_LIBRARIES ark::kernel)
-add_executable(ark_data_allocation_hook_tests main.cpp data_allocation_hooks.cpp)
+add_executable(ark_data_allocation_hook_tests $<TARGET_OBJECTS:ark_kernel_test_main> data_allocation_hooks.cpp)
 set_property(TARGET ark_data_allocation_hook_tests PROPERTY LINK_LIBRARIES ark::kernel)
 add_executable(ark_data_guid32_tests main.cpp data_allocation_failure.cpp data_strings.cpp data_length_bounds.cpp node_data_storage.cpp)
 set_property(TARGET ark_data_guid32_tests PROPERTY LINK_LIBRARIES ark::kernel)
@@ -128,19 +133,19 @@ add_custom_target(check-data-allocation
     DEPENDS ark_data_allocation_tests ark_data_allocation_hook_tests ark_data_guid32_tests USES_TERMINAL VERBATIM)
 add_dependencies(check-core check-data-allocation)
 
-add_executable(ark_entity_stream_tests main.cpp entity_stream.cpp entity_nested_stream.cpp)
+add_executable(ark_entity_stream_tests $<TARGET_OBJECTS:ark_kernel_test_main> entity_stream.cpp entity_nested_stream.cpp)
 set_property(TARGET ark_entity_stream_tests PROPERTY LINK_LIBRARIES ark::kernel)
 add_custom_target(check-entity-stream
     COMMAND $<TARGET_FILE:ark_entity_stream_tests>
     DEPENDS ark_entity_stream_tests USES_TERMINAL)
 add_dependencies(check-core check-entity-stream)
-add_executable(ark_scalar_stream_allocation_tests main.cpp entity_scalar_stream_allocation.cpp)
+add_executable(ark_scalar_stream_allocation_tests $<TARGET_OBJECTS:ark_kernel_test_main> entity_scalar_stream_allocation.cpp)
 set_property(TARGET ark_scalar_stream_allocation_tests PROPERTY LINK_LIBRARIES ark::kernel)
 add_custom_target(check-scalar-stream-allocation
     COMMAND $<TARGET_FILE:ark_scalar_stream_allocation_tests>
     DEPENDS ark_scalar_stream_allocation_tests USES_TERMINAL)
 add_dependencies(check-entity-stream check-scalar-stream-allocation)
-add_executable(ark_nested_stream_allocation_tests main.cpp entity_nested_stream_allocation.cpp)
+add_executable(ark_nested_stream_allocation_tests $<TARGET_OBJECTS:ark_kernel_test_main> entity_nested_stream_allocation.cpp)
 set_property(TARGET ark_nested_stream_allocation_tests PROPERTY LINK_LIBRARIES ark::kernel)
 add_custom_target(check-nested-stream-allocation
     COMMAND $<TARGET_FILE:ark_nested_stream_allocation_tests>
