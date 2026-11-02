@@ -70,7 +70,7 @@ Neither completed native closes nor `dlclose`/`FreeLibrary` success proves physi
 
 ### Optional resource deadline and retention
 
-`--shutdown_timeout_ms` defaults to `0` (unlimited). A positive value supplies `stop_until()` with a monotonic deadline; the earliest supplied deadline persists across later calls. No automatic 30-second business budget or 5-second cancellation budget is added.
+`--shutdown_timeout_ms` defaults to `0` (unlimited). A positive value supplies `stop_until()` with a monotonic deadline; the earliest supplied deadline persists across later calls.
 
 | State | Behavior |
 | --- | --- |
