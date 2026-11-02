@@ -50,7 +50,7 @@ public:
         return true;
     }
 
-    bool stop_accepting() override {
+    bool pre_shut() override {
         require_startup(!dependent_stopped || *dependent_stopped, "Provider stopped before the role dependent");
         return true;
     }
@@ -309,7 +309,7 @@ public:
         return true;
     }
 
-    bool stop_accepting() override {
+    bool pre_shut() override {
         stopped = true;
         return true;
     }

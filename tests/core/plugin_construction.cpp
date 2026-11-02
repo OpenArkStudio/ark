@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <typeinfo>
 
 #include "../network/doctest.h"
@@ -44,6 +45,11 @@ public:
     void uninstall() override {
     }
 };
+
+static_assert(!std::is_copy_constructible_v<test_plugin>);
+static_assert(!std::is_copy_assignable_v<test_plugin>);
+static_assert(!std::is_move_constructible_v<test_plugin>);
+static_assert(!std::is_move_assignable_v<test_plugin>);
 
 class throwing_service final : public service
 {
@@ -312,7 +318,9 @@ TEST_CASE("Typed unregister retains ownership while managed work borrows a modul
     CHECK(manager.update(1));
     CHECK(manager.pending_tasks() == 0);
     CHECK(manager.stop(2));
+    CHECK(events.destroyed == 1);
     CHECK(owner.unregister_module<service>());
+    CHECK_FALSE(owner.unregister_module<service>());
     CHECK(events.destroyed == 1);
     counts rejected;
     CHECK_THROWS_AS(owner.register_module(make_service(rejected), ark::module_update::disabled), std::logic_error);
@@ -331,6 +339,10 @@ TEST_CASE("Plugin destruction alone preserves legacy explicit uninstall ownershi
     }
     CHECK(events.destroyed == 0);
     CHECK(manager.find_module<service>() == retained);
+    // A dead standalone plugin leaves the explicit caller-owned path intact.
+    // Shutdown must not call the old plugin's destruction callback.
+    CHECK(manager.stop(1));
+    CHECK(events.destroyed == 0);
     manager.remove_module(typeid(service).name());
     delete retained;
     CHECK(events.destroyed == 1);

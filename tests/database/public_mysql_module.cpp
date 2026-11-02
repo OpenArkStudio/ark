@@ -284,7 +284,7 @@ TEST_CASE("Public MySQL transactions retain a lease across steps and drain idle 
         if (scenario == 2)
         {
             CHECK_FALSE(owner.manager.stop(0));
-            CHECK(owner.manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::draining);
+            CHECK(owner.manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopping);
         }
         owner.stop();
         peer.finish();
@@ -314,7 +314,7 @@ TEST_CASE("Public MySQL rejects foreign executors and invalid configuration befo
     owner.stop();
 }
 
-TEST_CASE("Public MySQL cancellation retires sent work without replay during manager drain") {
+TEST_CASE("Manager stop cancels sent MySQL work and retires unknown outcomes without replay") {
     observed_commands seen;
     mysql_peer peer([&seen](mysql_peer& server) { return serve(server, seen); });
     module_owner owner;
@@ -336,7 +336,6 @@ TEST_CASE("Public MySQL cancellation retires sent work without replay during man
     REQUIRE(seen.queries == 1);
     CHECK_FALSE(owner.manager.stop(0));
     CHECK_FALSE(owner.database.configure("late", {}));
-    REQUIRE(tasks.cancel(id));
     owner.drain();
     CHECK_FALSE(failure);
     REQUIRE(replies.size() == 1);
@@ -419,8 +418,7 @@ TEST_CASE("Public MySQL cancels a queued acquire without losing its transaction 
 
     REQUIRE(tasks.start(
         reuse_after_queued_cancellation(owner, transaction, reused, thread), [&](auto error) { failure = error; }));
-    REQUIRE(owner.manager.update(0));
-    CHECK_FALSE(owner.manager.stop(0));
+    owner.drain();
     owner.stop();
     REQUIRE_FALSE(failure);
     REQUIRE(reused.size() == 2);

@@ -15,11 +15,6 @@ add_library(ark_construction_header_checks OBJECT headers/module_base.cpp header
 set_property(TARGET ark_construction_header_checks PROPERTY LINK_LIBRARIES ark::core)
 add_dependencies(ark_core_tests ark_construction_header_checks)
 if(ARK_BUILD_PROTO)
-    add_executable(ark_net_external_root_tests main.cpp net_external_root.cpp)
-    set_property(TARGET ark_net_external_root_tests PROPERTY LINK_LIBRARIES ark::net)
-    add_custom_target(check-net-external-root
-        COMMAND $<TARGET_FILE:ark_net_external_root_tests>
-        DEPENDS ark_net_external_root_tests USES_TERMINAL VERBATIM)
     add_executable(ark_net_health_timer_tests main.cpp net_health_timer.cpp
         ../../src/plugins/net/net_service_manager_module_impl.cpp
         ../../src/plugins/net/net_client_service_impl.cpp
@@ -75,8 +70,8 @@ add_custom_target(check-core
     COMMAND $<TARGET_FILE:ark_core_tests>
     DEPENDS ark_core_tests
     USES_TERMINAL)
-if(TARGET check-net-external-root)
-    add_dependencies(check-core check-net-external-root check-net-health-timer check-msg-dependencies)
+if(TARGET check-net-health-timer)
+    add_dependencies(check-core check-net-health-timer check-msg-dependencies)
 endif()
 
 # Keep singleton shutdown terminal within its own process, including the logger specialization.

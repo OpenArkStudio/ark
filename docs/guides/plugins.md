@@ -148,7 +148,7 @@ The manager does not make plugin unloading safe for arbitrary outstanding callba
 
 ## Use typed registration and explicit entries
 
-The [complete example above](#pair-registration-and-unregistration) is recommended. Existing macros/plugins remain supported. Preserve interface keys, update selection, lifecycle, drain and unload contracts during migration:
+The [complete example above](#pair-registration-and-unregistration) is recommended. Existing macros/plugins remain supported. Preserve interface keys, update selection, lifecycle, resource-cleanup and unload contracts during migration:
 
 | Legacy spelling | Recommended replacement |
 | --- | --- |

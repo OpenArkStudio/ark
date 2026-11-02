@@ -6,6 +6,7 @@
 #include <string>
 #include <typeinfo>
 #include <unordered_map>
+#include <utility>
 
 #include "ark/plugin.hpp"
 #include "ark/plugin_manager.hpp"
@@ -22,6 +23,12 @@ template<typename derived_type>
 class plugin_base : public plugin
 {
 public:
+    plugin_base() = default;
+    plugin_base(const plugin_base&) = delete;
+    plugin_base& operator=(const plugin_base&) = delete;
+    plugin_base(plugin_base&&) = delete;
+    plugin_base& operator=(plugin_base&&) = delete;
+
     int get_plugin_version() override {
         return 0;
     }
@@ -48,8 +55,8 @@ public:
     }
 
 protected:
-    // Successful registration transfers ownership to the explicit unregister path.
-    // Like the legacy macros, destruction alone does not uninstall modules.
+    // Register an owner callback so dependency-ordered shutdown can destroy the
+    // concrete module before its providers, while plugin code remains loaded.
     template<std::derived_from<module> interface_type>
     bool register_module(std::unique_ptr<interface_type> candidate, module_update update) {
         get_plugin_manager()->check_registration();
@@ -67,7 +74,12 @@ protected:
         }
         try
         {
-            if (!get_plugin_manager()->register_owned_module(name, *candidate, update == module_update::enabled))
+            if (!get_plugin_manager()->register_owned_module(name, *candidate, update == module_update::enabled,
+                    {this,
+                        [](void* owner, const std::string& key) {
+                            return static_cast<plugin_base*>(owner)->destroy_named_module(key);
+                        },
+                        lifetime_}))
             {
                 modules_.erase(entry);
                 return false;
@@ -84,20 +96,52 @@ protected:
 
     template<std::derived_from<module> interface_type>
     bool unregister_module() {
+        return unregister_named_module(typeid(interface_type).name());
+    }
+
+private:
+    bool unregister_named_module(const std::string& name) {
         get_plugin_manager()->check_registry_mutation();
-        const auto entry = modules_.find(typeid(interface_type).name());
-        if (entry == modules_.end() || !get_plugin_manager()->unregister_owned_module(entry->first, *entry->second))
+        const auto entry = modules_.find(name);
+        if (entry == modules_.end() || !destroy_named_module(name))
         {
             return false;
         }
-        auto* instance = entry->second;
         modules_.erase(entry);
+        return true;
+    }
+
+    bool destroy_named_module(const std::string& name) {
+        get_plugin_manager()->check_registry_mutation();
+        const auto entry = modules_.find(name);
+        if (entry == modules_.end())
+        {
+            return false;
+        }
+        // Keep a null entry until uninstall acknowledges this registration.
+        // Existing explicit unregister calls still succeed exactly once.
+        if (!entry->second)
+        {
+            return true;
+        }
+        std::unique_ptr<task_group> retired_tasks;
+        if (!get_plugin_manager()->unregister_owned_module(entry->first, *entry->second, retired_tasks))
+        {
+            return false;
+        }
+        auto* instance = std::exchange(entry->second, nullptr);
+        // A concrete destructor must not remove another provider or reenter
+        // teardown while the manager is walking its validated snapshot.
+        typename plugin_manager::phase_guard destroying(
+            *get_plugin_manager(), plugin_manager::call_phase::tearing_down);
         delete instance;
         return true;
     }
 
-private:
     std::unordered_map<std::string, module*> modules_;
+    // Standalone plugin destruction keeps the legacy explicit ownership path;
+    // it must not leave a callable manager pointer into the destroyed plugin.
+    std::shared_ptr<void> lifetime_ = std::make_shared<int>(0);
     plugin_manager* plugin_manager_{nullptr};
     inline static std::string plugin_conf_;
 };

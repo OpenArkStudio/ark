@@ -30,7 +30,6 @@
 #include "../detail/plugin_configuration.hpp"
 #include "ark/http/http_server_module.hpp"
 #include "ark/module_base.hpp"
-#include "ark/plugin_manager.hpp"
 #include "http_plugin.hpp"
 
 namespace ark {
@@ -39,9 +38,9 @@ class http_server_module_impl final : public module_base<http_server_module>
 {
 public:
     http_server_module_impl();
+    ~http_server_module_impl() override;
 
     bool init() override;
-    bool stop_accepting() override;
     bool ready_to_shut() const override;
     bool pre_shut() override;
 
@@ -59,8 +58,8 @@ protected:
     uint8_t http_thread_num_{1};
 
 private:
-    struct admission_state;
-    std::shared_ptr<admission_state> admission_;
+    struct callback_state;
+    std::shared_ptr<callback_state> callbacks_;
     arknet::http_router router_;
     std::unique_ptr<arknet::http_server> server_;
     std::string listen_key_;
@@ -124,22 +123,22 @@ private:
 
 } // namespace
 
-struct http_server_module_impl::admission_state
+struct http_server_module_impl::callback_state
 {
     struct request_lease
     {
-        explicit request_lease(std::shared_ptr<admission_state> owner)
+        explicit request_lease(std::shared_ptr<callback_state> owner)
             : owner_(std::move(owner)) {
             std::lock_guard lock(owner_->mutex);
-            if (owner_->accepting)
+            if (!owner_->closing)
             {
                 ++owner_->pending;
-                admitted = true;
+                acquired = true;
             }
         }
 
         ~request_lease() {
-            if (admitted)
+            if (acquired)
             {
                 std::lock_guard lock(owner_->mutex);
                 --owner_->pending;
@@ -149,19 +148,23 @@ struct http_server_module_impl::admission_state
         request_lease(const request_lease&) = delete;
         request_lease& operator=(const request_lease&) = delete;
 
-        bool admitted = false;
+        bool acquired = false;
 
     private:
-        std::shared_ptr<admission_state> owner_;
+        std::shared_ptr<callback_state> owner_;
     };
 
     mutable std::mutex mutex;
-    bool accepting = true;
+    bool closing = false;
     std::size_t pending = 0;
 };
 
 http_server_module_impl::http_server_module_impl()
-    : admission_(std::make_shared<admission_state>()) {
+    : callbacks_(std::make_shared<callback_state>()) {
+}
+
+http_server_module_impl::~http_server_module_impl() {
+    pre_shut();
 }
 
 bool http_server_module_impl::init() {
@@ -171,23 +174,25 @@ bool http_server_module_impl::init() {
     return true;
 }
 
-bool http_server_module_impl::stop_accepting() {
-    std::lock_guard lock(admission_->mutex);
-    admission_->accepting = false;
-    return true;
-}
-
 bool http_server_module_impl::ready_to_shut() const {
-    std::lock_guard lock(admission_->mutex);
-    return admission_->pending == 0;
+    std::lock_guard lock(callbacks_->mutex);
+    // Resource retirement starts only after managed frames have completed. Seal
+    // native route dispatch before observing zero in-flight callback/send leases.
+    callbacks_->closing = true;
+    return callbacks_->pending == 0;
 }
 
 bool http_server_module_impl::pre_shut() {
+    {
+        std::lock_guard lock(callbacks_->mutex);
+        callbacks_->closing = true;
+    }
     if (server_)
     {
         server_->stop();
         server_.reset();
     }
+    router_ = {};
     release_endpoint(listen_key_);
 
     return true;
@@ -200,10 +205,15 @@ bool http_server_module_impl::start_server() {
 bool http_server_module_impl::start_server(
     std::string const& ip /* = "0.0.0.0"*/, uint16_t port /* = 8080 */, uint8_t thread_num /* = 1*/) {
     {
-        std::lock_guard lock(admission_->mutex);
-        if (!admission_->accepting)
+        std::lock_guard lock(callbacks_->mutex);
+        if (callbacks_->closing)
         {
-            return false;
+            if (server_ || callbacks_->pending != 0)
+            {
+                return false;
+            }
+            // An explicit restart after pre_shut uses the caller's new router.
+            callbacks_->closing = false;
         }
     }
     if (server_ && server_->is_started())
@@ -218,15 +228,10 @@ bool http_server_module_impl::start_server(
     auto server = std::make_unique<arknet::http_server>(
         arknet::detail::http_frame_size, arknet::detail::max_buffer_size, std::max<unsigned>(thread_num, 1));
     server->bind_recv([this](std::shared_ptr<arknet::http_session>& session, arknet::http_route_request& request) {
-        auto lease = std::make_shared<admission_state::request_lease>(admission_);
-        if (!lease->admitted)
+        auto lease = std::make_shared<callback_state::request_lease>(callbacks_);
+        if (!lease->acquired)
         {
-            arknet::http_route_response response(arknet::http::status::service_unavailable, request.version());
-            response.set(arknet::http::field::server, "ARK");
-            response.keep_alive(false);
-            response.prepare_payload();
-            session->async_send(
-                std::move(response), [session](const arknet::error_code&, std::size_t) { session->stop(); });
+            session->stop();
             return;
         }
         auto response = router_(request);

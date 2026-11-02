@@ -82,6 +82,6 @@ config = ""
 
 `ARK_INSTALL` 在顶层项目中默认 `ON`，嵌入构建时默认 `OFF`；启用显式公开头安装、可迁移 CMake 导出、`check-install` 与 TGZ／ZIP CPack 归档。`ARK_USE_INSTALLED_ARKNET=ON` 发现单独安装的 arknet 包，优先于源码与版本覆盖；默认 `OFF`，保留源码依赖构建。具体操作见[安装与包消费](../get-started/installation_CN.md#安装并消费-cmake-包)。打包不会启用可选运行时插件，也不代表外部驱动已经验收。
 
-Net 的 19 个公开头不再包含 `http_client_module_impl.hpp`；使用 `<ark/net/http_client_module.hpp>` 并查找公开接口。此移除属于源码／ABI 兼容性变化，详见 [Net 迁移](network_CN.md#api-与私有创建)。私有工厂声明不安装。
+Net 的 18 个公开头不再包含 `http_client_module_impl.hpp`；使用 `<ark/net/http_client_module.hpp>` 并查找公开接口。此移除属于源码／ABI 兼容性变化，详见 [Net 迁移](network_CN.md#api-与私有创建)。私有工厂声明不安装。
 
 Kafka 继续默认关闭（`ARK_BUILD_PLUGIN_KAFKA=OFF`）。准备原有驱动依赖并启用应用、Protobuf 和核心测试后，`ARK_BUILD_PLUGIN_KAFKA=ON` 会将 `check-kafka-construction`、`check-kafka-plugin` 加入 `check-core`。前者验证真实工厂／装配、受控动态库生命周期及启用 update；后者另检查生产动态库导出。测试不连接 broker。关闭 Kafka 时，核心测试不发现 Kafka 依赖。重建要求与验收边界见 [Kafka 构造迁移](directory-structure_CN.md#kafka-类型化构造)。

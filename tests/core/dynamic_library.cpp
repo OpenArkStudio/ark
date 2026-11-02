@@ -11,6 +11,7 @@
 #include "../network/doctest.h"
 
 #include <ark/dynamic_library.hpp>
+#include <ark/module_base.hpp>
 #include <ark/plugin_base.hpp>
 #include <ark/plugin_manager.hpp>
 
@@ -569,5 +570,230 @@ TEST_CASE("Plugin exit exceptions retain handles and never retry uninstall or na
         CHECK(closes == 0);
         CHECK(owner.manager.get_shutdown_exception() == failure);
         CHECK(owner.manager.get_shutdown_failure() == std::string("uninstall: ") + name);
+    }
+}
+
+namespace {
+
+struct cleanup_events
+{
+    std::vector<std::string> order;
+    bool provider_cleaned{};
+    bool provider_stopped{};
+    bool consumer_destroyed{};
+    unsigned callbacks{};
+    unsigned plugins_uninstalled{};
+};
+
+cleanup_events* active_cleanup{};
+
+class lifetime_provider : public ark::module
+{
+public:
+    int value{42};
+    std::function<void()> callback;
+};
+
+class lifetime_consumer : public ark::module
+{
+};
+
+class lifetime_provider_impl final : public ark::module_base<lifetime_provider>
+{
+public:
+    ~lifetime_provider_impl() override {
+        CHECK(active_cleanup->consumer_destroyed);
+        active_cleanup->order.emplace_back("provider-destroy");
+    }
+
+    bool pre_shut() override {
+        CHECK_FALSE(active_cleanup->consumer_destroyed);
+        REQUIRE(callback);
+        callback();
+        callback = {};
+        active_cleanup->provider_cleaned = true;
+        active_cleanup->order.emplace_back("provider-pre");
+        return true;
+    }
+
+    bool shut() override {
+        CHECK(active_cleanup->consumer_destroyed);
+        active_cleanup->provider_stopped = true;
+        active_cleanup->order.emplace_back("provider-shut");
+        return true;
+    }
+};
+
+class lifetime_consumer_impl final : public ark::module_base<lifetime_consumer, lifetime_provider>
+{
+public:
+    bool init() override {
+        provider_ = find_module<lifetime_provider>();
+        if (!provider_)
+        {
+            return false;
+        }
+        tasks_ = &get_plugin_manager()->create_task_group(*this);
+        provider_->callback = [this] {
+            CHECK_FALSE(active_cleanup->consumer_destroyed);
+            CHECK(provider_->value == 42);
+            ++active_cleanup->callbacks;
+        };
+        return true;
+    }
+
+    ~lifetime_consumer_impl() override {
+        REQUIRE(tasks_ != nullptr);
+        CHECK(tasks_->pending() == 0);
+        CHECK(tasks_->closed());
+        CHECK_NOTHROW(tasks_->close());
+        CHECK_FALSE(get_plugin_manager()->stop(1));
+        CHECK_THROWS_AS(get_plugin_manager()->remove_module(typeid(lifetime_provider).name()), std::logic_error);
+        check_provider();
+        CHECK(active_cleanup->provider_cleaned);
+        CHECK_FALSE(provider_->callback);
+        CHECK(find_module<lifetime_provider>() == provider_);
+        active_cleanup->consumer_destroyed = true;
+        active_cleanup->order.emplace_back("consumer-destroy");
+    }
+
+    bool pre_shut() override {
+        check_provider();
+        CHECK_FALSE(active_cleanup->provider_cleaned);
+        CHECK(bool(provider_->callback));
+        active_cleanup->order.emplace_back("consumer-pre");
+        return true;
+    }
+
+    bool shut() override {
+        check_provider();
+        active_cleanup->order.emplace_back("consumer-shut");
+        return true;
+    }
+
+private:
+    void check_provider() const {
+        REQUIRE(provider_ != nullptr);
+        CHECK(provider_->value == 42);
+        CHECK_FALSE(active_cleanup->provider_stopped);
+    }
+
+    lifetime_provider* provider_{};
+    ark::task_group* tasks_{};
+};
+
+class lifetime_provider_plugin final : public ark::plugin_base<lifetime_provider_plugin>
+{
+public:
+    void install() override {
+        REQUIRE(register_module<lifetime_provider>(
+            std::make_unique<lifetime_provider_impl>(), ark::module_update::disabled));
+    }
+
+    void uninstall() override {
+        CHECK(get_plugin_manager()->try_find_module<lifetime_provider>() == nullptr);
+        CHECK(get_plugin_manager()->try_find_module<lifetime_consumer>() == nullptr);
+        CHECK(unregister_module<lifetime_provider>());
+        CHECK_FALSE(unregister_module<lifetime_provider>());
+        ++active_cleanup->plugins_uninstalled;
+    }
+};
+
+class lifetime_consumer_plugin final : public ark::plugin_base<lifetime_consumer_plugin>
+{
+public:
+    void install() override {
+        REQUIRE(register_module<lifetime_consumer>(
+            std::make_unique<lifetime_consumer_impl>(), ark::module_update::disabled));
+    }
+
+    void uninstall() override {
+        CHECK(get_plugin_manager()->try_find_module<lifetime_provider>() == nullptr);
+        CHECK(get_plugin_manager()->try_find_module<lifetime_consumer>() == nullptr);
+        CHECK(unregister_module<lifetime_consumer>());
+        CHECK_FALSE(unregister_module<lifetime_consumer>());
+        ++active_cleanup->plugins_uninstalled;
+    }
+};
+
+} // namespace
+
+TEST_CASE("Dependency objects retire before every plugin uninstall and native unload including unload failure") {
+    for (const bool fail_unload : {false, true})
+    {
+        CAPTURE(fail_unload);
+        quiet_logger logger;
+        cleanup_events events;
+        active_cleanup = &events;
+        ark::dynamic_library first("ark_plugin_allocation_first");
+        ark::dynamic_library second("ark_plugin_allocation_second");
+        REQUIRE(first.load(ARK_ALLOCATION_PROBE_DIR));
+        REQUIRE(second.load(ARK_ALLOCATION_PROBE_DIR));
+
+        struct close_observers
+        {
+            ark::dynamic_library& first;
+            ark::dynamic_library& second;
+
+            ~close_observers() {
+                CHECK(first.unload());
+                CHECK(second.unload());
+            }
+        } closed{first, second};
+
+        using entry = void (*)(ark::plugin_manager*, const std::string&);
+        using exit = void (*)(ark::plugin_manager*);
+        const auto first_entry = reinterpret_cast<void (*)(entry)>(first.get_symbol("allocation_probe_set_entry"));
+        const auto second_entry = reinterpret_cast<void (*)(entry)>(second.get_symbol("allocation_probe_set_entry"));
+        const auto first_exit = reinterpret_cast<void (*)(exit)>(first.get_symbol("allocation_probe_set_exit"));
+        const auto second_exit = reinterpret_cast<void (*)(exit)>(second.get_symbol("allocation_probe_set_exit"));
+        REQUIRE(first_entry != nullptr);
+        REQUIRE(second_entry != nullptr);
+        REQUIRE(first_exit != nullptr);
+        REQUIRE(second_exit != nullptr);
+
+        struct reset_callbacks
+        {
+            decltype(first_entry) reset_first_entry;
+            decltype(second_entry) reset_second_entry;
+            decltype(first_exit) reset_first_exit;
+            decltype(second_exit) reset_second_exit;
+
+            ~reset_callbacks() {
+                reset_first_entry(nullptr);
+                reset_second_entry(nullptr);
+                reset_first_exit(nullptr);
+                reset_second_exit(nullptr);
+            }
+        } reset{first_entry, second_entry, first_exit, second_exit};
+
+        first_entry(+[](ark::plugin_manager* manager, const std::string& name) {
+            manager->register_plugin<lifetime_provider_plugin>(name);
+        });
+        second_entry(+[](ark::plugin_manager* manager, const std::string& name) {
+            manager->register_plugin<lifetime_consumer_plugin>(name);
+        });
+        first_exit(+[](ark::plugin_manager* manager) { manager->unregister_plugin<lifetime_provider_plugin>(); });
+        second_exit(+[](ark::plugin_manager* manager) { manager->unregister_plugin<lifetime_consumer_plugin>(); });
+        retained_manager owner;
+        REQUIRE(owner.manager.start(0, ARK_ALLOCATION_PROBE_DIR, "",
+            {{"ark_plugin_allocation_first", ""}, {"ark_plugin_allocation_second", ""}}));
+        unsigned closes{};
+        const auto close = [&](ark::dynamic_library& library) {
+            ++closes;
+            CHECK(events.plugins_uninstalled == 2);
+            CHECK(events.callbacks == 1);
+            CHECK(events.order == std::vector<std::string>{"consumer-pre", "provider-pre", "consumer-shut",
+                                      "consumer-destroy", "provider-shut", "provider-destroy"});
+            return fail_unload ? library_access::unload(library, [](DYNLIB_HANDLE) { return native_failure; })
+                               : library.unload();
+        };
+        CHECK(manager_access::stop(owner.manager, close) == !fail_unload);
+        CHECK(closes == (fail_unload ? 1 : 2));
+        CHECK(owner.manager.get_shutdown_state() == (fail_unload ? ark::plugin_manager::shutdown_state::failed
+                                                                 : ark::plugin_manager::shutdown_state::stopped));
+        CHECK(owner.manager.stop(1) == !fail_unload);
+        CHECK(events.plugins_uninstalled == 2);
+        CHECK(closes == (fail_unload ? 1 : 2));
     }
 }

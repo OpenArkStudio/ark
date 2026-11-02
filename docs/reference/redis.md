@@ -69,13 +69,13 @@ Managed-group cancellation reaches the native service. Cancelled waiting acquire
 | Update / shutdown | Contract |
 | --- | --- |
 | Delivery | Plugin runs `service.update()` then bridge dispatch; manager centrally polls the shared runtime and resumes coroutines on its owner. arknet owns native IO/workers |
-| Drain | Keep updating while `stop()` returns false; accepted workflows may submit later commands. Readiness observes logical activity without sealing early |
+| Resource completion | `stop()` requests task cancellation; keep updating until actual completion. Finish saving before process stop; cancellation does not prove a write did not occur |
 | Native retirement | After tasks/delivery stacks return, host-frame `pre_shut` seals admission and calls `retire_native()`. False/exception retains resources and prevents `shut` release; `service.stop()` is not this barrier |
 | Reentrancy | Recursive lifecycle teardown from a running task is unsupported; manager defers it to the host frame |
 
 `tests/database/public_redis_module.cpp` covers the public facade against a
 bounded loopback RESP protocol peer: owning input/results, ordered pipeline
-replies, foreign executor rejection, quotas, cancellation, verified TLS and graceful
+replies, foreign executor rejection, quotas, cancellation, verified TLS and resource-safe
 manager stop. This peer is not a Redis implementation. Private TLS regressions
 cover additional underlying-service failure cases. These local checks do not establish real Redis
 deployment acceptance, production capacity or a general leak-free guarantee.
@@ -88,7 +88,7 @@ server acceptance.
 `ark_database_public_service_tests` uses the real module implementation,
 a consumer task group and the manager's shared runtime. It covers authentication
 configuration, an ordered binary pipeline, input/configuration/result ownership,
-owner-thread resumption, natural drain and host-stack unwinding with work pending.
+owner-thread resumption, business completion before resource stop and host-stack unwinding with work pending.
 `ark_database_public_failure_service_tests` checks a wrong password and a server-observed BLPOP
 deadline, preserving native errors and `command_may_have_run`, then requires an
 explicit new PING to recover.

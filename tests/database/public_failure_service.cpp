@@ -144,11 +144,19 @@ struct module_owner
 
     void finish() {
         const auto deadline = std::chrono::steady_clock::now() + 30s;
+        // Finish the slow command and independent observer before cleanup. This
+        // preserves server-side no-replay evidence without relying on shutdown grace.
+        while (tasks->pending())
+        {
+            require(std::chrono::steady_clock::now() < deadline, "Failure workflows did not complete");
+            require(manager.update(0), "Failure workflow owner update failed");
+            std::this_thread::sleep_for(1ms);
+        }
         while (!(stopped = manager.stop(0)))
         {
             require(manager.get_shutdown_state() != ark::plugin_manager::shutdown_state::failed &&
                         std::chrono::steady_clock::now() < deadline,
-                "Failure workflows did not naturally drain/retire native resources");
+                "Failure workflows did not retire native resources");
             require(manager.update(0), "Failure workflow update failed during drain");
             std::this_thread::sleep_for(1ms);
         }
@@ -156,9 +164,6 @@ struct module_owner
 
     void verify() {
         require(tasks->pending() == 2, "Slow request and independent observer were not both admitted");
-        require(!manager.stop(0), "Manager stopped before failure workflows drained");
-        require(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::draining,
-            "Manager did not begin natural drain");
         finish();
         check_failure();
         require(completions == 3 && completions_on_owner, "Failure completions repeated or escaped their owner");

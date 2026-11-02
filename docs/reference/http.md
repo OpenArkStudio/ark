@@ -70,9 +70,9 @@ helper, including content type, length and keep-alive behavior.
 | Listener / shutdown boundary | Behavior |
 | --- | --- |
 | Endpoint reservation | Rejects start while running; two instances in one library cannot reserve one nonzero endpoint. `pre_shut()` stops/releases server and reservation, retaining restart behavior when used alone |
-| `stop_accepting()` | Permanently closes this instance’s business admission; `start_server()` cannot reopen it. New requests receive HTTP 503 and close their connection; TCP listening continues, with one gate for existing/new connections |
-| `ready_to_shut()` | Waits for admitted handlers/response sends before listener cleanup. Failed sends also finish requests, without proving client receipt |
-| Lifecycle | Owner-thread manager shutdown retains cooperative waits/timeouts and cannot interrupt blocked routes. Independently scheduled handler work needs separate ownership; HTTP send accounting excludes it |
+| Ordinary requests | No manager-state business gate or automatic HTTP 503; routes retain ordinary behavior until the resource-readiness seal; later transport requests close without invoking routes |
+| `ready_to_shut()` | Atomically seals native route dispatch, then waits for active route/response-send leases to retire; failed sends also retire leases without proving client receipt |
+| Resource closure | `pre_shut()` stops/joins the native server, clears router captures and releases its endpoint; blocked routes must return cooperatively. Independently scheduled work needs separate ownership |
 
 No generic hot replacement or HTTP/2 support; arknet retains IO workers, request parsing and transport.
 
@@ -95,20 +95,7 @@ mapped. The generated mapping is an include view of the co-located source header
 
 ## Validation
 
-With the HTTP target enabled, `check-http-plugin` (also in `check-core`) loads the
-actual HTTP DSO and sends real loopback HTTP requests. It checks the interface
-key, router identity, path/query routing, binary POST bodies, response status and
-headers, IO-worker dispatch without manager updates, retirement of an active
-handler during owner-thread stop, repeated stop and endpoint reuse. The in-flight
-shutdown case requires the admitted response to finish and new requests to receive
-503 without invoking their routes. No substitute server or transport is used.
-
-`check-http-admission` also uses the production factory and real loopback requests
-to check retention after manager timeout or a readiness exception. The listener
-and route owner remain alive while an admitted route finishes, and later business requests
-receive 503 both before and after that response completes. Repeated stop preserves
-the manager's terminal state; these tests explicitly retire the drained server
-through their test owner rather than claiming automatic recovery or forced cleanup.
+`check-http-plugin` uses the actual HTTP DSO and loopback requests for public interfaces, routing, IO-worker dispatch, resource readiness, repeated closure and endpoint reuse. `check-http-resource-cleanup` checks resource waiting/retention without a manager-state business-refusal gate. Acceptance requires actual results for the tested revision; earlier HTTP 503 cases are not current-contract evidence. Independently scheduled route work is outside HTTP send-lease accounting.
 
 `check-network` suite retains its HTTP duplicate binding,
 restart, public response helper and invalid-TOML assertions through the private

@@ -52,7 +52,7 @@ ark::task<> run() {
 | 配置边界 | 行为 |
 | --- | --- |
 | 所属线程 | 只能显式配置；注册已设置 manager，可早于数据库模块的 `init()`；不支持原位重配 |
-| 拒绝／异常 | 重名或 manager 排空期间新增配置返回 false；空名称／零限额抛异常；`pre_shut()` 封闭后抛 `std::logic_error` |
+| 拒绝／异常 | 重名或 manager 停机期间新增配置返回 false；空名称／零限额抛异常；`pre_shut()` 封闭后抛 `std::logic_error` |
 | TLS／构建 | 默认校验证书，按需设置 CA／服务名；要求 `ARKNET_ENABLE_SSL=ON` 与 OpenSSL，不链接 mysql++ |
 | 选项来源 | 插件不读取清单 `config` 或数据库 XML；保持 `config` 为空，由业务模块 `configure()` 传入拥有型选项 |
 
@@ -87,7 +87,7 @@ ark::task<> update_player() {
 
 查询桥和事务桥分别最多保留 `max_operations` 条协程通知记录；查询请求和事务分别具有 `max_input_bytes` 的输入保留预算。每个具名池的活跃事务数由 `max_transactions` 限制。原生连接数、等待队列、查询行数/列数/结果字节上限及连接请求队列另行配置。这些是每个池的限额，不代表整个进程的内存预算。
 
-`stop()` 返回 false 时继续驱动主循环。已接收的工作流仍可提交后续数据库步骤，空闲事务完成到期清理。模块准备检查等待查询、事务及其完成回调栈退出，随后宿主停机阶段才封闭入口并通过原生等待接口退役拥有的连接池。退役失败时保留资源并报告停机失败，不据此承诺热更新或任意外部协程的生命周期安全。
+`stop()` 对任务组请求取消；返回 false 时继续驱动主循环，使取消与原生完成实际交付。保存与事务提交须在进程停止前完成；取消不保证回滚，也不能排除已执行写入。模块就绪检查等待查询、事务及其完成栈退出，随后 `pre_shut()` 关闭入口并通过原生等待屏障回收拥有的连接池。失败保留资源，不提供任意外部协程或热更新保证。
 
 ## 验证
 
@@ -95,7 +95,7 @@ ark::task<> update_player() {
 
 `ark_database_public_mysql_plugin_tests` 另外编译并加载真实插件动态库，验证宏注册、协程结果投递和宿主停机。该检查不代表操作系统动态库卸载或热更新验收。
 
-`ark_database_public_service_tests` 通过业务任务组和管理器共享运行时调用实际模块实现，覆盖查询与预处理结果、提交/回滚可见性、输入/配置/结果所有权、所属线程恢复、自然排空，以及工作未完成时的宿主调用栈异常展开。`ark_database_public_failure_service_tests` 检查错误密码、不可信 CA 和服务器可见的 `SELECT SLEEP` 截止时间，保留原生错误及 `outcome_unknown`，再通过显式新请求验证恢复。
+`ark_database_public_service_tests` 通过业务任务组和管理器共享运行时调用实际模块实现，覆盖查询与预处理结果、提交/回滚可见性、输入/配置/结果所有权、所属线程恢复、业务完成后再停止资源，以及工作未完成时的宿主调用栈异常展开。`ark_database_public_failure_service_tests` 检查错误密码、不可信 CA 和服务器可见的 `SELECT SLEEP` 截止时间，保留原生错误及 `outcome_unknown`，再通过显式新请求验证恢复。
 
 ```sh
 bash scripts/test_databases.sh database-build public-mysql

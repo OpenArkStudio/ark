@@ -370,28 +370,23 @@ TEST_CASE("Public Redis cancellation preserves sent and waiting outcomes") {
     CHECK(peer.commands() == 1);
 }
 
-TEST_CASE("Manager stop drains an accepted Redis workflow before sealing its next command") {
+TEST_CASE("Manager stop cancels a sent Redis command and retires its native outcome before cleanup") {
     redis_peer peer;
     module_owner owner;
     REQUIRE(owner.redis.configure("main", owner.options(peer)));
     REQUIRE(owner.redis.init());
-    bool finished{};
-    auto workflow = [&]() -> ark::task<> {
-        auto first = co_await owner.redis.command("main", {"PING"});
-        REQUIRE(first);
-        CHECK_FALSE(owner.manager.stop(0)); // Executor stack is still active.
-        CHECK_FALSE(owner.redis.configure("late-during-drain", owner.options(peer)));
-        auto second = co_await owner.redis.command("main", {"ECHO", "follow-up"});
-        REQUIRE(second);
-        REQUIRE(second.replies.size() == 1);
-        CHECK(second.replies[0].text == "follow-up");
-        finished = true;
-    };
-    REQUIRE(owner.tasks->start(workflow()) != 0);
+    REQUIRE(owner.start(owner.redis.command("main", {"BLOCK"})) != 0);
+    REQUIRE(owner.pump_until([&] { return peer.blocked(); }));
     CHECK_FALSE(owner.manager.stop(0));
-    REQUIRE(owner.pump_until([&] { return finished && owner.tasks->pending() == 0; }));
-    REQUIRE(owner.manager.stop(0));
-    CHECK(peer.commands() == 2);
+    CHECK(owner.manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopping);
+    CHECK(owner.tasks->start([]() -> ark::task<> { co_return; }()) == 0);
+    REQUIRE(owner.pump_until([&] { return owner.completed == 1 && owner.tasks->pending() == 0; }));
+    CHECK_FALSE(owner.error);
+    REQUIRE(owner.result);
+    CHECK(owner.result->error == client_errc::cancelled);
+    CHECK(owner.result->command_may_have_run);
+    REQUIRE(owner.pump_until([&] { return owner.manager.stop(0); }));
+    CHECK(peer.commands() == 1);
     CHECK_FALSE(owner.redis.configure("late", owner.options(peer)));
 }
 

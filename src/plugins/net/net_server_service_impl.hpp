@@ -59,6 +59,9 @@ class net_server_service_impl final : public net_server_service
 public:
     explicit net_server_service_impl(plugin_manager* p);
 
+    ~net_server_service_impl() override;
+    void shutdown();
+
     bool start(std::shared_ptr<const msg_header> head, bus_id_t bus_id, const endpoint& ep, uint8_t thread_count,
         uint32_t max_connection, const size_t silent_timeout) override;
     bool update() override;
@@ -102,6 +105,9 @@ protected:
     //void SyncToAllClient(bus_id_t bus_id, conv_id_t session_id);
 
 private:
+    // Owner-thread transport dispatch must retire before the service object.
+    std::shared_ptr<int> callback_lifetime_ = std::make_shared<int>();
+    bool closed_ = false;
     plugin_manager* plugin_manager_;
     net_service_manager_module* net_service_manager_;
     msg_module* msg_module_;

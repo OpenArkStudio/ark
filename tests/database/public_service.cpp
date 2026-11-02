@@ -134,14 +134,17 @@ struct module_owner
             "Public database workflow was not accepted");
         require(manager.update(0), "Cannot start public database workflow");
         require(tasks->pending() == 1, "Public database workflow did not suspend for native IO");
-        require(!manager.stop(0), "Manager stopped before its accepted database workflow drained");
-        require(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::draining,
-            "Manager did not enter natural drain");
-        require(!database.configure("late", {}), "Database admitted configuration during drain");
     }
 
     void finish() {
         const auto deadline = std::chrono::steady_clock::now() + 30s;
+        // Explicit application completion precedes resource cleanup, including host unwinding.
+        while (tasks->pending())
+        {
+            require(std::chrono::steady_clock::now() < deadline, "Public database workflow did not complete");
+            require(manager.update(0), "Public database workflow owner update failed");
+            std::this_thread::sleep_for(1ms);
+        }
         while (!(stopped = manager.stop(0)))
         {
             if (manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::failed ||
@@ -174,7 +177,7 @@ ark::task<> redis_workflow(module_owner<ark::redis_module>& owner, ark::task<ark
     auto second = co_await database.command("primary", {"PING"}, 5s);
     owner.check_executor();
     require(bool(second) && second.replies.size() == 1 && second.replies[0].text == "PONG",
-        "Public Redis follow-up command failed during natural drain");
+        "Public Redis follow-up command failed before framework cleanup");
     require(retained->replies[0].text == binary, "Public Redis prior result changed after the next command");
 }
 

@@ -28,59 +28,15 @@ Installation remains GUID → timer → schedule → compression, reversed on un
 
 ## Scheduler shutdown
 
-The schedule module uses the existing lifecycle hooks. `stop_accepting()` closes
-new external registrations and future recurring dispatch. The existing `void`
-registration methods ignore refused requests. Registrations racing with stop are
-serialized with dispatch: admitted one-shot `in`/`at` schedules retain their due
-times and run during drain; work already submitted to the pool also runs to
-completion, including queued callbacks. Future recurring occurrences are retired.
-An interval callback that was already dispatched finishes without rearming.
-Normal interval, target-time and cron behavior is unchanged. Target-time and cron
-calendar conversion use caller-owned `std::tm` storage; parsing, process-local
-timezone selection and `mktime`/DST rules remain unchanged. The calendar helper
-serializes each C-runtime conversion, including `mktime`, for callers sharing its
-linked helper instance. It releases that lock before task registration or callback
-execution. This scope does not coordinate independent DSO/helper copies, external
-C-runtime callers or timezone environment changes.
+The schedule module calls nonblocking `scheduler::close()` in `ready_to_shut()` after manager-task frames finish. The dispatcher discards every timer not yet dispatched, including future one-shots, and all further registrations are sealed, including callback-generated continuations. Already-dispatched callbacks and their captures retire before readiness; `pre_shut()` then joins workers. The scheduler destructor requests the same resource close. Discarded timers never invoke their application callbacks.
 
-An accepted callback may register a one-shot continuation on the same scheduler
-while draining, including from its capture destructors. This authority does not
-extend to another scheduler or to recurring registration. The schedule module
-also permits one-shot `add_at_schedule()` from the manager owner's accepted-task
-polling context. Owner-thread calls outside that context remain refused. The
-module keeps the dispatcher available until these managed tasks have drained;
-calling raw task-runtime polls does not grant this authority.
+An explicit low-level `scheduler::stop_accepting()` retains its natural-drain contract: admitted future one-shot `in`/`at` schedules keep their due times, and submitted/queued callbacks finish. Future recurring occurrences retire; dispatched intervals do not rearm. An accepted callback on the same scheduler may register a one-shot continuation, including from capture destruction; this does not extend to other schedulers or recurring registration. Normal interval, target-time and cron behavior is unchanged. Calendar conversion uses caller-owned `std::tm`, existing local timezone and `mktime`/DST rules. A shared helper serializes conversion within that linked instance, not independent DSOs/copies or external timezone changes.
 
-`ready_to_shut()` is a nonblocking snapshot. It remains false until all admitted
-one-shots finish, future recurring schedules retire, registration capture transfers
-finish, and all dispatched callback owners have been destroyed. Capture destruction
-runs outside the scheduler mutex, before readiness is published; it can call
-stop/readiness methods. Callback exceptions are reported to stderr and destroyed
-before the work owner retires; standard exceptions retain their `what()` text
-in the diagnostic and nonstandard exceptions use a generic message. No callback
-result future is exposed. A dispatcher submission, recurrence calculation or
-recurrence-insertion failure returns untransferred owners to scheduler storage
-without allocating and leaves readiness closed; it does not retry automatically.
-Repeated stop requests are safe. This covers
-captures owned by this scheduler, not caller-owned arguments or external producers.
-Stop those producers before destroying the module or its receivers.
+Readiness is a nonblocking snapshot covering queued timer retirement, registration capture transfers, dispatched callbacks and capture destruction. Captures are destroyed outside the mutex before readiness publication. Callback exceptions go to stderr; exception objects are destroyed before work ownership retires. Submission/recurrence failures return untransferred owners to existing storage, retain not-ready state and do not automatically recover.
 
-`pre_shut()` returns false until ready; only then does the owner join the pool.
-The manager keeps its existing all-module readiness gate and fixed shutdown
-deadline. A far-future accepted one-shot can reach that deadline; it is not silently
-cancelled. A timeout keeps cleanup closed even if work later completes.
-Readiness does not interrupt a callback or its destructor: both must finish
-cooperatively while required owner updates remain available. Direct scheduler
-owners can use the same three methods. Destruction without an earlier successful
-drain stops admission and joins accepted work synchronously, with no deadline;
-never destroy a scheduler from its own callback or make a callback wait for its
-owner to finish joining it. No threads are detached or forcefully terminated.
-This is a scheduler drain contract, not a general DSO unload or hot-update barrier.
+Resource close does not wait for future timer deadlines. A dispatched callback or capture destructor that does not return can still reach an optional resource deadline; timeout does not destroy running work. Direct scheduler owners stop external producers before close/readiness/join. Owners that explicitly choose natural processing can use `stop_accepting()` and wait for its retained schedules before destruction. Never destroy a scheduler from its callback or have that callback wait for its owner to join it. Destruction can synchronously wait for dispatched work; threads are never detached or forcefully terminated. This is not a general DSO unload or hot-update barrier.
 
-**Binary compatibility:** `scheduler.hpp` adds shutdown-accounting state to the
-public `ark::scheduler` helper, changing its object layout. Rebuild the Utility
-plugin and every consumer that constructs or embeds this helper together. The
-`schedule_module` interface and base-module virtual functions are unchanged.
+**Binary compatibility:** shutdown accounting affects the public scheduler helper layout; removing `module::stop_accepting()` also changes the module vtable. Rebuild Utility, the host and every consumer constructing/embedding the helper together.
 
 ## Timer ownership and allocation
 
@@ -264,8 +220,8 @@ through its public interface.
 `check-scheduler-drain`, included in `check-core`, runs the production scheduler
 and schedule-module implementation with controlled callback/capture barriers.
 It checks accepted and queued work, recurring retirement, registration/stop races,
-same-instance/managed-task continuations, callback reentry, capture and exception
-destruction, owner-driven completion and sticky manager
+same-instance continuations for explicit natural drain, resource-close rejection of callback continuations, callback reentry, capture and exception
+destruction, a module-owned 24-hour timer discarded without running or retaining its capture, owner-driven completion and sticky manager
 timeout without cleanup. Run it with
 `cmake --build <build-dir> --target check-scheduler-drain`. These checks do not
 establish general DSO unload, hosted platform or production capacity acceptance.

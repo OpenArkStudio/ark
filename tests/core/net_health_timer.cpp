@@ -47,12 +47,12 @@ public:
         return true;
     }
 
-    bool stop_accepting() override {
+    bool pre_shut() override {
         if (dependent_stopped)
         {
             CHECK(*dependent_stopped);
         }
-        phases.emplace_back("stop_accepting");
+        phases.emplace_back("pre_shut");
         return true;
     }
 
@@ -249,7 +249,7 @@ public:
         return true;
     }
 
-    bool stop_accepting() override {
+    bool pre_shut() override {
         check_provider_phases({"init", "post_init", "check_config", "pre_update"});
         stopped = true;
         return true;

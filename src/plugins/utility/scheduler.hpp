@@ -172,11 +172,10 @@ public:
     scheduler& operator=(scheduler&&) noexcept = delete;
 
     ~scheduler() {
-        stop_accepting();
-        // Owner-only fallback: joins accepted work without a deadline. A callback
-        // must never destroy its own scheduler or wait for this owner to join it.
-        // Keep idle workers alive while accepted future one-shots can still be
-        // submitted by the dispatcher or by accepted callback continuations.
+        close();
+        // Owner-only fallback: discard queued timers and join dispatched work.
+        // A callback must never destroy its own scheduler or wait for this owner
+        // to join it. Running callbacks still require cooperative completion.
         while (!dispatcher_retired_.load())
         {
             dispatcher_retired_.wait(false);
@@ -192,8 +191,19 @@ public:
         sleeper_.interrupt();
     }
 
+    // Nonblocking resource close. Queued timers are discarded by the dispatcher;
+    // already-dispatched callbacks and their captures retire before readiness.
+    void close() {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            closing_ = true;
+            stopping_ = true;
+        }
+        sleeper_.interrupt();
+    }
+
     bool ready_to_shut() const {
-        // No business owners or further dispatch remain. pre_shut() still joins
+        // No queued or dispatched callback owners remain. pre_shut() still joins
         // the framework's final notification/return path before module teardown.
         return dispatcher_retired_.load() && outstanding_.load() == 0;
     }
@@ -327,6 +337,7 @@ public:
 
 private:
     std::atomic<bool> stopping_;
+    bool closing_{false};
     std::atomic<bool> dispatcher_retired_{false};
     std::atomic<std::size_t> outstanding_{0};
 
@@ -398,7 +409,8 @@ private:
         explicit operation(scheduler& owner, bool recurring = false)
             : owner(owner) {
             std::lock_guard<std::mutex> lock(owner.mutex_);
-            accepted = !owner.dispatcher_retired_ && (!owner.stopping_ || (!recurring && owner.in_callback()));
+            accepted = !owner.closing_ && !owner.dispatcher_retired_ &&
+                       (!owner.stopping_ || (!recurring && owner.in_callback()));
             if (accepted)
             {
                 ++owner.outstanding_;
@@ -442,7 +454,7 @@ private:
     void add_task(const clock::time_point time, std::shared_ptr<scheduler_task> t) {
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            if (!stopping_ || !t->recurring)
+            if (!closing_ && (!stopping_ || !t->recurring))
             {
                 tasks_.emplace(time, std::move(t));
             }
@@ -461,7 +473,11 @@ private:
                 bool finished;
                 {
                     std::lock_guard<std::mutex> lock(mutex_);
-                    if (stopping_)
+                    if (closing_)
+                    {
+                        retired.swap(tasks_);
+                    }
+                    else if (stopping_)
                     {
                         for (auto i = tasks_.begin(); i != tasks_.end();)
                         {
@@ -533,7 +549,7 @@ private:
             for (auto& entry : dispatched)
             {
                 auto& task = entry.second;
-                if (stopping_ && task->recurring)
+                if (closing_ || (stopping_ && task->recurring))
                 {
                     continue;
                 }

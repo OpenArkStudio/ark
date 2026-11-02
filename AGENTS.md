@@ -140,6 +140,26 @@ branch or worktree when the existing checkout contains uncommitted changes.
   Verify accepted source before claiming the new layout is available. Hot-update
   and Registry design discussions remain paused.
 
+## Process shutdown ownership
+
+- Applications/operators complete announcements, business-ingress closure, player
+  removal and saving before requesting process stop. Do not add framework business
+  admission, natural business-drain phases or automatic saving budgets.
+- Framework shutdown seals/cancels managed groups with `close()`, drives actual
+  completion and resource readiness, then uses two reverse dependency passes:
+  all `pre_shut()` calls while every object is alive, followed by each `shut()`
+  and owned-module destruction. Plugin uninstallation follows all modules; every
+  DSO stays loaded until all module/callback/plugin destruction is finished.
+- Provider objects survive consumer destruction, but their resources may already
+  be closed by the all-module `pre_shut()` pass. Do not defer database writes,
+  sends, kicking or saving into resource hooks/destructors.
+- Borrowed `add_module()` registrations remain caller-owned. Declare real provider
+  dependencies and retire native callback sources before destroying receivers.
+  Cancellation never authorizes suspended-frame destruction or proves rollback.
+- `stop_until()` / `--shutdown_timeout_ms` remain optional cooperative resource
+  safeguards, default unlimited (`0`); failure/timeout retains remaining resources.
+  Startup fail-fast and explicitly registered acquisition cleanup remain separate.
+
 ## Documentation and releases
 
 - Keep English and Chinese documentation aligned. Keep the README concise and

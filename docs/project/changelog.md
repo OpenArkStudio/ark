@@ -4,11 +4,13 @@
 
 ### Features
 
-- Net, Bus messaging, Kernel/configuration and built-in server roles, including Game, validate declared providers before startup hooks. Startup follows provider order and admission-stop reverses it; complete teardown ordering and the Map/Kernel runtime cycle remain separate design boundaries. See [module dependencies](../guides/modules.md#declare-startup-dependencies).
+- Net, Bus messaging, Kernel/configuration and built-in server roles, including Game, validate declared providers before startup hooks. Startup follows provider order; the Map/Kernel runtime cycle stays outside declared dependencies. See [module dependencies](../guides/modules.md#declare-startup-dependencies).
 
 - Application and logger settings share one manifest, with console INFO defaults and optional file output, formatting and named loggers in the same file.
 
 ### Improvements
+
+- Process shutdown requests managed-task cancellation, cleans up and destroys modules consumer-first, then closes all libraries last. Applications/operators complete announcements, ingress closure, player removal and saving before stopping the process.
 
 - Core type dispatch and Kernel callback adapters use standard C++20 facilities while preserving existing trait aliases, generated random sequences and callback argument behavior.
 - Zstandard dictionary and context handles have explicit RAII ownership; moving a populated compressor transfers its resources safely.
@@ -19,6 +21,8 @@
 - XXTEA rejects malformed buffers before reading them and releases temporary allocations on string exceptions, preserving existing ciphertext.
 
 ### Upgrade notes
+
+- **BREAKING CHANGE:** Remove `module::stop_accepting()` overrides and Net external-root helper registrations; HTTP no longer uses manager-state business admission or continuation exceptions. Move business shutdown into application procedures and rebuild the launcher, all plugins and consumers together. Resource waiting remains unlimited by default, with optional `--shutdown_timeout_ms`. See [lifecycle migration](lifecycle-closeout.md#migration-and-remaining-boundaries).
 
 - `zstd_compress` is move-only and its object layout changes. Replace copying with moving, borrowing or constructing an independent instance, and rebuild consumers/plugins together. See [compression ownership](../reference/utility.md#compression-buffers-and-concurrency).
 

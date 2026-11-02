@@ -11,7 +11,6 @@
 
 #include <arknet/arknet.hpp>
 
-#include <ark/net/external_root_callback.hpp>
 #include <ark/net/http_client_module.hpp>
 #include <ark/net/net_service_manager_module.hpp>
 #include <ark/plugin_manager.hpp>
@@ -125,23 +124,15 @@ int main(int argc, char* argv[]) {
     require(server && !network->get_intra_net_server(), "Configured Net listener selection changed");
     receiver received;
     require(server->reg_msg_callback(45000, &received, &receiver::on_message), "Net message callback rejected");
-    unsigned roots_accepted{}, roots_rejected{};
-    require(
-        ark::reg_external_root_callback(
-            *server, manager, 45001,
-            [&](const ark::net_msg* message, ark::conv_id_t session) {
-                require(std::this_thread::get_id() == received.owner && session != 0 && message->get_msg_id() == 45001,
-                    "External-root acceptance arguments or owner changed");
-                ++roots_accepted;
-            },
-            [&](const ark::net_msg* message, ark::conv_id_t session) {
-                require(std::this_thread::get_id() == received.owner && session != 0 && message->get_msg_id() == 45001,
-                    "External-root rejection arguments or owner changed");
-                // This test's local rejection policy records the refusal.
-                // It does not close the session or discard pending output.
-                ++roots_rejected;
-            }),
-        "External-root callback registration failed");
+    unsigned messages{};
+    require(server->reg_msg_callback(45001,
+                [&](const ark::net_msg* message, ark::conv_id_t session) {
+                    require(
+                        std::this_thread::get_id() == received.owner && session != 0 && message->get_msg_id() == 45001,
+                        "Ordinary message arguments or owner changed");
+                    ++messages;
+                }),
+        "Ordinary callback registration failed");
     std::weak_ptr<ark::net> endpoint = server->get_net();
     const asio::ip::tcp::endpoint listener_endpoint(asio::ip::make_address("127.0.0.1"), port);
     const auto live_probe = listener_probe(context, listener_endpoint);
@@ -174,8 +165,7 @@ int main(int argc, char* argv[]) {
         require(client.async_send(root_frame), "Owned TCP peer could not enqueue its root frame");
     };
     send_root();
-    wait_for([&] { return roots_accepted == 1; }, update);
-    require(roots_rejected == 0, "Running manager rejected external root");
+    wait_for([&] { return messages == 1; }, update);
 
     arknet::http_server peer(1024, 1024 * 1024, 1);
     std::atomic<bool> answered{};
@@ -221,14 +211,13 @@ int main(int argc, char* argv[]) {
         "HTTP DSO shutdown changed pending-request cancellation");
     peer.stop();
     require(client.is_started() && !peer_closed.load(), "Owned TCP peer must remain live across Net shutdown");
-    require(!manager.stop(++tick) && manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::draining,
+    require(!manager.stop(++tick) && manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopping,
         "Controlled readiness hold did not retain Net in draining");
     send_root();
     frame.replace(frame.size() - 4, 4, "done");
     require(client.async_send(frame), "Owned TCP peer could not enqueue an ordinary drain callback");
-    wait_for([&] { return roots_rejected == 1 && received.body == "done"; }, update);
-    require(roots_accepted == 1 && !peer_closed.load(),
-        "Root gate admitted new work or closed the ordinary callback session");
+    wait_for([&] { return messages == 2 && received.body == "done"; }, update);
+    require(messages == 2 && !peer_closed.load(), "Resource wait closed the ordinary callback session");
     hold.ready = true;
     server.reset();
     ark::test::drain_owner(manager, [&] { return ++tick; }, std::chrono::steady_clock::now() + 5s, "Net actual DSOs");
@@ -248,8 +237,8 @@ int main(int argc, char* argv[]) {
     const auto closed_probe = listener_probe(context, listener_endpoint);
     require(closed_probe == asio::error::connection_refused,
         "Net listener closure probe must be refused: " + closed_probe.message());
-    std::cout << "Net actual DSOs: interface RTTI lookup, manager-owned TCP/HTTP callbacks, explicit root admission "
-                 "and ordinary dispatch during drain, listener refusal, remote "
+    std::cout << "Net actual DSOs: interface RTTI lookup, manager-owned TCP/HTTP callbacks, ordinary message dispatch "
+                 "during resource wait, listener refusal, remote "
                  "peer closure and "
                  "normal repeated shutdown passed\n";
 }

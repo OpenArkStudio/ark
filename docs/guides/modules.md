@@ -145,7 +145,7 @@ class dependent_module final
 | `module_base<interface_type, providers...>::get_dependencies()` | Returns provider interface RTTI keys; the first parameter selects the inherited interface. Providers add metadata, not bases or owned pointers |
 | `module::get_dependencies()` | Empty by default; legacy implementations may override required keys directly. Do not mutate the registry while reading metadata |
 | Validation | Repeated keys count once; self-dependency is a cycle. Optional lookups stay nullable, not required. Only key presence is checked; raw `add_module()` callers must supply the matching interface |
-| Cache | Read once on the owner after installation. Legal idle additions/removals invalidate order; first admission-stop rebuilds when needed. Declarations stay stable while registered; polling/reentrant stop never reread them |
+| Cache | Read once on the owner after installation. Legal idle additions/removals invalidate order; shutdown rebuilds when needed. Declarations stay stable while registered; polling/reentrant stop never reread them |
 | Ordering | Stable registration-key order among ready nodes within compatible builds, not across compiler RTTI encodings |
 
 Each row lists **direct declarations**, not every runtime lookup. Missing declared providers fail before startup hooks.
@@ -159,14 +159,14 @@ Each row lists **direct declarations**, not every runtime lookup. Missing declar
 | Login, Master, Proxy, World, Dir, Router | `bus_module`, `net_service_manager_module` | Listener setup |
 | [Kernel configuration](../reference/kernel.md#required-providers) (`config_module`) | `class_meta_module` | Configuration metadata |
 | Kernel (`kernel_module`) | `class_meta_module`, `config_module`, `guid_module` | Register Utility with Kernel |
-| Map (`map_module`) | None declared | Required Map ↔ Kernel runtime cycle stays outside the ordering graph; register both and use entity APIs after startup. Map/Kernel declarations alone do not validate their mutual presence or relative admission-stop order |
+| Map (`map_module`) | None declared | Required Map ↔ Kernel runtime cycle stays outside the ordering graph; register both and use entity APIs after startup. Map/Kernel declarations alone do not validate their mutual presence or relative cleanup order |
 | Game | `kernel_module`, `bus_module`, `net_service_manager_module`, `map_module`, `class_meta_module` | Active callbacks and Player setup. Guid is required transitively through Kernel; retained Guid/Msg lookups add no direct declarations |
 
-The graph controls startup and reverse `stop_accepting()` order only. It does not change update, readiness, `pre_shut()`, `shut()` or unloading order, establish a complete callback-lifetime graph, or retire IO. See the [lifecycle route](../project/lifecycle-closeout.md) for remaining ingress migration, full reverse cleanup and startup-failure compensation boundaries.
+The graph controls provider-first startup and consumer-first resource cleanup. Once tasks and native work are ready, all `pre_shut()` calls run consumer-first while every module object remains alive. A second reverse pass runs each module’s `shut()` and destroys its owned object before its providers. Plugin uninstallation follows all modules; all dynamic libraries close last. Declarations must cover real dependencies; topology does not unregister external callbacks or stop native workers. See [lifecycle status](../project/lifecycle-closeout.md).
 
 <Aside type="caution" title="Rebuild modules and consumers together">
 
-- Metadata and `stop_accepting()` change `module`’s vtable; cached order changes manager layout. Rebuild the launcher, all official/business plugins and affected consumers with compatible headers/compiler settings; do not mix older binaries. Lookup keys stay unchanged; no cross-compiler ABI is promised.
+- **BREAKING CHANGE:** Removing `module::stop_accepting()` changes the vtable and manager layout. Remove its overrides; move announcements, ingress closure, player removal and saving into the application/operator procedure before process stop. Keep resource cancellation and unregistration in resource lifecycle hooks. Rebuild the launcher, all official/business plugins and affected consumers with compatible headers/compiler settings; do not mix older binaries. Lookup keys stay unchanged; no cross-compiler ABI is promised.
 - Update references to former `module_base` specializations for Timers and the concrete role, Game, Kernel configuration and Kernel implementations, then rebuild their consumers.
 
 </Aside>
@@ -180,9 +180,9 @@ The graph controls startup and reverse `stop_accepting()` order only. It does no
 | `check_config()` | Check configuration and dependencies | A failure stops the remaining startup work |
 | `pre_update()` | Prepare work before the application loop | Keep this stage bounded |
 | `update()` | Publish queued service and bridge completions | Only explicitly enabled registrations participate; the manager then polls its shared executor once. Its Boolean result does not stop updates |
-| `stop_accepting()` | Close external business-root admission | Consumer-first once, before task drain; false/exception retains resources |
-| `pre_shut()` | Release subscriptions and prepare resource cleanup | Entered after managed tasks finish and the active update/completion stack returns; the first `false` or exception stops shutdown |
-| `shut()` | Release module-owned resources | Entered only if every `pre_shut()` succeeds; the first `false` or exception stops remaining callbacks and prevents further unloading |
+| `ready_to_shut()` | Establish task/native-callback resource safety | False waits while owner updates continue; exceptions retain resources |
+| `pre_shut()` | Release subscriptions and prepare resource cleanup | Entered consumer-first after tasks, active stacks and readiness are safe; all objects stay alive through this pass; false/exception stops cleanup |
+| `shut()` | Release module-owned resources | Follows all successful `pre_shut()` calls; reverse `shut()`/owned-object destruction releases consumers first; failure stops cleanup |
 
 ![Successful module lifecycle](../assets/module-lifecycle.svg)
 
@@ -202,28 +202,27 @@ Installation/registration and completed stages are not rolled back. The launcher
 
 </Aside>
 
-## Stop new business roots
+## Clean up resources at process stop
 
-`bool stop_accepting()` defaults to `true` for source compatibility. Close only the external business-root gate; accepted workflows still need provider requests, completions and bridges. Do not seal a provider or call its `close()` / `stop()` merely because the operation has a similar name.
+The application or operator completes announcements, ingress closure, player removal and saving before requesting process stop. The framework does not classify business roots, provide a natural business-drain phase or promise follow-up saves/transactions during shutdown.
 
-| Stage / boundary | Behavior |
-| --- | --- |
-| `stopping_acceptance` | First `manager.stop()` seals all managed groups. Active update/poll/completion returns false and defers hooks to an outer owner-frame `stop()`. Before task waits, hooks run once in reverse cached topology, reversing registration-key ties |
-| Cold / invalidated cache | A never-started manual manager or invalidated graph rebuilds/validates once under the lifecycle guard before hooks, including same-key replacement; no stale pointers. No metadata reread during polling or after hooks begin |
-| Hard failure `failed` | First hook false/exception or invalid rebuilt graph retains `stop_accepting: <module>` and exception details; stops remaining hooks, updates and teardown, pinning accepted frames/resources. Gates stay closed; repeated stop never retries. False is not a readiness wait |
-| `draining` | After all hooks succeed, enabled updates/shared owner poll finish accepted tasks and active stacks, then all-module readiness and synchronous teardown. Task services/bridges stay open; no reordering of `pre_shut()`, `shut()`, plugin exits or library closes, and no startup-failure compensation |
-| Reentrancy | Reentrant stop returns false; recursive update/start and registry mutation are rejected before effects |
-| `timed_out` / `cleanup_timed_out` | `stop_until(timestamp, deadline)` checks after admission/readiness hooks and before cleanup. Before cleanup, expiry retains resources with updates allowed; after cleanup begins, remaining resources stay retained with updates disabled. Later `stop()` cannot bypass expiry |
+`manager.stop()` enters `stopping` and calls task-group `close()` to seal admission and request cancellation. Cancellation never forcibly destroys frames. Continue owner updates, service completion dispatch and shared-runtime polling until tasks, active stacks and native module resources are safe. `ready_to_shut()` returning false waits; an exception enters `failed`. The Utility schedule module uses resource close to discard undispatched timers and seal all further scheduling, then waits only for dispatched callbacks and capture retirement. Its standalone `scheduler::stop_accepting()` API still supports explicitly chosen natural processing.
 
-Hooks/unloading are synchronous and can block; the poll’s handler-count budget does not bound hook duration. Checks at hook/close returns cannot preempt or undo actions. Failed hooks report phase/module, retain launcher/resources and are not retried automatically. See [timeout states](tasks.md#shared-business-executor-for-modules).
+Then all `pre_shut()` calls run in reverse dependency order while every module object is alive, closing native callback sources. A second reverse pass runs each consumer’s `shut()` and owned-object destruction before its providers. Plugin uninstallation follows all modules, and every DSO closes last. Resource owners must stop external producers, unregister cross-module callbacks and wait for native workers. Undeclared dependencies and arbitrary external work are outside the graph’s proof.
 
-**Migration boundary:** the official HTTP server closes per-request admission and drains accepted response sends. Net provides the opt-in [external-root callback helper](../reference/network.md#explicit-external-root-registration), with an explicit application-owned rejection handler. Ordinary registrations and guest-room behavior are unchanged; remaining TCP/WebSocket/RUDP business entry points require individual migration. Admission at business callback entry does not pause transport-level accept. Stopping a transport or manipulating its acceptor is not a substitute for preserving accepted workflows. See [HTTP shutdown](../reference/http.md#route-requests).
+`stop_until(timestamp, deadline)` is an optional resource-cleanup safeguard; the default wait is unlimited. Timeout/failure retains remaining resources and never permits pending-frame destruction. See [tasks and timeout states](tasks.md#shared-business-executor-for-modules).
+
+Provider objects remain alive during consumer `shut()`/destruction, but their native resources may already be closed by the preceding `pre_shut()` pass. Release borrows or unregister metadata only where the interface permits; do not rely on database writes, network sends or business saving at this stage. Complete those operations while running, before process stop.
+
+Raw `add_module()` registrations remain caller-owned; the manager cannot destroy borrowed objects. Callers must preserve the same consumer/provider lifetimes; ordering does not transfer ownership.
+
+`plugin_base` is neither copyable nor movable; its registered address stays stable. Destroying a standalone plugin expires its destruction authority, and the caller must explicitly release retained modules. A module's stored task-group reference remains valid through its destructor; manager lookup is unavailable after unregistration. During normal shutdown, `uninstall()` acknowledges released registrations through existing `unregister_module()` calls; it must not access module objects. Put resource cleanup in module hooks.
 
 ## Keep callbacks within their owner's lifetime
 
 The example only holds a borrowed pointer and clears it in `pre_shut()`. A real module may also register timers, event handlers or asynchronous operations that capture `this`. Record their identifiers or cancellation handles, stop accepting new work, and unregister or cancel them according to the owning service's API before destroying the module. Cancellation alone must not be assumed to mean that every completion has already run.
 
-The manager tracks roots accepted by its task groups, but not arbitrary callbacks, native pool workers or background cleanup. Those operations must finish according to their own service contracts before their code or state can be released. Do not infer safe library replacement or a complete callback-drain guarantee from a zero managed-task count, `pre_shut()`, `shut()` or a successful `stop()` return. See [shared module tasks](tasks.md#shared-business-executor-for-modules) for the admission and drain contract. Hot-update behavior is outside this guide.
+The manager tracks roots accepted by its task groups, but not arbitrary callbacks, native pool workers or background cleanup. Those operations must finish according to their own service contracts before their code or state can be released. Do not infer safe library replacement or a complete callback-drain guarantee from a zero managed-task count, `pre_shut()`, `shut()` or a successful `stop()` return. See [shared module tasks](tasks.md#shared-business-executor-for-modules) for the cancellation and resource-cleanup contract. Hot-update behavior is outside this guide.
 
 ## Continue
 

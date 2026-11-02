@@ -39,6 +39,11 @@ class tcp_server final
     , public std::enable_shared_from_this<tcp_server>
 {
 public:
+    tcp_server(net_msg_functor message_callback, net_event_functor event_callback)
+        : net_msg_cb_(std::move(message_callback))
+        , net_event_cb_(std::move(event_callback)) {
+    }
+
     template<typename base_type>
     tcp_server(base_type* base_type_ptr, void (base_type::*handle_recv)(net_msg const*, conv_id_t),
         void (base_type::*handle_event)(net_event const*)) {

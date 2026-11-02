@@ -15,10 +15,6 @@
 
 namespace ark::guest_room {
 
-namespace detail {
-struct room_module_test_access;
-}
-
 class room_module final : public module_base<module>
 {
 public:
@@ -28,8 +24,6 @@ public:
     bool pre_shut() override;
 
 private:
-    friend struct detail::room_module_test_access;
-
     struct output
     {
         msg_id_t id;
@@ -50,7 +44,6 @@ private:
     };
 
     void on_message(const net_msg* message, conv_id_t session);
-    void on_stopping_request(const net_msg* message, conv_id_t session);
     peer* consume_message_budget(conv_id_t session);
     void on_event(const net_event* event);
     void join_room(peer& connection, const wire::join_request& body);
@@ -69,7 +62,6 @@ private:
     std::vector<std::shared_ptr<const entity_sync::scalar_delta>> removed_;
     std::uint64_t next_player_{1};
     unsigned tick_messages_{0};
-    bool stopping_{false};
 };
 
 } // namespace ark::guest_room

@@ -324,9 +324,12 @@ for (const prefix of ["", "zh/"]) {
   for (const step of source.matchAll(/<Step title="([^"]+)">/g)) {
     assert.ok(markdown.includes(`**${step[1]}**`), `${route}: lost exported shutdown step`);
   }
-  for (const token of ["stopping_acceptance", "draining", "timed_out", "cleanup_timed_out", "failed", "close_and_wait()", "reg_external_root_callback()", "manager.update()", "task_group::poll()", "17", "12", "--shutdown_timeout_ms"]) {
+  for (const token of ["running", "stopping", "timed_out", "cleanup_timed_out", "failed", "stopped", "close_and_wait()", "close()", "manager.update()", "task_group::poll()", "BREAKING CHANGE", "--shutdown_timeout_ms"]) {
     assert.ok(markdown.includes(token), `${route}: missing lifecycle constraint ${token}`);
   }
+  assert.doesNotMatch(markdown, /stopping_acceptance|`draining`/, `${route}: obsolete business shutdown state`);
+  const cleanupOrder = prefix ? "两次反向遍历" : "two reverse dependency passes";
+  assert.ok(markdown.includes(cleanupOrder), `${route}: missing resource cleanup passes`);
   for (const target of ["guides/applications", "project/startup-failure-cleanup"]) {
     assert.ok(markdown.includes(`](/ark/${prefix}${target})`), `${route}: missing procedure card destination`);
   }

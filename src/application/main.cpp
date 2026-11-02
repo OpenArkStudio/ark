@@ -378,7 +378,8 @@ int main(int argc, char* argv[]) {
         main_loop();
     }
 
-    // Normal shutdown seals business roots before draining accepted tasks.
+    // Operations complete business shutdown before stopping the process.
+    // Cancel remaining managed work and reclaim module resources safely.
     // Deadline checks retain remaining resources at synchronous hook boundaries;
     // they cannot preempt a hook or undo cleanup already performed by that call.
     const auto shutdown_started = std::chrono::steady_clock::now();

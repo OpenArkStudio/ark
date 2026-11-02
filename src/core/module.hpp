@@ -37,7 +37,7 @@ public:
     virtual ~module() = default;
 
     // Required provider registration keys. Keep these stable while registered.
-    // Startup and the first ingress-stop phase use a validated snapshot.
+    // Startup and reverse resource cleanup use a validated snapshot.
     virtual std::vector<std::string> get_dependencies() const {
         return {};
     }
@@ -62,14 +62,8 @@ public:
         return true;
     }
 
-    // Close only new external business roots. Accepted tasks must keep access
-    // to provider operations and completion delivery. Called once by the owner.
-    virtual bool stop_accepting() {
-        return true;
-    }
-
-    // Called after managed tasks and active callbacks drain, before any module
-    // tears down. Return false while native work still needs owner-side updates.
+    // Called after managed coroutine cancellation completes, before resources
+    // are released. Return false while callbacks still need owner-side updates.
     virtual bool ready_to_shut() const {
         return true;
     }
