@@ -5,7 +5,7 @@ recorded result. The [detailed service records](../reports/database-services.md)
 retain each scenario's tested revisions, date, environment, observations and limits.
 Restart and isolation have separate records linked below.
 
-Historical results retain natural-drain behavior at their recorded revisions; they do not validate later cancellation-based process shutdown. See the [current lifecycle contract](../project/lifecycle-closeout.md).
+Current DSO/failure/cancellation/TLS results and other recorded scopes keep separate source identities; direct public-module positive workflows retain their earlier natural-drain revision. See the [current lifecycle contract](../project/lifecycle-closeout.md).
 
 ## Recorded results
 
@@ -15,8 +15,8 @@ and scenario; the table does not combine them into a broader acceptance claim.
 | Capability | Recorded result | Run tool / instructions | Detailed record |
 | --- | --- | --- | --- |
 | Shutdown-candidate resource cleanup | 12 actual-service invocations passed: business completion before stop, owner task cancellation, owning results, native resource closure and TLS controls | Existing positive/cancellation/TLS native entries | [Candidate record](../reports/database-services.md#shutdown-candidate-resource-cleanup) |
-| <a id="public-modules-against-real-services"></a>Public modules: Redis and MySQL | Normal and failure modes passed: owning results, owner delivery, authentication failures, observed timeouts and explicit-request recovery | [Public service and failure runners](../../tests/database/README.md#public-modules-against-real-services) | [Service records](../reports/database-services.md#public-modules-against-real-services) |
-| <a id="real-plugin-dsos-against-real-services"></a>Real plugin DSOs: positive workflows | Both modes passed with owning results, natural drain and idempotent stop | `ark_database_public_plugin_service_tests` (`redis`, `mysql`) | [Positive DSO records](../reports/database-services.md#real-plugin-dsos-against-real-services) |
+| <a id="public-modules-against-real-services"></a>Public modules: Redis and MySQL | Direct-module positive evidence retains its earlier revision; current failure controls pass with observed timeouts and explicit recovery | [Public service and failure runners](../../tests/database/README.md#public-modules-against-real-services) | [Service records](../reports/database-services.md#public-modules-against-real-services) |
+| <a id="real-plugin-dsos-against-real-services"></a>Real plugin DSOs: positive workflows | Both modes passed with owning results, business completion before resource stop and idempotent cleanup | `ark_database_public_plugin_service_tests` (`redis`, `mysql`) | [Positive DSO records](../reports/database-services.md#real-plugin-dsos-against-real-services) |
 | <a id="mysql-dso-writes-and-two-connection-commit-visibility"></a>MySQL DSO writes | Binary inserts, own-write reads, independent commit/rollback visibility and retained results passed | `ark_database_public_plugin_service_tests mysql-transactions` | [Write record](../reports/database-services.md#mysql-dso-writes-and-two-connection-commit-visibility) |
 | <a id="real-plugin-request-cancellation"></a>Server-observed request cancellation | Both modes passed; native cancellation outcomes and finite counter observations are retained | [C++ cancellation runner](../../tests/database/cancellation.md) | [Cancellation records](../reports/database-services.md#real-plugin-request-cancellation) |
 | MySQL sent transaction-query cancellation | `cancelled`/`outcome_unknown`; transaction `unconfirmed`, `discard_requested=true`, no rollback reply; observer read `n=0` after the original session disappeared | [C++ `mysql-transaction` mode](../../tests/database/cancellation.md#mysql-transaction-operation-cancellation) | [Transaction cancellation record](../reports/database-services.md#mysql-sent-transaction-operation-cancellation) |

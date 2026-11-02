@@ -4,7 +4,7 @@
 [详细服务记录](../reports/database-services_CN.md)保留各场景的测试版本、日期、
 环境、观察结果和限制。重启与隔离级别使用下表链接的独立记录。
 
-历史结果保留各自修订的自然排空行为，不验收后续取消式资源停机。见[当前生命周期合同](../project/lifecycle-closeout_CN.md)。
+当前 DSO／故障／取消／TLS 结果与其他范围分别保留源码身份；直接调用公开模块的正常流程仍保留其自然排空修订。见[当前生命周期合同](../project/lifecycle-closeout_CN.md)。
 
 ## 已记录结果
 
@@ -14,8 +14,8 @@
 | 能力 | 已记录结果 | 运行工具／说明 | 详细记录 |
 | --- | --- | --- | --- |
 | 停机候选版本资源清理 | 12 次真实服务调用通过：业务完成后 stop、所属线程请求取消、拥有型结果、原生资源关闭与 TLS 对照 | 既有正常／取消／TLS 原生入口 | [候选版本记录](../reports/database-services_CN.md#停机候选版本资源清理) |
-| <a id="公开模块与真实服务"></a>公开模块：Redis 与 MySQL | 正常与故障模式通过：拥有型结果、所属线程恢复、认证失败、已观察到的超时及显式请求恢复 | [公开服务与故障程序](../../tests/database/README_CN.md#公开模块真实服务验收) | [服务记录](../reports/database-services_CN.md#公开模块与真实服务) |
-| <a id="真实插件动态库与真实服务"></a>真实插件 DSO 正常流程 | 两种模式均通过，覆盖拥有型结果、自然排空和重复 stop | `ark_database_public_plugin_service_tests` (`redis`, `mysql`) | [正常 DSO 记录](../reports/database-services_CN.md#真实插件动态库与真实服务) |
+| <a id="公开模块与真实服务"></a>公开模块：Redis 与 MySQL | 正常流程保留原修订；当前故障对照通过，覆盖已观察的超时与显式恢复 | [公开服务与故障程序](../../tests/database/README_CN.md#公开模块真实服务验收) | [服务记录](../reports/database-services_CN.md#公开模块与真实服务) |
+| <a id="真实插件动态库与真实服务"></a>真实插件 DSO 正常流程 | 两种模式通过：拥有型结果、业务完成后资源 stop 与可重复清理 | `ark_database_public_plugin_service_tests` (`redis`, `mysql`) | [正常 DSO 记录](../reports/database-services_CN.md#真实插件动态库与真实服务) |
 | <a id="mysql-dso-写入与两连接提交可见性"></a>MySQL DSO 写入 | 二进制插入、自身写入读取、独立连接的提交／回滚可见性及保留结果均通过 | `ark_database_public_plugin_service_tests mysql-transactions` | [写入记录](../reports/database-services_CN.md#mysql-dso-写入与两连接提交可见性) |
 | <a id="真实插件请求取消"></a>服务端观察确认的请求取消 | 两种模式均通过；保留原生取消结果及有限窗口内的计数观察 | [C++ 取消程序](../../tests/database/cancellation_CN.md) | [取消记录](../reports/database-services_CN.md#真实插件请求取消) |
 | MySQL 已发送事务查询取消 | `cancelled`／`outcome_unknown`；事务 `unconfirmed`／已请求丢弃，无回滚回复；原会话消失后观察到 `n=0` | [C++ `mysql-transaction` 模式](../../tests/database/cancellation_CN.md#mysql-事务内操作取消) | [事务取消记录](../reports/database-services_CN.md#mysql-已发送事务操作取消) |
