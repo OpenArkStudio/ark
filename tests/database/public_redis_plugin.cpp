@@ -44,12 +44,26 @@ int main() {
         return 3;
     }
     std::exception_ptr failure;
-    if (!manager.create_task_group(*database).start(request(*database), [&](auto error) { failure = error; }))
+    bool completed{};
+    if (!manager.create_task_group(*database).start(request(*database), [&](auto error) {
+            failure = error;
+            completed = true;
+        }))
     {
         return 4;
     }
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    // stop() must leave the dynamically registered module alive for the task.
+    // Complete the public coroutine while running. Process shutdown cancels
+    // residual tasks; it no longer completes business requests on their behalf.
+    while (!completed && std::chrono::steady_clock::now() < deadline)
+    {
+        manager.update(0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    if (!completed)
+    {
+        return 8;
+    }
     while (!manager.stop(0) && std::chrono::steady_clock::now() < deadline)
     {
         if (manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::failed)
