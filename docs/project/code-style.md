@@ -2,6 +2,23 @@
 
 This convention applies to the ark reorganization and subsequent development. Public interfaces, implementation names and filenames consistently use `snake_case`.
 
+## C++20 implementation
+
+CMake requires C++20 and propagates it through the core and configuration targets. The maintained runtime uses these conventions:
+
+| Area | Implementation | Compatibility |
+| --- | --- | --- |
+| Template selection | Concepts, standard type utilities and `if constexpr` | Existing exact-type traits and public aliases remain valid |
+| Receiver callbacks | `std::bind_front` | Receivers remain borrowed; parameter references, return values and priorities stay unchanged |
+| Logging | `std::source_location`, `__VA_OPT__` | Existing logging call forms remain valid |
+| Binary helpers | `std::endian`, fixed-extent `std::span` | Existing hash migration functions and XXTEA ciphertext remain unchanged |
+| Resource owners | RAII, explicit copy/move rules | See [compression ownership](../reference/utility.md#compression-buffers-and-concurrency) and [container contracts](#pod-array-storage-and-failure-contract) |
+| Database tasks | Asio awaitables on the owner-driven runtime | See [task execution](../guides/tasks.md) |
+
+Retain `std::bind` in the generic scheduler: it evaluates nested bind expressions and unwraps reference arguments. `bind_front` would change those supported behaviors. Platform/export macros, allocation override hooks and existing node metadata/vtable declarations also remain where replacement would change ABI or ownership. Vendored sources retain upstream conventions; PhysX 3 and simulation are still unsupported integrations.
+
+This scope does not implement the separately deferred Registry, hot update, nested synchronization wire format, complete teardown ordering or deployment-capacity acceptance.
+
 ## Naming
 
 | Item | Convention | Examples |
@@ -128,7 +145,7 @@ on those names. `tests/core/protobuf_messages.cpp` retains golden-byte regressio
 for binary payload compatibility.
 
 The configuration generator follows the same C++ naming convention and formats
-`meta_define.hpp` before copying it into `include/ark`. Configuration data,
+`meta_define.hpp` before copying it into `src/core/`. Configuration data,
 reflection strings and C# output retain their existing names.
 
 ## C++20 compatibility migration

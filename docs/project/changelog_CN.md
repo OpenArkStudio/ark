@@ -8,7 +8,19 @@
 
 - 应用与日志设置共用一个清单；省略日志设置时提供控制台 INFO 默认日志，可在同一文件启用文件输出、格式和具名日志。
 
+### 改进
+
+- 核心类型分派与 Kernel 回调适配采用标准 C++20 工具，保留既有类型别名、随机序列与回调参数行为。
+- Zstandard 字典与上下文使用显式 RAII 所有权；移动已初始化的压缩器可安全转移资源。
+
+### 修复
+
+- 通用 Entity 回调可被所有已注册类正常调用，后续类不再持有已移空的函数。
+- XXTEA 在读取前拒绝畸形缓冲区，并在字符串操作抛出异常时释放临时分配；密文格式不变。
+
 ### 升级说明
+
+- `zstd_compress` 禁止复制、允许移动；修改了对象布局。不要复制已拥有字典／上下文的实例，改用移动、引用或重新创建实例，并一起重建使用方与插件。见[压缩所有权](../reference/utility_CN.md#压缩缓冲区与并发)。
 
 - 必需依赖声明改变了 `config_module_impl`、`kernel_module_impl`、`game_net_module_impl` 和 Login／Proxy／Master／World／Dir／Router 具体实现的基类。更新原 `module_base` 特化引用，并同时重新编译受影响的使用方与插件；接口键和线格式保持不变。详见 [Kernel 迁移](../reference/kernel_CN.md)与[服务角色迁移](../concepts/server-architecture_CN.md)。
 
