@@ -26,8 +26,6 @@ void set_active_stage(const char* stage) noexcept {
 }
 } // namespace
 
-#define CTPL_CONSTRUCTION_TEST_STAGE(stage) set_active_stage(stage)
-
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -49,6 +47,7 @@ void set_active_stage(const char* stage) noexcept {
 #include <dirent.h>
 #endif
 
+#define CTPL_CONSTRUCTION_TEST_STAGE(stage) set_active_stage(stage)
 #include "../../src/plugins/utility/ctpl_stl.h"
 #undef CTPL_CONSTRUCTION_TEST_STAGE
 
