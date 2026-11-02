@@ -683,8 +683,8 @@ public:
     }
 
     void uninstall() override {
-        CHECK(get_plugin_manager()->find_module<lifetime_provider>() == nullptr);
-        CHECK(get_plugin_manager()->find_module<lifetime_consumer>() == nullptr);
+        CHECK(get_plugin_manager()->try_find_module<lifetime_provider>() == nullptr);
+        CHECK(get_plugin_manager()->try_find_module<lifetime_consumer>() == nullptr);
         CHECK(unregister_module<lifetime_provider>());
         CHECK_FALSE(unregister_module<lifetime_provider>());
         ++active_cleanup->plugins_uninstalled;
@@ -700,8 +700,8 @@ public:
     }
 
     void uninstall() override {
-        CHECK(get_plugin_manager()->find_module<lifetime_provider>() == nullptr);
-        CHECK(get_plugin_manager()->find_module<lifetime_consumer>() == nullptr);
+        CHECK(get_plugin_manager()->try_find_module<lifetime_provider>() == nullptr);
+        CHECK(get_plugin_manager()->try_find_module<lifetime_consumer>() == nullptr);
         CHECK(unregister_module<lifetime_consumer>());
         CHECK_FALSE(unregister_module<lifetime_consumer>());
         ++active_cleanup->plugins_uninstalled;
