@@ -56,3 +56,19 @@ add_custom_target(check-http-resource-cleanup
     COMMAND $<TARGET_FILE:ark_http_resource_cleanup_tests>
     DEPENDS ark_http_resource_cleanup_tests USES_TERMINAL VERBATIM)
 add_dependencies(check-network check-http-resource-cleanup)
+
+# Retained startup owners must never hang the test runner on failure.
+add_library(ark_http_startup_install_fixture SHARED http_client_startup_install.cpp)
+set_target_properties(ark_http_startup_install_fixture PROPERTIES PREFIX "" DEBUG_POSTFIX "_d"
+    CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
+target_link_libraries(ark_http_startup_install_fixture PRIVATE ark::config)
+target_include_directories(ark_http_startup_install_fixture PRIVATE "${PROJECT_SOURCE_DIR}/src/plugins")
+add_executable(ark_http_client_startup_cleanup_tests http_client_startup_cleanup.cpp)
+target_link_libraries(ark_http_client_startup_cleanup_tests PRIVATE ark::config)
+target_include_directories(ark_http_client_startup_cleanup_tests PRIVATE "${PROJECT_SOURCE_DIR}/src/plugins")
+add_custom_target(check-http-client-startup-cleanup
+    COMMAND ${CMAKE_COMMAND} "-DPROGRAM=$<TARGET_FILE:ark_http_client_startup_cleanup_tests>"
+        "-DFIXTURE_DIR=$<TARGET_FILE_DIR:ark_http_startup_install_fixture>"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/http_client_startup_cleanup.cmake"
+    DEPENDS ark_http_client_startup_cleanup_tests ark_http_startup_install_fixture USES_TERMINAL VERBATIM)
+add_dependencies(check-network check-http-client-startup-cleanup)

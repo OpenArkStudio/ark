@@ -78,6 +78,8 @@ API 目标本身不会构建或加载运行时动态库。
 
 `check-network` 与 `check-net-http-drain` 使用实际实现／受控回环或真实 DSO 检查资源完成与清理；执行结果须对应实际修订，不代表外部 Etcd／Consul 或任意工作流验收。DSO 创建的 future 须在卸载前消费，只有拥有型结果值可继续保留。
 
+Net 安装时，在请求池启动前登记独立持有 HTTP 状态的 capsule。失败启动只回收没有已受理请求、排队结果和活跃回调帧的空闲池，否则保留完整状态并返回不安全。候选模块展开把原生关闭交给该所有者；启动成功后解除登记，保留正常析构行为。不增加普通更新、回调取消或启动重试。见[启动失败清理](../project/startup-failure-cleanup_CN.md#空闲-net-http-客户端清理)与 `check-http-client-startup-cleanup`。
+
 ## 服务端与客户端服务示例
 
 `msg_header::max_body_size() const` 定义本地协议配置允许的正文长度上限，

@@ -8,6 +8,6 @@
 // Plugin-private construction; not part of the public header/install mapping.
 namespace ark::detail {
 
-std::unique_ptr<http_client_module> make_http_client_module();
+std::unique_ptr<http_client_module> make_http_client_module(plugin_manager* manager = nullptr);
 
 } // namespace ark::detail

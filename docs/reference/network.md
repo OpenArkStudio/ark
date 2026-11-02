@@ -94,6 +94,8 @@ A timeout does not make callback receivers safe to destroy; retain the module, r
 
 `check-network` and `check-net-http-drain` use actual implementations with controlled loopback or real DSOs for resource completion/cleanup. Results must identify their tested revision; these targets do not establish external Etcd/Consul or arbitrary workflow acceptance. Consume DSO-created futures before unload; only owning result values may remain.
 
+During Net installation, an independently owned HTTP state capsule is enrolled before the request pool starts. Failed-start cleanup joins only an idle pool with no accepted requests, queued results or active callback frames; otherwise it retains the complete state as unsafe. Candidate unwinding defers native close to that owner, while successful-start disarm preserves normal destruction. No ordinary update, callback cancellation or startup retry is introduced. See [startup-failure cleanup](../project/startup-failure-cleanup.md#quiet-net-http-client-cleanup) and `check-http-client-startup-cleanup`.
+
 ## Server and client service examples
 
 `msg_header::max_body_size() const` defines the locally configured protocol's

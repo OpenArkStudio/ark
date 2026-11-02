@@ -35,7 +35,7 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void net_plugin::install() {
-    if (!register_module(detail::make_http_client_module(), module_update::enabled))
+    if (!register_module(detail::make_http_client_module(get_plugin_manager()), module_update::enabled))
     {
         throw std::runtime_error("net HTTP client module registration rejected");
     }
