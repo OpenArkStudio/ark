@@ -34,8 +34,37 @@ net_client_service_impl::net_client_service_impl(plugin_manager* p)
     consistent_hashmap_.set_vnode_count(default_weight);
 }
 
+net_client_service_impl::~net_client_service_impl() {
+    shutdown();
+}
+
+void net_client_service_impl::shutdown() {
+    closed_ = true;
+    callback_lifetime_.reset();
+    for (const auto& [bus, connection] : real_connections_)
+    {
+        if (connection->net_client)
+        {
+            connection->net_client->shutdown();
+            connection->net_client.reset();
+        }
+    }
+    real_connections_.clear();
+    tmp_connections_.clear();
+    net_msg_callbacks_.clear();
+    net_msg_forward_callbacks_.clear();
+    net_event_callbacks_.clear();
+    actor_bus_map_.clear();
+    account_bus_map_.clear();
+    consistent_hashmap_ = {};
+}
+
 bool net_client_service_impl::start_client(
     std::shared_ptr<const msg_header> head, bus_id_t target_bus_id, const endpoint& endpoint) {
+    if (closed_)
+    {
+        return false;
+    }
     connection_data data;
     data.head = head;
     data.server_bus_id = target_bus_id;
@@ -46,6 +75,10 @@ bool net_client_service_impl::start_client(
 }
 
 void net_client_service_impl::update() {
+    if (closed_)
+    {
+        return;
+    }
     process_add_connection();
     process_update();
 }
@@ -133,15 +166,26 @@ void net_client_service_impl::process_update() {
 }
 
 std::shared_ptr<net> net_client_service_impl::create_net(const proto_type proto) {
+    const std::weak_ptr<void> lifetime = callback_lifetime_;
+    const net_msg_functor message_callback = [this, lifetime](const net_msg* message, conv_id_t session) {
+        if (const auto alive = lifetime.lock())
+        {
+            on_net_msg(message, session);
+        }
+    };
+    const net_event_functor event_callback = [this, lifetime](const net_event* event) {
+        if (const auto alive = lifetime.lock())
+        {
+            on_net_event(event);
+        }
+    };
     if (proto == proto_type::tcp)
     {
-        return std::make_shared<tcp_client>(
-            this, &net_client_service_impl::on_net_msg, &net_client_service_impl::on_net_event);
+        return std::make_shared<tcp_client>(message_callback, event_callback);
     }
     else if (proto == proto_type::udp)
     {
-        return std::make_shared<rudp_client>(
-            this, &net_client_service_impl::on_net_msg, &net_client_service_impl::on_net_event);
+        return std::make_shared<rudp_client>(message_callback, event_callback);
     }
     else if (proto == proto_type::ws)
     {

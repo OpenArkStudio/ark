@@ -21,7 +21,7 @@ namespace {
 
 using namespace std::chrono_literals;
 
-std::uint16_t admission_port() {
+std::uint16_t resource_port() {
     asio::io_context context;
     asio::ip::tcp::acceptor acceptor(context, {asio::ip::make_address("127.0.0.1"), 0});
     return acceptor.local_endpoint().port();
@@ -51,7 +51,7 @@ private:
     bool released_ = false;
 };
 
-bool wait_for_admission_drain(const ark::http_server_module& server) {
+bool wait_for_resource_readiness(const ark::http_server_module& server) {
     const auto deadline = std::chrono::steady_clock::now() + 5s;
     while (!server.ready_to_shut() && std::chrono::steady_clock::now() < deadline)
     {
@@ -62,7 +62,7 @@ bool wait_for_admission_drain(const ark::http_server_module& server) {
 
 } // namespace
 
-TEST_CASE("HTTP stop admission drains an accepted route before manager cleanup") {
+TEST_CASE("HTTP resource retirement seals native route dispatch and waits for active callbacks") {
     std::promise<void> entered;
     auto entered_future = entered.get_future();
     std::promise<void> release;
@@ -78,26 +78,23 @@ TEST_CASE("HTTP stop admission drains an accepted route before manager cleanup")
         }
         response.body() = "accepted";
     });
-    const auto port = admission_port();
+    const auto port = resource_port();
     REQUIRE(server->start_server("127.0.0.1", port, 3));
     release_route route_guard(release);
     auto client = ark::detail::make_http_client_module();
     ark::plugin_manager manager;
-    REQUIRE(manager.add_module("http-admission", server.get()));
+    REQUIRE(manager.add_module("http-resource", server.get()));
     auto accepted = client->get("127.0.0.1", port, "/accepted");
     REQUIRE(entered_future.wait_for(5s) == std::future_status::ready);
 
     CHECK_FALSE(manager.stop(0));
     CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::draining);
     CHECK_FALSE(server->ready_to_shut());
-    CHECK(server->stop_accepting());
-    auto rejected = client->get("127.0.0.1", port, "/accepted");
-    REQUIRE(rejected.wait_for(5s) == std::future_status::ready);
-    const auto rejection = rejected.get();
-    CHECK_FALSE(rejection.first);
-    CHECK(rejection.second == "Service Unavailable");
+    auto ordinary = client->get("127.0.0.1", port, "/accepted");
+    REQUIRE(ordinary.wait_for(5s) == std::future_status::ready);
+    CHECK_FALSE(ordinary.get().first);
     CHECK(routed.load() == 1);
-    CHECK_FALSE(server->start_server("127.0.0.1", admission_port(), 1));
+    CHECK_FALSE(server->start_server("127.0.0.1", resource_port(), 1));
 
     route_guard.release();
     REQUIRE(accepted.wait_for(5s) == std::future_status::ready);
@@ -120,7 +117,7 @@ TEST_CASE("HTTP stop admission drains an accepted route before manager cleanup")
     CHECK(replacement->pre_shut());
 }
 
-TEST_CASE("HTTP admission drain releases a route after its peer disconnects") {
+TEST_CASE("HTTP resource readiness waits for a route after its peer disconnects") {
     std::promise<void> entered;
     auto entered_future = entered.get_future();
     std::promise<void> release;
@@ -132,11 +129,11 @@ TEST_CASE("HTTP admission drain releases a route after its peer disconnects") {
         route_timed_out = released.wait_for(5s) != std::future_status::ready;
         response.body() = "response after peer disconnect";
     });
-    const auto port = admission_port();
+    const auto port = resource_port();
     REQUIRE(server->start_server("127.0.0.1", port, 1));
     release_route route_guard(release);
     ark::plugin_manager manager;
-    REQUIRE(manager.add_module("http-admission", server.get()));
+    REQUIRE(manager.add_module("http-resource", server.get()));
     asio::io_context context;
     asio::ip::tcp::socket socket(context);
     socket.connect({asio::ip::make_address("127.0.0.1"), port});
@@ -160,7 +157,7 @@ TEST_CASE("HTTP admission drain releases a route after its peer disconnects") {
     CHECK(manager.stop(0));
 }
 
-TEST_CASE("HTTP server manager timeout retains its listener and admitted route") {
+TEST_CASE("HTTP server manager timeout retains its listener and active route") {
     std::promise<void> entered;
     auto entered_future = entered.get_future();
     std::promise<void> release;
@@ -179,12 +176,12 @@ TEST_CASE("HTTP server manager timeout retains its listener and admitted route")
         response.body() = std::to_string(*lifetime);
     });
     lifetime.reset();
-    const auto port = admission_port();
+    const auto port = resource_port();
     REQUIRE(server->start_server("127.0.0.1", port, 3));
     release_route route_guard(release);
     auto client = ark::detail::make_http_client_module();
     ark::plugin_manager manager;
-    REQUIRE(manager.add_module("http-admission", server.get()));
+    REQUIRE(manager.add_module("http-resource", server.get()));
     auto accepted = client->get("127.0.0.1", port, "/timeout");
     REQUIRE(entered_future.wait_for(5s) == std::future_status::ready);
     CHECK_FALSE(manager.stop(0));
@@ -194,34 +191,34 @@ TEST_CASE("HTTP server manager timeout retains its listener and admitted route")
     CHECK_FALSE(server->ready_to_shut());
     CHECK_FALSE(retained.expired());
 
-    auto rejected = client->get("127.0.0.1", port, "/timeout");
-    REQUIRE(rejected.wait_for(5s) == std::future_status::ready);
-    CHECK(rejected.get() == std::pair<bool, std::string>{false, "Service Unavailable"});
+    auto ordinary = client->get("127.0.0.1", port, "/timeout");
+    REQUIRE(ordinary.wait_for(5s) == std::future_status::ready);
+    CHECK_FALSE(ordinary.get().first);
     CHECK(routed.load() == 1);
     route_guard.release();
     REQUIRE(accepted.wait_for(5s) == std::future_status::ready);
     CHECK(accepted.get() == std::pair<bool, std::string>{true, "42"});
-    REQUIRE(wait_for_admission_drain(*server));
+    REQUIRE(wait_for_resource_readiness(*server));
     CHECK_FALSE(route_timed_out.load());
     CHECK_FALSE(manager.stop(2));
     CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::timed_out);
     CHECK_FALSE(retained.expired());
     auto after_drain = client->get("127.0.0.1", port, "/timeout");
     REQUIRE(after_drain.wait_for(5s) == std::future_status::ready);
-    CHECK(after_drain.get() == std::pair<bool, std::string>{false, "Service Unavailable"});
+    CHECK_FALSE(after_drain.get().first);
     CHECK(routed.load() == 1);
 
     // The terminal manager cannot clean up; the test owner retires the drained server explicitly.
     CHECK(server->pre_shut());
-    server.reset();
     CHECK(retained.expired());
+    server.reset();
 }
 
-TEST_CASE("HTTP server manager readiness failure retains its listener and admitted route") {
+TEST_CASE("HTTP server manager readiness failure retains its listener and active route") {
     struct failed_readiness : ark::module
     {
         bool ready_to_shut() const override {
-            throw std::runtime_error("HTTP admission readiness failure");
+            throw std::runtime_error("HTTP resource readiness failure");
         }
     } failure;
 
@@ -243,12 +240,12 @@ TEST_CASE("HTTP server manager readiness failure retains its listener and admitt
         response.body() = std::to_string(*lifetime);
     });
     lifetime.reset();
-    const auto port = admission_port();
+    const auto port = resource_port();
     REQUIRE(server->start_server("127.0.0.1", port, 3));
     release_route route_guard(release);
     auto client = ark::detail::make_http_client_module();
     ark::plugin_manager manager;
-    REQUIRE(manager.add_module("http-admission", server.get()));
+    REQUIRE(manager.add_module("http-resource", server.get()));
     REQUIRE(manager.add_module("failure", &failure));
     auto accepted = client->get("127.0.0.1", port, "/failure");
     REQUIRE(entered_future.wait_for(5s) == std::future_status::ready);
@@ -258,25 +255,25 @@ TEST_CASE("HTTP server manager readiness failure retains its listener and admitt
     CHECK_FALSE(server->ready_to_shut());
     CHECK_FALSE(retained.expired());
 
-    auto rejected = client->get("127.0.0.1", port, "/failure");
-    REQUIRE(rejected.wait_for(5s) == std::future_status::ready);
-    CHECK(rejected.get() == std::pair<bool, std::string>{false, "Service Unavailable"});
+    auto ordinary = client->get("127.0.0.1", port, "/failure");
+    REQUIRE(ordinary.wait_for(5s) == std::future_status::ready);
+    CHECK_FALSE(ordinary.get().first);
     CHECK(routed.load() == 1);
     route_guard.release();
     REQUIRE(accepted.wait_for(5s) == std::future_status::ready);
     CHECK(accepted.get() == std::pair<bool, std::string>{true, "42"});
-    REQUIRE(wait_for_admission_drain(*server));
+    REQUIRE(wait_for_resource_readiness(*server));
     CHECK_FALSE(route_timed_out.load());
     CHECK_FALSE(manager.stop(1));
     CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::failed);
     CHECK_FALSE(retained.expired());
     auto after_drain = client->get("127.0.0.1", port, "/failure");
     REQUIRE(after_drain.wait_for(5s) == std::future_status::ready);
-    CHECK(after_drain.get() == std::pair<bool, std::string>{false, "Service Unavailable"});
+    CHECK_FALSE(after_drain.get().first);
     CHECK(routed.load() == 1);
 
     // The terminal manager cannot clean up; the test owner retires the drained server explicitly.
     CHECK(server->pre_shut());
-    server.reset();
     CHECK(retained.expired());
+    server.reset();
 }

@@ -83,14 +83,14 @@ protected:
 
 private:
     // bus_id -> net_server_service - support multi-server in the same app
-    using server_service = shared_object_map<bus_id_t, net_server_service>;
+    using server_service = shared_object_map<bus_id_t, net_server_service_impl>;
     server_service server_services_;
 
     server_service intra_services_;
 
     // target_app_type -> net_client_service
     // the NetClientService have target multi-client info.
-    shared_object_map<app_type, net_client_service> client_services_;
+    shared_object_map<app_type, net_client_service_impl> client_services_;
 
     // All net relations, for finding AFINet
     // <self_bus, client_bus> -> AFINet
@@ -266,32 +266,34 @@ bool net_service_manager_module_impl::update() {
 }
 
 bool net_service_manager_module_impl::pre_shut() {
-    // All module objects are still alive in the explicit pre-shutdown phase.
-    // A provider may already have cleared its wheel; a missing ID is retired.
+    // Retire callbacks while their consumers and resource providers are still alive.
     const auto timer_id = std::exchange(health_timer_id_, 0);
     if (timer_id != 0 && timer_module_)
     {
         timer_module_->remove_timer(timer_id);
     }
+    for (const auto& [bus, service] : server_services_)
+    {
+        service->shutdown();
+    }
+    for (const auto& [bus, service] : intra_services_)
+    {
+        service->shutdown();
+    }
+    for (const auto& [type, service] : client_services_)
+    {
+        service->shutdown();
+    }
+    net_bus_relations_.clear();
+    bus_session_list_.clear();
+    server_services_.clear();
+    intra_services_.clear();
+    client_services_.clear();
     return true;
 }
 
 bool net_service_manager_module_impl::shut() {
-    pre_shut();
-    for (auto iter : server_services_)
-    {
-        auto server_data_ptr = iter.second;
-
-        //        // deregister from consul
-        //        DeregisterFromConsul(iter.first);
-    }
-
-    for (auto iter : client_services_)
-    {
-        auto data_ptr = iter.second;
-    }
-
-    return true;
+    return pre_shut();
 }
 
 bool net_service_manager_module_impl::create_server(
@@ -312,7 +314,7 @@ bool net_service_manager_module_impl::create_server(
             auto server_interface_ptr = static_pointer_cast<net_server_service>(server_ptr);
             server_interface_ptr->reg_reg_server_call_back(
                 this, &net_service_manager_module_impl::on_reg_server_call_back);
-            server_service.insert(bus_module_->get_self_bus_id(), server_interface_ptr);
+            server_service.insert(bus_module_->get_self_bus_id(), server_ptr);
 
             ARK_LOG_INFO("Start net server successful, url = {}", ep.to_string());
             return true;

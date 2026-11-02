@@ -6,7 +6,6 @@
 
 #include "ark/kernel/data_list_impl.hpp"
 #include "ark/kernel/map_module.hpp"
-#include "ark/net/external_root_callback.hpp"
 #include "ark/net/net_service_manager_module.hpp"
 #include "guest_room_module.hpp"
 
@@ -77,17 +76,7 @@ bool room_module::pre_update() {
     {
         return false;
     }
-    for (const auto id : {join, move, action})
-    {
-        if (!reg_external_root_callback(
-                *server_, *get_plugin_manager(), id,
-                [this](const net_msg* message, conv_id_t session) { on_message(message, session); },
-                [this](const net_msg* message, conv_id_t session) { on_stopping_request(message, session); }))
-        {
-            return false;
-        }
-    }
-    for (const auto id : {ping, unsupported})
+    for (const auto id : {join, move, action, ping, unsupported})
     {
         if (!server_->reg_msg_callback(id, this, &room_module::on_message))
         {
@@ -100,7 +89,7 @@ bool room_module::pre_update() {
 }
 
 void room_module::enqueue(peer& connection, msg_id_t id, const google::protobuf::MessageLite& body) {
-    if (connection.closing || stopping_)
+    if (connection.closing)
     {
         return;
     }
@@ -329,7 +318,7 @@ void room_module::act_player(peer& connection, const wire::action_request& body)
 room_module::peer* room_module::consume_message_budget(conv_id_t session) {
     owner_thread();
     auto found = peers_.find(session);
-    if (stopping_ || found == peers_.end() || found->second.closing)
+    if (found == peers_.end() || found->second.closing)
     {
         return nullptr;
     }
@@ -346,30 +335,6 @@ room_module::peer* room_module::consume_message_budget(conv_id_t session) {
         return nullptr;
     }
     return &connection;
-}
-
-void room_module::on_stopping_request(const net_msg* message, conv_id_t session) {
-    auto* connection = consume_message_budget(session);
-    if (connection == nullptr)
-    {
-        return;
-    }
-    wire::error_response response;
-    response.set_code("server_stopping");
-    response.set_message("The room is stopping; start a new session after reconnecting");
-    if (message->get_msg_id() == action)
-    {
-        wire::action_request body;
-        if (!body.ParseFromArray(message->get_msg_data(), static_cast<int>(message->get_msg_length())))
-        {
-            connection->closing = true;
-            return;
-        }
-        // Correlate the existing client's pending action without validating or
-        // applying business state. The normal work/output budgets still apply.
-        response.set_action_sequence(body.sequence());
-    }
-    enqueue(*connection, error, response);
 }
 
 void room_module::on_message(const net_msg* message, conv_id_t session) {
@@ -444,10 +409,6 @@ void room_module::on_message(const net_msg* message, conv_id_t session) {
 
 void room_module::on_event(const net_event* event) {
     owner_thread();
-    if (stopping_)
-    {
-        return;
-    }
     if (event->get_type() == net_event_type::connect)
     {
         peers_.try_emplace(event->get_id());
@@ -519,7 +480,6 @@ bool room_module::update() {
 
 bool room_module::pre_shut() {
     owner_thread();
-    stopping_ = true;
     for (auto& [session, connection] : peers_)
     {
         if (connection.player != nullptr)

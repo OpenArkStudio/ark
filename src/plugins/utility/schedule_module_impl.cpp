@@ -29,7 +29,6 @@ class schedule_module_impl final : public module_base<schedule_module>
 {
 public:
     bool init() override;
-    bool stop_accepting() override;
     bool ready_to_shut() const override;
     bool pre_shut() override;
 
@@ -40,37 +39,18 @@ protected:
     void add_cron_schedule(const std::string& cron_expression, scheduler_functor&& cb) override;
 
 private:
-    bool is_continuation() const;
-
-    const std::thread::id owner_ = std::this_thread::get_id();
     std::shared_ptr<scheduler> scheduler_{nullptr};
-    // Manager readiness runs after accepted tasks have drained. Until then,
-    // leave the dispatcher available for their one-shot continuations.
-    mutable std::unique_ptr<scheduler::operation> accepted_tasks_;
 };
 
 bool schedule_module_impl::init() {
     scheduler_ = std::make_shared<scheduler>(16);
-    accepted_tasks_ = std::make_unique<scheduler::operation>(*scheduler_);
-    return true;
-}
-
-bool schedule_module_impl::stop_accepting() {
-    if (scheduler_)
-    {
-        scheduler_->stop_accepting();
-    }
     return true;
 }
 
 bool schedule_module_impl::ready_to_shut() const {
-    if (scheduler_ && scheduler_->stopping_ && std::this_thread::get_id() == owner_)
+    if (scheduler_)
     {
-        auto* manager = get_plugin_manager();
-        if (!manager || (!manager->is_polling_tasks() && manager->pending_tasks() == 0))
-        {
-            accepted_tasks_.reset();
-        }
+        scheduler_->stop_accepting();
     }
     return !scheduler_ || scheduler_->ready_to_shut();
 }
@@ -89,18 +69,7 @@ void schedule_module_impl::add_interval_schedule(
 }
 
 void schedule_module_impl::add_at_schedule(const std::string& target_time, scheduler_functor&& cb) {
-    if (is_continuation())
-    {
-        scheduler::callback_context context(*scheduler_);
-        scheduler_->at(target_time, std::move(cb));
-        return;
-    }
     scheduler_->at(target_time, std::move(cb));
-}
-
-bool schedule_module_impl::is_continuation() const {
-    auto* manager = get_plugin_manager();
-    return manager && std::this_thread::get_id() == owner_ && manager->is_polling_tasks();
 }
 
 namespace detail {

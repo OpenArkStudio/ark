@@ -40,6 +40,9 @@ public:
 
     net_client_service_impl(plugin_manager* p);
 
+    ~net_client_service_impl() override;
+    void shutdown();
+
     bool start_client(
         std::shared_ptr<const msg_header> head, bus_id_t target_bus_id, const endpoint& endpoint) override;
     void update() override;
@@ -100,6 +103,9 @@ protected:
     void send_report(std::shared_ptr<connection_data> server_data_ptr);
 
 private:
+    // Owner-thread transport dispatch must retire before the service object.
+    std::shared_ptr<int> callback_lifetime_ = std::make_shared<int>();
+    bool closed_ = false;
     plugin_manager* plugin_manager_;
     net_service_manager_module* net_service_manager_;
     bus_module* bus_module_;

@@ -30,18 +30,49 @@ net_server_service_impl::net_server_service_impl(plugin_manager* p)
     msg_module_ = plugin_manager_->find_module<msg_module>();
 }
 
-//AFCNetServerService::~AFCNetServerService()
-//{
-//    ARK_DELETE(m_pNet); // shutdown will be called in destructor
-//}
+net_server_service_impl::~net_server_service_impl() {
+    shutdown();
+}
+
+void net_server_service_impl::shutdown() {
+    closed_ = true;
+    callback_lifetime_.reset();
+    if (network_)
+    {
+        network_->shutdown();
+        network_.reset();
+    }
+    reg_server_call_back_ = {};
+    net_msg_callbacks_.clear();
+    net_forward_msg_callbacks_.clear();
+    net_event_callbacks_.clear();
+    connection_list_.clear();
+    client_connection_list_.clear();
+}
 
 bool net_server_service_impl::start(std::shared_ptr<const msg_header> head, bus_id_t bus_id, const endpoint& ep,
     uint8_t thread_count, uint32_t max_connection, const size_t silent_timeout) {
+    if (closed_)
+    {
+        return false;
+    }
+    const std::weak_ptr<void> lifetime = callback_lifetime_;
+    const net_msg_functor message_callback = [this, lifetime](const net_msg* message, conv_id_t session) {
+        if (const auto alive = lifetime.lock())
+        {
+            on_net_msg(message, session);
+        }
+    };
+    const net_event_functor event_callback = [this, lifetime](const net_event* event) {
+        if (const auto alive = lifetime.lock())
+        {
+            on_net_event(event);
+        }
+    };
     bool ret = false;
     if (ep.proto() == proto_type::tcp)
     {
-        network_ = std::make_shared<tcp_server>(
-            this, &net_server_service_impl::on_net_msg, &net_server_service_impl::on_net_event);
+        network_ = std::make_shared<tcp_server>(message_callback, event_callback);
         ret = network_->start_server(
             head, bus_id, ep.get_ip(), ep.get_port(), thread_count, max_connection, silent_timeout);
 
@@ -50,8 +81,7 @@ bool net_server_service_impl::start(std::shared_ptr<const msg_header> head, bus_
     }
     else if (ep.proto() == proto_type::udp)
     {
-        network_ = std::make_shared<rudp_server>(
-            this, &net_server_service_impl::on_net_msg, &net_server_service_impl::on_net_event);
+        network_ = std::make_shared<rudp_server>(message_callback, event_callback);
         ret = network_->start_server(
             head, bus_id, ep.get_ip(), ep.get_port(), thread_count, max_connection, silent_timeout);
     }
@@ -69,6 +99,10 @@ bool net_server_service_impl::start(std::shared_ptr<const msg_header> head, bus_
 }
 
 bool net_server_service_impl::update() {
+    if (closed_)
+    {
+        return true;
+    }
     ARK_ASSERT_RET_VAL(network_ != nullptr, false);
     network_->update();
 
