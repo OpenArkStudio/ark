@@ -513,7 +513,8 @@ bool kernel_module_impl::add_common_class_event(class_event_functor&& cb, const 
             continue;
         }
 
-        add_class_call_back(iter.first, std::move(cb), prio);
+        auto callback = cb;
+        add_class_call_back(iter.first, std::move(callback), prio);
     }
 
     return true;
