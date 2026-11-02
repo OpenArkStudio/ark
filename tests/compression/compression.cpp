@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <map>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -26,7 +27,10 @@ constexpr const char* prefix = "existing:";
 
 static_assert(!std::is_copy_constructible_v<ark::zstd_compress>);
 static_assert(!std::is_copy_assignable_v<ark::zstd_compress>);
-static_assert(std::is_nothrow_move_constructible_v<ark::zstd_compress>);
+static_assert(std::is_move_constructible_v<ark::zstd_compress>);
+// The fixed allocator/comparator match the dictionary map; some STLs allocate on move construction.
+static_assert(std::is_nothrow_move_constructible_v<ark::zstd_compress> ==
+              std::is_nothrow_move_constructible_v<std::map<std::uint16_t, int>>);
 static_assert(std::is_nothrow_move_assignable_v<ark::zstd_compress>);
 
 std::string payload(std::size_t size, uint32_t seed = 1) {

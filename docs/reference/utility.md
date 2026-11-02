@@ -122,6 +122,8 @@ Normal zlib/LZ4/Zstandard calls share no writable output. Dictionary calls still
 
 **Breaking source and binary change:** `zstd_compress` is move-only and its class layout changes. Rebuild all code that constructs, embeds or passes it across binary boundaries. Replace copies with `std::move` when transferring ownership, or construct and initialize a separate instance when independent state is needed. Move construction and assignment transfer populated dictionaries and cached contexts; assignment releases the destination's previous resources. Moved-from instances can be initialized again. Compression formats, append behavior and size limits stay unchanged.
 
+Move construction inherits the dictionary map's exception guarantee. On standard libraries that allocate during map moves, including Microsoft STL, it can throw `std::bad_alloc`; a failed allocation leaves the source dictionaries and contexts usable. Move assignment remains `noexcept` with the fixed standard allocator and comparator.
+
 Enable `ARK_BUILD_COMPRESSION_TESTS=ON` and the vcpkg `compression-tests` feature
 to run `cmake --build <build-dir> --target check-compression`. The target is also
 part of `check-core` when enabled; Applications CI enables it explicitly. It
@@ -130,7 +132,9 @@ behavior and parallel round trips with separate dictionary instances. Ownership
 tests check move-only type traits, populated moves, duplicate keys, resource
 creation failures and dictionary insertion exceptions with balanced native-handle
 and file-buffer counts. Failure injection runs in a separate executable using
-the existing release-mode false-return paths. LZ4 remains
+the existing release-mode false-return paths. The move-construction allocation
+failure case runs only when the codec's move-construction trait permits throwing;
+it is skipped on libraries with nonthrowing map moves. LZ4 remains
 a direct core helper; the Utility module still selects zlib or Zstandard.
 
 ## Source and build-tree SDK migration

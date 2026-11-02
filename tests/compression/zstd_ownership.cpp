@@ -11,6 +11,7 @@
 #include <string>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -331,4 +332,37 @@ TEST_CASE("Zstandard populated moves release overwritten owners once and retain 
         CHECK(output == "unchanged");
     }
     check_empty_resources();
+}
+
+TEST_CASE("Zstandard fallible move construction preserves the source after allocation failure" *
+          doctest::skip(std::is_nothrow_move_constructible_v<ark::zstd_compress>)) {
+    if constexpr (!std::is_nothrow_move_constructible_v<ark::zstd_compress>)
+    {
+        dictionary_file dictionary(1);
+        const auto input = dictionary.bytes.substr(100, 2048);
+        check_empty_resources();
+        {
+            ark::zstd_compress source;
+            REQUIRE(source.init_z_std_dict(1, dictionary.path.string(), 1));
+            const auto expected = frame(source, input);
+            const auto initial = live;
+            bool caught{};
+            // Arm immediately before construction; doctest assertion setup may allocate too.
+            fail_next_new = true;
+            try
+            { ark::zstd_compress moved(std::move(source)); }
+            catch (const std::bad_alloc&)
+            { caught = true; }
+            const bool consumed = !std::exchange(fail_next_new, false);
+            CHECK(consumed);
+            CHECK(caught);
+            CHECK(live == initial);
+            CHECK(frame(source, input) == expected);
+
+            ark::zstd_compress moved(std::move(source));
+            CHECK(live == initial);
+            CHECK(frame(moved, input) == expected);
+        }
+        check_empty_resources();
+    }
 }

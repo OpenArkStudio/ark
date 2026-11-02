@@ -87,9 +87,10 @@ public:
     ~zstd_compress() = default;
     zstd_compress(const zstd_compress&) = delete;
     zstd_compress& operator=(const zstd_compress&) = delete;
-    zstd_compress(zstd_compress&&) noexcept = default;
+    zstd_compress(zstd_compress&&) = default;
 
     zstd_compress& operator=(zstd_compress&& other) noexcept {
+        static_assert(noexcept(dictionaries_ = std::move(other.dictionaries_)));
         if (this != &other)
         {
             compress_ctx_ = std::move(other.compress_ctx_);
