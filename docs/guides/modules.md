@@ -216,6 +216,8 @@ Provider objects remain alive during consumer `shut()`/destruction, but their na
 
 Raw `add_module()` registrations remain caller-owned; the manager cannot destroy borrowed objects. Callers must preserve the same consumer/provider lifetimes; ordering does not transfer ownership.
 
+`plugin_base` is neither copyable nor movable; its registered address stays stable. Destroying a standalone plugin expires its destruction authority, and the caller must explicitly release retained modules. A module's stored task-group reference remains valid through its destructor; manager lookup is unavailable after unregistration. During normal shutdown, `uninstall()` acknowledges released registrations through existing `unregister_module()` calls; it must not access module objects. Put resource cleanup in module hooks.
+
 ## Keep callbacks within their owner's lifetime
 
 The example only holds a borrowed pointer and clears it in `pre_shut()`. A real module may also register timers, event handlers or asynchronous operations that capture `this`. Record their identifiers or cancellation handles, stop accepting new work, and unregister or cancel them according to the owning service's API before destroying the module. Cancellation alone must not be assumed to mean that every completion has already run.

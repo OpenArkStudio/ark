@@ -56,7 +56,6 @@ void net_client_service_impl::shutdown() {
     net_event_callbacks_.clear();
     actor_bus_map_.clear();
     account_bus_map_.clear();
-    consistent_hashmap_ = {};
 }
 
 bool net_client_service_impl::start_client(
