@@ -253,6 +253,35 @@ void arm(std::size_t index) {
     armed = true;
 }
 
+int settled_process_threads() {
+    auto count = process_threads();
+    if (count < 0)
+    {
+        return count;
+    }
+    auto stable_since = std::chrono::steady_clock::now();
+    const auto deadline = stable_since + std::chrono::seconds(2);
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        const auto current = process_threads();
+        if (current < 0)
+        {
+            return current;
+        }
+        if (current != count)
+        {
+            count = current;
+            stable_since = std::chrono::steady_clock::now();
+        }
+        else if (std::chrono::steady_clock::now() - stable_since >= std::chrono::milliseconds(100))
+        {
+            return count;
+        }
+        std::this_thread::yield();
+    }
+    return -1;
+}
+
 bool workers_retired() {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
     while (process_threads() != baseline_threads)
@@ -267,7 +296,11 @@ bool workers_retired() {
 }
 
 int constructor_failure(std::size_t index) {
-    baseline_threads = process_threads();
+    // Let runtimes such as ThreadSanitizer initialize persistent helper threads
+    // before recording the pool-owned thread baseline.
+    std::thread runtime_warmup([] {});
+    runtime_warmup.join();
+    baseline_threads = settled_process_threads();
     if (baseline_threads < 1)
     {
         return 20;
