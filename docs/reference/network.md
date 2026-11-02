@@ -48,7 +48,7 @@ a fresh install prefix so obsolete headers from older installations do not linge
 `net_client_service_impl.hpp`, `net_server_service_impl.hpp`, endpoint classes
 and callback templates remain public. Request overloads, timeout defaults,
 future results and owner-update callback dispatch are unchanged. The official
-HTTP client participates in the admission and drain phases described below.
+HTTP client participates in the resource-readiness and cleanup phases below.
 
 ## Service-manager required providers
 
@@ -59,12 +59,12 @@ The manager rejects a missing provider or a dependency cycle before any module
 `init()` hook runs. A valid graph puts each provider before Net in `init()`,
 `post_init()`, `check_config()` and `pre_update()`, so Net reads initialized Bus
 configuration and registers its health timer after provider initialization.
-`stop_accepting()` follows the reverse dependency order. The other shutdown
-hooks and shared IO retain their existing ordering and lifetime rules.
+Resource cleanup runs all consumer-first `pre_shut()` calls while all objects
+are alive, then reverse `shut()`/owned-object destruction; all DSOs close last.
 
 `check-net-health-timer` exercises the production private factory with controlled
 Bus and Timer providers. It checks both required interface keys, missing-provider
-and cycle rejection before module side effects, startup and admission-stop
+and cycle rejection before module side effects, startup and resource-cleanup
 ordering, and the actual health registration and retirement described below.
 
 ## Service-manager health timer
@@ -84,71 +84,15 @@ time wheel. It checks callback-storage release, unrelated timers, repeated
 retirement and registration failure. This scope does not establish arbitrary
 callback retirement or DSO unload safety.
 
-## HTTP client admission and drain
+## HTTP client resource cleanup
 
-`http_client_module` overrides `stop_accepting()` to close new request roots without cancelling accepted HTTP IO; repeated calls succeed.
+`http_client_module` does not classify business roots or continuations and does not grant request authority from the manager’s polling phase. Applications close their own business ingress before process stop. Future/callback requests retain ordinary behavior until resource cleanup.
 
-| New root after closure | Rejection delivery |
-| --- | --- |
-| Future `get`, `post`, `async_request` | `{false, operation_aborted.message()}`, immediately ready |
-| Both callback `post` overloads | Same rejection, delivered by owner `update()`; rejected callbacks grant no continuation permission during drain |
+`ready_to_shut()` waits for native requests to publish results, queued callbacks to be delivered, and active callbacks to return and release captures. Callback exceptions propagate to the owner; later queued results remain available to subsequent updates. Continue manager updates during shutdown; `pre_shut()` then closes/cancels the request runtime. Direct cleanup or destruction does not establish natural IO completion.
 
-The untagged request interface recognizes two bounded continuation scopes: a
-synchronous call inside this client's accepted HTTP callback, and execution in
-the associated manager's central task-poll phase during owner-thread
-`manager.update()`. The manager's `is_polling_tasks()` reads that object's phase;
-it does not depend on an Asio context marker local to the calling shared library. This preserves
-Etcd's callback retry and provider requests initiated by previously accepted
-managed tasks. Merely running a module's `update()` does not grant admission.
-Calls deferred outside these scopes to another thread or an external scheduler
-carry no accepted-work identity and are rejected after admission closes. The
-interface does not infer arbitrary application workflow ownership. The shared
-executor is a trusted continuation scope: application ingress must not post new
-roots onto it during drain. Keep lifecycle and callback dispatch on the module's
-owner thread, and close application ingress before draining tasks.
+A timeout does not make callback receivers safe to destroy; retain the module, receivers and code. Request IO/connect timeout defaults remain 20/5 seconds; these are request settings, not process-shutdown budgets. See [task lifecycle](../guides/tasks.md#shared-business-executor-for-modules) for optional manager deadlines and retention.
 
-**Migration:** direct `task_group::poll()` and retained `manual_runtime::poll()`
-still execute handlers and retain their existing teardown/reentry guards, but no
-longer grant HTTP request continuation permission after admission closes. Drive
-managed tasks through `manager.update()` instead. Its module-update portion does
-not grant this permission; only the central task poll does, including task
-completion handlers. The phase is restored on normal return and exceptions.
-Rebuild the host and all plugins against the updated manager headers together.
-This changes admission behavior without adding virtual slots, object data or a
-wire-format change.
-
-`ready_to_shut()` waits for every accepted native request to publish its result,
-all queued callback results to be delivered, and active callback invocations to
-return and release their captures. Callback exceptions propagate to the owner;
-the active scope is restored and later queued results remain available to a
-subsequent update. Continue manager updates while shutdown is draining. Only then
-can normal manager shutdown call `pre_shut()`, which retains its existing request
-cancellation and IO-runtime stop behavior. Direct `pre_shut()` or destruction
-still cancels pending IO; it is not a graceful-drain shortcut.
-
-Manager deadlines and failure states retain their existing semantics. A drain
-timeout does not cancel HTTP IO or make callback receivers safe to destroy;
-continue owner updates while retaining the module, receivers and implementation
-library. A failed manager does not resume updates automatically. Request IO and
-connect timeout defaults remain 20 and 5 seconds. This integration covers the Net
-HTTP client, not TCP/WebSocket/RUDP ingress or the separate HTTP server plugin.
-
-`check-network` exercises the production factory, active request completion,
-rejection through all request overloads, callback and managed-task follow-ups,
-manager drain ordering, repeated stop, callback exceptions and capture release
-using loopback HTTP. These local checks do not establish external Etcd/Consul
-acceptance or arbitrary application continuation safety.
-
-Application-enabled `check-core` also runs `check-net-http-drain`, which loads
-actual Net, Bus and Utility DSOs. Its host-side managed coroutine suspends before
-admission stop, then resumes on the shared owner task executor and calls the
-loaded HTTP interface. Controlled loopback responses check the accepted request,
-rejection of a fresh external root, a callback retry during drain, binary owning
-results, receiver release and normal manager teardown/unload. The host does not
-compile the private HTTP implementation or substitute a client. DSO-created
-futures are consumed before unload; only their owning result values are retained.
-This test covers the shared-executor boundary in the configured host/DSO toolchain;
-it does not establish arbitrary deferred workflow identity or external services.
+`check-network` and `check-net-http-drain` use actual implementations with controlled loopback or real DSOs for resource completion/cleanup. Results must identify their tested revision; these targets do not establish external Etcd/Consul or arbitrary workflow acceptance. Consume DSO-created futures before unload; only owning result values may remain.
 
 ## Server and client service examples
 
@@ -251,64 +195,11 @@ Growth/copy allocation failure throws `std::bad_alloc`; allocation and clone fai
 
 With `ARK_BUILD_NETWORK_TESTS=ON`, `check-net-message` covers ownership, framing and deterministic allocation failures without sockets; `check-network` includes it. Local checks do not establish shared-service or capacity acceptance.
 
-## Explicit external-root registration
+## Application ingress and resource closure
 
-Include `<ark/net/external_root_callback.hpp>` and use
-`reg_external_root_callback(server, manager, id, on_accept, on_reject)` only for
-callbacks that begin new external business workflows. Both handlers are required;
-an empty handler returns `false` before service registration. Duplicate IDs retain
-the service's existing `false` result and original callback.
+**Migration:** `<ark/net/external_root_callback.hpp>` and `reg_external_root_callback()` are removed. Register ordinary `reg_msg_callback` handlers; any application business-refusal policy runs before process stop. The framework does not classify or reject TCP/WebSocket/RUDP business roots from manager state. Heartbeat, control and completion callbacks retain ordinary behavior.
 
-```cpp
-#include <utility>
-#include <ark/net/external_root_callback.hpp>
-
-bool register_request(ark::net_server_service& server, ark::plugin_manager& manager,
-    ark::net_msg_functor handle_request, unsigned& rejected) {
-    return ark::reg_external_root_callback(server, manager, 45001,
-        std::move(handle_request),
-        [&rejected](const ark::net_msg*, ark::conv_id_t) { ++rejected; });
-}
-```
-
-This example explicitly records refusal locally. Applications supply their own
-rejection handler; the helper adds no error message, wire format, session close
-or output discard policy. Keep the counter and other borrowed state alive.
-
-The wrapper checks the manager state at owner-thread callback entry: `running`
-invokes `on_accept`; every other state invokes `on_reject`. Admission is not at
-socket receipt or framing: a queued frame that has not entered its business
-callback can still be refused. An accepted handler can request `manager.stop()`;
-that handler continues while later root entries are refused. Existing
-`reg_msg_callback` registrations, completion/control callbacks, registration and
-heartbeat processing, sends and provider operations retain their behavior.
-Do not classify roots from the transport, CS/SS header, Bus ID or connection role.
-For an ID mixing roots and completions, classify inside the business handler
-instead of wrapping the entire ID.
-
-Continue owner updates during `draining` and pre-cleanup `timed_out` to deliver
-accepted workflows' results. `failed`, `stopped` and `cleanup_timed_out` managers
-do not update; the predicate is not a promise of delivery in those states.
-
-Register and dispatch on the manager owner thread. The helper borrows the manager;
-the manager and every captured receiver must outlive the service's callback
-registration. It supplies no unregister, independent module-removal or library
-unload guarantee. Message pointers remain borrowed for that invocation; avoid a
-strong service capture creating a service/callback ownership cycle. Handler
-exceptions follow the existing callback path; provide a nonthrowing rejection
-handler. This header-only addition changes no service virtual table, class layout
-or wire format. The [guest room](../../examples/guest_room/README.md#stop-new-business-requests)
-explicitly migrates Join/Move/Action with the existing Protobuf errors and budgets;
-heartbeats and connection events remain ordinary callbacks. Other unmarked
-business registrations are not automatically migrated.
-
-`check-net-external-root` (Core tests plus Protobuf) exercises the registered
-wrapper with a contract recorder across running, stopping, draining, timed-out,
-failed and stopped states, invalid/duplicate registration and reentrant stop.
-`check-net-plugin` additionally loads real Bus/Utility/Net DSOs and verifies TCP
-root acceptance, refusal during drain and continuing ordinary callbacks on the
-same session. Recorder cases are not transport proof; neither check establishes
-production capacity or complete application migration.
+Net owners close service endpoints during cleanup, then clear borrowed callbacks and their captures. Retain receivers, providers and implementation DSOs until callback stacks return and native closure finishes; clean up consumers before destroying providers. Message pointers remain borrowed for the invocation only. This resource cleanup adds no wire-format or business-saving guarantee.
 
 ## Member callbacks and borrowed arguments
 

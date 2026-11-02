@@ -67,32 +67,24 @@ runtime 和组须在同一线程构造、操作和销毁。`manual_runtime` 不�
 1. 模块 `update()`：先 `service.update()`，再 `bridge.dispatch()`。
 2. `manager.update(timestamp, maximum_handlers = 64)`：统一轮询一次，所有组共用 handler 预算。模块不得另行轮询组或 runtime。
 
-`manager.is_polling_tasks()` 只能在所属线程查询，仅在 `manager.update()` 统一轮询任务期间
-（包括任务完成回调）为真。普通模块更新、轮询返回或抛出异常后均为假。
-在 `manager.update()` 之外直接调用 `task_group::poll()` 或保留的 `manual_runtime::poll()` 不建立该阶段。
-阶段标记属于管理器对象，其他动态库中的服务提供方可直接查询，不依赖该库内部的 Asio 线程局部上下文。
-它表示受信任的执行范围，不是任意外部工作流的身份令牌；应用入口不得在排空期间向执行器投递新的请求根。
+`manager.update()` 在服务完成派发后统一轮询共享执行器。`manager.is_polling_tasks()` 仅查询轮询阶段，不授予业务请求或 HTTP 续接权限。独立任务组仍可使用 `task_group::poll()`；模块任务由管理器驱动，避免重复轮询。
 
-**迁移：**直接轮询组或 runtime 仍执行就绪工作，并保留现有拆除与重入防护，
-但停止接收后不再授予 Net HTTP 后续请求权限。管理器拥有的任务应由 `manager.update()` 驱动。
-独立任务组和工具保留直接轮询 API。宿主和所有插件须一起重新构建，使用更新后的内联管理器阶段行为；
-不增加虚函数槽或对象数据。
+`manager.stop(timestamp)` 进入 `stopping`，对全部任务组调用 `close()`，关闭准入并请求取消。有任务或活跃回调栈时返回 `false`，不强制销毁帧。继续所属线程更新与原生完成派发；取消是否生效取决于等待的操作。框架不等待业务流程自然结束，也不保证写操作未发生。公告、关入口、踢人和保存须在停止进程前完成。
 
-`manager.stop(timestamp)` 先关闭所有组的顶层任务准入，再按缓存拓扑反向执行[一次性模块停止接收钩子](modules_CN.md#停止接收新业务根请求)。活跃 update／完成回调会将钩子推迟到下一次外层 owner frame 的 stop。有任务或活跃栈未返回时，直接返回 `false`，不等待。服务和桥接须继续受理这些协程的后续操作。任务与回调栈排空后，`stop()` 仍可能因模块未就绪而返回 `false`，需要继续 owner 更新并重复调用。全部模块就绪后，才同步执行 `pre_shut()`、`shut()` 和卸载；用户钩子可能阻塞。
+任务与活跃栈结束，全部模块 `ready_to_shut()` 为真后，先按反向依赖执行全部 `pre_shut()`，在所有对象存活时关闭原生回调源；再反向逐个执行 `shut()` 并销毁拥有的对象，之后注销插件，最后关闭全部动态库。消费者销毁前提供方仍存活。钩子可能阻塞；handler 数量预算不限制停机耗时。
 
-`manager.stop_until(timestamp, deadline)` 接收 `std::chrono::steady_clock::time_point`。首次及后续调用中最早的截止时间持续生效，包括后来的 `stop(timestamp)`；无期限调用不能清除截止时间。没有传入截止时间时，`stop(timestamp)` 保留无限等待语义。时间检查发生在同步钩子边界，以及进入 `pre_shut()` 前。钩子超时返回后，不能再进入后续清理。超时状态不可恢复并返回 `false`；`get_shutdown_failure()` 保留阶段／模块，普通超时的 `get_shutdown_exception()` 为空。清理已开始时，已执行动作不回滚，`cleanup_timed_out` 还会停止更新。详见[启动器超时行为](applications_CN.md#确认启动并停止进程)。
+`manager.stop_until(timestamp, deadline)` 接收 `std::chrono::steady_clock::time_point`。最早的截止时间持续生效，后续无期限 `stop()` 不能清除。默认不设置截止时间。检查发生在就绪检查与同步清理边界，不能中断阻塞调用或回滚已完成的动作。`get_shutdown_failure()` 保留阶段／模块，普通超时的 `get_shutdown_exception()` 为空。见[启动器超时行为](applications_CN.md#确认启动并停止进程)。
 
 | 状态 | 调用方处理 |
 | --- | --- |
 | `running` | 正常更新并受理任务 |
-| `stopping_acceptance` | 任务组已关闭准入；退出活跃栈，在外层 owner frame 调用 stop，执行一次模块根请求入口关闭 |
-| `draining` | 继续模块更新和统一轮询，保留业务状态/服务 |
-| `timed_out` | 清理前到达截止时间；继续 owner 更新，但不再恢复清理 |
-| `cleanup_timed_out` | 清理开始后到达截止时间；保留剩余资源，停止后续更新和清理 |
-| `failed` | 关闭钩子失败/抛出异常，或原生库关闭失败；停止后续卸载并保留资源 |
-| `stopped` | 关闭钩子和原生关闭成功；重复 `stop()` 返回 `true` |
+| `stopping` | 任务组已请求取消；继续 owner 更新，等待帧、活跃栈与原生资源安全 |
+| `timed_out` | 清理前到达可选截止时间；继续 owner 更新，但不恢复清理 |
+| `cleanup_timed_out` | 清理开始后超时；保留剩余资源，停止后续更新与清理 |
+| `failed` | 清理／就绪／原生库关闭失败；保留剩余资源，不重试后续清理 |
+| `stopped` | 资源清理与原生关闭成功；重复 `stop()` 返回 `true` |
 
-用 `get_shutdown_state()`、`get_shutdown_failure()` 和 `get_shutdown_exception()` 区分等待与失败。停止接收钩子成功后，启动器继续驱动待完成任务。停止接收钩子返回 false／异常时进入不可恢复的 failed：只报告一次，保留待完成帧和资源，不再更新或清理，不表示等待后重试。没有隐含停机超时，也不以取消、分离或销毁协程替代排空；任务检查不等待，handler 预算不限制停机耗时。
+通过 `get_shutdown_state()`、`get_shutdown_failure()` 和 `get_shutdown_exception()` 区分等待与失败。没有默认业务排空期限，也不通过分离线程或销毁待完成帧结束停机。
 
 | `dynamic_library::unload()` 结果 | 效果 |
 | --- | --- |
@@ -102,11 +94,11 @@ runtime 和组须在同一线程构造、操作和销毁。`manual_runtime` 不�
 
 后续 `stop()` 不重试插件出口/关闭，也不回滚停机工作。关闭成功不证明操作系统已移除库映像。
 
-在构造线程操作管理器和组；更新、关闭钩子或执行器回调中，禁止增删模块或递归更新。有待完成任务时禁止注销任何模块，任务可能借用其他服务提供方。管理器在仍有任务、回调栈中或跨线程析构时终止进程；析构不能发起排空。
+在构造线程操作管理器和组；更新、关闭钩子或执行器回调中，禁止增删模块或递归更新。有待完成任务时禁止注销任何模块，任务可能借用其他服务提供方。管理器在仍有任务、回调栈中或跨线程析构时终止进程；析构不能发起资源停机。
 
 <Aside type="caution" title="任务完成不等于 IO 资源已释放">
 
-任务检查仅覆盖管理器组已受理的顶层任务。各模块的停止接收与就绪钩子有各自的原生工作范围；参见 [Net HTTP 客户端](../reference/network_CN.md#http-客户端停止接收与排空)与 [HTTP 服务端](../reference/http_CN.md)。安全卸载还需外部回调返回、连接池线程退出、后台清理完成；任务归零不证明这些条件。未受组管理的工作不得引用即将销毁的模块。
+任务检查仅覆盖管理器组已受理的顶层任务。各模块的就绪与资源清理有各自的原生工作范围；参见 [Net HTTP 客户端](../reference/network_CN.md#http-客户端资源清理)与 [HTTP 服务端](../reference/http_CN.md)。安全卸载还需外部回调返回、连接池线程退出、后台清理完成；任务归零不证明这些条件。未受组管理的工作不得引用即将销毁的模块。
 
 </Aside>
 
@@ -131,7 +123,7 @@ runtime 和组须在同一线程构造、操作和销毁。`manual_runtime` 不�
 
 | 目的 | 操作与持续驱动要求 |
 | --- | --- |
-| 自然完成 | `stop_accepting()` 后继续所属线程更新；保持服务和桥接存活并受理后续异步操作 |
+| 独立任务组自然完成 | `stop_accepting()` 后继续所属线程更新；保持服务和桥接存活并受理后续异步操作 |
 | 取消 | `close()` 后持续驱动服务完成通知、桥接分发和 runtime 轮询，直至实际完成 |
 
 能否取消取决于异步操作和协程代码。取消请求不强行销毁协程帧，也不证明远端写入未发生。

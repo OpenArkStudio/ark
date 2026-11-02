@@ -2,6 +2,8 @@
 
 [Acceptance index](../guides/database-validation.md)
 
+These acceptance records apply to their listed source revisions. Historical natural-drain results do not validate later cancellation-based resource shutdown; see the [current lifecycle contract](../project/lifecycle-closeout.md).
+
 This record separates public-module service/failure checks, positive plugin-DSO workflows, MySQL DSO write transactions, server-observed request cancellation, sent MySQL transaction-query and prepared-execute cancellation, owned-server termination and verified Redis TLS. Each scope has its own tested revisions and environment; a passing result applies only to that scope. The 2026-11-02 positive and fault/TLS records retain distinct executed sources; the intervening change concerns the compressor move constructor, tests and documentation, not additional database acceptance.
 
 ## Public modules against real services

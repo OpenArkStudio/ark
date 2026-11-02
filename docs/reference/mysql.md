@@ -52,7 +52,7 @@ ark::task<> run() {
 | Configuration boundary | Behavior |
 | --- | --- |
 | Owner thread | Explicit configuration; registration supplies the manager, so it may precede the module’s `init()`. No in-place reconfiguration |
-| Rejection / exceptions | Duplicate names/new configuration during manager drain return false; empty names/zero limits throw; after `pre_shut()` seals admission, throws `std::logic_error` |
+| Rejection / exceptions | Duplicate names/new configuration during manager shutdown return false; empty names/zero limits throw; after `pre_shut()` seals admission, throws `std::logic_error` |
 | TLS / build | Certificate verification defaults on; set CA/server name as needed. Requires `ARKNET_ENABLE_SSL=ON` and OpenSSL, without mysql++ |
 | Option source | No manifest `config` or database XML reader; leave `config` empty and pass owning options through a business module’s `configure()` |
 
@@ -87,7 +87,7 @@ Run tasks on the manager's shared business executor. A foreign executor is rejec
 
 Each query/transaction bridge separately reserves at most `max_operations` delivery records; query requests and transactions each have a `max_input_bytes` retained-input budget. `max_transactions` bounds active transactions per named pool. Configure native pool connections/waiters, query row/column/result-byte limits and connection queue bounds separately. These are per-pool limits, not a process-wide memory budget.
 
-Keep calling manager updates while `stop()` returns false. Accepted workflows can finish subsequent database steps; idle transactions complete deadline cleanup. Readiness waits for both query and transaction coordinators and their delivery stacks. Only then does the host teardown phase seal admission and retire the owning pool through its native join barrier. A retirement failure retains resources and fails shutdown. This is not a hot-update or arbitrary external coroutine lifetime guarantee.
+`stop()` requests task-group cancellation; keep owner updates running while it returns false so cancellation and native completions actually retire. Complete saving and transaction commits before process stop. Cancellation does not guarantee rollback or exclude an executed write. Readiness waits for query/transaction coordinators and delivery stacks; `pre_shut()` then seals admission and retires owning pools through native join barriers. Failure retains resources; this is not an arbitrary external-coroutine or hot-update guarantee.
 
 ## Validation
 
@@ -95,7 +95,7 @@ Keep calling manager updates while `stop()` returns false. Accepted workflows ca
 
 `ark_database_public_mysql_plugin_tests` additionally builds and loads the real plugin library to verify macro registration, coroutine delivery and host shutdown. It does not certify OS library unloading or hot update.
 
-`ark_database_public_service_tests` uses the real module implementation with a consumer task group and the manager's shared runtime. It covers query/prepared results, commit/rollback visibility, input/configuration/result ownership, owner-thread resumption, natural drain and host-stack unwinding while work is pending. `ark_database_public_failure_service_tests` checks wrong passwords, an untrusted CA and a server-observed `SELECT SLEEP` deadline. It preserves native errors and `outcome_unknown`, then requires an explicit new request to recover.
+`ark_database_public_service_tests` uses the real module implementation with a consumer task group and the manager's shared runtime. It covers query/prepared results, commit/rollback visibility, input/configuration/result ownership, owner-thread resumption, natural drain at the recorded revision and host-stack unwinding while work is pending. `ark_database_public_failure_service_tests` checks wrong passwords, an untrusted CA and a server-observed `SELECT SLEEP` deadline. It preserves native errors and `outcome_unknown`, then requires an explicit new request to recover.
 
 ```sh
 bash scripts/test_databases.sh database-build public-mysql

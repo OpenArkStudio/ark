@@ -16,9 +16,9 @@ The bundled examples use capability names. Configure with applications and examp
 
 hpp/cpp files remain adjacent in each directory. Start with the [timers quick start](../get-started/quick-start.md). The generic launcher helpers select `conf/<name>.app.toml`, so use the capability name for both the process and application manifest. Kernel examples still require their business metadata.
 
-## Guest-room admission during shutdown
+## Guest-room resource cleanup
 
-The room explicitly registers Join, Move and Action as external business roots. Once the manager leaves `running`, callback entry returns `server_stopping`; Action carries its correlation sequence. Refusals preserve membership and Entity state and share the existing work/output limits. Heartbeats, connection events and disconnect tombstones continue, and accepted work can complete. A separate child with an observation deadline checks this behavior using actual Room/Kernel/Net DSOs and native clients; it supplies no native-send, unload or Godot acceptance guarantee. See the [example verification scope](../../examples/guest_room/README.md#native-verification).
+The room uses ordinary Join, Move, Action and control callbacks without manager-state business refusal. Applications/operators complete announcements, ingress closure, player removal and saving before process stop. A controlled native child loads actual Room/Kernel/Net DSOs for Net endpoint closure, capture release and repeated resource cleanup. It supplies no native-send, library-image unload or Godot acceptance guarantee. See [example verification scope](../../examples/guest_room/README.md#native-verification).
 
 ## Migrate numbered example names
 

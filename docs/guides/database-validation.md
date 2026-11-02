@@ -5,6 +5,8 @@ recorded result. The [detailed service records](../reports/database-services.md)
 retain each scenario's tested revisions, date, environment, observations and limits.
 Restart and isolation have separate records linked below.
 
+Historical results retain natural-drain behavior at their recorded revisions; they do not validate later cancellation-based process shutdown. See the [current lifecycle contract](../project/lifecycle-closeout.md).
+
 ## Recorded results
 
 These are local functional results. Each result applies to its recorded source

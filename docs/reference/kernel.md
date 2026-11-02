@@ -34,7 +34,7 @@ is declared in the single lifecycle dependency graph, because declaring both
 would create a startup cycle. These pointers are required, not optional: keep
 both modules registered and call their entity APIs only after startup. The
 current graph does not validate their mutual presence or impose their relative
-admission-stop order. A complete declaration requires a separate decision about
+cleanup order. A complete declaration requires a separate decision about
 required-presence versus ordering semantics, or removal of the runtime cycle.
 
 ### Resource loading

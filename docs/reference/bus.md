@@ -63,13 +63,13 @@ only query Bus configuration through that runtime plugin.
 
 The manager rejects a missing message provider or a dependency cycle before any
 module startup hook. It starts providers before Message in each startup phase and
-runs `stop_accepting()` in reverse dependency order. Plugin installation order
-does not replace this validation. Normal teardown hooks, public interfaces and
-message framing retain their existing behavior.
+pairs module cleanup and object destruction in reverse dependency order, with
+all libraries closing last. Plugin installation order does not replace validation.
+Public interfaces and message framing retain their existing behavior.
 
 `check-msg-dependencies` uses the real private message factory to verify required
 interface keys, missing-provider and cycle rejection before startup, provider-first
-startup phases and reverse admission stop. Existing DSO checks cover the real
+startup phases and reverse resource cleanup. Existing DSO checks cover the real
 Bus/Net/Utility graph and message behavior.
 
 ## Addresses and responsibilities
