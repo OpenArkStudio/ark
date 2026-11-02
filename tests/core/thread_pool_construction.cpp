@@ -98,6 +98,7 @@ thread_local bool armed{};
 thread_local std::size_t remaining{}, attempts{}, rejected{};
 thread_local int baseline_threads{}, threads_at_failure{};
 const char* active_mode = "controller";
+const char* active_stage = "controller";
 std::size_t active_budget{};
 
 void before_allocation() {
@@ -307,13 +308,19 @@ int constructor_failure(std::size_t index) {
     }
     bool threw{};
     arm(index);
+    active_stage = "constructing pool";
     try
     {
         ctpl::thread_pool pool(4);
         // Destruction also runs with the persistent owner-thread fault armed.
+        active_stage = "pool constructed";
     }
     catch (const std::bad_alloc&)
-    { threw = true; }
+    {
+        active_stage = "caught bad_alloc";
+        threw = true;
+    }
+    active_stage = "checking worker retirement";
     const bool retired = workers_retired();
     const bool persistent = armed && rejected == (threw ? 1u : 0u);
     armed = false;
@@ -530,11 +537,34 @@ int sweep(const char* executable, const char* mode, std::size_t boundary,
 
 int main(int argc, char** argv) {
     std::set_terminate([]() noexcept {
+        int exception_kind{};
+        if (auto exception = std::current_exception())
+        {
+            try
+            { std::rethrow_exception(exception); }
+            catch (const std::bad_alloc&)
+            { exception_kind = 1; }
+            catch (const std::exception&)
+            { exception_kind = 2; }
+            catch (...)
+            { exception_kind = 3; }
+        }
         std::fprintf(stderr,
-            "terminate mode=%s budget=%zu armed=%d remaining=%zu attempts=%zu rejected=%zu baseline=%d failure=%d "
-            "current=%d\n",
-            active_mode, active_budget, armed, remaining, attempts, rejected, baseline_threads, threads_at_failure,
-            process_threads());
+            "terminate mode=%s stage=%s budget=%zu exception=%d armed=%d remaining=%zu attempts=%zu rejected=%zu "
+            "baseline=%d failure=%d current=%d\n",
+            active_mode, active_stage, active_budget, exception_kind, armed, remaining, attempts, rejected,
+            baseline_threads, threads_at_failure, process_threads());
+#ifdef _WIN32
+        void* frames[16]{};
+        const auto frame_count = CaptureStackBackTrace(0, 16, frames, nullptr);
+        std::fputs("terminate stack:", stderr);
+        for (USHORT index{}; index < frame_count; ++index)
+        {
+            std::fprintf(stderr, " %p", frames[index]);
+        }
+        std::fputc('\n', stderr);
+#endif
+        std::fflush(stderr);
         std::_Exit(86);
     });
     if (argc == 4)
@@ -542,6 +572,7 @@ int main(int argc, char** argv) {
         const auto index = static_cast<std::size_t>(std::strtoull(argv[2], nullptr, 10));
         const auto boundary = static_cast<std::size_t>(std::strtoull(argv[3], nullptr, 10));
         active_mode = argv[1];
+        active_stage = "child dispatch";
         active_budget = index;
         if (std::string_view(argv[1]) == "constructor")
         {
