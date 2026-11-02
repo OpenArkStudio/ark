@@ -93,7 +93,7 @@ cmake --build sdk-build --target check-sdk
 
 消费者还验证 MySQL/Redis/Utility 的公开头映射，并拒绝可见的实现或私有装配头。上述命令启用 SSL 和 vcpkg `database` feature 所需的 OpenSSL，同时检查两种接口；关闭 SSL 时仅编译 Redis 接口。这里验证选定构建树中的公共接口头消费。
 
-仅使用 Net 的消费者启用 Protobuf，保持运行时插件关闭；分别编译 19 个 Net 公开头，
+仅使用 Net 的消费者启用 Protobuf，保持运行时插件关闭；分别编译 18 个 Net 公开头，
 并确认私有管理器与插件头不可见：
 
 ```sh

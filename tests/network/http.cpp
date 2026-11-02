@@ -471,7 +471,7 @@ TEST_CASE("HTTP manager drain keeps ordinary provider calls available until reso
     auto accepted = client.get("127.0.0.1", peer.port(), "/accepted");
     REQUIRE(wait_http([&] { return peer.count() == 1; }));
     CHECK_FALSE(manager.stop(1));
-    CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::draining);
+    CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopping);
     auto ordinary = client.get("127.0.0.1", peer.port(), "/ordinary-during-stop");
     REQUIRE(wait_http([&] { return peer.count() == 2; }));
     peer.reply_pending();

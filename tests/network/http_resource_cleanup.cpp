@@ -88,7 +88,7 @@ TEST_CASE("HTTP resource retirement seals native route dispatch and waits for ac
     REQUIRE(entered_future.wait_for(5s) == std::future_status::ready);
 
     CHECK_FALSE(manager.stop(0));
-    CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::draining);
+    CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopping);
     CHECK_FALSE(server->ready_to_shut());
     auto ordinary = client->get("127.0.0.1", port, "/accepted");
     REQUIRE(ordinary.wait_for(5s) == std::future_status::ready);
@@ -185,7 +185,7 @@ TEST_CASE("HTTP server manager timeout retains its listener and active route") {
     auto accepted = client->get("127.0.0.1", port, "/timeout");
     REQUIRE(entered_future.wait_for(5s) == std::future_status::ready);
     CHECK_FALSE(manager.stop(0));
-    CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::draining);
+    CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopping);
     CHECK_FALSE(manager.stop_until(1, std::chrono::steady_clock::now()));
     CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::timed_out);
     CHECK_FALSE(server->ready_to_shut());

@@ -102,7 +102,7 @@ Use `-DARK_USE_GUID_32=ON` to check the 32-bit GUID configuration.
 The consumer also checks MySQL/Redis/Utility public-header mapping and rejects visible implementation or private assembly headers. The command enables SSL and the vcpkg `database` feature's OpenSSL dependency to check both interfaces; with SSL disabled, only Redis is compiled. This checks public-header consumption from the selected build tree.
 
 The Net-only consumer enables Protobuf while keeping runtime plugins disabled.
-It compiles all 19 Net public headers independently and excludes the private
+It compiles all 18 Net public headers independently and excludes the private
 manager/plugin headers:
 
 ```sh
