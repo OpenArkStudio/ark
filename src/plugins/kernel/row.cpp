@@ -18,6 +18,8 @@
  *
  */
 
+#include <functional>
+
 #include "ark/kernel/data_impl.hpp"
 #include "ark/kernel/node_impl.hpp"
 #include "ark/kernel/row.hpp"
@@ -29,8 +31,7 @@ row_impl::row_impl(
     std::shared_ptr<class_meta> class_meta_ptr, uint32_t row, const data_list& args, row_callback_functor&& func)
     : row_(row) {
     // data node
-    auto function = std::bind(
-        &row_impl::on_node_call_back, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+    auto function = std::bind_front(&row_impl::on_node_call_back, this);
     node_manager_ = std::make_shared<node_manager>(class_meta_ptr, args, std::move(function));
 
     func_ = std::move(func);

@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include <functional>
 #include <span>
 #include <stdexcept>
 
@@ -39,8 +40,7 @@ public:
     bool add_common_class_event(base_type* base_ptr,
         int (base_type::*handler)(const guid_t&, const std::string&, const entity_event, const data_list&),
         const int32_t prio = 0) {
-        auto functor = std::bind(handler, base_ptr, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3,
-            std::placeholders::_4);
+        auto functor = std::bind_front(handler, base_ptr);
         return add_common_class_event(std::move(functor), prio);
     }
 
@@ -48,8 +48,7 @@ public:
     template<typename base_type>
     bool add_event_call_back(const guid_t& self, const int event_id, base_type* base_ptr,
         int (base_type::*handler)(const guid_t&, const int, const data_list&)) {
-        auto functor =
-            std::bind(handler, base_ptr, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+        auto functor = std::bind_front(handler, base_ptr);
         return add_event_call_back(self, event_id, std::move(functor));
     }
 
@@ -57,8 +56,7 @@ public:
     bool add_class_call_back(const std::string& name, base_type* base_ptr,
         int (base_type::*handler)(const guid_t&, const std::string&, const entity_event, const data_list&),
         const int32_t prio = 0) {
-        auto functor = std::bind(handler, base_ptr, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3,
-            std::placeholders::_4);
+        auto functor = std::bind_front(handler, base_ptr);
         return add_class_call_back(name, std::move(functor), prio);
     }
 
@@ -66,20 +64,14 @@ public:
     bool add_node_call_back(const std::string& class_name, const std::string& name, base_type* base_ptr,
         int (base_type::*handler)(const guid_t&, const std::string&, const uint32_t, const data&, const data&),
         const int32_t prio = 0) {
-        return add_node_call_back(class_name, name,
-            std::move(std::bind(handler, base_ptr, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3,
-                std::placeholders::_4, std::placeholders::_5)),
-            prio);
+        return add_node_call_back(class_name, name, std::bind_front(handler, base_ptr), prio);
     }
 
     template<typename base_type>
     bool add_table_call_back(const std::string& class_name, const std::string& name, base_type* base_ptr,
         int (base_type::*handler)(const guid_t&, const table_event_data&, const data&, const data&),
         const int32_t prio = 0) {
-        return add_table_call_back(class_name, name,
-            std::move(std::bind(handler, base_ptr, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3,
-                std::placeholders::_4)),
-            prio);
+        return add_table_call_back(class_name, name, std::bind_front(handler, base_ptr), prio);
     }
 
     // call back by index
@@ -87,20 +79,14 @@ public:
     bool add_node_call_back(const std::string& class_name, const uint32_t index, base_type* base_ptr,
         int (base_type::*handler)(const guid_t&, const std::string&, const uint32_t, const data&, const data&),
         const int32_t prio = 0) {
-        return add_node_call_back(class_name, index,
-            std::move(std::bind(handler, base_ptr, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3,
-                std::placeholders::_4, std::placeholders::_5)),
-            prio);
+        return add_node_call_back(class_name, index, std::bind_front(handler, base_ptr), prio);
     }
 
     template<typename base_type>
     bool add_table_call_back(const std::string& class_name, const uint32_t index, base_type* base_ptr,
         int (base_type::*handler)(const guid_t&, const table_event_data&, const data&, const data&),
         const int32_t prio = 0) {
-        return add_table_call_back(class_name, index,
-            std::move(std::bind(handler, base_ptr, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3,
-                std::placeholders::_4)),
-            prio);
+        return add_table_call_back(class_name, index, std::bind_front(handler, base_ptr), prio);
     }
 
     // container call back
@@ -109,10 +95,7 @@ public:
         int (base_type::*handler)(
             const guid_t&, const uint32_t, const container_op_type, const uint32_t, const uint32_t),
         const int32_t prio = 0) {
-        return add_container_call_back(class_name, index,
-            std::move(std::bind(handler, base_ptr, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3,
-                std::placeholders::_4, std::placeholders::_5)),
-            prio);
+        return add_container_call_back(class_name, index, std::bind_front(handler, base_ptr), prio);
     }
 
     // only for player
@@ -121,39 +104,27 @@ public:
         int (base_type::*handler)(
             const guid_t&, const uint32_t, const container_op_type, const uint32_t, const uint32_t),
         const int32_t prio = 0) {
-        return add_common_container_call_back(
-            std::move(std::bind(handler, base_ptr, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3,
-                std::placeholders::_4, std::placeholders::_5)),
-            prio);
+        return add_common_container_call_back(std::bind_front(handler, base_ptr), prio);
     }
 
     // scene event call back
     template<typename base_type>
     bool add_leave_scene_event(const std::string& class_name, base_type* base_ptr,
         int (base_type::*handler)(const guid_t&, const int, const int), const int32_t prio = 0) {
-        return add_leave_scene_event(class_name,
-            std::move(
-                std::bind(handler, base_ptr, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3)),
-            prio);
+        return add_leave_scene_event(class_name, std::bind_front(handler, base_ptr), prio);
     }
 
     template<typename base_type>
     bool add_enter_scene_event(const std::string& class_name, base_type* base_ptr,
         int (base_type::*handler)(const guid_t&, const int, const int), const int32_t prio = 0) {
-        return add_enter_scene_event(class_name,
-            std::move(
-                std::bind(handler, base_ptr, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3)),
-            prio);
+        return add_enter_scene_event(class_name, std::bind_front(handler, base_ptr), prio);
     }
 
     // move event call back
     template<typename base_type>
     bool add_move_event(const std::string& class_name, base_type* base_ptr,
         int (base_type::*handler)(const guid_t&, const vector3d&, const vector3d&), const int32_t prio = 0) {
-        return add_move_event(class_name,
-            std::move(
-                std::bind(handler, base_ptr, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3)),
-            prio);
+        return add_move_event(class_name, std::bind_front(handler, base_ptr), prio);
     }
 
     //////////////////////////////////////////////////////////////////////////

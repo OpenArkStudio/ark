@@ -45,7 +45,7 @@ public:
 
         if (nullptr != component_ptr)
         {
-            if (std::is_base_of_v<component, value_type>)
+            if constexpr (std::is_base_of_v<component, value_type>)
             {
                 std::shared_ptr<value_type> value_ptr = std::dynamic_pointer_cast<value_type>(component_ptr);
 
