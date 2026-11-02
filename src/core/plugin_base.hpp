@@ -121,6 +121,10 @@ private:
             return false;
         }
         auto* instance = std::exchange(entry->second, nullptr);
+        // A concrete destructor must not remove another provider or reenter
+        // teardown while the manager is walking its validated snapshot.
+        typename plugin_manager::phase_guard destroying(
+            *get_plugin_manager(), plugin_manager::call_phase::tearing_down);
         delete instance;
         return true;
     }

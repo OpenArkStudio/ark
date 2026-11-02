@@ -864,6 +864,7 @@ private:
             }
             if (pending_tasks_unchecked())
             {
+                shutdown_failure_.clear();
                 if (shutdown_deadline_expired())
                 {
                     shutdown_failure_ = "managed_tasks";
@@ -910,8 +911,8 @@ private:
 
     template<typename unload_type>
     auto shut(unload_type unload) -> bool {
-        // Keep every provider alive until each consumer has released its
-        // resources and its concrete object has been destroyed.
+        // Stop callback sources while every receiver object is still alive.
+        // A provider must not deliver a new callback to a destroyed consumer.
         for (auto iter = lifecycle_order_.rbegin(); iter != lifecycle_order_.rend(); ++iter)
         {
             const auto& [name, module_ptr] = *iter;
@@ -920,6 +921,11 @@ private:
             {
                 return false;
             }
+        }
+        // Providers remain available through consumer shut hooks/destructors.
+        for (auto iter = lifecycle_order_.rbegin(); iter != lifecycle_order_.rend(); ++iter)
+        {
+            const auto& [name, module_ptr] = *iter;
             shutdown_failure_ = "shut: " + name;
             if (!module_ptr->shut() || shutdown_deadline_expired(true))
             {
