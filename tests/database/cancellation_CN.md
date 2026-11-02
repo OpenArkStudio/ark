@@ -44,6 +44,21 @@ database-build/tests/database/ark_database_public_plugin_cancellation_tests mysq
 
 此范围只覆盖 manager stop 对已观察到的待完成 Redis 流水线或 MySQL autocommit 请求发起取消。事务／预处理 stop 取消、其他操作阶段或竞争、Redis TLS、服务端故障、持久性、热更新、库映像物理移除及容量仍属独立范围。测试时限不改变生产停机默认值。原有四种显式取消模式的行为与断言保持不变。
 
+## 管理器 stop 取消事务
+
+另有仅在启用 SSL 时可用的 `mysql-transaction-stop`、`mysql-statement-stop` 模式，沿用私有 schema 范围内的账号权限与可信 TLS 配置：
+
+```sh
+database-build/tests/database/ark_database_public_plugin_cancellation_tests mysql-transaction-stop
+database-build/tests/database/ark_database_public_plugin_cancellation_tests mysql-statement-stop
+```
+
+目标在固定连接上开启事务，执行未提交的预写入，并保留自身读取计数为一的结果。独立观察者管理器／运行时／连接池必须读到零，并在 `User sleep` 中识别精确目标连接的带标记慢 UPDATE；预处理模式还要求 `COMMAND='Execute'`。两项观察均成立后，外层所属线程才在根任务仍待完成时调用目标 `manager.stop()`。模式不显式取消任务，也不再向已关闭目标发送工作。
+
+目标须在所属执行器恰好完成一次，保留 `cancelled`、`outcome_unknown`、事务 `unconfirmed` 与 `discard_requested=true`，没有 statement-close 或 rollback 回复／错误码，也没有清理／取消／归还连接异常。资源关闭且重复 stop 成功。观察者在目标 stop 后继续运行，等待整个原会话消失，再确认后续 500 ms 内原会话与带标记请求不再出现，随后要求外部计数为零并删除表。两个宿主销毁后，保留的自身读取仍为一，取消结果保留原诊断。
+
+外部计数为零只验证本次观察到的丢弃效果，不能将未知 API 结果改称已确认回滚、持久性或全局仅执行一次。这些模式仅覆盖一条已发送的事务查询或预处理 execute 期间的 stop；acquire／BEGIN／prepare／statement close／commit／rollback 取消、其他竞争、服务故障、跨平台、热更新与容量仍需独立验收。观察期限是测试控制，不是生产停机默认值。原有显式取消及流水线／autocommit stop 模式不变。
+
 ## MySQL 事务内操作取消
 
 仅在启用 SSL 时可用的 `mysql-transaction` 模式使用既有公共 `begin()` 和

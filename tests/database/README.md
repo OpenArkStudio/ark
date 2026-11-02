@@ -330,6 +330,8 @@ an explicit new request through the existing pool. See the
 
 Optional `redis-stop`/`mysql-stop` use an independent observer manager/runtime. After server-confirmed activity, the outer owner frame calls target `manager.stop()` to initiate cancellation; the observer continues to verify connection retirement, bounded counter-one/no-replay effects, once-only completion and safe resource closure. They do not recover requests through the closed target or change the four explicit-cancellation modes. See [manager-stop acceptance](cancellation.md#manager-stop-cancellation).
 
+`mysql-transaction-stop`/`mysql-statement-stop` separately cover process-stop-initiated cancellation of a sent transaction query/prepared execute. An independent observer first confirms the exact active session and hidden uncommitted write, then follows session retirement and the final external counter; the API result stays unknown/unconfirmed without a fabricated rollback reply. See [manager-stop transaction acceptance](cancellation.md#manager-stop-transaction-cancellation).
+
 ## Public real-service failure checks
 
 The separate `ark_database_public_failure_service_tests` executable checks wrong

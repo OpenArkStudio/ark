@@ -1002,6 +1002,138 @@ void check_mysql_transaction(bool prepared = false) {
     mysql_cancelled_transaction(*result);
 }
 
+ark::task<> mysql_transaction_stop_preflight(
+    plugin_host& observer, ark::mysql_module& database, const std::string& tag) {
+    auto created = co_await database.query(
+        "observer", "CREATE TABLE `" + tag + "` (id INT PRIMARY KEY,n BIGINT NOT NULL) ENGINE=InnoDB", 5s);
+    observer.check_executor();
+    mysql_success(created);
+    auto seeded = co_await database.query("observer", "INSERT INTO `" + tag + "` VALUES (1,0)", 5s);
+    observer.check_executor();
+    mysql_success(seeded);
+}
+
+ark::task<> mysql_transaction_stop_observe(plugin_host& observer, ark::mysql_module& database, stop_state& state,
+    const std::int64_t& original, const std::optional<ark::mysql_transaction_reply>& owned,
+    const std::optional<ark::mysql_transaction_reply>& result, std::string tag, bool prepared) {
+    auto identity = co_await database.query("observer", "SELECT CAST(CONNECTION_ID() AS SIGNED)", 3s);
+    observer.check_executor();
+    mysql_success(identity);
+    const auto observer_id = mysql_scalar(identity.result);
+    std::optional<std::chrono::steady_clock::time_point> quiet_until;
+    const auto deadline = std::chrono::steady_clock::now() + 18s;
+    for (;;)
+    {
+        require(std::chrono::steady_clock::now() < deadline,
+            "Manager-stopped MySQL transaction did not retire on the server");
+        const auto sql = "SELECT CAST(ID AS SIGNED),STATE,INFO,COMMAND FROM information_schema.processlist "
+                         "WHERE ID <> CONNECTION_ID() AND (ID=" +
+                         std::to_string(original) + " OR INFO LIKE '%" + tag + "%')";
+        auto listing = co_await database.query("observer", sql, 3s);
+        observer.check_executor();
+        mysql_success(listing);
+        require(listing.result.rows.size() <= 1, "Manager stop replayed the transaction request concurrently");
+        if (!listing.result.rows.empty())
+        {
+            const auto& row = listing.result.rows[0];
+            require(row.size() == 4 && original && original != observer_id &&
+                        std::get<std::int64_t>(row[0]) == original && !quiet_until,
+                "Manager-stopped transaction changed session or replayed after retirement");
+            const auto* phase = std::get_if<std::string>(&row[1]);
+            const auto* text = std::get_if<std::string>(&row[2]);
+            if (!state.observed && phase && *phase == "User sleep" && text && text->find(tag) != std::string::npos)
+            {
+                const auto* command = std::get_if<std::string>(&row[3]);
+                require(!prepared || (command && *command == "Execute"),
+                    "Manager stop preceded the transaction's actual prepared execute");
+                auto hidden = co_await database.query("observer", "SELECT n FROM `" + tag + "` WHERE id=1", 3s);
+                observer.check_executor();
+                mysql_success(hidden);
+                require(owned && bool(*owned) && mysql_scalar(owned->result) == 1 && mysql_scalar(hidden.result) == 0 &&
+                            !result,
+                    "Manager stop preceded the isolated uncommitted pre-write observation");
+                state.observed = true;
+                std::cout << (prepared ? "mysql-statement-stop" : "mysql-transaction-stop") << " exact tagged "
+                          << (prepared ? "Execute" : "query") << " active; target=" << original
+                          << " observer=" << observer_id << "; own-read=1 external-read=0; outer-frame stop enabled\n";
+            }
+        }
+        if (state.target_stopped)
+        {
+            state.observed_after_stop = true;
+            require(result.has_value(), "Manager stop lost the owning transaction result");
+            mysql_cancelled_transaction(*result);
+            if (listing.result.rows.empty())
+            {
+                if (!quiet_until)
+                {
+                    quiet_until = std::chrono::steady_clock::now() + 500ms;
+                }
+                if (std::chrono::steady_clock::now() >= *quiet_until)
+                {
+                    break;
+                }
+            }
+        }
+        co_await observer_interval();
+        observer.check_executor();
+    }
+    auto counter = co_await database.query("observer", "SELECT n FROM `" + tag + "` WHERE id=1", 3s);
+    observer.check_executor();
+    mysql_success(counter);
+    require(mysql_scalar(counter.result) == 0 && owned && mysql_scalar(owned->result) == 1,
+        "Manager-stopped transaction committed a write or invalidated its owning pre-write result");
+    auto dropped = co_await database.query("observer", "DROP TABLE `" + tag + "`", 3s);
+    observer.check_executor();
+    mysql_success(dropped);
+    std::cout << (prepared ? "mysql-statement-stop" : "mysql-transaction-stop")
+              << " independent observer outlived target; session absent, bounded no-replay, external counter=0; "
+                 "native cancelled/unknown, unconfirmed/discarded, no rollback reply\n";
+}
+
+void check_mysql_transaction_stop(bool prepared = false) {
+    ark::mysql_options options;
+    options.pool.connection.host = environment("ARK_DATABASE_MYSQL_HOST");
+    require(options.pool.connection.host == "127.0.0.1", "MySQL transaction stop requires owned IPv4 loopback");
+    options.pool.connection.port = port("ARK_DATABASE_MYSQL_PORT");
+    options.pool.connection.username = environment("ARK_DATABASE_MYSQL_USER");
+    options.pool.connection.password = environment("ARK_DATABASE_MYSQL_PASSWORD");
+    options.pool.connection.database = environment("ARK_DATABASE_MYSQL_DATABASE");
+    options.pool.connection.ca_file = environment("ARK_DATABASE_MYSQL_CA");
+    options.pool.connection.tls = arknet::mysql::tls_mode::required;
+    options.pool.connection.timeout = 5s;
+    options.pool.max_connections = 1;
+    const auto tag = std::string(prepared ? "ark_dso_stmt_stop_" : "ark_dso_tx_stop_") +
+                     std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    stop_state state;
+    std::int64_t original{};
+    std::optional<ark::mysql_transaction_reply> owned, result;
+    {
+        plugin_host observer("ark_database_mysql_plugin");
+        plugin_host target("ark_database_mysql_plugin");
+        auto* database = target.manager.find_module<ark::mysql_module>();
+        auto* observer_database = observer.manager.find_module<ark::mysql_module>();
+        require(database && database->configure("primary", options), "Cannot configure MySQL transaction stop target");
+        require(observer_database && observer_database->configure("observer", options),
+            "Cannot configure independent transaction stop observer");
+        observer.preflight(mysql_transaction_stop_preflight(observer, *observer_database, tag));
+        target.start(
+            mysql_transaction_request(target, *database, tag, original, owned, result, prepared), state.request);
+        observer.start(
+            mysql_transaction_stop_observe(observer, *observer_database, state, original, owned, result, tag, prepared),
+            state.observer);
+        drive_observed_stop(target, observer, state);
+        require(target.manager.try_find_module<ark::mysql_module>() == nullptr,
+            "Manager-stopped transaction retained its target module");
+        observer.stop();
+        require(state.request.count == 1 && state.observer.count == 1,
+            "Manager-stopped transaction completion repeated after observer cleanup");
+    }
+    require(owned && result && bool(*owned) && mysql_scalar(owned->result) == 1,
+        "Manager-stopped transaction lost its owning read after both hosts were destroyed");
+    mysql_cancelled_transaction(*result);
+}
+
 #endif
 
 } // namespace
@@ -1010,7 +1142,8 @@ int main(int argc, char** argv) {
     try
     {
         require(argc == 2, "Usage: ark_database_public_plugin_cancellation_tests "
-                           "redis|redis-stop|mysql|mysql-stop|mysql-transaction|mysql-statement");
+                           "redis|redis-stop|mysql|mysql-stop|mysql-transaction|mysql-statement|mysql-transaction-stop|"
+                           "mysql-statement-stop");
         const std::string_view protocol(argv[1]);
         if (protocol == "redis")
         {
@@ -1037,12 +1170,21 @@ int main(int argc, char** argv) {
         {
             check_mysql_transaction(true);
         }
+        else if (protocol == "mysql-transaction-stop")
+        {
+            check_mysql_transaction_stop();
+        }
+        else if (protocol == "mysql-statement-stop")
+        {
+            check_mysql_transaction_stop(true);
+        }
 #endif
         else
         {
             throw acceptance_failure("Requested database cancellation protocol is not enabled");
         }
-        if (protocol == "redis-stop" || protocol == "mysql-stop")
+        if (protocol == "redis-stop" || protocol == "mysql-stop" || protocol == "mysql-transaction-stop" ||
+            protocol == "mysql-statement-stop")
         {
             std::cout
                 << protocol
