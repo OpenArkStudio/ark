@@ -579,7 +579,9 @@ struct cleanup_events
 {
     std::vector<std::string> order;
     bool provider_cleaned{};
+    bool provider_stopped{};
     bool consumer_destroyed{};
+    unsigned callbacks{};
     unsigned plugins_uninstalled{};
 };
 
@@ -589,6 +591,7 @@ class lifetime_provider : public ark::module
 {
 public:
     int value{42};
+    std::function<void()> callback;
 };
 
 class lifetime_consumer : public ark::module
@@ -604,13 +607,18 @@ public:
     }
 
     bool pre_shut() override {
-        CHECK(active_cleanup->consumer_destroyed);
+        CHECK_FALSE(active_cleanup->consumer_destroyed);
+        REQUIRE(callback);
+        callback();
+        callback = {};
         active_cleanup->provider_cleaned = true;
         active_cleanup->order.emplace_back("provider-pre");
         return true;
     }
 
     bool shut() override {
+        CHECK(active_cleanup->consumer_destroyed);
+        active_cleanup->provider_stopped = true;
         active_cleanup->order.emplace_back("provider-shut");
         return true;
     }
@@ -621,11 +629,22 @@ class lifetime_consumer_impl final : public ark::module_base<lifetime_consumer, 
 public:
     bool init() override {
         provider_ = find_module<lifetime_provider>();
-        return provider_ != nullptr;
+        if (!provider_)
+        {
+            return false;
+        }
+        provider_->callback = [this] {
+            CHECK_FALSE(active_cleanup->consumer_destroyed);
+            CHECK(provider_->value == 42);
+            ++active_cleanup->callbacks;
+        };
+        return true;
     }
 
     ~lifetime_consumer_impl() override {
         check_provider();
+        CHECK(active_cleanup->provider_cleaned);
+        CHECK_FALSE(provider_->callback);
         CHECK(find_module<lifetime_provider>() == provider_);
         active_cleanup->consumer_destroyed = true;
         active_cleanup->order.emplace_back("consumer-destroy");
@@ -633,6 +652,8 @@ public:
 
     bool pre_shut() override {
         check_provider();
+        CHECK_FALSE(active_cleanup->provider_cleaned);
+        CHECK(bool(provider_->callback));
         active_cleanup->order.emplace_back("consumer-pre");
         return true;
     }
@@ -647,7 +668,7 @@ private:
     void check_provider() const {
         REQUIRE(provider_ != nullptr);
         CHECK(provider_->value == 42);
-        CHECK_FALSE(active_cleanup->provider_cleaned);
+        CHECK_FALSE(active_cleanup->provider_stopped);
     }
 
     lifetime_provider* provider_{};
@@ -698,6 +719,18 @@ TEST_CASE("Dependency objects retire before every plugin uninstall and native un
         ark::dynamic_library second("ark_plugin_allocation_second");
         REQUIRE(first.load(ARK_ALLOCATION_PROBE_DIR));
         REQUIRE(second.load(ARK_ALLOCATION_PROBE_DIR));
+
+        struct close_observers
+        {
+            ark::dynamic_library& first;
+            ark::dynamic_library& second;
+
+            ~close_observers() {
+                CHECK(first.unload());
+                CHECK(second.unload());
+            }
+        } closed{first, second};
+
         using entry = void (*)(ark::plugin_manager*, const std::string&);
         using exit = void (*)(ark::plugin_manager*);
         const auto first_entry = reinterpret_cast<void (*)(entry)>(first.get_symbol("allocation_probe_set_entry"));
@@ -739,8 +772,9 @@ TEST_CASE("Dependency objects retire before every plugin uninstall and native un
         const auto close = [&](ark::dynamic_library& library) {
             ++closes;
             CHECK(events.plugins_uninstalled == 2);
-            CHECK(events.order == std::vector<std::string>{"consumer-pre", "consumer-shut", "consumer-destroy",
-                                      "provider-pre", "provider-shut", "provider-destroy"});
+            CHECK(events.callbacks == 1);
+            CHECK(events.order == std::vector<std::string>{"consumer-pre", "provider-pre", "consumer-shut",
+                                      "consumer-destroy", "provider-shut", "provider-destroy"});
             return fail_unload ? library_access::unload(library, [](DYNLIB_HANDLE) { return native_failure; })
                                : library.unload();
         };

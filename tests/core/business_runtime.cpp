@@ -267,12 +267,13 @@ TEST_CASE("Manager stop cancels a suspended task and retains owners until late c
     REQUIRE(manager.update(1));
     REQUIRE(service.started == 1);
     CHECK_FALSE(manager.stop(2));
-    CHECK(tasks.closed());
+    CHECK_FALSE(tasks.closed());
     CHECK(tasks.start(ready_task()) == 0);
     CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopping);
     CHECK(module.pre_shut_calls == 0);
     CHECK(manager.update(3));
     CHECK(completed == 1);
+    CHECK(tasks.closed());
     CHECK(service.cancelled == 1);
     CHECK(service.started == 1);
     CHECK(result.empty());
@@ -621,7 +622,7 @@ TEST_CASE("Shutdown hook failure is observable and retains modules without repea
     CHECK(empty.stop(2));
 }
 
-TEST_CASE("Shutdown pairs consumer cleanup before provider cleanup using cached dependencies") {
+TEST_CASE("Shutdown closes callback sources before reverse dependent object cleanup") {
     ark::plugin_manager manager;
     observed_module provider("provider"), consumer("consumer");
     consumer.dependencies = {"provider"};
@@ -649,7 +650,7 @@ TEST_CASE("Shutdown pairs consumer cleanup before provider cleanup using cached 
     CHECK(manager.update(2));
     CHECK(manager.stop(3));
     CHECK(manager.stop(4));
-    CHECK(events == std::vector<std::string>{"consumer-pre", "consumer-shut", "provider-pre", "provider-shut"});
+    CHECK(events == std::vector<std::string>{"consumer-pre", "provider-pre", "consumer-shut", "provider-shut"});
     CHECK(provider.dependency_reads == 1);
     CHECK(consumer.dependency_reads == 1);
 }

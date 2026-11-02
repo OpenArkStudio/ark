@@ -153,8 +153,8 @@ int main(int argc, char* argv[]) {
         "HTTP shutdown must wait for its admitted route");
     require(!server->ready_to_shut(), "Active HTTP route was reported drained");
     const auto during_stop = request(port, arknet::http::verb::get, "/users/99");
-    require(!during_stop.error && during_stop.response.result() == arknet::http::status::ok && handled.load() == 2,
-        "Framework cleanup changed application route policy");
+    require(bool(during_stop.error) && handled.load() == 1,
+        "Retiring native dispatcher invoked a route after readiness sealed callback acquisition");
     require(!manager.stop(1), "Repeated stop released an active route");
     state->release.store(true);
     pending.join();
