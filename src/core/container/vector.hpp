@@ -22,6 +22,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -33,21 +34,7 @@ template<typename element_type, bool is_smart_ptr>
 class vector_value_type
 {
 public:
-    using value_type = element_type*;
-};
-
-template<typename element_type>
-class vector_value_type<element_type, false>
-{
-public:
-    using value_type = element_type*;
-};
-
-template<typename element_type>
-class vector_value_type<element_type, true>
-{
-public:
-    using value_type = std::shared_ptr<element_type>;
+    using value_type = std::conditional_t<is_smart_ptr, std::shared_ptr<element_type>, element_type*>;
 };
 
 template<typename element_type, bool is_smart_ptr>

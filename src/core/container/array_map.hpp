@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include <type_traits>
+#include <concepts>
 
 #include "ark/array_pod.hpp"
 #include "ark/macros.hpp"
@@ -37,9 +37,9 @@ class is_buildin_type
 public:
     enum
     {
-        yes = std::is_same_v<element_type, uint16_t> || std::is_same_v<element_type, uint32_t> ||
-              std::is_same_v<element_type, uint64_t> || std::is_same_v<element_type, int16_t> ||
-              std::is_same_v<element_type, int32_t> || std::is_same_v<element_type, int64_t>,
+        yes = std::same_as<element_type, uint16_t> || std::same_as<element_type, uint32_t> ||
+              std::same_as<element_type, uint64_t> || std::same_as<element_type, int16_t> ||
+              std::same_as<element_type, int32_t> || std::same_as<element_type, int64_t>,
         no = !yes
     };
 };
