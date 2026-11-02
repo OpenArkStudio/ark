@@ -29,6 +29,21 @@ Both cases require one owner-thread/shared-executor continuation and exactly one
 
 These are opt-in cancellation scenarios, separate from positive natural-drain modes and deadline/error fixtures. The earlier query modes do not establish Redis TLS, transaction cancellation or every failure race, external-service interoperability, cross-platform acceptance, hot update or capacity. Exact executed revision/runtime identities and cleanup evidence belong to the local handoff; this test description alone is not a passing run.
 
+## Manager-stop cancellation
+
+The optional `redis-stop` and SSL-only `mysql-stop` modes use the same private service configuration and write privileges. They exercise process resource cancellation without explicitly calling `task_group::cancel(id)`:
+
+```sh
+database-build/tests/database/ark_database_public_plugin_cancellation_tests redis-stop
+database-build/tests/database/ark_database_public_plugin_cancellation_tests mysql-stop
+```
+
+The target and observer load separate plugin instances with independent managers, task runtimes and connection pools. The observer confirms the Redis named pipeline is blocked after its INCR, or the tagged MySQL autocommit UPDATE is in `User sleep`. Only then does the outer owner loop call the target's `manager.stop()`, with its request still pending. It pumps both managers until the target reaches `stopped`; the observer keeps running afterward. No new request is sent through the stopped target and observer queries are not target-pool recovery.
+
+Both modes require exactly one owner-executor completion, an owning native cancelled/unknown result after both hosts are destroyed, zero pending target tasks and idempotent resource stop. The observer tracks the whole original server connection, requires its disappearance and a further 500 ms without the connection or tagged request returning, then requires counter one and removes the exclusive data. That counter is the required observation for these specific autocommit/pipeline cases; it is not an API promise that cancellation preserves or rolls back writes. MySQL retains `outcome_unknown`; no rollback reply is fabricated.
+
+These modes cover manager-stop-initiated cancellation of an observed pending Redis pipeline or MySQL autocommit request only. Transaction/prepared stop cancellation, other operation stages/races, Redis TLS, server faults, durability, hot update, physical library-image removal and capacity remain separate scopes. Test bounds do not change production shutdown defaults. The four explicit-cancellation modes retain their existing behavior and assertions.
+
 ## MySQL transaction-operation cancellation
 
 The additional SSL-only `mysql-transaction` mode uses the existing public

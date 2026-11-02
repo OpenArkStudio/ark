@@ -257,6 +257,8 @@ INSERT 权限、强制 TLS 与可信 CA。该模式使用相同的 MySQL 环境�
 及未提交写入的最终可见性，并通过原连接池显式提交新请求验证恢复。详见
 [事务取消说明](cancellation_CN.md#mysql-事务内操作取消)。
 
+可选 `redis-stop`／`mysql-stop` 使用独立观察者管理器与运行时，确认服务端请求已执行后，由外层所属线程调用目标 `manager.stop()` 发起取消；观察者继续运行，验证原连接退出、有限窗口内计数为一、仅一次完成及安全资源关闭。它们不向已关闭目标恢复请求，不改变原有四种显式取消模式。见[管理器 stop 验收](cancellation_CN.md#管理器-stop-发起取消)。
+
 ## 公开模块真实服务负面验收
 
 独立的 `ark_database_public_failure_service_tests` 验证 Redis/MySQL 错误密码、

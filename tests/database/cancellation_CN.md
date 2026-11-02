@@ -29,6 +29,21 @@ MySQL 先创建私有单行计数表，任务只执行一次带标记的 `UPDATE
 
 这些是手动启用的取消场景，与正常排空模式及超时／错误 fixture 分开。此前查询模式的结果不覆盖 Redis TLS、事务取消或全部错误竞争、外部服务互通、跨平台验收、热更新或容量。实际执行的精确源码／运行时身份与清理证据由本地交接记录提供；测试说明本身不代表执行通过。
 
+## 管理器 stop 发起取消
+
+可选 `redis-stop` 与仅在启用 SSL 时可用的 `mysql-stop` 模式沿用上述私有服务配置和写入权限，验证进程资源取消，不显式调用 `task_group::cancel(id)`：
+
+```sh
+database-build/tests/database/ark_database_public_plugin_cancellation_tests redis-stop
+database-build/tests/database/ark_database_public_plugin_cancellation_tests mysql-stop
+```
+
+目标与观察者加载各自的插件实例，使用独立管理器、任务运行时与连接池。观察者先确认 Redis 命名流水线在 INCR 后阻塞，或带标记的 MySQL autocommit UPDATE 处于 `User sleep`。外层所属线程循环随后才对目标调用 `manager.stop()`，此时请求仍待完成。循环驱动两个管理器直到目标进入 `stopped`；观察者继续运行。不向已停止的目标提交新请求，也不把观察者查询视为目标池恢复。
+
+两个模式均要求所属执行器仅完成一次、两个宿主销毁后拥有型原生取消／未知结果仍有效、目标任务归零且资源 stop 可重复。观察者追踪原服务端连接整体，等待其消失，并要求后续 500 ms 内连接或带标记请求不再出现，随后确认计数为一并删除独占数据。计数是这两个特定 autocommit／流水线场景的验收观察，不是取消必然保留写入或回滚的 API 承诺。MySQL 继续保留 `outcome_unknown`，不伪造 rollback 回复。
+
+此范围只覆盖 manager stop 对已观察到的待完成 Redis 流水线或 MySQL autocommit 请求发起取消。事务／预处理 stop 取消、其他操作阶段或竞争、Redis TLS、服务端故障、持久性、热更新、库映像物理移除及容量仍属独立范围。测试时限不改变生产停机默认值。原有四种显式取消模式的行为与断言保持不变。
+
 ## MySQL 事务内操作取消
 
 仅在启用 SSL 时可用的 `mysql-transaction` 模式使用既有公共 `begin()` 和
