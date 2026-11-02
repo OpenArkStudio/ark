@@ -9,6 +9,8 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "../network/doctest.h"
@@ -21,6 +23,11 @@ namespace {
 
 constexpr std::size_t capacity = 1024 * 1024;
 constexpr const char* prefix = "existing:";
+
+static_assert(!std::is_copy_constructible_v<ark::zstd_compress>);
+static_assert(!std::is_copy_assignable_v<ark::zstd_compress>);
+static_assert(std::is_nothrow_move_constructible_v<ark::zstd_compress>);
+static_assert(std::is_nothrow_move_assignable_v<ark::zstd_compress>);
 
 std::string payload(std::size_t size, uint32_t seed = 1) {
     std::string result(size, '\0');
@@ -106,6 +113,55 @@ void check_compression_boundary(bound_type bound, compress_type compress) {
 }
 
 } // namespace
+
+TEST_CASE("Zstandard moves retain populated contexts dictionaries and frame compatibility") {
+    dictionary_file dictionary;
+    const auto input = payload(4096).substr(123, 2048);
+    ark::zstd_compress source;
+    REQUIRE(source.init_z_std_dict(1, dictionary.path.string(), 1));
+    std::string frame;
+    REQUIRE(source.dict_compress(1, input.data(), input.size(), frame));
+    std::string output;
+    REQUIRE(source.dict_decompress(1, frame.data(), frame.size(), output));
+    REQUIRE(output == input);
+
+    ark::zstd_compress moved(std::move(source));
+    output = prefix;
+    CHECK(moved.dict_decompress(1, frame.data(), frame.size(), output));
+    CHECK(output == prefix + input);
+    std::string moved_frame;
+    CHECK(moved.dict_compress(1, input.data(), input.size(), moved_frame));
+    CHECK(moved_frame == frame);
+
+    ark::zstd_compress destination;
+    REQUIRE(destination.init_z_std_dict(2, dictionary.path.string(), 3));
+    std::string old_frame;
+    REQUIRE(destination.dict_compress(2, input.data(), input.size(), old_frame));
+    output.clear();
+    REQUIRE(destination.dict_decompress(2, old_frame.data(), old_frame.size(), output));
+    destination = std::move(moved);
+    auto* same = &destination;
+    destination = std::move(*same);
+    output = prefix;
+    CHECK(destination.dict_decompress(1, frame.data(), frame.size(), output));
+    CHECK(output == prefix + input);
+    moved_frame.clear();
+    CHECK(destination.dict_compress(1, input.data(), input.size(), moved_frame));
+    CHECK(moved_frame == frame);
+
+    for (auto* reused : {&source, &moved})
+    {
+        REQUIRE(reused->init_z_std_dict(1, dictionary.path.string(), 1));
+        std::string reused_frame;
+        REQUIRE(reused->dict_compress(1, input.data(), input.size(), reused_frame));
+        CHECK(reused_frame == frame);
+    }
+
+    const auto normal_frame = external_zstd(input);
+    output = prefix;
+    CHECK(destination.normal_decompress(normal_frame.data(), normal_frame.size(), output));
+    CHECK(output == prefix + input);
+}
 
 TEST_CASE("compression preserves binary bytes and appends successful results") {
     const auto input = payload(8192);
