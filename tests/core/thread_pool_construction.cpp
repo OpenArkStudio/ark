@@ -13,19 +13,6 @@
 #include <string_view>
 #include <thread>
 
-namespace {
-std::atomic<const char*> active_stage{"controller"};
-std::atomic<bool> trace_constructor_stages{};
-
-void set_active_stage(const char* stage) noexcept {
-    active_stage.store(stage, std::memory_order_relaxed);
-    if (trace_constructor_stages.load(std::memory_order_relaxed))
-    {
-        std::fprintf(stderr, "constructor stage: %s\n", stage);
-    }
-}
-} // namespace
-
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -47,9 +34,7 @@ void set_active_stage(const char* stage) noexcept {
 #include <dirent.h>
 #endif
 
-#define CTPL_CONSTRUCTION_TEST_STAGE(stage) set_active_stage(stage)
 #include "../../src/plugins/utility/ctpl_stl.h"
-#undef CTPL_CONSTRUCTION_TEST_STAGE
 
 namespace {
 
@@ -111,11 +96,17 @@ int process_threads() noexcept {
 
 thread_local bool armed{};
 thread_local std::size_t remaining{}, attempts{}, rejected{};
+thread_local std::size_t failed_allocation_size{};
 thread_local int baseline_threads{}, threads_at_failure{};
+#ifdef _WIN32
+thread_local std::array<void*, 16> allocation_frames{};
+thread_local USHORT allocation_frame_count{};
+#endif
 const char* active_mode = "controller";
+const char* active_stage = "controller";
 std::size_t active_budget{};
 
-void before_allocation() {
+void before_allocation(std::size_t size) {
     ++attempts;
     if (armed && remaining-- == 0)
     {
@@ -123,13 +114,18 @@ void before_allocation() {
         // depend on another successful allocation on this owner thread.
         remaining = 0;
         ++rejected;
+        failed_allocation_size = size;
         threads_at_failure = process_threads();
+#ifdef _WIN32
+        allocation_frame_count =
+            CaptureStackBackTrace(1, static_cast<DWORD>(allocation_frames.size()), allocation_frames.data(), nullptr);
+#endif
         throw std::bad_alloc{};
     }
 }
 
 void* allocate(std::size_t size) {
-    before_allocation();
+    before_allocation(size);
     if (auto* pointer = std::malloc(size ? size : 1))
     {
         return pointer;
@@ -138,7 +134,7 @@ void* allocate(std::size_t size) {
 }
 
 void* allocate_aligned(std::size_t size, std::size_t alignment) {
-    before_allocation();
+    before_allocation(size);
 #ifdef _WIN32
     if (auto* pointer = _aligned_malloc(size ? size : 1, alignment))
     {
@@ -322,21 +318,19 @@ int constructor_failure(std::size_t index) {
     }
     bool threw{};
     arm(index);
-    active_stage.store("constructing pool", std::memory_order_relaxed);
-    trace_constructor_stages.store(index < 2, std::memory_order_relaxed);
+    active_stage = "constructing pool";
     try
     {
         ctpl::thread_pool pool(4);
         // Destruction also runs with the persistent owner-thread fault armed.
-        active_stage.store("pool constructed", std::memory_order_relaxed);
+        active_stage = "pool constructed";
     }
     catch (const std::bad_alloc&)
     {
-        active_stage.store("caught bad_alloc", std::memory_order_relaxed);
+        active_stage = "caught bad_alloc";
         threw = true;
     }
-    trace_constructor_stages.store(false, std::memory_order_relaxed);
-    active_stage.store("checking worker retirement", std::memory_order_relaxed);
+    active_stage = "checking worker retirement";
     const bool retired = workers_retired();
     const bool persistent = armed && rejected == (threw ? 1u : 0u);
     armed = false;
@@ -566,10 +560,10 @@ int main(int argc, char** argv) {
             { exception_kind = 3; }
         }
         std::fprintf(stderr,
-            "terminate mode=%s stage=%s budget=%zu exception=%d armed=%d remaining=%zu attempts=%zu rejected=%zu "
-            "baseline=%d failure=%d current=%d\n",
-            active_mode, active_stage.load(std::memory_order_relaxed), active_budget, exception_kind, armed, remaining,
-            attempts, rejected, baseline_threads, threads_at_failure, process_threads());
+            "terminate mode=%s stage=%s budget=%zu exception=%d uncaught=%d armed=%d remaining=%zu attempts=%zu "
+            "rejected=%zu failed_size=%zu baseline=%d failure=%d current=%d\n",
+            active_mode, active_stage, active_budget, exception_kind, std::uncaught_exceptions(), armed, remaining,
+            attempts, rejected, failed_allocation_size, baseline_threads, threads_at_failure, process_threads());
 #ifdef _WIN32
         void* frames[16]{};
         const auto frame_count = CaptureStackBackTrace(0, 16, frames, nullptr);
@@ -577,6 +571,12 @@ int main(int argc, char** argv) {
         for (USHORT index{}; index < frame_count; ++index)
         {
             std::fprintf(stderr, " %p", frames[index]);
+        }
+        std::fputc('\n', stderr);
+        std::fputs("allocation stack:", stderr);
+        for (USHORT index{}; index < allocation_frame_count; ++index)
+        {
+            std::fprintf(stderr, " %p", allocation_frames[index]);
         }
         std::fputc('\n', stderr);
 #endif
@@ -588,7 +588,7 @@ int main(int argc, char** argv) {
         const auto index = static_cast<std::size_t>(std::strtoull(argv[2], nullptr, 10));
         const auto boundary = static_cast<std::size_t>(std::strtoull(argv[3], nullptr, 10));
         active_mode = argv[1];
-        active_stage.store("child dispatch", std::memory_order_relaxed);
+        active_stage = "child dispatch";
         active_budget = index;
         if (std::string_view(argv[1]) == "constructor")
         {
