@@ -294,6 +294,12 @@ test('module flags and workflow matrix guards keep uncertain source ranges and q
   assert.equal(count(plan(undefined, 'pull_request', { enumerationFailed: true })), 12);
   assert.equal(count(plan([])), 12);
   assert.equal(count(plan(['../bad.cpp'])), 12);
+  const databaseManualChange = ['tests/database/public_plugin_cancellation.cpp',
+    'tests/database/cancellation.md', 'tests/database/cancellation_CN.md'];
+  assert.equal(count(plan(databaseManualChange)), 1);
+  assert.equal(count(plan(databaseManualChange, 'merge_group')), 12);
+  assert.equal(count(plan(['tests/database/cancellation.md', 'tests/database/cancellation_CN.md'])), 0);
+  assert.equal(count(plan(['tests/database/cancellation.md', 'tests/database/future-manual.md'])), 3);
   assert.equal(count(plan(['tests/network/rudp.cpp'], 'merge_group')), 12);
   assert.equal(count(plan(['docs/guide.md'], 'workflow_dispatch')), 12);
   assert.equal(count(plan(['docs/guide.md'], 'merge_group')), 0);
