@@ -31,6 +31,11 @@ ark_database_test(ark_database_service_retirement_tests main.cpp service_retirem
 target_link_libraries(ark_database_service_retirement_tests PRIVATE arknet::arknet)
 ark_database_test(ark_database_service_construction_tests service_construction_allocation.cpp)
 target_link_libraries(ark_database_service_construction_tests PRIVATE arknet::arknet)
+if(MSVC)
+    # Global allocation fault injection must target service construction, not
+    # the Debug STL's noexcept container-proxy bookkeeping.
+    target_compile_definitions(ark_database_service_construction_tests PRIVATE _ITERATOR_DEBUG_LEVEL=0)
+endif()
 add_custom_target(check-database-service-construction
     COMMAND ${CMAKE_COMMAND} -DPROGRAM=$<TARGET_FILE:ark_database_service_construction_tests>
         -DENABLE_SSL=${ARKNET_ENABLE_SSL} -DPROFILE=default
