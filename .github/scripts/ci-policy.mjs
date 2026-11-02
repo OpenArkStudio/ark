@@ -8,8 +8,10 @@ const cppPath = /\.(?:c|cc|cpp|cxx|c\+\+|h|hh|hpp|hxx|inl|ipp|tpp|proto)$/i;
 const docPath = /\.(?:md|mdx|markdown|rst|adoc|txt|html|css|js|mjs|cjs|ts|tsx|jsx|astro|json|yaml|yml|svg|png|jpe?g|gif|webp|ico|pdf|woff2?|ttf|otf)$/i;
 const dependencyName = /^(?:package(?:-lock)?\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|vcpkg(?:-configuration)?\.json|conanfile\.(?:py|txt)|conan\.lock|requirements(?:-[\w.-]+)?\.txt|.*\.lock|\.gitmodules)$/i;
 const pluginIndexPaths = new Set(['src/plugins/README.md', 'src/plugins/README_CN.md']);
+// Reviewed static test manuals only; unknown Markdown and executable inputs stay conservative.
 const testGuidePaths = new Set(['tests/core/README.md', 'tests/core/README_CN.md',
-  'tests/database/README.md', 'tests/database/README_CN.md']);
+  'tests/database/README.md', 'tests/database/README_CN.md',
+  'tests/database/cancellation.md', 'tests/database/cancellation_CN.md']);
 
 function isRepositoryPath(file) {
   return typeof file === 'string' && file.length > 0 && !/[\x00-\x1f\x7f\\]/.test(file) &&

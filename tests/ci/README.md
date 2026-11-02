@@ -121,6 +121,16 @@ other test Markdown/README paths. Fixtures, source, build/dependency/CI inputs,
 unknown neighbors, mixed changes and unavailable ranges retain their native checks.
 This CI policy change itself requires all native modules before acceptance.
 
+The two existing manuals `tests/database/cancellation.md` and
+`tests/database/cancellation_CN.md` also describe opt-in commands; they are not
+executed or read as build/runtime inputs. Their exact paths select documentation,
+while mixed database C++ changes still select Database source validation and Nimbus.
+Unknown test Markdown, scripts and build/dependency inputs remain conservative.
+Git renames include both removed and added paths; deleting code retains native
+validation. Code-bearing queue candidates still require every native variant.
+This classification fix itself requires all source modules and full native queue
+acceptance; it does not change already-running checks or exempt executable tools.
+
 Root README link checks run only when a root README changes. They validate local file
 targets, including images, HTML `srcset` and reference links. It handles the forms
 used by these READMEs; it is not a complete Markdown parser. Remote URLs and heading

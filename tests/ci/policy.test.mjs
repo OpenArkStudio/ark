@@ -339,6 +339,112 @@ test('test guide scoping keeps unavailable sites uncertain inputs and manual run
   }
 });
 
+const cancellationManuals = ['tests/database/cancellation.md', 'tests/database/cancellation_CN.md'];
+
+test('the two exact cancellation manuals select documentation without native or root README checks', () => {
+  for (const file of cancellationManuals) assert.equal(isDocumentationPath(file), true, file);
+  for (const eventName of ['pull_request', 'merge_group']) {
+    for (const files of [[cancellationManuals[0]], [cancellationManuals[1]], cancellationManuals]) {
+      const scope = decision(files, { eventName });
+      assert.equal(scope.validation_stage, 'documentation');
+      assert.equal(scope.reason, 'documentation-only');
+      assert.equal(scope.docs_check, true);
+      assert.equal(scope.readme_check, false);
+      assert.equal(scope.format_check, false);
+      for (const job of ['network', 'applications', 'database']) assert.equal(scope[job + '_check'], false);
+      validateGate(results(scope));
+      const skippedDocs = results(scope);
+      skippedDocs.validation.outputs.documentation_outcome = 'skipped';
+      assert.throws(() => validateGate(skippedDocs));
+    }
+  }
+});
+
+test('cancellation manuals with database C++ keep Database source validation and full native queue acceptance', () => {
+  const files = [...cancellationManuals, 'tests/database/public_plugin_cancellation.cpp'];
+  for (const eventName of ['pull_request', 'merge_group']) {
+    const scope = decision(files, { eventName });
+    assert.equal(scope.docs_check, true);
+    assert.equal(scope.format_check, true);
+    assert.equal(scope.validation_stage, eventName === 'pull_request' ? 'modules' : 'full');
+    assert.equal(scope.database_check, true);
+    assert.equal(scope.network_check, eventName === 'merge_group');
+    assert.equal(scope.applications_check, eventName === 'merge_group');
+    validateGate(results(scope));
+    const skippedDatabase = results(scope);
+    skippedDatabase.database.result = 'skipped';
+    assert.throws(() => validateGate(skippedDatabase));
+  }
+});
+
+test('future test manuals scripts dependencies and unknown build inputs do not inherit cancellation manual scope', () => {
+  for (const file of ['tests/database/new-manual.md', 'tests/database/cancellation.mdx',
+    'tests/database/cancellation_CN.MD', 'tests/database/cancellation.md.bak',
+    'tests/database/fixtures/cancellation.md', 'tests/database/cancellation.sh',
+    'tests/database/cancellation.mjs', 'tests/database/cancellation.cmake',
+    'tests/database/package.json', 'tests/database/package-lock.json', 'CMakeLists.txt',
+    'cmake/database.cmake', 'vcpkg.json', '.github/workflows/ci.yml']) {
+    assert.equal(isDocumentationPath(file), false, file);
+    for (const eventName of ['pull_request', 'merge_group']) {
+      const scope = decision([...cancellationManuals, file], { eventName });
+      for (const job of ['network', 'applications', 'database']) assert.equal(scope[job + '_check'], true, eventName + '/' + file);
+      assert.equal(scope.docs_check, true);
+      assert.equal(scope.format_check, true);
+      validateGate(results(scope));
+    }
+  }
+  for (const extra of [{ enumerationFailed: true }, { eventName: 'workflow_dispatch' },
+    { site: { present: false, available: false } }, { site: { present: true, available: false } }]) {
+    const scope = decision(cancellationManuals, extra);
+    assert.equal(scope.validation_stage, 'full');
+    for (const job of ['network', 'applications', 'database']) assert.equal(scope[job + '_check'], true);
+    validateGate(results(scope));
+  }
+});
+
+test('a real rename into an exact cancellation manual cannot conceal removed source', t => {
+  const repo = repository(t);
+  const base = addSite(repo);
+  mkdirSync(resolve(repo.root, 'tests/database'), { recursive: true });
+  renameSync(resolve(repo.root, 'src/main.cpp'), resolve(repo.root, cancellationManuals[0]));
+  const head = repo.commit();
+  assert.deepEqual(changedPaths({ root: repo.root, base, head }).sort(), ['src/main.cpp', cancellationManuals[0]].sort());
+  for (const eventName of ['pull_request', 'merge_group']) {
+    const payload = eventName === 'pull_request' ? { pull_request: { base: { sha: base }, head: { sha: head } } } :
+      { merge_group: { base_sha: base, head_sha: head } };
+    const scope = classifyEvent(repo, eventName, payload).plan;
+    assert.equal(scope.native_check, true);
+    for (const job of ['network', 'applications', 'database']) assert.equal(scope[job + '_check'], true);
+    validateGate(results(scope));
+  }
+});
+
+test('manual deletion stays documentation while deleted database C++ remains native work', t => {
+  for (const deleteCode of [false, true]) {
+    const repo = repository(t);
+    addSite(repo);
+    for (const file of cancellationManuals) repo.write(file, '# Cancellation instructions\n');
+    repo.write('tests/database/public_plugin_cancellation.cpp', 'int cancellation_test;\n');
+    const base = repo.commit();
+    for (const file of cancellationManuals) rmSync(resolve(repo.root, file));
+    if (deleteCode) rmSync(resolve(repo.root, 'tests/database/public_plugin_cancellation.cpp'));
+    const head = repo.commit();
+    const files = changedPaths({ root: repo.root, base, head });
+    assert.equal(files.length, deleteCode ? 3 : 2);
+    for (const eventName of ['pull_request', 'merge_group']) {
+      const payload = eventName === 'pull_request' ? { pull_request: { base: { sha: base }, head: { sha: head } } } :
+        { merge_group: { base_sha: base, head_sha: head } };
+      const scope = classifyEvent(repo, eventName, payload).plan;
+      assert.equal(scope.docs_check, true);
+      assert.equal(scope.native_check, deleteCode);
+      assert.equal(scope.database_check, deleteCode);
+      assert.equal(scope.network_check, deleteCode && eventName === 'merge_group');
+      assert.equal(scope.applications_check, deleteCode && eventName === 'merge_group');
+      validateGate(results(scope));
+    }
+  }
+});
+
 test('this CI policy change requires all native jobs and the required gate rejects skips', () => {
   const files = ['.github/scripts/ci-policy.mjs', 'tests/ci/policy.test.mjs',
     'tests/ci/README.md', 'tests/ci/README_CN.md'];
