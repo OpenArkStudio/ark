@@ -106,7 +106,7 @@ public:
     plugin_manager() = default;
 
     ~plugin_manager() {
-        // Destruction cannot drive a drain or release code executing on this
+        // Destruction cannot retire tasks or release code executing on this
         // stack. Keep the same visible contract as the task groups themselves.
         if (owner_ != std::this_thread::get_id() || execution_active() || pending_tasks_unchecked())
         {
@@ -377,8 +377,8 @@ public:
             return;
         }
 
-        // A task owned by another module can still borrow this provider. Until
-        // dependency lifetimes are explicit, every managed group must drain.
+        // A task owned by another module can still borrow this provider.
+        // Retire every managed group before removing any provider object.
         if (pending_tasks_unchecked())
         {
             throw std::logic_error("Cannot remove modules while managed tasks are pending");
@@ -602,7 +602,7 @@ protected:
         {
             failure = std::string(phase) + (std::string(phase) == "dependencies"
                                                    ? ": cycle prevents startup; blocked modules: "
-                                                   : ": cycle prevents admission stop; blocked modules: ");
+                                                   : ": cycle prevents shutdown; blocked modules: ");
             bool first = true;
             for (const auto& [name, count] : pending)
             {
@@ -1001,7 +1001,8 @@ private:
         return true;
     }
 
-    bool unregister_owned_module(const std::string& name, module& expected) {
+    bool unregister_owned_module(
+        const std::string& name, module& expected, std::unique_ptr<task_group>& retired_tasks) {
         check_registry_mutation();
         const auto entry = module_instances_.find(name);
         const auto update = module_updates_.find(name);
@@ -1010,7 +1011,21 @@ private:
         {
             return false;
         }
-        remove_module(name); // Preserve the global pending-task and owner/phase guards.
+        if (pending_tasks_unchecked())
+        {
+            throw std::logic_error("Cannot remove modules while managed tasks are pending");
+        }
+        // A module may retain a direct task_group reference for its destructor.
+        // Remove registry lookup now, but keep the facade alive through delete.
+        const auto tasks = task_groups_.find(&expected);
+        if (tasks != task_groups_.end())
+        {
+            retired_tasks = std::move(tasks->second);
+            task_groups_.erase(tasks);
+        }
+        module_instances_.erase(entry);
+        module_owners_.erase(name);
+        lifecycle_order_valid_ = false;
         if (update != module_updates_.end())
         {
             module_updates_.erase(update);

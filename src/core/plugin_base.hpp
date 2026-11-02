@@ -116,7 +116,8 @@ private:
         {
             return true;
         }
-        if (!get_plugin_manager()->unregister_owned_module(entry->first, *entry->second))
+        std::unique_ptr<task_group> retired_tasks;
+        if (!get_plugin_manager()->unregister_owned_module(entry->first, *entry->second, retired_tasks))
         {
             return false;
         }
