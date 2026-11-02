@@ -267,6 +267,9 @@ add_dependencies(check-core check-scheduler-startup-cleanup)
 
 add_executable(ark_thread_pool_construction_tests thread_pool_construction.cpp)
 target_link_libraries(ark_thread_pool_construction_tests PRIVATE Threads::Threads)
+if(WIN32)
+    target_link_libraries(ark_thread_pool_construction_tests PRIVATE Dbghelp)
+endif()
 add_custom_target(check-scheduler-construction
     COMMAND $<TARGET_FILE:ark_thread_pool_construction_tests>
     DEPENDS ark_thread_pool_construction_tests USES_TERMINAL VERBATIM)

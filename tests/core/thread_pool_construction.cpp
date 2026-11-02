@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cerrno>
 #include <chrono>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -19,6 +20,7 @@
 #endif
 #include <windows.h>
 
+#include <dbghelp.h>
 #include <malloc.h>
 #include <tlhelp32.h>
 #elif defined(__APPLE__)
@@ -345,6 +347,44 @@ int constructor_failure(std::size_t index) {
     return !threw ? no_failure : threads_at_failure > baseline_threads ? partial_workers : 0;
 }
 
+#ifdef _WIN32
+void print_symbolized_stack(const char* label, void* const* frames, USHORT frame_count) noexcept {
+    const auto process = GetCurrentProcess();
+    if (!SymInitialize(process, nullptr, TRUE))
+    {
+        return;
+    }
+
+    SymSetOptions(SymGetOptions() | SYMOPT_UNDNAME | SYMOPT_LOAD_LINES | SYMOPT_DEFERRED_LOADS);
+    alignas(SYMBOL_INFO) std::array<std::byte, sizeof(SYMBOL_INFO) + MAX_SYM_NAME> storage{};
+    auto* symbol = reinterpret_cast<SYMBOL_INFO*>(storage.data());
+    symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+    symbol->MaxNameLen = MAX_SYM_NAME;
+
+    for (USHORT index{}; index < frame_count; ++index)
+    {
+        DWORD64 displacement{};
+        if (SymFromAddr(process, reinterpret_cast<DWORD64>(frames[index]), &displacement, symbol))
+        {
+            IMAGEHLP_LINE64 line{};
+            line.SizeOfStruct = sizeof(line);
+            DWORD line_displacement{};
+            if (SymGetLineFromAddr64(process, reinterpret_cast<DWORD64>(frames[index]), &line_displacement, &line))
+            {
+                std::fprintf(stderr, "%s[%u]: %s+0x%llx (%s:%lu)\n", label, index, symbol->Name,
+                    static_cast<unsigned long long>(displacement), line.FileName, line.LineNumber);
+            }
+            else
+            {
+                std::fprintf(stderr, "%s[%u]: %s+0x%llx\n", label, index, symbol->Name,
+                    static_cast<unsigned long long>(displacement));
+            }
+        }
+    }
+    SymCleanup(process);
+}
+#endif
+
 struct capture
 {
     unsigned& destroyed;
@@ -579,6 +619,8 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, " %p", allocation_frames[index]);
         }
         std::fputc('\n', stderr);
+        armed = false;
+        print_symbolized_stack("allocation symbol", allocation_frames.data(), allocation_frame_count);
 #endif
         std::fflush(stderr);
         std::_Exit(86);
