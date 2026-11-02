@@ -20,10 +20,11 @@
 
 #pragma once
 
-#include "ark/platform.hpp"
+#include <bit>
+#include <memory>
+#include <span>
 
-#define MX (((z >> 5) ^ (y << 2)) + ((y >> 3) ^ (z << 4))) ^ ((sum ^ y) + (key[(p & 3) ^ e] ^ z))
-#define DELTA 0x9e3779b9
+#include "ark/platform.hpp"
 
 namespace ark {
 
@@ -39,14 +40,14 @@ public:
      */
     static bool xxtea_encrypt(std::string const& data, std::string const& key, std::string& encrypt_value) {
         size_t out_len = 0;
-        void* ret = xxtea_encrypt(data.c_str(), data.length(), key.c_str(), &out_len);
-        if (ret == NULL)
+        std::unique_ptr<void, decltype(&std::free)> ret(
+            xxtea_encrypt(data.c_str(), data.length(), key.c_str(), &out_len), &std::free);
+        if (ret == nullptr)
         {
             return false;
         }
 
-        encrypt_value.append((char*)ret, out_len);
-        free(ret);
+        encrypt_value.append(static_cast<const char*>(ret.get()), out_len);
         return true;
     }
 
@@ -59,14 +60,14 @@ public:
      */
     static bool xxtea_decrypt(std::string const& data, std::string const& key, std::string& decrypt_value) {
         size_t out_len = 0;
-        void* ret = xxtea_decrypt(data.c_str(), data.length(), key.c_str(), &out_len);
-        if (ret == NULL)
+        std::unique_ptr<void, decltype(&std::free)> ret(
+            xxtea_decrypt(data.c_str(), data.length(), key.c_str(), &out_len), &std::free);
+        if (ret == nullptr)
         {
             return false;
         }
 
-        decrypt_value.append((char*)ret, out_len);
-        free(ret);
+        decrypt_value.append(static_cast<const char*>(ret.get()), out_len);
         return true;
     }
 
@@ -76,11 +77,16 @@ public:
      * @len:     Length of the data to be encrypted
      * @key:     Symmetric key
      * @out_len: Pointer to output length variable
-     * Returns:  Encrypted data or %NULL on failure
+     * Returns:  Encrypted data or nullptr on failure
      *
      * Caller is responsible for freeing the returned buffer.
      */
     static void* xxtea_encrypt(const void* data, size_t len, const void* key, size_t* out_len) {
+        if (data == nullptr || key == nullptr || out_len == nullptr || len == 0 ||
+            len > (std::numeric_limits<uint32_t>::max)())
+        {
+            return nullptr;
+        }
         const auto fixed_key = normalize_key(key);
         return xxtea_ubyte_encrypt((const uint8_t*)data, len, fixed_key.data(), out_len);
     }
@@ -91,13 +97,26 @@ public:
      * @len:     Length of the data to be decrypted
      * @key:     Symmetric key
      * @out_len: Pointer to output length variable
-     * Returns:  Decrypted data or %NULL on failure
+     * Returns:  Decrypted data or nullptr on failure
      *
      * Caller is responsible for freeing the returned buffer.
      */
     static void* xxtea_decrypt(const void* data, size_t len, const void* key, size_t* out_len) {
+        if (data == nullptr || key == nullptr || out_len == nullptr || len == 0 || len % sizeof(uint32_t) != 0 ||
+            len > (std::numeric_limits<uint32_t>::max)())
+        {
+            return nullptr;
+        }
         const auto fixed_key = normalize_key(key);
         return xxtea_ubyte_decrypt((const uint8_t*)data, len, fixed_key.data(), out_len);
+    }
+
+private:
+    static constexpr uint32_t delta = 0x9e3779b9u;
+
+    static constexpr uint32_t mix(uint32_t z, uint32_t y, uint32_t sum, uint32_t position, uint32_t selector,
+        std::span<const uint32_t, 4> key) noexcept {
+        return (((z >> 5) ^ (y << 2)) + ((y >> 3) ^ (z << 4))) ^ ((sum ^ y) + (key[(position & 3) ^ selector] ^ z));
     }
 
 protected:
@@ -122,7 +141,7 @@ protected:
             out = (uint32_t*)calloc(n + 1, sizeof(uint32_t));
             if (!out)
             {
-                return NULL;
+                return nullptr;
             }
             out[n] = (uint32_t)len;
             *out_len = n + 1;
@@ -132,18 +151,21 @@ protected:
             out = (uint32_t*)calloc(n, sizeof(uint32_t));
             if (!out)
             {
-                return NULL;
+                return nullptr;
             }
             *out_len = n;
         }
-#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
-        memcpy(out, data, len);
-#else
-        for (size_t i = 0; i < len; ++i)
+        if constexpr (std::endian::native == std::endian::little)
         {
-            out[i >> 2] |= (uint32_t)data[i] << ((i & 3) << 3);
+            std::memcpy(out, data, len);
         }
-#endif
+        else
+        {
+            for (size_t i = 0; i < len; ++i)
+            {
+                out[i >> 2] |= static_cast<uint32_t>(data[i]) << ((i & 3) << 3);
+            }
+        }
 
         return out;
     }
@@ -161,21 +183,29 @@ protected:
             n -= 4;
             if ((m < n - 3) || (m > n))
             {
-                return NULL;
+                return nullptr;
             }
             n = m;
         }
 
         out = (uint8_t*)malloc(n + 1);
 
-#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
-        memcpy(out, data, n);
-#else
-        for (size_t i = 0; i < n; ++i)
+        if (out == nullptr)
         {
-            out[i] = (uint8_t)(data[i >> 2] >> ((i & 3) << 3));
+            return nullptr;
         }
-#endif
+
+        if constexpr (std::endian::native == std::endian::little)
+        {
+            std::memcpy(out, data, n);
+        }
+        else
+        {
+            for (size_t i = 0; i < n; ++i)
+            {
+                out[i] = static_cast<uint8_t>(data[i >> 2] >> ((i & 3) << 3));
+            }
+        }
 
         out[n] = '\0';
         *out_len = n;
@@ -194,17 +224,17 @@ protected:
 
         while (0 < q--)
         {
-            sum += DELTA;
+            sum += delta;
             e = sum >> 2 & 3;
 
             for (p = 0; p < n; p++)
             {
                 y = data[p + 1];
-                z = data[p] += MX;
+                z = data[p] += mix(z, y, sum, p, e, std::span<const uint32_t, 4>(key, 4));
             }
 
             y = data[0];
-            z = data[n] += MX;
+            z = data[n] += mix(z, y, sum, p, e, std::span<const uint32_t, 4>(key, 4));
         }
 
         return data;
@@ -212,7 +242,7 @@ protected:
 
     static uint32_t* xxtea_uint_decrypt(uint32_t* data, size_t len, uint32_t* key) {
         uint32_t n = (uint32_t)len - 1;
-        uint32_t z, y = data[0], p, q = 6 + 52 / (n + 1), sum = q * DELTA, e;
+        uint32_t z, y = data[0], p, q = 6 + 52 / (n + 1), sum = q * delta, e;
 
         if (n < 1)
         {
@@ -226,12 +256,12 @@ protected:
             for (p = n; p > 0; p--)
             {
                 z = data[p - 1];
-                y = data[p] -= MX;
+                y = data[p] -= mix(z, y, sum, p, e, std::span<const uint32_t, 4>(key, 4));
             }
 
             z = data[n];
-            y = data[0] -= MX;
-            sum -= DELTA;
+            y = data[0] -= mix(z, y, sum, p, e, std::span<const uint32_t, 4>(key, 4));
+            sum -= delta;
         }
 
         return data;
@@ -244,20 +274,20 @@ protected:
 
         if (!len)
         {
-            return NULL;
+            return nullptr;
         }
 
         data_array = xxtea_to_uint_array(data, len, 1, &data_len);
         if (!data_array)
         {
-            return NULL;
+            return nullptr;
         }
 
         key_array = xxtea_to_uint_array(key, 16, 0, &key_len);
         if (!key_array)
         {
             free(data_array);
-            return NULL;
+            return nullptr;
         }
 
         out = xxtea_to_ubyte_array(xxtea_uint_encrypt(data_array, data_len, key_array), data_len, 0, out_len);
@@ -275,20 +305,20 @@ protected:
 
         if (!len)
         {
-            return NULL;
+            return nullptr;
         }
 
         data_array = xxtea_to_uint_array(data, len, 0, &data_len);
         if (!data_array)
         {
-            return NULL;
+            return nullptr;
         }
 
         key_array = xxtea_to_uint_array(key, 16, 0, &key_len);
         if (!key_array)
         {
             free(data_array);
-            return NULL;
+            return nullptr;
         }
 
         out = xxtea_to_ubyte_array(xxtea_uint_decrypt(data_array, data_len, key_array), data_len, 1, out_len);
