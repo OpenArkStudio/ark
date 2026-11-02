@@ -149,13 +149,12 @@ int main(int argc, char* argv[]) {
         std::this_thread::sleep_for(1ms);
     }
     require(state->active.load(), "Pending HTTP wire request never entered its route");
-    require(!manager.stop(1) && manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::draining,
+    require(!manager.stop(1) && manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopping,
         "HTTP shutdown must wait for its admitted route");
     require(!server->ready_to_shut(), "Active HTTP route was reported drained");
-    const auto rejected = request(port, arknet::http::verb::get, "/users/99");
-    require(!rejected.error && rejected.response.result() == arknet::http::status::service_unavailable &&
-                !rejected.response.keep_alive() && handled.load() == 1,
-        "HTTP stop admission must return 503 without invoking the business route");
+    const auto during_stop = request(port, arknet::http::verb::get, "/users/99");
+    require(!during_stop.error && during_stop.response.result() == arknet::http::status::ok && handled.load() == 2,
+        "Framework cleanup changed application route policy");
     require(!manager.stop(1), "Repeated stop released an active route");
     state->release.store(true);
     pending.join();
@@ -181,5 +180,5 @@ int main(int argc, char* argv[]) {
     require(restarted.find_module<ark::http_server_module>()->start_server(), "HTTP endpoint was not reusable");
     require(restarted.stop(1), "Restarted HTTP DSO shutdown failed");
     std::cout << "HTTP actual DSO/wire: interface key, router identity, routes/binary bodies, IO-worker dispatch, "
-                 "request admission rejection, accepted-response drain, owner shutdown and endpoint reuse passed\n";
+                 "active handler ownership, accepted-response cleanup, owner shutdown and endpoint reuse passed\n";
 }

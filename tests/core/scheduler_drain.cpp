@@ -616,12 +616,8 @@ TEST_CASE("Manager deadline retains accepted future one-shot work without cleanu
             : scheduler(scheduler) {
         }
 
-        bool stop_accepting() override {
-            scheduler.stop_accepting();
-            return true;
-        }
-
         bool ready_to_shut() const override {
+            scheduler.stop_accepting();
             return scheduler.ready_to_shut();
         }
 

@@ -284,7 +284,7 @@ TEST_CASE("Public MySQL transactions retain a lease across steps and drain idle 
         if (scenario == 2)
         {
             CHECK_FALSE(owner.manager.stop(0));
-            CHECK(owner.manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::draining);
+            CHECK(owner.manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopping);
         }
         owner.stop();
         peer.finish();

@@ -108,21 +108,20 @@ private:
     arknet::http_server server_{1024, 1024 * 1024, 1};
 };
 
-ark::task<> accepted_request(ark::plugin_manager& manager, ark::http_client_module& client, asio::steady_timer& resume,
-    std::uint16_t port, bool& entered, bool& submitted, std::future<http_result>& result) {
+ark::task<> cancelled_request(
+    ark::plugin_manager& manager, asio::steady_timer& resume, bool& entered, bool& frame_retired) {
+    struct frame_lifetime
+    {
+        bool& retired;
+
+        ~frame_lifetime() {
+            retired = true;
+        }
+    } lifetime{frame_retired};
+
     entered = true;
-    arknet::error_code error;
-    co_await resume.async_wait(asio::redirect_error(asio::use_awaitable, error));
-    require(error == asio::error::operation_aborted, "Accepted task resumed without the explicit release");
-    require(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::draining,
-        "Accepted task did not resume during manager drain");
-    require(manager.get_task_runtime()->get_executor().running_in_this_thread(),
-        "Host coroutine left the shared owner task executor");
-    // This virtual call enters the actual Net DSO, whose own Asio executor
-    // context check must recognize the host-side accepted task continuation.
-    result = client.get("127.0.0.1", port, "/managed");
-    submitted = true;
-    co_return;
+    co_await resume.async_wait(asio::use_awaitable);
+    require(false, "Terminal cancellation unexpectedly completed its suspended business wait");
 }
 } // namespace
 
@@ -151,18 +150,18 @@ int main(int argc, char* argv[]) {
     auto update = [&] { require(manager.update(++tick), "HTTP drain owner update failed"); };
     asio::steady_timer resume(manager.get_task_runtime()->get_executor(), std::chrono::steady_clock::time_point::max());
     bool entered = false;
-    bool submitted = false;
+    bool frame_retired = false;
     bool task_completed = false;
-    std::future<http_result> future;
+    auto future = client->get("127.0.0.1", peer.port(), "/managed");
     auto& tasks = manager.create_task_group(*client);
-    require(tasks.start(accepted_request(manager, *client, resume, peer.port(), entered, submitted, future),
+    require(tasks.start(cancelled_request(manager, resume, entered, frame_retired),
                 [&](std::exception_ptr error) {
-                    require(!error, "Accepted host task threw during DSO HTTP submission");
+                    require(bool(error) && frame_retired, "Cancelled host task completed before frame retirement");
                     task_completed = true;
                 }) != 0,
         "Host managed task was not admitted before stop");
     wait_for([&] { return entered; }, update);
-    require(!submitted && tasks.pending() == 1, "Host task did not suspend before shutdown");
+    require(!frame_retired && tasks.pending() == 1, "Host task did not suspend before shutdown");
 
     auto receiver = std::make_shared<int>(42);
     std::weak_ptr<int> retained = receiver;
@@ -174,7 +173,7 @@ int main(int argc, char* argv[]) {
             require(std::this_thread::get_id() == owner, "Accepted HTTP callback left the owner thread");
             require(!result.first && result.second == "Service Unavailable", "Controlled first response changed");
             require(!client->ready_to_shut(), "HTTP callback was absent from active readiness accounting");
-            require(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::draining,
+            require(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopping,
                 "HTTP callback retry ran outside drain");
             client->post(
                 [&, receiver](http_result retried_result) {
@@ -189,19 +188,13 @@ int main(int argc, char* argv[]) {
         "127.0.0.1", peer.port(), "/callback-first");
     receiver.reset();
     wait_for([&] { return peer.received("/callback-first"); }, [] {});
-    require(!manager.stop(++tick) && manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::draining,
+    require(!manager.stop(++tick) && manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopping,
         "Manager did not retain the suspended accepted task during admission stop");
     require(!retained.expired(), "Accepted callback receiver was released at admission stop");
-    auto rejected = client->get("127.0.0.1", peer.port(), "/external-root");
-    require(rejected.wait_for(0ms) == std::future_status::ready, "New external HTTP root was not rejected immediately");
-    const auto rejected_result = rejected.get();
-    require(!rejected_result.first &&
-                rejected_result.second == arknet::error_code(asio::error::operation_aborted).message(),
-        "New external HTTP root was admitted during drain");
-
-    require(resume.cancel() == 1, "Suspended task release did not cancel exactly one timer wait");
-    wait_for([&] { return submitted && task_completed; }, update);
-    require(future.valid(), "Accepted host task did not obtain a DSO-created future");
+    wait_for([&] { return task_completed; }, update);
+    require(frame_retired && tasks.closed() && manager.pending_tasks() == 0,
+        "Manager did not cancel and retire the suspended host coroutine");
+    require(future.valid(), "Native HTTP request did not obtain a DSO-created future");
     if (future.wait_for(0ms) == std::future_status::ready)
     {
         const auto early = future.get();
@@ -221,13 +214,13 @@ int main(int argc, char* argv[]) {
     // Consume the DSO-created future before unload; keep only its owning value.
     const auto result = future.get();
     require(result.first && result.second == std::string("managed\0owned", 13),
-        "Accepted host coroutine did not obtain its real HTTP wire response through the Net DSO");
+        "Native HTTP request did not obtain its real owning response");
     peer.reply("/callback-retry");
     wait_for([&] { return callback_completed; }, update);
     require(callback_result.first && callback_result.second == std::string("retry\0owned", 11),
         "Accepted callback continuation did not obtain its real HTTP wire response");
     require(retained.expired(), "Completed callback capture survived drain");
-    require(peer.count() == 3, "An external root reached the peer or an accepted continuation was duplicated");
+    require(peer.count() == 3, "Native request or callback retry was duplicated");
     ark::test::drain_owner(
         manager, [&] { return ++tick; }, std::chrono::steady_clock::now() + 5s, "HTTP-client actual Net DSOs");
     client = nullptr;
@@ -236,7 +229,7 @@ int main(int argc, char* argv[]) {
     require(
         result.second == std::string("managed\0owned", 13) && callback_result.second == std::string("retry\0owned", 11),
         "Owning HTTP result values changed after plugin unload");
-    std::cout << "Actual Net/Bus/Utility DSOs: accepted host coroutine resumed after admission stop, shared owner "
-                 "executor HTTP request, external-root rejection, callback retry, binary owning results, receiver "
+    std::cout << "Actual Net/Bus/Utility DSOs: host task cancellation and frame retirement, native HTTP request, "
+                 "callback retry, binary owning results, receiver "
                  "release and manager drain/unload passed\n";
 }

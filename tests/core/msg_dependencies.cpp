@@ -41,12 +41,12 @@ public:
         return true;
     }
 
-    bool stop_accepting() override {
+    bool pre_shut() override {
         if (dependent_stopped)
         {
             CHECK(*dependent_stopped);
         }
-        phases.emplace_back("stop_accepting");
+        phases.emplace_back("pre_shut");
         return true;
     }
 
@@ -209,7 +209,7 @@ public:
         return true;
     }
 
-    bool stop_accepting() override {
+    bool pre_shut() override {
         check_phases({"init", "post_init", "check_config", "pre_update"});
         stopped = true;
         return true;
@@ -298,7 +298,6 @@ TEST_CASE("Message graph orders provider startup and reverses admission stop") {
     REQUIRE(state.manager.start(0, {}, {}, {}));
     REQUIRE(state.manager.stop(0));
     CHECK(dependent.stopped);
-    CHECK(state.bus.phases ==
-          std::vector<std::string>{"init", "post_init", "check_config", "pre_update", "stop_accepting"});
+    CHECK(state.bus.phases == std::vector<std::string>{"init", "post_init", "check_config", "pre_update", "pre_shut"});
     CHECK(state.network.phases == state.bus.phases);
 }

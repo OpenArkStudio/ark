@@ -17,10 +17,8 @@ inline const char* shutdown_state_name(plugin_manager::shutdown_state state) {
     {
     case plugin_manager::shutdown_state::running:
         return "running";
-    case plugin_manager::shutdown_state::stopping_acceptance:
-        return "stopping_acceptance";
-    case plugin_manager::shutdown_state::draining:
-        return "draining";
+    case plugin_manager::shutdown_state::stopping:
+        return "stopping";
     case plugin_manager::shutdown_state::failed:
         return "failed";
     case plugin_manager::shutdown_state::stopped:
@@ -51,9 +49,8 @@ std::size_t drain_owner(plugin_manager& manager, next_timestamp&& now, std::chro
         while (!manager.stop_until(now(), deadline))
         {
             const auto state = manager.get_shutdown_state();
-            if ((state != plugin_manager::shutdown_state::draining &&
-                    state != plugin_manager::shutdown_state::stopping_acceptance) ||
-                !manager.get_shutdown_failure().empty() || manager.get_shutdown_exception())
+            if (state != plugin_manager::shutdown_state::stopping || !manager.get_shutdown_failure().empty() ||
+                manager.get_shutdown_exception())
             {
                 fail_owner_drain(manager, context, "shutdown failed");
             }

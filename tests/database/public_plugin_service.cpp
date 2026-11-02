@@ -106,11 +106,15 @@ public:
                         ++completions_;
                     }) != 0,
             "Database DSO workflow was not admitted");
-        // Stop admission before polling. Accepted work is deterministically
-        // pending, so no network timing or sleep proves entry into drain.
-        require(tasks_->pending() == 1 && !manager.stop(0) &&
-                    manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::draining,
-            "Manager did not naturally drain its accepted DSO workflow");
+        require(tasks_->pending() == 1, "DSO workflow was not pending before application completion");
+        // Application operations complete their business workflow before framework cleanup.
+        const auto deadline = std::chrono::steady_clock::now() + 30s;
+        while (tasks_->pending())
+        {
+            require(std::chrono::steady_clock::now() < deadline, "DSO workflow did not complete");
+            require(manager.update(0), "DSO workflow owner update failed");
+            std::this_thread::sleep_for(1ms);
+        }
         drain();
         if (failure_)
         {
