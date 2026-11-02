@@ -332,6 +332,8 @@ Optional `redis-stop`/`mysql-stop` use an independent observer manager/runtime. 
 
 `mysql-transaction-stop`/`mysql-statement-stop` separately cover process-stop-initiated cancellation of a sent transaction query/prepared execute. An independent observer first confirms the exact active session and hidden uncommitted write, then follows session retirement and the final external counter; the API result stays unknown/unconfirmed without a fabricated rollback reply. See [manager-stop transaction acceptance](cancellation.md#manager-stop-transaction-cancellation).
 
+The SSL-only optional `redis-tls-stop` runs a certificate-verification control and stop-first pipeline cancellation against an owned TLS-only service. An independent observer checks TLS-session retirement and bounded no-replay effects; plain-TCP results are not TLS proof. See [Redis TLS stop details](cancellation.md#redis-tls-manager-stop-cancellation).
+
 ## Public real-service failure checks
 
 The separate `ark_database_public_failure_service_tests` executable checks wrong

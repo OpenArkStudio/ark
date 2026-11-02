@@ -16,6 +16,11 @@
 #include <variant>
 #include <vector>
 
+#if defined(ARKNET_ENABLE_SSL)
+#include <openssl/err.h>
+#include <openssl/sslerr.h>
+#endif
+
 #include "ark/plugin_manager.hpp"
 #include "ark/redis/redis_module.hpp"
 #include "ark/task.hpp"
@@ -576,6 +581,76 @@ void check_redis_stop() {
 }
 
 #if defined(ARKNET_ENABLE_SSL)
+bool redis_tls_certificate_rejected(const arknet::redis::result& result) {
+    return result.error == arknet::redis::client_errc::connection_failed &&
+           result.transport_error.category() == asio::error::get_ssl_category() &&
+           ERR_GET_REASON(static_cast<unsigned long>(result.transport_error.value())) ==
+               SSL_R_CERTIFICATE_VERIFY_FAILED &&
+           !result.command_may_have_run && result.replies.empty();
+}
+
+ark::task<> redis_tls_stop_preflight(
+    plugin_host& observer, ark::redis_module& database, std::optional<arknet::redis::result>& rejected) {
+    arknet::redis::command ping{"PING"};
+    rejected = co_await database.command("tls_untrusted", std::move(ping), 5s);
+    observer.check_executor();
+    require(redis_tls_certificate_rejected(*rejected),
+        "Redis TLS stop preflight did not reject the unrelated CA before command execution");
+    std::cout << "redis-tls-stop unrelated CA rejected with native certificate verification failure; known unsent\n";
+}
+
+void check_redis_tls_stop() {
+    ark::redis_options options;
+    options.tls = true;
+    options.pool.connection.host = environment("ARK_DATABASE_REDIS_HOST");
+    require(options.pool.connection.host == "127.0.0.1", "Redis TLS stop requires an owned IPv4 loopback service");
+    options.pool.connection.port = std::to_string(port("ARK_DATABASE_REDIS_PORT"));
+    options.pool.connection.password = environment("ARK_DATABASE_REDIS_PASSWORD");
+    if (const auto* user = std::getenv("ARK_DATABASE_REDIS_USER"))
+    {
+        options.pool.connection.username = user;
+    }
+    options.pool.certificate_authority = environment("ARK_DATABASE_REDIS_CA");
+    options.pool.max_connections = 1;
+    options.pool.client_configuration.connect_timeout = 3s;
+    options.pool.client_configuration.drain_timeout = 100ms;
+    const auto tag = "ark_dso_tls_stop_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    stop_state state;
+    std::optional<arknet::redis::result> result, rejected;
+    {
+        plugin_host observer("ark_database_redis_plugin");
+        plugin_host target("ark_database_redis_plugin");
+        auto* database = target.manager.find_module<ark::redis_module>();
+        auto* observer_database = observer.manager.find_module<ark::redis_module>();
+        options.pool.connection.client_name = tag;
+        require(database && database->configure("primary", options), "Cannot configure verified Redis TLS target");
+        options.pool.connection.client_name = tag + "_observer";
+        require(observer_database && observer_database->configure("observer", options),
+            "Cannot configure independent verified Redis TLS observer");
+        options.pool.connection.client_name = tag + "_untrusted";
+        options.pool.certificate_authority = environment("ARK_DATABASE_REDIS_UNTRUSTED_CA");
+        require(observer_database->configure("tls_untrusted", options), "Cannot configure Redis TLS CA control");
+        observer.preflight(redis_tls_stop_preflight(observer, *observer_database, rejected));
+        target.start(redis_request(target, *database, tag, result), state.request);
+        observer.start(redis_stop_observe(observer, *observer_database, state, result, tag), state.observer);
+        drive_observed_stop(target, observer, state);
+        require(target.manager.try_find_module<ark::redis_module>() == nullptr,
+            "Stopped verified Redis TLS target retained its module");
+        observer.stop();
+        require(state.request.count == 1 && state.observer.count == 1, "Redis TLS stop completion repeated");
+    }
+    require(result && result->error == arknet::redis::client_errc::cancelled && result->command_may_have_run &&
+                !result->transport_error && result->replies.size() <= 1,
+        "Redis TLS manager-stop result lost its owning cancelled/uncertain semantics");
+    if (!result->replies.empty())
+    {
+        require(result->replies[0].type == arknet::redis::value_type::integer && result->replies[0].integer == 1,
+            "Redis TLS manager-stop partial reply changed after both hosts were destroyed");
+    }
+    require(rejected && redis_tls_certificate_rejected(*rejected),
+        "Redis TLS verification diagnostic did not survive both hosts");
+}
+
 void mysql_success(const ark::mysql_reply& reply) {
     require(bool(reply), "Explicit MySQL observer/recovery operation failed");
 }
@@ -1143,7 +1218,7 @@ int main(int argc, char** argv) {
     {
         require(argc == 2, "Usage: ark_database_public_plugin_cancellation_tests "
                            "redis|redis-stop|mysql|mysql-stop|mysql-transaction|mysql-statement|mysql-transaction-stop|"
-                           "mysql-statement-stop");
+                           "mysql-statement-stop|redis-tls-stop");
         const std::string_view protocol(argv[1]);
         if (protocol == "redis")
         {
@@ -1154,6 +1229,10 @@ int main(int argc, char** argv) {
             check_redis_stop();
         }
 #if defined(ARKNET_ENABLE_SSL)
+        else if (protocol == "redis-tls-stop")
+        {
+            check_redis_tls_stop();
+        }
         else if (protocol == "mysql")
         {
             check_mysql();
@@ -1184,7 +1263,7 @@ int main(int argc, char** argv) {
             throw acceptance_failure("Requested database cancellation protocol is not enabled");
         }
         if (protocol == "redis-stop" || protocol == "mysql-stop" || protocol == "mysql-transaction-stop" ||
-            protocol == "mysql-statement-stop")
+            protocol == "mysql-statement-stop" || protocol == "redis-tls-stop")
         {
             std::cout
                 << protocol
