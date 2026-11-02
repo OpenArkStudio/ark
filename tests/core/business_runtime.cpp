@@ -137,6 +137,7 @@ struct controlled_service
     callback first_callback;
     unsigned started{};
     unsigned cancelled{};
+    bool defer_cancellation{};
 
     std::uint64_t start(callback completion) {
         CHECK_FALSE(pending);
@@ -156,6 +157,13 @@ struct controlled_service
 
     void cancel() {
         ++cancelled;
+        if (!defer_cancellation)
+        {
+            complete_cancelled();
+        }
+    }
+
+    void complete_cancelled() {
         REQUIRE(pending);
         auto delivery = std::move(pending);
         delivery(std::make_exception_ptr(arknet::system_error(asio::error::operation_aborted)), {});
@@ -252,6 +260,7 @@ TEST_CASE("Manager stop cancels a suspended task and retains owners until late c
     auto& tasks = manager.create_task_group(module, 2);
     bridge_type bridge(manager.get_task_runtime(), 1);
     controlled_service service;
+    service.defer_cancellation = true;
     module.on_update = [&] { bridge.dispatch(); };
     std::string result;
     unsigned completed{};
@@ -271,6 +280,14 @@ TEST_CASE("Manager stop cancels a suspended task and retains owners until late c
     CHECK(tasks.start(ready_task()) == 0);
     CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopping);
     CHECK(module.pre_shut_calls == 0);
+    CHECK(manager.update(3));
+    CHECK(completed == 0);
+    CHECK(manager.pending_tasks() == 1);
+    CHECK_FALSE(manager.stop(3));
+    CHECK(service.cancelled == 1);
+    CHECK(module.readiness_calls == 0);
+    CHECK(module.pre_shut_calls == 0);
+    service.complete_cancelled();
     CHECK(manager.update(3));
     CHECK(completed == 1);
     CHECK(tasks.closed());
