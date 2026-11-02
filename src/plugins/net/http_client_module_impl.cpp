@@ -22,6 +22,7 @@
 #include <deque>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <unordered_map>
 
 #include <arknet/base/io_pool.hpp>
@@ -34,8 +35,10 @@ namespace ark {
 
 class http_client_module_impl final : public module_base<http_client_module>
 {
+    friend struct http_client_startup_test_access;
+
 public:
-    http_client_module_impl();
+    explicit http_client_module_impl(plugin_manager* manager);
     ~http_client_module_impl() override;
 
     bool update() override;
@@ -96,7 +99,9 @@ private:
 
 private:
     struct state;
+    struct startup_capsule;
     std::shared_ptr<state> state_;
+    std::weak_ptr<startup_capsule> startup_owner_;
 };
 
 namespace {
@@ -230,6 +235,27 @@ struct http_client_module_impl::state : std::enable_shared_from_this<state>
         finished.push_back({std::move(callback), std::move(result)});
     }
 
+    startup_cleanup_result cleanup_failed_startup() {
+        if (runtime.running_in_threads())
+        {
+            return startup_cleanup_result::unsafe;
+        }
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            if (!requests.empty() || !finished.empty() || active_callbacks != 0)
+            {
+                return startup_cleanup_result::unsafe;
+            }
+            stopped = true;
+        }
+        // This private pool has no accepted request or application callback to
+        // drive. Join only its idle worker; never poll, cancel or deliver work.
+        runtime.stop();
+        std::lock_guard<std::mutex> lock(mutex);
+        return requests.empty() && finished.empty() && active_callbacks == 0 ? startup_cleanup_result::done
+                                                                             : startup_cleanup_result::unsafe;
+    }
+
     void stop() {
         {
             std::lock_guard<std::mutex> lock(mutex);
@@ -243,8 +269,30 @@ struct http_client_module_impl::state : std::enable_shared_from_this<state>
     }
 };
 
-http_client_module_impl::http_client_module_impl()
+struct http_client_module_impl::startup_capsule
+{
+    explicit startup_capsule(std::shared_ptr<state> resource)
+        : resource(std::move(resource)) {
+    }
+
+    std::shared_ptr<state> resource;
+};
+
+http_client_module_impl::http_client_module_impl(plugin_manager* manager)
     : state_(std::make_shared<state>()) {
+    // Keep complete state and its deleter alive even if construction or a later
+    // install/startup hook fails. Enrollment precedes native worker acquisition.
+    if (manager)
+    {
+        auto capsule = std::make_shared<startup_capsule>(state_);
+        if (!manager->prepare_startup_cleanup("NetHttpClient", "ark_net_plugin", capsule, [](void* context) {
+                return static_cast<startup_capsule*>(context)->resource->cleanup_failed_startup();
+            }))
+        {
+            throw std::runtime_error("Net HTTP startup cleanup enrollment rejected");
+        }
+        startup_owner_ = capsule;
+    }
     if (!state_->runtime.start())
     {
         throw arknet::system_error(arknet::get_last_error());
@@ -252,7 +300,13 @@ http_client_module_impl::http_client_module_impl()
 }
 
 http_client_module_impl::~http_client_module_impl() {
-    pre_shut();
+    // Failed construction/registration must reach the failure runner without
+    // closing native IO from candidate unwinding. Successful startup disarms
+    // the capsule, restoring ordinary ownership and destructor cleanup.
+    if (startup_owner_.expired())
+    {
+        pre_shut();
+    }
 }
 
 bool http_client_module_impl::pre_shut() {
@@ -329,8 +383,8 @@ void http_client_module_impl::async_request(http_callback callback, arknet::http
 
 namespace detail {
 
-std::unique_ptr<http_client_module> make_http_client_module() {
-    return std::make_unique<http_client_module_impl>();
+std::unique_ptr<http_client_module> make_http_client_module(plugin_manager* manager) {
+    return std::make_unique<http_client_module_impl>(manager);
 }
 
 } // namespace detail
