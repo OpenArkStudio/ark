@@ -97,6 +97,8 @@ int process_threads() noexcept {
 thread_local bool armed{};
 thread_local std::size_t remaining{}, attempts{}, rejected{};
 thread_local int baseline_threads{}, threads_at_failure{};
+const char* active_mode = "controller";
+std::size_t active_budget{};
 
 void before_allocation() {
     ++attempts;
@@ -284,6 +286,10 @@ int constructor_failure(std::size_t index) {
     armed = false;
     if (!retired || !persistent)
     {
+        std::fprintf(stderr,
+            "constructor budget=%zu retired=%d persistent=%d baseline=%d failure=%d current=%d attempts=%zu "
+            "rejected=%zu\n",
+            index, retired, persistent, baseline_threads, threads_at_failure, process_threads(), attempts, rejected);
         return 21;
     }
     return !threw ? no_failure : threads_at_failure > baseline_threads ? partial_workers : 0;
@@ -490,11 +496,20 @@ int sweep(const char* executable, const char* mode, std::size_t boundary,
 } // namespace
 
 int main(int argc, char** argv) {
-    std::set_terminate([]() noexcept { std::_Exit(86); });
+    std::set_terminate([]() noexcept {
+        std::fprintf(stderr,
+            "terminate mode=%s budget=%zu armed=%d remaining=%zu attempts=%zu rejected=%zu baseline=%d failure=%d "
+            "current=%d\n",
+            active_mode, active_budget, armed, remaining, attempts, rejected, baseline_threads, threads_at_failure,
+            process_threads());
+        std::_Exit(86);
+    });
     if (argc == 4)
     {
         const auto index = static_cast<std::size_t>(std::strtoull(argv[2], nullptr, 10));
         const auto boundary = static_cast<std::size_t>(std::strtoull(argv[3], nullptr, 10));
+        active_mode = argv[1];
+        active_budget = index;
         if (std::string_view(argv[1]) == "constructor")
         {
             return constructor_failure(index);
