@@ -16,6 +16,11 @@
 #include <variant>
 #include <vector>
 
+#if defined(ARKNET_ENABLE_SSL)
+#include <openssl/err.h>
+#include <openssl/sslerr.h>
+#endif
+
 #include "ark/plugin_manager.hpp"
 #include "ark/redis/redis_module.hpp"
 #include "ark/task.hpp"
@@ -152,6 +157,24 @@ public:
         manager.remove_module("cancel_consumer");
     }
 
+    bool stop_step() {
+        if (stopped_)
+        {
+            return true;
+        }
+        stopped_ = manager.stop(0);
+        require(manager.get_shutdown_state() != ark::plugin_manager::shutdown_state::failed,
+            "Observed-request resource shutdown failed");
+        if (stopped_)
+        {
+            require(tasks->closed() && tasks->pending() == 0 && manager.pending_tasks() == 0,
+                "Resource shutdown retained a managed request");
+            require(manager.stop(0), "Observed-request resource stop was not idempotent");
+            manager.remove_module("cancel_consumer");
+        }
+        return stopped_;
+    }
+
 private:
     completion preflight_completion_;
     ark::module consumer_;
@@ -182,6 +205,52 @@ void cancel_observed(plugin_host& host, cancellation_state& state) {
         "Accepted task cancellation or repeated pending cancellation failed");
     require(state.request.count == 0, "Cancellation fabricated synchronous root completion");
     state.cancelled = true;
+}
+
+struct stop_state
+{
+    completion request, observer;
+    bool observed{};
+    bool stop_requested{};
+    bool target_stopped{};
+    bool observed_after_stop{};
+};
+
+void drive_observed_stop(plugin_host& target, plugin_host& observer, stop_state& state) {
+    require(target.manager.get_task_runtime() != observer.manager.get_task_runtime(),
+        "Stop observer must own an independent runtime");
+    const auto deadline = std::chrono::steady_clock::now() + 25s;
+    while (!state.target_stopped || state.observer.count == 0)
+    {
+        require(std::chrono::steady_clock::now() < deadline && !state.request.error && !state.observer.error,
+            "Observed-request shutdown failed or exceeded its bound");
+        require(!target.manager.get_task_runtime()->get_executor().running_in_this_thread() &&
+                    !observer.manager.get_task_runtime()->get_executor().running_in_this_thread(),
+            "Target stop must originate on the outer owner frame");
+        if (state.observed && !state.stop_requested)
+        {
+            require(state.request.count == 0 && target.manager.pending_tasks() == 1 && observer.tasks->pending() == 1,
+                "Target request or independent observer retired before stop");
+            state.stop_requested = true;
+            require(!target.stop_step(), "Pending target request was destroyed synchronously by stop");
+        }
+        else if (state.stop_requested && !state.target_stopped)
+        {
+            state.target_stopped = target.stop_step();
+        }
+        if (!state.target_stopped)
+        {
+            require(target.manager.update(0), "Target resource-shutdown update failed");
+        }
+        require(observer.manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::running &&
+                    observer.manager.update(0),
+            "Target shutdown stopped the independent observer");
+        std::this_thread::sleep_for(1ms);
+    }
+    plugin_host::check_completion(state.request);
+    plugin_host::check_completion(state.observer);
+    require(state.observed_after_stop && target.manager.stop(0),
+        "Observer did not outlive target resource shutdown or repeated stop failed");
 }
 
 void redis_success(const arknet::redis::result& result) {
@@ -381,7 +450,207 @@ void check_redis() {
         "Redis native cancellation result did not survive module/manager destruction");
 }
 
+bool redis_target_present(const arknet::redis::result& listing, const std::string& tag, const std::string& original) {
+    redis_success(listing);
+    std::string_view remaining = listing.replies[0].text;
+    if (remaining.starts_with("txt:"))
+    {
+        remaining.remove_prefix(4);
+    }
+    bool present{};
+    while (!remaining.empty())
+    {
+        const auto end = remaining.find('\n');
+        const auto line = remaining.substr(0, end);
+        const auto id = client_field(line, "id");
+        if (client_field(line, "name") == tag || id == original)
+        {
+            require(!present && id == original, "Stopped Redis target reconnected or replayed its pipeline");
+            present = true;
+        }
+        if (end == std::string_view::npos)
+        {
+            break;
+        }
+        remaining.remove_prefix(end + 1);
+    }
+    return present;
+}
+
+ark::task<> redis_stop_observe(plugin_host& observer, ark::redis_module& database, stop_state& state,
+    const std::optional<arknet::redis::result>& result, std::string tag) {
+    std::optional<std::string> original;
+    std::optional<std::chrono::steady_clock::time_point> quiet_until;
+    const auto deadline = std::chrono::steady_clock::now() + 18s;
+    for (;;)
+    {
+        require(std::chrono::steady_clock::now() < deadline, "Stopped Redis target did not retire on the server");
+        arknet::redis::command clients{"CLIENT", "LIST"};
+        auto listing = co_await database.command("observer", std::move(clients), 3s);
+        observer.check_executor();
+        const auto blocked = blocked_client(listing, tag);
+        if (!state.observed && blocked)
+        {
+            original = *blocked;
+            arknet::redis::command get_counter{"GET", tag + "_counter"};
+            auto counter = co_await database.command("observer", std::move(get_counter), 3s);
+            observer.check_executor();
+            redis_success(counter);
+            require(counter.replies[0].text == "1", "Redis stop preceded its confirmed pipeline write");
+            state.observed = true;
+            std::cout << "redis-stop server-visible tagged BLPOP and counter=1; outer-frame stop enabled\n";
+        }
+        const bool present = original && redis_target_present(listing, tag, *original);
+        if (state.target_stopped)
+        {
+            state.observed_after_stop = true;
+            require(result.has_value(), "Redis stop lost its owning native result");
+            if (!present)
+            {
+                if (!quiet_until)
+                {
+                    quiet_until = std::chrono::steady_clock::now() + 500ms;
+                }
+                if (std::chrono::steady_clock::now() >= *quiet_until)
+                {
+                    break;
+                }
+            }
+            else
+            {
+                require(!quiet_until, "Retired Redis target returned during the no-replay window");
+            }
+        }
+        co_await observer_interval();
+        observer.check_executor();
+    }
+    arknet::redis::command get_counter{"GET", tag + "_counter"};
+    auto counter = co_await database.command("observer", std::move(get_counter), 3s);
+    observer.check_executor();
+    redis_success(counter);
+    require(counter.replies[0].text == "1", "Manager stop implicitly replayed the Redis pipeline write");
+    arknet::redis::command remove_keys{"DEL", tag + "_counter", tag + "_list"};
+    auto removed = co_await database.command("observer", std::move(remove_keys), 3s);
+    observer.check_executor();
+    redis_success(removed);
+    std::cout << "redis-stop independent observer outlived target; target connection absent and counter=1\n";
+}
+
+void check_redis_stop() {
+    ark::redis_options options;
+    options.pool.connection.host = environment("ARK_DATABASE_REDIS_HOST");
+    require(options.pool.connection.host == "127.0.0.1", "Redis stop acceptance requires owned IPv4 loopback");
+    options.pool.connection.port = std::to_string(port("ARK_DATABASE_REDIS_PORT"));
+    options.pool.connection.password = environment("ARK_DATABASE_REDIS_PASSWORD");
+    if (const auto* user = std::getenv("ARK_DATABASE_REDIS_USER"))
+    {
+        options.pool.connection.username = user;
+    }
+    options.pool.max_connections = 1;
+    options.pool.client_configuration.connect_timeout = 3s;
+    options.pool.client_configuration.drain_timeout = 100ms;
+    const auto tag = "ark_dso_stop_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    stop_state state;
+    std::optional<arknet::redis::result> result;
+    {
+        plugin_host observer("ark_database_redis_plugin");
+        plugin_host target("ark_database_redis_plugin");
+        auto* database = target.manager.find_module<ark::redis_module>();
+        auto* observer_database = observer.manager.find_module<ark::redis_module>();
+        options.pool.connection.client_name = tag;
+        require(database && database->configure("primary", options), "Cannot configure Redis stop target");
+        options.pool.connection.client_name = tag + "_observer";
+        require(observer_database && observer_database->configure("observer", options),
+            "Cannot configure independent Redis stop observer");
+        target.start(redis_request(target, *database, tag, result), state.request);
+        observer.start(redis_stop_observe(observer, *observer_database, state, result, tag), state.observer);
+        drive_observed_stop(target, observer, state);
+        require(
+            target.manager.try_find_module<ark::redis_module>() == nullptr, "Stopped Redis target retained its module");
+        observer.stop();
+        require(state.request.count == 1 && state.observer.count == 1, "Redis stop completion repeated");
+    }
+    require(result && result->error == arknet::redis::client_errc::cancelled && result->command_may_have_run &&
+                !result->transport_error && result->replies.size() <= 1,
+        "Redis manager-stop result lost its owning cancelled/uncertain semantics");
+    if (!result->replies.empty())
+    {
+        require(result->replies[0].type == arknet::redis::value_type::integer && result->replies[0].integer == 1,
+            "Redis manager-stop partial reply changed after both hosts were destroyed");
+    }
+}
+
 #if defined(ARKNET_ENABLE_SSL)
+bool redis_tls_certificate_rejected(const arknet::redis::result& result) {
+    return result.error == arknet::redis::client_errc::connection_failed &&
+           result.transport_error.category() == asio::error::get_ssl_category() &&
+           ERR_GET_REASON(static_cast<unsigned long>(result.transport_error.value())) ==
+               SSL_R_CERTIFICATE_VERIFY_FAILED &&
+           !result.command_may_have_run && result.replies.empty();
+}
+
+ark::task<> redis_tls_stop_preflight(
+    plugin_host& observer, ark::redis_module& database, std::optional<arknet::redis::result>& rejected) {
+    arknet::redis::command ping{"PING"};
+    rejected = co_await database.command("tls_untrusted", std::move(ping), 5s);
+    observer.check_executor();
+    require(redis_tls_certificate_rejected(*rejected),
+        "Redis TLS stop preflight did not reject the unrelated CA before command execution");
+    std::cout << "redis-tls-stop unrelated CA rejected with native certificate verification failure; known unsent\n";
+}
+
+void check_redis_tls_stop() {
+    ark::redis_options options;
+    options.tls = true;
+    options.pool.connection.host = environment("ARK_DATABASE_REDIS_HOST");
+    require(options.pool.connection.host == "127.0.0.1", "Redis TLS stop requires an owned IPv4 loopback service");
+    options.pool.connection.port = std::to_string(port("ARK_DATABASE_REDIS_PORT"));
+    options.pool.connection.password = environment("ARK_DATABASE_REDIS_PASSWORD");
+    if (const auto* user = std::getenv("ARK_DATABASE_REDIS_USER"))
+    {
+        options.pool.connection.username = user;
+    }
+    options.pool.certificate_authority = environment("ARK_DATABASE_REDIS_CA");
+    options.pool.max_connections = 1;
+    options.pool.client_configuration.connect_timeout = 3s;
+    options.pool.client_configuration.drain_timeout = 100ms;
+    const auto tag = "ark_dso_tls_stop_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    stop_state state;
+    std::optional<arknet::redis::result> result, rejected;
+    {
+        plugin_host observer("ark_database_redis_plugin");
+        plugin_host target("ark_database_redis_plugin");
+        auto* database = target.manager.find_module<ark::redis_module>();
+        auto* observer_database = observer.manager.find_module<ark::redis_module>();
+        options.pool.connection.client_name = tag;
+        require(database && database->configure("primary", options), "Cannot configure verified Redis TLS target");
+        options.pool.connection.client_name = tag + "_observer";
+        require(observer_database && observer_database->configure("observer", options),
+            "Cannot configure independent verified Redis TLS observer");
+        options.pool.connection.client_name = tag + "_untrusted";
+        options.pool.certificate_authority = environment("ARK_DATABASE_REDIS_UNTRUSTED_CA");
+        require(observer_database->configure("tls_untrusted", options), "Cannot configure Redis TLS CA control");
+        observer.preflight(redis_tls_stop_preflight(observer, *observer_database, rejected));
+        target.start(redis_request(target, *database, tag, result), state.request);
+        observer.start(redis_stop_observe(observer, *observer_database, state, result, tag), state.observer);
+        drive_observed_stop(target, observer, state);
+        require(target.manager.try_find_module<ark::redis_module>() == nullptr,
+            "Stopped verified Redis TLS target retained its module");
+        observer.stop();
+        require(state.request.count == 1 && state.observer.count == 1, "Redis TLS stop completion repeated");
+    }
+    require(result && result->error == arknet::redis::client_errc::cancelled && result->command_may_have_run &&
+                !result->transport_error && result->replies.size() <= 1,
+        "Redis TLS manager-stop result lost its owning cancelled/uncertain semantics");
+    if (!result->replies.empty())
+    {
+        require(result->replies[0].type == arknet::redis::value_type::integer && result->replies[0].integer == 1,
+            "Redis TLS manager-stop partial reply changed after both hosts were destroyed");
+    }
+    require(rejected && redis_tls_certificate_rejected(*rejected),
+        "Redis TLS verification diagnostic did not survive both hosts");
+}
+
 void mysql_success(const ark::mysql_reply& reply) {
     require(bool(reply), "Explicit MySQL observer/recovery operation failed");
 }
@@ -525,6 +794,112 @@ std::int64_t mysql_scalar(const arknet::mysql::query_result& result) {
     require(
         result.rows.size() == 1 && result.rows[0].size() == 1, "MySQL transaction cancellation scalar has wrong shape");
     return std::get<std::int64_t>(result.rows[0][0]);
+}
+
+ark::task<> mysql_stop_preflight(plugin_host& observer, ark::mysql_module& database, const std::string& tag) {
+    auto created =
+        co_await database.query("observer", "CREATE TABLE `" + tag + "` (id INT PRIMARY KEY,n BIGINT NOT NULL)", 5s);
+    observer.check_executor();
+    mysql_success(created);
+    auto seeded = co_await database.query("observer", "INSERT INTO `" + tag + "` VALUES (1,0)", 5s);
+    observer.check_executor();
+    mysql_success(seeded);
+}
+
+ark::task<> mysql_stop_observe(plugin_host& observer, ark::mysql_module& database, stop_state& state,
+    const std::optional<ark::mysql_reply>& result, std::string tag) {
+    std::optional<std::int64_t> original;
+    std::optional<std::chrono::steady_clock::time_point> quiet_until;
+    const auto deadline = std::chrono::steady_clock::now() + 18s;
+    for (;;)
+    {
+        require(std::chrono::steady_clock::now() < deadline, "Stopped MySQL target did not retire on the server");
+        const auto sql =
+            "SELECT CAST(ID AS SIGNED),STATE FROM information_schema.processlist WHERE ID <> CONNECTION_ID() AND (" +
+            (original ? "ID=" + std::to_string(*original) + " OR " : "") + "INFO LIKE '%" + tag + "%')";
+        auto listing = co_await database.query("observer", sql, 3s);
+        observer.check_executor();
+        mysql_success(listing);
+        require(listing.result.rows.size() <= 1, "Manager stop replayed the tagged MySQL UPDATE concurrently");
+        if (!listing.result.rows.empty())
+        {
+            const auto& row = listing.result.rows[0];
+            require(row.size() == 2, "MySQL stop observer lost its ID/state fields");
+            const auto id = std::get<std::int64_t>(row[0]);
+            require(!quiet_until && (!original || *original == id), "Stopped MySQL target reconnected or replayed");
+            original = id;
+            const auto* phase = std::get_if<std::string>(&row[1]);
+            if (!state.observed && phase && *phase == "User sleep")
+            {
+                state.observed = true;
+                std::cout << "mysql-stop server-visible tagged UPDATE in User sleep; outer-frame stop enabled\n";
+            }
+        }
+        if (state.target_stopped)
+        {
+            state.observed_after_stop = true;
+            require(result.has_value(), "MySQL stop lost its owning native result");
+            if (listing.result.rows.empty())
+            {
+                if (!quiet_until)
+                {
+                    quiet_until = std::chrono::steady_clock::now() + 500ms;
+                }
+                if (std::chrono::steady_clock::now() >= *quiet_until)
+                {
+                    break;
+                }
+            }
+        }
+        co_await observer_interval();
+        observer.check_executor();
+    }
+    auto counter = co_await database.query("observer", "SELECT n FROM `" + tag + "` WHERE id=1", 3s);
+    observer.check_executor();
+    mysql_success(counter);
+    require(mysql_scalar(counter.result) == 1, "Manager stop lost or replayed the observed MySQL autocommit write");
+    auto dropped = co_await database.query("observer", "DROP TABLE `" + tag + "`", 3s);
+    observer.check_executor();
+    mysql_success(dropped);
+    std::cout << "mysql-stop independent observer outlived target; original session absent and counter=1\n";
+}
+
+void check_mysql_stop() {
+    ark::mysql_options options;
+    options.pool.connection.host = environment("ARK_DATABASE_MYSQL_HOST");
+    require(options.pool.connection.host == "127.0.0.1", "MySQL stop acceptance requires owned IPv4 loopback");
+    options.pool.connection.port = port("ARK_DATABASE_MYSQL_PORT");
+    options.pool.connection.username = environment("ARK_DATABASE_MYSQL_USER");
+    options.pool.connection.password = environment("ARK_DATABASE_MYSQL_PASSWORD", true);
+    options.pool.connection.database = environment("ARK_DATABASE_MYSQL_DATABASE");
+    options.pool.connection.ca_file = environment("ARK_DATABASE_MYSQL_CA");
+    options.pool.connection.tls = arknet::mysql::tls_mode::required;
+    options.pool.connection.timeout = 5s;
+    options.pool.max_connections = 1;
+    const auto tag = "ark_dso_stop_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    stop_state state;
+    std::optional<ark::mysql_reply> result;
+    {
+        plugin_host observer("ark_database_mysql_plugin");
+        plugin_host target("ark_database_mysql_plugin");
+        auto* database = target.manager.find_module<ark::mysql_module>();
+        auto* observer_database = observer.manager.find_module<ark::mysql_module>();
+        require(database && database->configure("primary", options), "Cannot configure MySQL stop target");
+        require(observer_database && observer_database->configure("observer", options),
+            "Cannot configure independent MySQL stop observer");
+        observer.preflight(mysql_stop_preflight(observer, *observer_database, tag));
+        target.start(mysql_request(target, *database, tag, result), state.request);
+        observer.start(mysql_stop_observe(observer, *observer_database, state, result, tag), state.observer);
+        drive_observed_stop(target, observer, state);
+        require(
+            target.manager.try_find_module<ark::mysql_module>() == nullptr, "Stopped MySQL target retained its module");
+        observer.stop();
+        require(state.request.count == 1 && state.observer.count == 1, "MySQL stop completion repeated");
+    }
+    require(result && result->result.status.code == arknet::mysql::connection_errc::cancelled &&
+                result->result.status.outcome_unknown &&
+                result->result.status.transport_error == asio::error::operation_aborted,
+        "MySQL manager-stop result lost its owning cancelled/unknown diagnostics");
 }
 
 void mysql_cancelled_transaction(const ark::mysql_transaction_reply& reply) {
@@ -702,6 +1077,138 @@ void check_mysql_transaction(bool prepared = false) {
     mysql_cancelled_transaction(*result);
 }
 
+ark::task<> mysql_transaction_stop_preflight(
+    plugin_host& observer, ark::mysql_module& database, const std::string& tag) {
+    auto created = co_await database.query(
+        "observer", "CREATE TABLE `" + tag + "` (id INT PRIMARY KEY,n BIGINT NOT NULL) ENGINE=InnoDB", 5s);
+    observer.check_executor();
+    mysql_success(created);
+    auto seeded = co_await database.query("observer", "INSERT INTO `" + tag + "` VALUES (1,0)", 5s);
+    observer.check_executor();
+    mysql_success(seeded);
+}
+
+ark::task<> mysql_transaction_stop_observe(plugin_host& observer, ark::mysql_module& database, stop_state& state,
+    const std::int64_t& original, const std::optional<ark::mysql_transaction_reply>& owned,
+    const std::optional<ark::mysql_transaction_reply>& result, std::string tag, bool prepared) {
+    auto identity = co_await database.query("observer", "SELECT CAST(CONNECTION_ID() AS SIGNED)", 3s);
+    observer.check_executor();
+    mysql_success(identity);
+    const auto observer_id = mysql_scalar(identity.result);
+    std::optional<std::chrono::steady_clock::time_point> quiet_until;
+    const auto deadline = std::chrono::steady_clock::now() + 18s;
+    for (;;)
+    {
+        require(std::chrono::steady_clock::now() < deadline,
+            "Manager-stopped MySQL transaction did not retire on the server");
+        const auto sql = "SELECT CAST(ID AS SIGNED),STATE,INFO,COMMAND FROM information_schema.processlist "
+                         "WHERE ID <> CONNECTION_ID() AND (ID=" +
+                         std::to_string(original) + " OR INFO LIKE '%" + tag + "%')";
+        auto listing = co_await database.query("observer", sql, 3s);
+        observer.check_executor();
+        mysql_success(listing);
+        require(listing.result.rows.size() <= 1, "Manager stop replayed the transaction request concurrently");
+        if (!listing.result.rows.empty())
+        {
+            const auto& row = listing.result.rows[0];
+            require(row.size() == 4 && original && original != observer_id &&
+                        std::get<std::int64_t>(row[0]) == original && !quiet_until,
+                "Manager-stopped transaction changed session or replayed after retirement");
+            const auto* phase = std::get_if<std::string>(&row[1]);
+            const auto* text = std::get_if<std::string>(&row[2]);
+            if (!state.observed && phase && *phase == "User sleep" && text && text->find(tag) != std::string::npos)
+            {
+                const auto* command = std::get_if<std::string>(&row[3]);
+                require(!prepared || (command && *command == "Execute"),
+                    "Manager stop preceded the transaction's actual prepared execute");
+                auto hidden = co_await database.query("observer", "SELECT n FROM `" + tag + "` WHERE id=1", 3s);
+                observer.check_executor();
+                mysql_success(hidden);
+                require(owned && bool(*owned) && mysql_scalar(owned->result) == 1 && mysql_scalar(hidden.result) == 0 &&
+                            !result,
+                    "Manager stop preceded the isolated uncommitted pre-write observation");
+                state.observed = true;
+                std::cout << (prepared ? "mysql-statement-stop" : "mysql-transaction-stop") << " exact tagged "
+                          << (prepared ? "Execute" : "query") << " active; target=" << original
+                          << " observer=" << observer_id << "; own-read=1 external-read=0; outer-frame stop enabled\n";
+            }
+        }
+        if (state.target_stopped)
+        {
+            state.observed_after_stop = true;
+            require(result.has_value(), "Manager stop lost the owning transaction result");
+            mysql_cancelled_transaction(*result);
+            if (listing.result.rows.empty())
+            {
+                if (!quiet_until)
+                {
+                    quiet_until = std::chrono::steady_clock::now() + 500ms;
+                }
+                if (std::chrono::steady_clock::now() >= *quiet_until)
+                {
+                    break;
+                }
+            }
+        }
+        co_await observer_interval();
+        observer.check_executor();
+    }
+    auto counter = co_await database.query("observer", "SELECT n FROM `" + tag + "` WHERE id=1", 3s);
+    observer.check_executor();
+    mysql_success(counter);
+    require(mysql_scalar(counter.result) == 0 && owned && mysql_scalar(owned->result) == 1,
+        "Manager-stopped transaction committed a write or invalidated its owning pre-write result");
+    auto dropped = co_await database.query("observer", "DROP TABLE `" + tag + "`", 3s);
+    observer.check_executor();
+    mysql_success(dropped);
+    std::cout << (prepared ? "mysql-statement-stop" : "mysql-transaction-stop")
+              << " independent observer outlived target; session absent, bounded no-replay, external counter=0; "
+                 "native cancelled/unknown, unconfirmed/discarded, no rollback reply\n";
+}
+
+void check_mysql_transaction_stop(bool prepared = false) {
+    ark::mysql_options options;
+    options.pool.connection.host = environment("ARK_DATABASE_MYSQL_HOST");
+    require(options.pool.connection.host == "127.0.0.1", "MySQL transaction stop requires owned IPv4 loopback");
+    options.pool.connection.port = port("ARK_DATABASE_MYSQL_PORT");
+    options.pool.connection.username = environment("ARK_DATABASE_MYSQL_USER");
+    options.pool.connection.password = environment("ARK_DATABASE_MYSQL_PASSWORD");
+    options.pool.connection.database = environment("ARK_DATABASE_MYSQL_DATABASE");
+    options.pool.connection.ca_file = environment("ARK_DATABASE_MYSQL_CA");
+    options.pool.connection.tls = arknet::mysql::tls_mode::required;
+    options.pool.connection.timeout = 5s;
+    options.pool.max_connections = 1;
+    const auto tag = std::string(prepared ? "ark_dso_stmt_stop_" : "ark_dso_tx_stop_") +
+                     std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    stop_state state;
+    std::int64_t original{};
+    std::optional<ark::mysql_transaction_reply> owned, result;
+    {
+        plugin_host observer("ark_database_mysql_plugin");
+        plugin_host target("ark_database_mysql_plugin");
+        auto* database = target.manager.find_module<ark::mysql_module>();
+        auto* observer_database = observer.manager.find_module<ark::mysql_module>();
+        require(database && database->configure("primary", options), "Cannot configure MySQL transaction stop target");
+        require(observer_database && observer_database->configure("observer", options),
+            "Cannot configure independent transaction stop observer");
+        observer.preflight(mysql_transaction_stop_preflight(observer, *observer_database, tag));
+        target.start(
+            mysql_transaction_request(target, *database, tag, original, owned, result, prepared), state.request);
+        observer.start(
+            mysql_transaction_stop_observe(observer, *observer_database, state, original, owned, result, tag, prepared),
+            state.observer);
+        drive_observed_stop(target, observer, state);
+        require(target.manager.try_find_module<ark::mysql_module>() == nullptr,
+            "Manager-stopped transaction retained its target module");
+        observer.stop();
+        require(state.request.count == 1 && state.observer.count == 1,
+            "Manager-stopped transaction completion repeated after observer cleanup");
+    }
+    require(owned && result && bool(*owned) && mysql_scalar(owned->result) == 1,
+        "Manager-stopped transaction lost its owning read after both hosts were destroyed");
+    mysql_cancelled_transaction(*result);
+}
+
 #endif
 
 } // namespace
@@ -709,17 +1216,30 @@ void check_mysql_transaction(bool prepared = false) {
 int main(int argc, char** argv) {
     try
     {
-        require(argc == 2,
-            "Usage: ark_database_public_plugin_cancellation_tests redis|mysql|mysql-transaction|mysql-statement");
+        require(argc == 2, "Usage: ark_database_public_plugin_cancellation_tests "
+                           "redis|redis-stop|mysql|mysql-stop|mysql-transaction|mysql-statement|mysql-transaction-stop|"
+                           "mysql-statement-stop|redis-tls-stop");
         const std::string_view protocol(argv[1]);
         if (protocol == "redis")
         {
             check_redis();
         }
+        else if (protocol == "redis-stop")
+        {
+            check_redis_stop();
+        }
 #if defined(ARKNET_ENABLE_SSL)
+        else if (protocol == "redis-tls-stop")
+        {
+            check_redis_tls_stop();
+        }
         else if (protocol == "mysql")
         {
             check_mysql();
+        }
+        else if (protocol == "mysql-stop")
+        {
+            check_mysql_stop();
         }
         else if (protocol == "mysql-transaction")
         {
@@ -729,12 +1249,30 @@ int main(int argc, char** argv) {
         {
             check_mysql_transaction(true);
         }
+        else if (protocol == "mysql-transaction-stop")
+        {
+            check_mysql_transaction_stop();
+        }
+        else if (protocol == "mysql-statement-stop")
+        {
+            check_mysql_transaction_stop(true);
+        }
 #endif
         else
         {
             throw acceptance_failure("Requested database cancellation protocol is not enabled");
         }
-        std::cout << protocol << " real DSO request cancellation, owner completion and natural retirement passed\n";
+        if (protocol == "redis-stop" || protocol == "mysql-stop" || protocol == "mysql-transaction-stop" ||
+            protocol == "mysql-statement-stop" || protocol == "redis-tls-stop")
+        {
+            std::cout
+                << protocol
+                << " real DSO manager-stop cancellation, independent observation and resource retirement passed\n";
+        }
+        else
+        {
+            std::cout << protocol << " real DSO request cancellation, owner completion and natural retirement passed\n";
+        }
         return 0;
     }
     catch (const acceptance_failure& error)
