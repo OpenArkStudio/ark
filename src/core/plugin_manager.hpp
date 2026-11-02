@@ -57,17 +57,21 @@ class plugin_manager final : private noncopyable
 {
     using startup_modules = std::vector<std::pair<std::string, module*>>;
 
+    struct module_owner
+    {
+        void* instance;
+        bool (*destroy)(void*, const std::string&);
+    };
+
     enum class call_phase
     {
         idle,
         starting,
         installing,
         updating,
-        stopping_acceptance,
         tearing_down,
         uninstalling,
-        startup_cleanup,
-        polling_tasks
+        startup_cleanup
     };
 
     class phase_guard
@@ -92,10 +96,9 @@ public:
     enum class shutdown_state
     {
         running,
-        draining,
+        stopping,
         failed,
         stopped,
-        stopping_acceptance,
         timed_out,
         cleanup_timed_out
     };
@@ -243,20 +246,9 @@ public:
             module_ptr->update();
         }
 
-        // Modules publish service results and schedule bridge deliveries first.
-        // One bounded owner poll serves every managed group, including drain.
-        {
-            phase_guard polling(*this, call_phase::polling_tasks);
-            task_runtime_->poll(maximum_handlers);
-        }
+        // Continue publishing native completions until cancelled frames retire.
+        task_runtime_->poll(maximum_handlers);
         return true;
-    }
-
-    // Manager-owned continuation authority, independent of module-local Asio
-    // context state. Raw runtime/group polls do not enter this phase.
-    bool is_polling_tasks() const {
-        check_owner();
-        return phase_ == call_phase::polling_tasks;
     }
 
     std::shared_ptr<arknet::manual_runtime> get_task_runtime() const {
@@ -397,6 +389,7 @@ public:
             task_groups_.erase(tasks);
         }
         module_instances_.erase(iter);
+        module_owners_.erase(module_name);
         lifecycle_order_valid_ = false;
     }
 
@@ -757,23 +750,6 @@ protected:
         return ready;
     }
 
-    auto pre_shut() -> bool {
-        for (auto const& iter : module_instances_)
-        {
-            module* module_ptr = iter.second;
-            ARK_ASSERT_CONTINUE(module_ptr != nullptr);
-
-            shutdown_failure_ = "pre_shut: " + iter.first;
-            if (!module_ptr->pre_shut() || shutdown_deadline_expired(true))
-            {
-                return false;
-            }
-        }
-
-        shutdown_failure_.clear();
-        return true;
-    }
-
     auto load_plugin_library(const std::string& plugin_name) -> bool {
         auto iter = plugin_libs_.find(plugin_name);
         ARK_ASSERT_RET_VAL(iter == plugin_libs_.end(), false);
@@ -851,61 +827,40 @@ private:
         }
         if (shutdown_state_ == shutdown_state::running)
         {
-            shutdown_state_ = shutdown_state::stopping_acceptance;
+            shutdown_state_ = shutdown_state::stopping;
             for (const auto& [owner, tasks] : task_groups_)
             {
                 tasks->stop_accepting();
             }
         }
-        // The last task is removed before its completion is called. Even zero
-        // pending tasks cannot permit teardown while that callback is active.
+        // A completion removes its task before invoking user code. Never tear
+        // down a module from that code's own active stack, even at zero tasks.
         if (execution_active())
         {
             return false;
         }
         try
         {
-            if (shutdown_state_ == shutdown_state::stopping_acceptance)
+            phase_guard active(*this, call_phase::tearing_down);
+            if (!lifecycle_order_valid_)
             {
-                phase_guard stopping(*this, call_phase::stopping_acceptance);
-                shutdown_failure_ = "stop_accepting";
-                if (shutdown_deadline_expired())
+                startup_modules order(0);
+                if (!order_modules(order, shutdown_failure_, "shutdown"))
                 {
+                    shutdown_state_ = shutdown_state::failed;
                     return false;
                 }
-                // Idle registry changes invalidate old pointers. Rebuild only
-                // here, before the one-shot hook sequence, never during drain.
-                if (!lifecycle_order_valid_)
+                lifecycle_order_ = std::move(order);
+                lifecycle_order_valid_ = true;
+            }
+            if (!shutdown_cancellation_requested_)
+            {
+                shutdown_cancellation_requested_ = true;
+                shutdown_failure_ = "cancel_tasks";
+                for (const auto& [owner, tasks] : task_groups_)
                 {
-                    startup_modules order(0);
-                    if (!order_modules(order, shutdown_failure_, "stop_accepting"))
-                    {
-                        shutdown_state_ = shutdown_state::failed;
-                        return false;
-                    }
-                    lifecycle_order_ = std::move(order);
-                    lifecycle_order_valid_ = true;
-                    shutdown_failure_ = "stop_accepting";
-                    if (shutdown_deadline_expired())
-                    {
-                        return false;
-                    }
+                    tasks->close();
                 }
-                for (auto iter = lifecycle_order_.rbegin(); iter != lifecycle_order_.rend(); ++iter)
-                {
-                    shutdown_failure_ = "stop_accepting: " + iter->first;
-                    if (!iter->second->stop_accepting())
-                    {
-                        shutdown_state_ = shutdown_state::failed;
-                        return false;
-                    }
-                    if (shutdown_deadline_expired())
-                    {
-                        return false;
-                    }
-                }
-                shutdown_failure_.clear();
-                shutdown_state_ = shutdown_state::draining;
             }
             if (pending_tasks_unchecked())
             {
@@ -915,7 +870,6 @@ private:
                 }
                 return false;
             }
-            phase_guard active(*this, call_phase::tearing_down);
             if (!ready_to_shut())
             {
                 return false;
@@ -926,7 +880,7 @@ private:
             {
                 return false;
             }
-            if (!pre_shut() || !shut(unload))
+            if (!shut(unload))
             {
                 if (shutdown_state_ != shutdown_state::cleanup_timed_out)
                 {
@@ -956,15 +910,31 @@ private:
 
     template<typename unload_type>
     auto shut(unload_type unload) -> bool {
-        for (auto const& iter : module_instances_)
+        // Keep every provider alive until each consumer has released its
+        // resources and its concrete object has been destroyed.
+        for (auto iter = lifecycle_order_.rbegin(); iter != lifecycle_order_.rend(); ++iter)
         {
-            module* module_ptr = iter.second;
-            ARK_ASSERT_CONTINUE(module_ptr != nullptr);
-
-            shutdown_failure_ = "shut: " + iter.first;
+            const auto& [name, module_ptr] = *iter;
+            shutdown_failure_ = "pre_shut: " + name;
+            if (!module_ptr->pre_shut() || shutdown_deadline_expired(true))
+            {
+                return false;
+            }
+            shutdown_failure_ = "shut: " + name;
             if (!module_ptr->shut() || shutdown_deadline_expired(true))
             {
                 return false;
+            }
+            const auto owner = module_owners_.find(name);
+            if (owner != module_owners_.end())
+            {
+                const auto release = owner->second;
+                phase_guard releasing(*this, call_phase::uninstalling);
+                shutdown_failure_ = "destroy: " + name;
+                if (!release.destroy(release.instance, name) || shutdown_deadline_expired(true))
+                {
+                    return false;
+                }
             }
         }
 
@@ -1000,7 +970,7 @@ private:
     friend class plugin_base;
 
     // Publish only registry bookkeeping; no user callbacks or lifecycle rollback.
-    bool register_owned_module(const std::string& name, module& instance, bool update) {
+    bool register_owned_module(const std::string& name, module& instance, bool update, module_owner owner) {
         check_registration();
         if (module_instances_.contains(name) || module_updates_.contains(name) || registered_module(instance))
         {
@@ -1009,6 +979,7 @@ private:
         const auto entry = module_instances_.emplace(name, &instance).first;
         try
         {
+            module_owners_.emplace(name, owner);
             if (update)
             {
                 module_updates_.emplace(name, &instance);
@@ -1016,6 +987,7 @@ private:
         }
         catch (...)
         {
+            module_owners_.erase(name);
             module_instances_.erase(entry);
             throw;
         }
@@ -1097,6 +1069,7 @@ private:
     call_phase phase_{call_phase::idle};
     startup_modules lifecycle_order_;
     bool lifecycle_order_valid_{};
+    bool shutdown_cancellation_requested_{};
     shutdown_state shutdown_state_{shutdown_state::running};
     std::optional<std::chrono::steady_clock::time_point> shutdown_deadline_;
     std::exception_ptr shutdown_exception_;
@@ -1132,6 +1105,9 @@ private:
     std::unordered_map<std::string, plugin*> plugin_instances_;
     // module_runtime_name -> AFIModule*
     std::unordered_map<std::string, module*> module_instances_;
+    // Only plugin_base transfers destruction authority. add_module remains a
+    // borrowed registration; its caller is responsible for object lifetime.
+    std::unordered_map<std::string, module_owner> module_owners_;
     // Only include the module with self Update function. module_runtime_name -> AFIModule*
     std::unordered_map<std::string, module*> module_updates_;
 };
