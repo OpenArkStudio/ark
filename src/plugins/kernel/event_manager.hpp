@@ -20,6 +20,8 @@
 
 #pragma once
 
+#include <functional>
+
 #include "ark/define.hpp"
 #include "ark/kernel/data_list.hpp"
 #include "ark/platform.hpp"
@@ -34,8 +36,7 @@ public:
     template<typename base_type>
     bool add_event_call_back(const int event_id, base_type* base_ptr,
         int (base_type::*handler)(const guid_t&, const int, const data_list&)) {
-        event_process_functor functor =
-            std::bind(handler, base_ptr, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+        event_process_functor functor = std::bind_front(handler, base_ptr);
         return add_event_call_back(event_id, std::move(functor));
     }
 
