@@ -13,6 +13,7 @@
 
 | 能力 | 已记录结果 | 运行工具／说明 | 详细记录 |
 | --- | --- | --- | --- |
+| 停机候选版本资源清理 | 12 次真实服务调用通过：业务完成后 stop、所属线程请求取消、拥有型结果、原生资源关闭与 TLS 对照 | 既有正常／取消／TLS 原生入口 | [候选版本记录](../reports/database-services_CN.md#停机候选版本资源清理) |
 | <a id="公开模块与真实服务"></a>公开模块：Redis 与 MySQL | 正常与故障模式通过：拥有型结果、所属线程恢复、认证失败、已观察到的超时及显式请求恢复 | [公开服务与故障程序](../../tests/database/README_CN.md#公开模块真实服务验收) | [服务记录](../reports/database-services_CN.md#公开模块与真实服务) |
 | <a id="真实插件动态库与真实服务"></a>真实插件 DSO 正常流程 | 两种模式均通过，覆盖拥有型结果、自然排空和重复 stop | `ark_database_public_plugin_service_tests` (`redis`, `mysql`) | [正常 DSO 记录](../reports/database-services_CN.md#真实插件动态库与真实服务) |
 | <a id="mysql-dso-写入与两连接提交可见性"></a>MySQL DSO 写入 | 二进制插入、自身写入读取、独立连接的提交／回滚可见性及保留结果均通过 | `ark_database_public_plugin_service_tests mysql-transactions` | [写入记录](../reports/database-services_CN.md#mysql-dso-写入与两连接提交可见性) |

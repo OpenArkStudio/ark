@@ -4,7 +4,39 @@
 
 These acceptance records apply to their listed source revisions. Historical natural-drain results do not validate later cancellation-based resource shutdown; see the [current lifecycle contract](../project/lifecycle-closeout.md).
 
-This record separates public-module service/failure checks, positive plugin-DSO workflows, MySQL DSO write transactions, server-observed request cancellation, sent MySQL transaction-query and prepared-execute cancellation, owned-server termination and verified Redis TLS. Each scope has its own tested revisions and environment; a passing result applies only to that scope. The 2026-11-02 positive and fault/TLS records retain distinct executed sources; the intervening change concerns the compressor move constructor, tests and documentation, not additional database acceptance.
+This record separates public-module service/failure checks, positive plugin-DSO workflows, MySQL DSO write transactions, server-observed request cancellation, sent MySQL transaction-query and prepared-execute cancellation, owned-server termination and verified Redis TLS. Each scope has its own tested revisions and environment; a passing result applies only to that scope. The earlier 2026-11-02 positive and fault/TLS records retain distinct executed sources; the intervening change concerns the compressor move constructor, tests and documentation, not additional database acceptance.
+
+## Shutdown-candidate resource cleanup
+
+On **2026-11-02**, **12 native invocations passed** against fresh, exclusively owned single-node MySQL and Redis servers. This refresh uses the resource-only shutdown contract: positive business workflows finish while `running`, then the host stops resources. Cancellation cases explicitly cancel an observed task on the owner thread, finish native/observer delivery, then stop the host; they do not establish real-service cancellation initiated by process stop while requests remain pending.
+
+| Identity | Executed configuration |
+| --- | --- |
+| Candidate source | Clean `bc90b68199c7a8d5ccb23e70785454870e160f3e` |
+| Reused database build | `7767bbe0274a1b3e013f114546f567c079d03c00`; no native rebuild for this refresh. `tests/database`, `src/core`, `src/plugins/mysql` and `src/plugins/redis` are unchanged through the candidate. Binary SHA256 values below were identical before/after execution; this is source equivalence, not a build at the candidate commit |
+| Machine / system | Mac16,11 · Apple M4 Pro · 14 cores · 48 GB · macOS 27.0.1 (26A434) · arm64 |
+| Client | Apple Clang 21.0.0 · C++20 Debug · frozen Boost 1.92.0 · OpenSSL 4.1.0 · Boost.Asio with SSL enabled |
+| arknet | Configured source `a0dfe09cd543e75cfb5996e537ce2fa49f2a758f` |
+| Servers | MySQL Community 8.4.13 arm64 with authenticated, verified TLS; Redis 7.4.2 with authenticated TCP; Redis TLS build at `a0a6f23d997b024689ba157916837f493a593a34`, server OpenSSL 3.5.9 |
+
+| Native entry point and modes | Result / observation |
+| --- | --- |
+| `ark_database_public_plugin_service_tests`: `redis`, `mysql`, `mysql-transactions` | 3 passed. Actual hidden-symbol plugin DSOs, owner-thread/shared-executor delivery, once-only completion, owning results after destruction and idempotent stop. MySQL covers binary prepared inserts, autocommit, explicit commit/rollback and independent-connection visibility |
+| `ark_database_public_failure_service_tests`: `redis`, `mysql` | 2 passed through actual public module implementations: wrong credentials, server-observed request timeouts and explicit recovery; MySQL also rejects an unrelated CA |
+| `ark_database_public_plugin_cancellation_tests`: `redis`, `mysql`, `mysql-transaction`, `mysql-statement` | 4 passed. A separate connection confirms the tagged operation active before repeated owner-thread task cancellation; completion remains once-only. Redis retains partial replies and `command_may_have_run=true`, final counter `1`; MySQL autocommit preserves `outcome_unknown`, final counter `1`. Transaction/prepared cancellation remains unknown/unconfirmed with discard requested and no fabricated rollback reply; the original session disappears, explicit recovery succeeds, finite no-replay checks pass and the final counter is `0` |
+| `ark_database_public_plugin_service_tests`: `redis-tls`, `redis-tls-untrusted-ca`, `redis-tls-wrong-host` | 3 passed. Verified binary operations succeed; both negative controls return native certificate-verification failure, `command_may_have_run=false` and no replies. Server PING/ECHO counters do not increase during either negative control |
+
+| Executed binary | SHA256 |
+| --- | --- |
+| `ark_database_public_plugin_service_tests` | `e763e25372866b45461185e51bddf6734b80022e8724335ee3f06b46ec89b531` |
+| `ark_database_public_plugin_cancellation_tests` | `4effcf1c105bb5e66f124281849f2352dfcd96fd746fcac5e141cdf1e610d2da` |
+| `ark_database_public_failure_service_tests` | `eb39463bc477424ca19487a8fd572c8e4909bfa8ea5503f7445973051e3a65ad` |
+| `ark_database_mysql_plugin_d.dylib` | `48e8adc1f1b2e83e31ef496728b6f312f26c3fc5910e0faf368cbcabb4177293` |
+| `ark_database_redis_plugin_d.dylib` | `e6bf0a2b9476d79d5b846643dfb59511418f3e6086866277a5990caa2938c13a` |
+
+Each native child had a 45-second observation bound and a further 5-second owned-child termination bound; no bound was reached. These are test controls, not production shutdown defaults. All services, ports, databases, credentials and certificates were private to the batch. The schema and Redis databases were empty afterward; owned processes were stopped/reaped, and private data directories, keys and credential configurations were removed. Raw receipts, logs and server-binary fingerprints remain local. No shared user service was used.
+
+Reproduce through the existing [positive DSO modes](../../tests/database/README.md#real-plugin-dsos-against-real-services), [cancellation runner](../../tests/database/cancellation.md) and [Redis TLS controls](../../tests/database/redis_tls.md). This refresh does not repeat service termination/restart, isolation levels, queued-acquire contention, AddressSanitizer, UndefinedBehaviorSanitizer, ThreadSanitizer or cross-platform/hosted CI. It provides no production-capacity, arbitrary callback-lifetime, OS image-unmapping or hot-update guarantee. Earlier records below retain their own revisions and natural-drain semantics.
 
 ## Public modules against real services
 

@@ -4,7 +4,39 @@
 
 这些验收记录适用于各自列出的源码修订。历史自然排空结果不验收后续取消式资源停机；当前合同见[生命周期状态](../project/lifecycle-closeout_CN.md)。
 
-本页分别记录公开模块的真实服务正常／故障检查、插件 DSO 正常流程、MySQL DSO 写入事务、经服务端观察确认的请求取消、已发送 MySQL 事务查询与预处理执行取消、自有服务终止，以及可信 Redis TLS。每类检查保留各自的测试版本与环境；通过结果仅适用于对应范围。2026-11-02 的正常流程与故障／TLS 记录保留各自实际执行的源码；两者之间的变更仅涉及压缩器移动构造、测试和文档，不构成额外的数据库验收。
+本页分别记录公开模块的真实服务正常／故障检查、插件 DSO 正常流程、MySQL DSO 写入事务、经服务端观察确认的请求取消、已发送 MySQL 事务查询与预处理执行取消、自有服务终止，以及可信 Redis TLS。每类检查保留各自的测试版本与环境；通过结果仅适用于对应范围。此前 2026-11-02 的正常流程与故障／TLS 记录保留各自实际执行的源码；两者之间的变更仅涉及压缩器移动构造、测试和文档，不构成额外的数据库验收。
+
+## 停机候选版本资源清理
+
+**2026-11-02**，在新建、独占的单节点 MySQL 与 Redis 服务上，**12 次原生程序执行全部通过**。本次使用仅清理资源的停机合同：正常业务流程在 `running` 时完成，随后宿主停止资源。取消场景在服务端确认请求已执行后，由所属线程显式取消任务，等待原生结果与观察任务交付，再停止宿主；不据此验收真实服务请求尚未结束时，由进程 stop 发起的取消。
+
+| 身份 | 实际执行配置 |
+| --- | --- |
+| 候选源码 | 执行时工作区干净，`bc90b68199c7a8d5ccb23e70785454870e160f3e` |
+| 复用的数据库构建 | `7767bbe0274a1b3e013f114546f567c079d03c00`；本次未重新构建原生产物。`tests/database`、`src/core`、`src/plugins/mysql`、`src/plugins/redis` 至候选版本均无变化。下列二进制 SHA256 在执行前后相同；这是源码等价验证，不表示产物在候选提交上构建 |
+| 机器／系统 | Mac16,11 · Apple M4 Pro · 14 核 · 48 GB · macOS 27.0.1（26A434）· arm64 |
+| 客户端 | Apple Clang 21.0.0 · C++20 Debug · 固定 Boost 1.92.0 头文件 · OpenSSL 4.1.0 · 启用 SSL 的 Boost.Asio |
+| arknet | 配置源码 `a0dfe09cd543e75cfb5996e537ce2fa49f2a758f` |
+| 服务端 | MySQL Community 8.4.13 arm64，启用认证与 TLS 证书校验；Redis 7.4.2 使用密码认证 TCP；Redis TLS 构建源码为 `a0a6f23d997b024689ba157916837f493a593a34`，服务端 OpenSSL 3.5.9 |
+
+| 原生入口与模式 | 结果／观察 |
+| --- | --- |
+| `ark_database_public_plugin_service_tests`：`redis`、`mysql`、`mysql-transactions` | 3 次通过。加载真实隐藏符号插件 DSO，验证所属线程／共享执行器交付、仅一次完成、析构后保留的拥有型结果及可重复 stop。MySQL 覆盖二进制预处理插入、autocommit、显式 commit／rollback 与独立连接可见性 |
+| `ark_database_public_failure_service_tests`：`redis`、`mysql` | 2 次通过。使用真实公开模块实现，覆盖错误凭据、服务端可见的请求超时与显式恢复；MySQL 还拒绝不相关 CA |
+| `ark_database_public_plugin_cancellation_tests`：`redis`、`mysql`、`mysql-transaction`、`mysql-statement` | 4 次通过。独立连接确认带标记操作已执行后，所属线程重复请求任务取消，完成仍只有一次。Redis 保留部分回复与 `command_may_have_run=true`，最终计数为 `1`；MySQL autocommit 保留 `outcome_unknown`，最终计数为 `1`。事务／预处理取消保留未知、未确认与已请求丢弃状态，不伪造 rollback 回复；原会话消失、显式恢复、有限窗口内无重放检查通过，最终计数为 `0` |
+| `ark_database_public_plugin_service_tests`：`redis-tls`、`redis-tls-untrusted-ca`、`redis-tls-wrong-host` | 3 次通过。可信 TLS 二进制操作成功；两个负面对照返回原生证书校验失败、`command_may_have_run=false` 且无回复。负面对照期间，服务端 PING／ECHO 计数不增加 |
+
+| 执行的二进制 | SHA256 |
+| --- | --- |
+| `ark_database_public_plugin_service_tests` | `e763e25372866b45461185e51bddf6734b80022e8724335ee3f06b46ec89b531` |
+| `ark_database_public_plugin_cancellation_tests` | `4effcf1c105bb5e66f124281849f2352dfcd96fd746fcac5e141cdf1e610d2da` |
+| `ark_database_public_failure_service_tests` | `eb39463bc477424ca19487a8fd572c8e4909bfa8ea5503f7445973051e3a65ad` |
+| `ark_database_mysql_plugin_d.dylib` | `48e8adc1f1b2e83e31ef496728b6f312f26c3fc5910e0faf368cbcabb4177293` |
+| `ark_database_redis_plugin_d.dylib` | `e6bf0a2b9476d79d5b846643dfb59511418f3e6086866277a5990caa2938c13a` |
+
+每个原生子进程设置 45 秒观察期限，以及随后最多 5 秒的自有子进程终止期限，均未触及。这些是测试控制，不是生产停机默认值。服务、端口、数据库、凭据和证书均由本批次独占。结束后 schema 与 Redis 数据库为空，自有进程已停止并回收，私有数据目录、密钥与凭据配置已删除。原始回执、日志与服务端二进制指纹仅保存在本地，未使用用户现有共享服务。
+
+复现入口沿用[正常 DSO 模式](../../tests/database/README_CN.md#真实插件动态库与真实服务)、[取消程序](../../tests/database/cancellation_CN.md)和 [Redis TLS 对照](../../tests/database/redis_tls_CN.md)。本次未重复服务端终止／重启、隔离级别、等待连接竞争、AddressSanitizer、UndefinedBehaviorSanitizer、ThreadSanitizer 或跨平台／托管 CI，不证明生产容量、任意回调生命周期、操作系统库映像解除映射或热更新安全。下方历史记录保留各自修订与自然排空语义。
 
 ## 公开模块与真实服务
 
