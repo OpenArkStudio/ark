@@ -754,16 +754,16 @@ TEST_CASE("Dependency objects retire before every plugin uninstall and native un
 
         struct reset_callbacks
         {
-            decltype(first_entry) first_entry;
-            decltype(second_entry) second_entry;
-            decltype(first_exit) first_exit;
-            decltype(second_exit) second_exit;
+            decltype(first_entry) reset_first_entry;
+            decltype(second_entry) reset_second_entry;
+            decltype(first_exit) reset_first_exit;
+            decltype(second_exit) reset_second_exit;
 
             ~reset_callbacks() {
-                first_entry(nullptr);
-                second_entry(nullptr);
-                first_exit(nullptr);
-                second_exit(nullptr);
+                reset_first_entry(nullptr);
+                reset_second_entry(nullptr);
+                reset_first_exit(nullptr);
+                reset_second_exit(nullptr);
             }
         } reset{first_entry, second_entry, first_exit, second_exit};
 
