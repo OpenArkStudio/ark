@@ -63,7 +63,7 @@ Provider objects remain alive during consumer `shut()`/destruction, but their na
 | MySQL / Redis | Readiness observes service/bridge quiescence; `pre_shut()` seals admission and retires pools through native `close_and_wait()`; `shut()` requires native retirement before clearing connections |
 | Net HTTP client | Readiness waits for native results, queued delivery and active callbacks/capture release; `pre_shut()` closes/cancels its runtime. Ordinary calls have no business-root/continuation classification |
 | Routed HTTP server | Readiness atomically seals native route dispatch and waits for active route/response-send leases; `pre_shut()` stops/joins the server and releases its endpoint. Routes have no manager-state HTTP 503 gate |
-| Utility scheduler | Readiness seals the scheduler and waits for worker/dispatcher-owned callbacks; `pre_shut()` joins retired workers. This is resource retirement, not application business admission |
+| Utility scheduler | Readiness requests resource close, discards queued timers and seals further scheduling, then waits for already-dispatched callbacks/captures; `pre_shut()` joins retired workers. This is resource retirement, not application business admission |
 | Net services | Owning cleanup closes endpoints and clears borrowed callback captures before consumers/providers are destroyed. Ordinary protocol callbacks retain their registration behavior |
 
 Neither completed native closes nor `dlclose`/`FreeLibrary` success proves physical OS image removal or arbitrary hot-update safety.

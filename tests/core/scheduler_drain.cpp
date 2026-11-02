@@ -5,7 +5,9 @@
 #include <chrono>
 #include <functional>
 #include <future>
+#include <iomanip>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <type_traits>
@@ -126,6 +128,17 @@ struct receiver
     }
 };
 
+struct schedule_module_access : ark::schedule_module
+{
+    static void at(ark::schedule_module& module, const std::string& time, ark::scheduler_functor callback) {
+        // Form the protected callback overload's member pointer without casting
+        // the factory's production module to a test implementation.
+        using callback_method = void (ark::schedule_module::*)(const std::string&, ark::scheduler_functor&&);
+        const auto method = static_cast<callback_method>(&schedule_module_access::add_at_schedule);
+        (module.*method)(time, std::move(callback));
+    }
+};
+
 struct cleanup_probe final : ark::module
 {
     unsigned pre_shut_calls{};
@@ -182,13 +195,19 @@ TEST_CASE("Scheduler drains dispatched and queued callbacks while closing new re
     CHECK(calls == 2);
 }
 
-TEST_CASE("Scheduler destruction fallback keeps workers alive for accepted future one-shots") {
+TEST_CASE("Scheduler destruction fallback discards future one-shots and releases captures") {
     std::atomic<unsigned> calls{};
+    std::weak_ptr<int> lifetime;
     {
         ark::scheduler scheduler(1);
-        scheduler.in(5ms, [&] { ++calls; });
+        auto capture = std::make_shared<int>(42);
+        lifetime = capture;
+        scheduler.in(24h, [capture, &calls] { ++calls; });
+        capture.reset();
+        CHECK_FALSE(lifetime.expired());
     }
-    CHECK(calls == 1);
+    CHECK(calls == 0);
+    CHECK(lifetime.expired());
 }
 
 TEST_CASE("Scheduler future recurring capture retirement is outside locks and inside readiness") {
@@ -225,6 +244,56 @@ TEST_CASE("Scheduler dispatched capture destruction completes before readiness")
     release.open();
     REQUIRE(eventually([&] { return scheduler.ready_to_shut(); }));
     CHECK(retired);
+}
+
+TEST_CASE("Scheduler resource close discards future captures and seals running callback continuations") {
+    gate callback_entered, callback_release, capture_entered, capture_release;
+    ark::scheduler scheduler(1);
+    release_on_exit unblock_callback{callback_release};
+    release_on_exit unblock_capture{capture_release};
+    std::atomic<unsigned> calls{};
+    std::atomic<bool> capture_retired{};
+
+    struct closing_capture
+    {
+        ark::scheduler& scheduler;
+        gate& entered;
+        gate& release;
+        std::atomic<bool>& retired;
+
+        ~closing_capture() {
+            // Reentering close proves queued user captures retire outside the mutex.
+            scheduler.close();
+            entered.open();
+            release.wait();
+            retired = true;
+        }
+    };
+
+    scheduler.in(0ms, [&] {
+        ++calls;
+        callback_entered.open();
+        callback_release.wait();
+        scheduler.in(0ms, [&] { calls += 100; });
+    });
+    REQUIRE(callback_entered.wait());
+    auto capture = std::make_shared<closing_capture>(scheduler, capture_entered, capture_release, capture_retired);
+    std::weak_ptr<closing_capture> lifetime = capture;
+    scheduler.in(24h, [capture, &calls] { calls += 1000; });
+    capture.reset();
+    scheduler.close();
+    scheduler.close();
+    REQUIRE(capture_entered.wait());
+    CHECK_FALSE(scheduler.ready_to_shut());
+    CHECK_FALSE(scheduler.pre_shut());
+    capture_release.open();
+    REQUIRE(eventually([&] { return capture_retired.load(); }));
+    CHECK_FALSE(scheduler.ready_to_shut());
+    callback_release.open();
+    REQUIRE(eventually([&] { return scheduler.ready_to_shut(); }));
+    CHECK(lifetime.expired());
+    CHECK(calls == 1);
+    CHECK(scheduler.pre_shut());
 }
 
 TEST_CASE("Scheduler retains already admitted future one-shot work through drain") {
@@ -534,6 +603,32 @@ TEST_CASE("Scheduler readiness includes a registration copying captures when sto
     release.open();
     producer.join();
     REQUIRE(eventually([&] { return scheduler.ready_to_shut(); }));
+}
+
+TEST_CASE("Schedule module stop discards a 24-hour timer and releases its capture") {
+    ark::plugin_manager manager;
+    cleanup_probe probe;
+    auto module = ark::detail::make_schedule_module();
+    REQUIRE(module->init());
+    REQUIRE(manager.add_module("scheduler", module.get()));
+    REQUIRE(manager.add_module("probe", &probe));
+    std::atomic<unsigned> calls{};
+    auto capture = std::make_shared<int>(42);
+    std::weak_ptr<int> lifetime = capture;
+    const auto future = ark::scheduler::clock::to_time_t(ark::scheduler::clock::now() + 24h);
+    const auto local = ark::detail::scheduler_local_time(future);
+    std::ostringstream time;
+    time << std::put_time(&local, "%Y-%m-%d %H:%M:%S");
+    schedule_module_access::at(*module, time.str(), [capture, &calls] { ++calls; });
+    capture.reset();
+    CHECK_FALSE(lifetime.expired());
+    REQUIRE(eventually([&] { return manager.stop(1); }));
+    CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopped);
+    CHECK(lifetime.expired());
+    CHECK(calls == 0);
+    CHECK(probe.pre_shut_calls == 1);
+    CHECK(probe.shut_calls == 1);
+    CHECK(manager.stop(2));
 }
 
 TEST_CASE("Schedule module lets the owner advance accepted callback completion before cleanup") {

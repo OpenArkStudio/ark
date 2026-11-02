@@ -145,4 +145,4 @@ runtime 和组须在同一线程构造、操作和销毁。`manual_runtime` 不�
 - [数据库协程测试](../../tests/database/COROUTINES_CN.md)：内部原生操作桥接、所属线程更新顺序与显式测试清理。
 - [MySQL](../reference/mysql_CN.md) 与 [Redis](../reference/redis_CN.md)：公开插件配置、共享业务执行器与原生连接池退役。
 
-直接继承调度器基类的代码应改用 `ark::scheduler_task`。`ark::task<T>` 表示 Asio 协程；`ark::scheduler` 的调度接口保持原有签名。
+直接继承调度器基类的代码应改用 `ark::scheduler_task`。`ark::task<T>` 表示 Asio 协程；`ark::scheduler` 的调度接口保持原有签名。管理器任务帧回收后，调度模块通过 `scheduler::close()` 丢弃尚未派发的定时任务，并关闭回调生成的后续调度。显式调用低层 `stop_accepting()` 时，仍保留远期单次任务的自然处理，供选择等待的调用方使用。见[调度器停机](../reference/utility_CN.md#调度器停机)。

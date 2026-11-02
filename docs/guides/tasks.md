@@ -145,4 +145,4 @@ Rebuild all plugins against the same updated manager headers; stable binary plug
 - [Database coroutine tests](../../tests/database/COROUTINES.md): private native-operation bridges, owner update order and explicit test teardown.
 - [MySQL](../reference/mysql.md) and [Redis](../reference/redis.md): public plugin configuration, shared business executor and native pool retirement.
 
-Use `ark::scheduler_task` when deriving from the scheduler helper base. `ark::task<T>` denotes Asio coroutines; `ark::scheduler` call signatures are unchanged.
+Use `ark::scheduler_task` when deriving from the scheduler helper base. `ark::task<T>` denotes Asio coroutines; `ark::scheduler` scheduling call signatures are unchanged. After managed frames retire, the schedule module uses `scheduler::close()` to discard undispatched timers and seal callback-generated scheduling. Explicit low-level `stop_accepting()` retains natural future one-shot processing for callers choosing to wait for it. See [scheduler shutdown](../reference/utility.md#scheduler-shutdown).

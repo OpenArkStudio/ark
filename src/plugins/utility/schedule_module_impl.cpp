@@ -50,7 +50,7 @@ bool schedule_module_impl::init() {
 bool schedule_module_impl::ready_to_shut() const {
     if (scheduler_)
     {
-        scheduler_->stop_accepting();
+        scheduler_->close();
     }
     return !scheduler_ || scheduler_->ready_to_shut();
 }
