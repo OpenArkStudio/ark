@@ -312,6 +312,8 @@ TEST_CASE("Typed unregister retains ownership while managed work borrows a modul
     CHECK(manager.update(1));
     CHECK(manager.pending_tasks() == 0);
     CHECK(manager.stop(2));
+    CHECK(events.destroyed == 1);
+    CHECK(owner.unregister_module<service>());
     CHECK_FALSE(owner.unregister_module<service>());
     CHECK(events.destroyed == 1);
     counts rejected;
