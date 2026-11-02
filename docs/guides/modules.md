@@ -212,6 +212,8 @@ Then all `pre_shut()` calls run in reverse dependency order while every module o
 
 `stop_until(timestamp, deadline)` is an optional resource-cleanup safeguard; the default wait is unlimited. Timeout/failure retains remaining resources and never permits pending-frame destruction. See [tasks and timeout states](tasks.md#shared-business-executor-for-modules).
 
+Provider objects remain alive during consumer `shut()`/destruction, but their native resources may already be closed by the preceding `pre_shut()` pass. Release borrows or unregister metadata only where the interface permits; do not rely on database writes, network sends or business saving at this stage. Complete those operations while running, before process stop.
+
 Raw `add_module()` registrations remain caller-owned; the manager cannot destroy borrowed objects. Callers must preserve the same consumer/provider lifetimes; ordering does not transfer ownership.
 
 ## Keep callbacks within their owner's lifetime

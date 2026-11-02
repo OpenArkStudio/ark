@@ -72,7 +72,7 @@ helper, including content type, length and keep-alive behavior.
 | Endpoint reservation | Rejects start while running; two instances in one library cannot reserve one nonzero endpoint. `pre_shut()` stops/releases server and reservation, retaining restart behavior when used alone |
 | Ordinary requests | No manager-state business gate or automatic HTTP 503; routes retain ordinary behavior until the resource-readiness seal; later transport requests close without invoking routes |
 | `ready_to_shut()` | Atomically seals native route dispatch, then waits for active route/response-send leases to retire; failed sends also retire leases without proving client receipt |
-| Resource closure | `pre_shut()` stops/joins the native server and releases its endpoint; blocked routes must return cooperatively. Independently scheduled work needs separate ownership |
+| Resource closure | `pre_shut()` stops/joins the native server, clears router captures and releases its endpoint; blocked routes must return cooperatively. Independently scheduled work needs separate ownership |
 
 No generic hot replacement or HTTP/2 support; arknet retains IO workers, request parsing and transport.
 
@@ -95,7 +95,7 @@ mapped. The generated mapping is an include view of the co-located source header
 
 ## Validation
 
-`check-http-plugin` uses the actual HTTP DSO and loopback requests for public interfaces, routing, IO-worker dispatch, resource readiness, repeated closure and endpoint reuse. `check-http-admission` retains its historical target name for resource waiting/retention; it no longer supplies a manager-state business-refusal gate. Acceptance requires actual results for the tested revision; earlier HTTP 503 cases are not current-contract evidence. Independently scheduled route work is outside HTTP send-lease accounting.
+`check-http-plugin` uses the actual HTTP DSO and loopback requests for public interfaces, routing, IO-worker dispatch, resource readiness, repeated closure and endpoint reuse. `check-http-resource-cleanup` checks resource waiting/retention without a manager-state business-refusal gate. Acceptance requires actual results for the tested revision; earlier HTTP 503 cases are not current-contract evidence. Independently scheduled route work is outside HTTP send-lease accounting.
 
 `check-network` suite retains its HTTP duplicate binding,
 restart, public response helper and invalid-TOML assertions through the private

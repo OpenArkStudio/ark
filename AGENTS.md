@@ -150,6 +150,9 @@ branch or worktree when the existing checkout contains uncommitted changes.
   all `pre_shut()` calls while every object is alive, followed by each `shut()`
   and owned-module destruction. Plugin uninstallation follows all modules; every
   DSO stays loaded until all module/callback/plugin destruction is finished.
+- Provider objects survive consumer destruction, but their resources may already
+  be closed by the all-module `pre_shut()` pass. Do not defer database writes,
+  sends, kicking or saving into resource hooks/destructors.
 - Borrowed `add_module()` registrations remain caller-owned. Declare real provider
   dependencies and retire native callback sources before destroying receivers.
   Cancellation never authorizes suspended-frame destruction or proves rollback.

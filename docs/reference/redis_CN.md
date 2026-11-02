@@ -79,7 +79,7 @@ ark::task<> workflow() {
 `ark_database_public_redis_plugin_tests` 另行编译并加载实际插件动态库，验证宏注册、协程结果投递和宿主停机。该检查不代表操作系统动态库卸载、热更新或真实 Redis 服务验收。
 
 `ark_database_public_service_tests` 通过业务任务组和管理器共享运行时调用实际模块实现，覆盖认证
-配置、有序二进制流水线、输入/配置/结果所有权、所属线程恢复及已记录修订的自然排空，以及工作未
+配置、有序二进制流水线、输入/配置/结果所有权、所属线程恢复、业务完成后再停止资源，以及工作未
 完成时的宿主调用栈异常展开。`ark_database_public_failure_service_tests` 检查错误密码和服务器可见的 BLPOP 截止
 时间，保留原生错误及 `command_may_have_run`，再通过显式新 PING 验证恢复。
 

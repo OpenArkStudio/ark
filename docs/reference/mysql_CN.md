@@ -95,7 +95,7 @@ ark::task<> update_player() {
 
 `ark_database_public_mysql_plugin_tests` 另外编译并加载真实插件动态库，验证宏注册、协程结果投递和宿主停机。该检查不代表操作系统动态库卸载或热更新验收。
 
-`ark_database_public_service_tests` 通过业务任务组和管理器共享运行时调用实际模块实现，覆盖查询与预处理结果、提交/回滚可见性、输入/配置/结果所有权、所属线程恢复及当时的自然排空，以及工作未完成时的宿主调用栈异常展开。`ark_database_public_failure_service_tests` 检查错误密码、不可信 CA 和服务器可见的 `SELECT SLEEP` 截止时间，保留原生错误及 `outcome_unknown`，再通过显式新请求验证恢复。
+`ark_database_public_service_tests` 通过业务任务组和管理器共享运行时调用实际模块实现，覆盖查询与预处理结果、提交/回滚可见性、输入/配置/结果所有权、所属线程恢复、业务完成后再停止资源，以及工作未完成时的宿主调用栈异常展开。`ark_database_public_failure_service_tests` 检查错误密码、不可信 CA 和服务器可见的 `SELECT SLEEP` 截止时间，保留原生错误及 `outcome_unknown`，再通过显式新请求验证恢复。
 
 ```sh
 bash scripts/test_databases.sh database-build public-mysql

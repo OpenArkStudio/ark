@@ -95,7 +95,7 @@ Each query/transaction bridge separately reserves at most `max_operations` deliv
 
 `ark_database_public_mysql_plugin_tests` additionally builds and loads the real plugin library to verify macro registration, coroutine delivery and host shutdown. It does not certify OS library unloading or hot update.
 
-`ark_database_public_service_tests` uses the real module implementation with a consumer task group and the manager's shared runtime. It covers query/prepared results, commit/rollback visibility, input/configuration/result ownership, owner-thread resumption, natural drain at the recorded revision and host-stack unwinding while work is pending. `ark_database_public_failure_service_tests` checks wrong passwords, an untrusted CA and a server-observed `SELECT SLEEP` deadline. It preserves native errors and `outcome_unknown`, then requires an explicit new request to recover.
+`ark_database_public_service_tests` uses the real module implementation with a consumer task group and the manager's shared runtime. It covers query/prepared results, commit/rollback visibility, input/configuration/result ownership, owner-thread resumption, business completion before resource stop and host-stack unwinding while work is pending. `ark_database_public_failure_service_tests` checks wrong passwords, an untrusted CA and a server-observed `SELECT SLEEP` deadline. It preserves native errors and `outcome_unknown`, then requires an explicit new request to recover.
 
 ```sh
 bash scripts/test_databases.sh database-build public-mysql

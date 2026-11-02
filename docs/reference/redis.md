@@ -88,7 +88,7 @@ server acceptance.
 `ark_database_public_service_tests` uses the real module implementation,
 a consumer task group and the manager's shared runtime. It covers authentication
 configuration, an ordered binary pipeline, input/configuration/result ownership,
-owner-thread resumption, natural drain at the recorded revision and host-stack unwinding with work pending.
+owner-thread resumption, business completion before resource stop and host-stack unwinding with work pending.
 `ark_database_public_failure_service_tests` checks a wrong password and a server-observed BLPOP
 deadline, preserving native errors and `command_may_have_run`, then requires an
 explicit new PING to recover.

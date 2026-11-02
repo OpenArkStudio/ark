@@ -53,6 +53,8 @@ Uninstall plugins after all modules are released. Keep every DSO loaded through 
 
 Cancellation is cooperative and may not stop an awaited operation or undo a remote write. A zero task count does not prove callback/native-thread safety. Modules must retain owners/code until their native work is ready. Declared edges must represent real borrowed-provider lifetimes; the Map/Kernel runtime cycle is not a declared dependency cycle. Raw external owners and undeclared edges remain application responsibilities. `task_group::poll()` remains available to standalone owners; manager-owned groups use manager updates. There is no HTTP continuation authority tied to a poll phase.
 
+Provider objects remain alive during consumer `shut()`/destruction, but their native resources may already be closed by the preceding `pre_shut()` pass. Release borrows or unregister metadata only where the interface permits; do not rely on database writes, network sends or business saving at this stage. Complete those operations while running, before process stop.
+
 ### Native resource boundaries
 
 | Owner | Resource retirement |
