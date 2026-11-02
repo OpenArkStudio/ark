@@ -3,9 +3,13 @@
 #include <atomic>
 #include <barrier>
 #include <chrono>
+#include <functional>
 #include <future>
 #include <memory>
+#include <string>
 #include <thread>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "../network/doctest.h"
@@ -669,4 +673,85 @@ TEST_CASE("Schedule module timeout keeps all module cleanup hooks closed after w
     CHECK_FALSE(manager.stop(3));
     CHECK(probe.pre_shut_calls == 0);
     CHECK(probe.shut_calls == 0);
+}
+
+TEST_CASE("Scheduler snapshots value arguments and preserves borrowed reference arguments") {
+    std::string value = "registered";
+    int borrowed = 4;
+    std::promise<std::pair<std::string, int>> completed;
+    auto result = completed.get_future();
+    ark::scheduler scheduler(1);
+    scheduler.in(
+        24h,
+        [&](std::string& stored, int& alias) {
+            stored += " callback";
+            completed.set_value({stored, ++alias});
+            return 17; // The scheduler's void callback intentionally discards results.
+        },
+        value, std::ref(borrowed));
+    value = "changed after registration";
+    borrowed = 9;
+    CHECK(ark::scheduler_test_access::future_one_shots(scheduler, true) == 1);
+    scheduler.stop_accepting();
+    REQUIRE(result.wait_for(5s) == std::future_status::ready);
+    CHECK(result.get() == std::make_pair(std::string("registered callback"), 10));
+    REQUIRE(eventually([&] { return scheduler.ready_to_shut(); }));
+    CHECK(borrowed == 10);
+    CHECK(value == "changed after registration");
+}
+
+TEST_CASE("Scheduler evaluates nested bind expressions and unwraps generic reference arguments") {
+    int evaluated = 0;
+    int borrowed = 3;
+    std::promise<std::pair<bool, int>> completed;
+    auto result = completed.get_future();
+    ark::scheduler scheduler(1);
+    auto nested = std::bind([](int& calls) { return ++calls; }, std::ref(evaluated));
+    scheduler.in(
+        24h,
+        [&](auto&& alias, int nested_result) {
+            completed.set_value({std::is_same_v<decltype(alias), int&>, alias + nested_result});
+        },
+        std::ref(borrowed), std::move(nested));
+    CHECK(evaluated == 0);
+    borrowed = 8;
+    CHECK(ark::scheduler_test_access::future_one_shots(scheduler, true) == 1);
+    scheduler.stop_accepting();
+    REQUIRE(result.wait_for(5s) == std::future_status::ready);
+    CHECK(result.get() == std::make_pair(true, 9));
+    REQUIRE(eventually([&] { return scheduler.ready_to_shut(); }));
+    CHECK(evaluated == 1);
+}
+
+TEST_CASE("Scheduler member callbacks retain shared receivers and borrow raw receivers") {
+    struct member_receiver
+    {
+        int calls{};
+
+        int invoke(int value, std::promise<int>& completed) {
+            completed.set_value(value + ++calls);
+            return calls;
+        }
+    } borrowed;
+
+    auto owned = std::make_shared<member_receiver>();
+    std::weak_ptr<member_receiver> lifetime = owned;
+    std::promise<int> borrowed_completed;
+    std::promise<int> owned_completed;
+    auto borrowed_result = borrowed_completed.get_future();
+    auto owned_result = owned_completed.get_future();
+    ark::scheduler scheduler(1);
+    scheduler.in(24h, &member_receiver::invoke, &borrowed, 7, std::ref(borrowed_completed));
+    scheduler.in(24h, &member_receiver::invoke, owned, 13, std::ref(owned_completed));
+    owned.reset();
+    CHECK_FALSE(lifetime.expired());
+    CHECK(ark::scheduler_test_access::future_one_shots(scheduler, true) == 2);
+    scheduler.stop_accepting();
+    REQUIRE(borrowed_result.wait_for(5s) == std::future_status::ready);
+    REQUIRE(owned_result.wait_for(5s) == std::future_status::ready);
+    CHECK(borrowed_result.get() == 8);
+    CHECK(owned_result.get() == 14);
+    REQUIRE(eventually([&] { return scheduler.ready_to_shut(); }));
+    CHECK(borrowed.calls == 1);
+    CHECK(lifetime.expired());
 }

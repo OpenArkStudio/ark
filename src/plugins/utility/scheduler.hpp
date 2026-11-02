@@ -208,6 +208,9 @@ public:
         return true;
     }
 
+    // Keep std::bind for these fully bound callbacks: nested bind expressions
+    // are evaluated on invocation and reference_wrapper arguments are unwrapped.
+    // std::bind_front would change both contracts for generic user callables.
     template<typename callable_type, typename... args_type>
     void in(const clock::time_point time, callable_type&& f, args_type&&... args) {
         operation registration(*this);
