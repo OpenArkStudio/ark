@@ -6,7 +6,11 @@ Results apply only to the source, binary identities and operations recorded belo
 
 ## Shutdown-candidate resource cleanup
 
-On **2026-11-02**, **12 native invocations passed** against fresh, exclusively owned single-node MySQL and Redis servers. Positive business workflows finish while `running`, then the host stops resources. Cancellation cases explicitly cancel an observed task on the owner thread, finish native/observer delivery, then stop the host; they do not establish real-service cancellation initiated by process stop while requests remain pending.
+On **2026-11-02**, **14 native invocations passed in two scopes**. The 12 positive/explicit-cancellation/TLS executions and the 2 manager-stop executions retain separate source and binary identities below. Each result is attributed to its recorded build.
+
+### Positive workflows, explicit cancellation and TLS (12 invocations)
+
+The **12 invocations** used fresh, exclusively owned single-node MySQL and Redis servers. Positive business workflows finish while `running`, then the host stops resources. Cancellation cases explicitly cancel an observed task on the owner thread, finish native/observer delivery, then stop the host; they do not establish real-service cancellation initiated by process stop while requests remain pending.
 
 | Identity | Executed configuration |
 | --- | --- |
@@ -21,7 +25,7 @@ On **2026-11-02**, **12 native invocations passed** against fresh, exclusively o
 <a id="mysql-dso-writes-and-two-connection-commit-visibility"></a>
 <a id="reproduce-the-positive-dso-workflows"></a>
 
-### Positive DSO workflows and public failure controls
+#### Positive DSO workflows and public failure controls
 
 | Native entry point and modes | Result / observation |
 | --- | --- |
@@ -32,7 +36,7 @@ On **2026-11-02**, **12 native invocations passed** against fresh, exclusively o
 <a id="mysql-sent-transaction-operation-cancellation"></a>
 <a id="mysql-prepared-execute-cancellation"></a>
 
-### Server-observed explicit task cancellation
+#### Server-observed explicit task cancellation
 
 All four modes of `ark_database_public_plugin_cancellation_tests` passed. An independent connection identifies the tagged operation as active before repeated `task_group::cancel(id)` requests; elapsed delay is not the activity barrier. Roots complete once on the owner thread/shared executor, retired IDs reject cancellation, explicit new requests recover, and retained results survive resource shutdown.
 
@@ -47,7 +51,7 @@ An observed zero does not confirm rollback through the API. These finite observa
 
 <a id="real-plugin-redis-tls"></a>
 
-### Redis TLS
+#### Redis TLS
 
 All three TLS modes of `ark_database_public_plugin_service_tests` passed against a private password-protected, TLS-only server. Its fresh certificate had only a `127.0.0.1` IP SAN; OpenSSL controls confirmed the trusted chain/IP and `localhost` mismatch.
 
@@ -60,7 +64,7 @@ All three TLS modes of `ark_database_public_plugin_service_tests` passed against
 PING/ECHO counters did not increase during either negative control. That observation does not prove that no RESP command reached the server; received-command counting is separate protocol-peer evidence. Mutual TLS, certificate rotation/revocation and TLS cancellation/recovery were not exercised.
 
 <Collapsible>
-<CollapsibleTrigger>Executed binary fingerprints</CollapsibleTrigger>
+<CollapsibleTrigger>12-invocation build fingerprints</CollapsibleTrigger>
 <CollapsibleContent>
 
 | Executed binary | SHA256 |
@@ -74,9 +78,45 @@ PING/ECHO counters did not increase during either negative control. That observa
 </CollapsibleContent>
 </Collapsible>
 
-Each native child had a 45-second observation bound and a further 5-second owned-child termination bound; no bound was reached. These are test controls, not production shutdown defaults. Services, ports, data, credentials and certificates were private to the batch. The schema and Redis databases were empty afterward; owned processes were stopped/reaped, and private data directories, keys and credential configurations were removed. Raw receipts, logs and server-binary fingerprints remain local.
+<a id="manager-stop-initiated-cancellation"></a>
 
-Use the existing [positive DSO modes](../../tests/database/README.md#real-plugin-dsos-against-real-services), [failure controls](../../tests/database/README.md#public-real-service-failure-checks), [cancellation runner](../../tests/database/cancellation.md) and [Redis TLS controls](../../tests/database/redis_tls.md). Real-service execution remains opt-in; `check-database` compilation does not reproduce it.
+### Manager-stop-initiated cancellation (2 invocations)
+
+On the same machine with the client/arknet versions above, **`redis-stop` and `mysql-stop` both passed** using fresh authenticated Redis TCP and verified-TLS MySQL instances. These modes call target `manager.stop()` on the outer owner frame only after server observation confirms its request active and the target root is still pending. They do not explicitly call `task_group::cancel(id)`.
+
+| Identity | Executed configuration |
+| --- | --- |
+| Tested source | Clean `39e6503683a3dcbca1169de30a488da35f7b51a7`, based on `b97f85fe3a4dd5aaaaa1423b7f8c47b4954f51d6` |
+| Separate native build | New cancellation executable and actual hidden-symbol Redis/MySQL DSOs; database-only C++20 Debug, SSL enabled, applications/Protobuf disabled. The earlier 12-invocation binaries were unchanged; hashes below identify this two-mode build only |
+| Native entry | `ark_database_public_plugin_cancellation_tests redis-stop` and `mysql-stop`; both exited `0` |
+
+The observer owns a separate manager, runtime and pool and remains `running` after the target reaches `stopped`. It tracks the whole original server connection, then a further 500 ms without that connection or tagged request returning. Observer queries are not recovery through the closed target. Target roots complete once on their owner executor, pending task count reaches zero, the target module is removed and repeated stop succeeds. Owning native results remain valid after both hosts are destroyed.
+
+| Mode | Native result and independent observation |
+| --- | --- |
+| `redis-stop` | Named pipeline observed in BLPOP after confirmed INCR `1`; manager stop preserves native `cancelled`, `command_may_have_run=true` and any valid partial reply. The target connection disappears and counter remains `1` through the bounded no-replay check |
+| `mysql-stop` | Tagged autocommit UPDATE observed in `User sleep`; manager stop preserves native `cancelled`, `outcome_unknown=true` and `operation_aborted`. The original session disappears and final counter is `1`; no target-pool recovery or rollback reply is fabricated |
+
+These counter observations do not establish a general cancellation write-effect or rollback guarantee. Stop-initiated transaction/prepared cancellation was not executed; those modes above retain explicit-task-cancellation evidence only. An observer DSO handle can keep the shared library image loaded until both hosts finish; resource closure does not establish physical image removal.
+
+<Collapsible>
+<CollapsibleTrigger>Two-mode manager-stop build fingerprints</CollapsibleTrigger>
+<CollapsibleContent>
+
+| Executed binary | SHA256 |
+| --- | --- |
+| `ark_database_public_plugin_cancellation_tests` | `2b698a5702600b9a38dd51a023b34c7ab0d1a7527d0c0e0c4c165e49e978647a` |
+| `ark_database_mysql_plugin_d.dylib` | `effac22db654a276cd2ec3cd66baab908d5a4655dbfddf5b64382af5cb0abd41` |
+| `ark_database_redis_plugin_d.dylib` | `96402add5a1a8a423e909f789176d72422b6b5617559e8d903c78f282d0ceafe` |
+
+</CollapsibleContent>
+</Collapsible>
+
+### Execution controls and cleanup
+
+Each native child had a 45-second observation bound and a further 5-second owned-child termination bound; no bound was reached. These are test controls, not production shutdown defaults. Services, ports, data, credentials and certificates were private to their respective batches. The schema and Redis databases were empty afterward; owned processes were stopped/reaped, and private data directories, keys and credential configurations were removed. Raw receipts, logs and server-binary fingerprints remain local.
+
+Use the existing [positive DSO modes](../../tests/database/README.md#real-plugin-dsos-against-real-services), [failure controls](../../tests/database/README.md#public-real-service-failure-checks), [cancellation runner](../../tests/database/cancellation.md), [Redis TLS controls](../../tests/database/redis_tls.md) and [manager-stop modes](../../tests/database/cancellation.md#manager-stop-cancellation). Real-service execution remains opt-in; `check-database` compilation does not reproduce it.
 
 ## Other recorded scopes
 
@@ -150,4 +190,4 @@ bash tests/database/owned_server_fault_actor_guards.sh
 
 ## Acceptance boundaries
 
-DSO workflows exercise normal plugin destruction and native close calls; successful `dlclose`/`FreeLibrary` does not prove physical OS image removal. Production capacity, arbitrary callback lifetimes and hot-update safety are unverified. The current record excludes process-stop-initiated cancellation of pending real-service requests, real-service queued-acquire contention, other cancellation stages/races, crash durability, complete isolation coverage, transaction recovery, mutual TLS, certificate rotation/revocation and Redis TLS fault recovery. AddressSanitizer, UndefinedBehaviorSanitizer, ThreadSanitizer, other platforms and hosted CI are separate scopes.
+DSO workflows exercise normal plugin destruction and native close calls; successful `dlclose`/`FreeLibrary` does not prove physical OS image removal. Production capacity, arbitrary callback lifetimes and hot-update safety are unverified. Stop-initiated cancellation is limited to the two observed pipeline/autocommit modes; transaction/prepared stop cancellation and real-service queued-acquire contention remain excluded, alongside other cancellation stages/races, crash durability, complete isolation coverage, transaction recovery, mutual TLS, certificate rotation/revocation and Redis TLS fault recovery. AddressSanitizer, UndefinedBehaviorSanitizer, ThreadSanitizer, other platforms and hosted CI are separate scopes.

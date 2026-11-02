@@ -6,7 +6,11 @@
 
 ## 停机候选版本资源清理
 
-**2026-11-02**，在新建、独占的单节点 MySQL 与 Redis 服务上，**12 次原生程序执行全部通过**。正常业务流程在 `running` 时完成，随后宿主停止资源。取消场景在服务端确认请求已执行后，由所属线程显式取消任务，等待原生结果与观察任务交付，再停止宿主；不据此验收真实服务请求尚未结束时，由进程 stop 发起的取消。
+**2026-11-02**，两个范围共 **14 次原生执行通过**。下方分别保留 12 次正常／显式取消／TLS 执行与 2 次 manager-stop 执行的源码和二进制身份，结果分别归属于对应构建。
+
+### 正常流程、显式取消与 TLS（12 次执行）
+
+这 **12 次执行**使用新建、独占的单节点 MySQL 与 Redis 服务。正常业务流程在 `running` 时完成，随后宿主停止资源。取消场景在服务端确认请求已执行后，由所属线程显式取消任务，等待原生结果与观察任务交付，再停止宿主；不据此验收真实服务请求尚未结束时，由进程 stop 发起的取消。
 
 | 身份 | 实际执行配置 |
 | --- | --- |
@@ -21,7 +25,7 @@
 <a id="mysql-dso-写入与两连接提交可见性"></a>
 <a id="复现真实-dso-正常流程"></a>
 
-### 正常 DSO 流程与公开接口故障对照
+#### 正常 DSO 流程与公开接口故障对照
 
 | 原生入口与模式 | 结果／观察 |
 | --- | --- |
@@ -32,7 +36,7 @@
 <a id="mysql-已发送事务操作取消"></a>
 <a id="mysql-预处理执行取消"></a>
 
-### 服务端观察确认后显式取消任务
+#### 服务端观察确认后显式取消任务
 
 `ark_database_public_plugin_cancellation_tests` 四种模式均通过。独立连接先确认带标记的操作正在执行，再重复调用 `task_group::cancel(id)`；等待时长不作为活动确认屏障。根任务在所属线程／共享执行器上各完成一次，已结束的 ID 拒绝取消，显式新请求恢复，保留结果在资源停机后仍有效。
 
@@ -47,7 +51,7 @@
 
 <a id="真实插件-redis-tls"></a>
 
-### Redis TLS
+#### Redis TLS
 
 `ark_database_public_plugin_service_tests` 三种 TLS 模式均在私有、密码保护、仅开放 TLS 的服务上通过。新证书只含 `127.0.0.1` IP SAN；OpenSSL 对照确认可信证书链／IP，以及 `localhost` 主机名不匹配。
 
@@ -60,7 +64,7 @@
 两个负面对照期间，PING／ECHO 计数未增加。这不证明没有任何 RESP 命令到达服务端；接收命令计数属于独立的协议端点证据。未执行双向 TLS、证书轮换／撤销及 TLS 取消／恢复。
 
 <Collapsible>
-<CollapsibleTrigger>执行的二进制指纹</CollapsibleTrigger>
+<CollapsibleTrigger>12 次执行使用的构建指纹</CollapsibleTrigger>
 <CollapsibleContent>
 
 | 执行的二进制 | SHA256 |
@@ -74,9 +78,45 @@
 </CollapsibleContent>
 </Collapsible>
 
-每个原生子进程设置 45 秒观察期限，以及随后最多 5 秒的自有子进程终止期限，均未触及；这些是测试控制，不是生产停机默认值。服务、端口、数据、凭据和证书均由本批次独占。结束后 schema 与 Redis 数据库为空，自有进程已停止并回收，私有数据目录、密钥与凭据配置已删除。原始回执、日志与服务端二进制指纹仅保存在本地。
+<a id="管理器-stop-发起取消"></a>
 
-复现沿用[正常 DSO 模式](../../tests/database/README_CN.md#真实插件动态库与真实服务)、[故障对照](../../tests/database/README_CN.md#公开模块真实服务负面验收)、[取消程序](../../tests/database/cancellation_CN.md)和 [Redis TLS 对照](../../tests/database/redis_tls_CN.md)。真实服务执行保持显式选择；`check-database` 仅编译不复现服务验收。
+### 管理器 stop 发起取消（2 次执行）
+
+在上述同一机器与客户端／arknet 版本上，使用新建的认证 Redis TCP 与可信 TLS MySQL 实例，**`redis-stop`、`mysql-stop` 均通过**。独立服务端观察确认请求正在执行，且目标根任务仍待完成后，外层所属线程才调用目标 `manager.stop()`；模式不显式调用 `task_group::cancel(id)`。
+
+| 身份 | 实际执行配置 |
+| --- | --- |
+| 测试源码 | 执行时工作区干净，`39e6503683a3dcbca1169de30a488da35f7b51a7`，基于 `b97f85fe3a4dd5aaaaa1423b7f8c47b4954f51d6` |
+| 独立原生构建 | 新建取消程序与真实隐藏符号 Redis／MySQL DSO，使用仅数据库的 C++20 Debug 构建、启用 SSL、关闭 applications／Protobuf。前述 12 次执行的二进制未改动；下方指纹仅属于本次两个模式的构建 |
+| 原生入口 | `ark_database_public_plugin_cancellation_tests redis-stop` 与 `mysql-stop`，退出码均为 `0` |
+
+观察者使用独立管理器、运行时与连接池，目标进入 `stopped` 后仍保持 `running`。它追踪原服务端连接整体，连接消失后再观察 500 ms，确认原连接或带标记请求未返回。观察者查询不是已关闭目标的恢复请求。目标根任务在所属执行器仅完成一次、任务归零、模块移除且重复 stop 成功；两个宿主销毁后，拥有型原生结果仍有效。
+
+| 模式 | 原生结果与独立观察 |
+| --- | --- |
+| `redis-stop` | 先确认 INCR 为 `1`，再观察命名流水线处于 BLPOP；管理器 stop 保留原生 `cancelled`、`command_may_have_run=true` 及已有有效部分回复。目标连接消失，有界无重放检查中计数仍为 `1` |
+| `mysql-stop` | 观察带标记的 autocommit UPDATE 处于 `User sleep`；管理器 stop 保留原生 `cancelled`、`outcome_unknown=true` 与 `operation_aborted`。原会话消失，最终计数为 `1`；不通过目标池恢复，也不伪造 rollback 回复 |
+
+这些计数不构成取消后写入效果或回滚的一般保证。未执行事务／预处理的 stop 取消；前述相关模式仍只提供显式任务取消证据。观察者的 DSO 句柄可能在两个宿主结束前保持库映像加载；资源关闭不证明库映像已物理移除。
+
+<Collapsible>
+<CollapsibleTrigger>两个 manager-stop 模式的构建指纹</CollapsibleTrigger>
+<CollapsibleContent>
+
+| 执行的二进制 | SHA256 |
+| --- | --- |
+| `ark_database_public_plugin_cancellation_tests` | `2b698a5702600b9a38dd51a023b34c7ab0d1a7527d0c0e0c4c165e49e978647a` |
+| `ark_database_mysql_plugin_d.dylib` | `effac22db654a276cd2ec3cd66baab908d5a4655dbfddf5b64382af5cb0abd41` |
+| `ark_database_redis_plugin_d.dylib` | `96402add5a1a8a423e909f789176d72422b6b5617559e8d903c78f282d0ceafe` |
+
+</CollapsibleContent>
+</Collapsible>
+
+### 执行控制与清理
+
+每个原生子进程设置 45 秒观察期限，以及随后最多 5 秒的自有子进程终止期限，均未触及；这些是测试控制，不是生产停机默认值。服务、端口、数据、凭据和证书均由各自批次独占。结束后 schema 与 Redis 数据库为空，自有进程已停止并回收，私有数据目录、密钥与凭据配置已删除。原始回执、日志与服务端二进制指纹仅保存在本地。
+
+复现沿用[正常 DSO 模式](../../tests/database/README_CN.md#真实插件动态库与真实服务)、[故障对照](../../tests/database/README_CN.md#公开模块真实服务负面验收)、[取消程序](../../tests/database/cancellation_CN.md)、[Redis TLS 对照](../../tests/database/redis_tls_CN.md)和 [manager-stop 模式](../../tests/database/cancellation_CN.md#管理器-stop-发起取消)。真实服务执行保持显式选择；`check-database` 仅编译不复现服务验收。
 
 ## 其他已记录范围
 
@@ -150,4 +190,4 @@ bash tests/database/owned_server_fault_actor_guards.sh
 
 ## 验收边界
 
-DSO 流程覆盖正常插件销毁与原生关闭；`dlclose`／`FreeLibrary` 成功不证明操作系统已物理移除库映像。生产容量、任意回调生命周期与热更新安全均未验收。当前记录不覆盖真实服务请求待完成时由 stop 发起取消、真实服务等待连接竞争、其他取消阶段与竞争、崩溃持久性、完整隔离级别、事务恢复、双向 TLS、证书轮换／撤销或 Redis TLS 故障恢复。AddressSanitizer、UndefinedBehaviorSanitizer、ThreadSanitizer、其他平台与托管 CI 均为独立范围。
+DSO 流程覆盖正常插件销毁与原生关闭；`dlclose`／`FreeLibrary` 成功不证明操作系统已物理移除库映像。生产容量、任意回调生命周期与热更新安全均未验收。stop 发起取消仅覆盖上述两个已观察的流水线／autocommit 模式；未覆盖事务／预处理 stop 取消、真实服务等待连接竞争、其他取消阶段与竞争、崩溃持久性、完整隔离级别、事务恢复、双向 TLS、证书轮换／撤销或 Redis TLS 故障恢复。AddressSanitizer、UndefinedBehaviorSanitizer、ThreadSanitizer、其他平台与托管 CI 均为独立范围。
