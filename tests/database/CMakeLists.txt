@@ -35,7 +35,7 @@ add_custom_target(check-database-service-construction
     COMMAND ${CMAKE_COMMAND} -DPROGRAM=$<TARGET_FILE:ark_database_service_construction_tests>
         -DENABLE_SSL=${ARKNET_ENABLE_SSL} -DPROFILE=default
         -P "${CMAKE_CURRENT_SOURCE_DIR}/service_construction_allocation.cmake"
-    DEPENDS ark_database_service_construction_tests USES_TERMINAL)
+    DEPENDS ark_database_service_construction_tests USES_TERMINAL VERBATIM)
 if(NOT MSVC)
     # Native Asio supports malloc-based aligned allocation, which global new
     # injection cannot observe. Exercise its supported new-based path as well.
@@ -49,7 +49,7 @@ if(NOT MSVC)
         COMMAND ${CMAKE_COMMAND} -DPROGRAM=$<TARGET_FILE:ark_database_service_construction_new_tests>
             -DENABLE_SSL=${ARKNET_ENABLE_SSL} -DPROFILE=asio-new
             -P "${CMAKE_CURRENT_SOURCE_DIR}/service_construction_allocation.cmake"
-        DEPENDS ark_database_service_construction_new_tests USES_TERMINAL)
+        DEPENDS ark_database_service_construction_new_tests USES_TERMINAL VERBATIM)
     add_dependencies(check-database-service-construction check-database-service-construction-new)
 else()
     message(STATUS "Database Asio new-allocation profile unavailable: MSVC uses _aligned_malloc; default controls remain enabled")
