@@ -83,12 +83,23 @@ public:
     thread_pool(int nThreads) {
         this->init();
         try
-        { this->resize(nThreads); }
+        {
+#ifdef CTPL_CONSTRUCTION_TEST_STAGE
+            CTPL_CONSTRUCTION_TEST_STAGE("constructor resize");
+#endif
+            this->resize(nThreads);
+        }
         catch (...)
         {
             // A failed constructor does not run ~thread_pool(). Retire any
             // workers already created before their joinable threads unwind.
+#ifdef CTPL_CONSTRUCTION_TEST_STAGE
+            CTPL_CONSTRUCTION_TEST_STAGE("constructor catch");
+#endif
             this->stop(true);
+#ifdef CTPL_CONSTRUCTION_TEST_STAGE
+            CTPL_CONSTRUCTION_TEST_STAGE("constructor cleanup complete");
+#endif
             throw;
         }
     }
@@ -121,12 +132,24 @@ public:
             int oldNThreads = static_cast<int>(this->threads.size());
             if (oldNThreads <= nThreads)
             { // if the number of threads is increased
+#ifdef CTPL_CONSTRUCTION_TEST_STAGE
+                CTPL_CONSTRUCTION_TEST_STAGE("resize thread storage");
+#endif
                 this->threads.resize(nThreads);
+#ifdef CTPL_CONSTRUCTION_TEST_STAGE
+                CTPL_CONSTRUCTION_TEST_STAGE("resize flag storage");
+#endif
                 this->flags.resize(nThreads);
 
                 for (int i = oldNThreads; i < nThreads; ++i)
                 {
+#ifdef CTPL_CONSTRUCTION_TEST_STAGE
+                    CTPL_CONSTRUCTION_TEST_STAGE("allocate worker flag");
+#endif
                     this->flags[i] = std::make_shared<std::atomic<bool>>(false);
+#ifdef CTPL_CONSTRUCTION_TEST_STAGE
+                    CTPL_CONSTRUCTION_TEST_STAGE("create worker thread");
+#endif
                     this->set_thread(i);
                 }
             }
@@ -176,6 +199,9 @@ public:
     // may be called asynchronously to not pause the calling thread while waiting
     // if isWait == true, all the functions in the queue are run, otherwise the queue is cleared without running the functions
     void stop(bool isWait = false) {
+#ifdef CTPL_CONSTRUCTION_TEST_STAGE
+        CTPL_CONSTRUCTION_TEST_STAGE("stop entered");
+#endif
         if (!isWait)
         {
             if (this->isStop)
@@ -200,10 +226,16 @@ public:
             }
             this->isDone = true; // give the waiting threads a command to finish
         }
+#ifdef CTPL_CONSTRUCTION_TEST_STAGE
+        CTPL_CONSTRUCTION_TEST_STAGE("stop notify workers");
+#endif
         {
             std::unique_lock<std::mutex> lock(this->mutex);
             this->cv.notify_all(); // stop all waiting threads
         }
+#ifdef CTPL_CONSTRUCTION_TEST_STAGE
+        CTPL_CONSTRUCTION_TEST_STAGE("stop join workers");
+#endif
         for (int i = 0; i < static_cast<int>(this->threads.size()); ++i)
         { // wait for the computing threads to finish
             if (this->threads[i] && this->threads[i]->joinable())
@@ -211,11 +243,17 @@ public:
                 this->threads[i]->join();
             }
         }
+#ifdef CTPL_CONSTRUCTION_TEST_STAGE
+        CTPL_CONSTRUCTION_TEST_STAGE("stop clear queue");
+#endif
         // if there were no threads in the pool but some functors in the queue, the functors are not deleted by the threads
         // therefore delete them here
         this->clear_queue();
         this->threads.clear();
         this->flags.clear();
+#ifdef CTPL_CONSTRUCTION_TEST_STAGE
+        CTPL_CONSTRUCTION_TEST_STAGE("stop complete");
+#endif
     }
 
     template<typename F, typename... Rest>

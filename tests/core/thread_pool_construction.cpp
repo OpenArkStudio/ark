@@ -13,6 +13,16 @@
 #include <string_view>
 #include <thread>
 
+namespace {
+const char* active_stage = "controller";
+
+void set_active_stage(const char* stage) noexcept {
+    active_stage = stage;
+}
+} // namespace
+
+#define CTPL_CONSTRUCTION_TEST_STAGE(stage) set_active_stage(stage)
+
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -35,6 +45,7 @@
 #endif
 
 #include "../../src/plugins/utility/ctpl_stl.h"
+#undef CTPL_CONSTRUCTION_TEST_STAGE
 
 namespace {
 
@@ -98,7 +109,6 @@ thread_local bool armed{};
 thread_local std::size_t remaining{}, attempts{}, rejected{};
 thread_local int baseline_threads{}, threads_at_failure{};
 const char* active_mode = "controller";
-const char* active_stage = "controller";
 std::size_t active_budget{};
 
 void before_allocation() {
