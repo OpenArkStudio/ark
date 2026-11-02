@@ -21,8 +21,11 @@
 #pragma once
 
 #include <cstdio>
+#include <future>
 #include <iomanip>
+#include <limits>
 #include <map>
+#include <stdexcept>
 
 #include "ark/utility/ctpl_stl.h"
 
@@ -161,9 +164,7 @@ public:
     using clock = std::chrono::system_clock;
 
     explicit scheduler(unsigned int max_n_tasks = 4)
-        : stopping_(false)
-        , threads_(max_n_tasks + 1) {
-        threads_.push([this](int) { dispatch(); });
+        : scheduler(max_n_tasks, nullptr) {
     }
 
     scheduler(const scheduler&) = delete;
@@ -336,6 +337,26 @@ public:
     }
 
 private:
+    static int worker_count(unsigned int callbacks) {
+        if (callbacks >= static_cast<unsigned int>(std::numeric_limits<int>::max()))
+        {
+            throw std::length_error("Scheduler worker count exceeds the supported range");
+        }
+        return static_cast<int>(callbacks) + 1;
+    }
+
+    // A failed-start owner may observe the internal dispatcher without pumping
+    // business callbacks or adding a second scheduler lifetime.
+    scheduler(unsigned int max_n_tasks, std::future<void>* completion)
+        : stopping_(false)
+        , threads_(worker_count(max_n_tasks)) {
+        auto dispatched = threads_.push([this](int) { dispatch(); });
+        if (completion)
+        {
+            *completion = std::move(dispatched);
+        }
+    }
+
     std::atomic<bool> stopping_;
     bool closing_{false};
     std::atomic<bool> dispatcher_retired_{false};

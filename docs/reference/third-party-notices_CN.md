@@ -8,5 +8,6 @@
 | fmt | 文本格式化 | [MIT](https://github.com/fmtlib/fmt/blob/main/LICENSE) |
 | nlohmann/json | JSON | [MIT](https://github.com/nlohmann/json/blob/v3.12.0/LICENSE.MIT) |
 | toml++ | TOML 配置 | [MIT](https://github.com/marzer/tomlplusplus/blob/v3.4.0/LICENSE) |
+| CTPL | Schedule 工作线程；包含本地异常安全修复 | [Apache-2.0 声明](https://github.com/OpenArkStudio/ark/blob/main/src/plugins/utility/ctpl_stl.h) |
 
 导出器和文档工具见[项目依赖与素材](../project/third-party-notices_CN.md)。历史内置依赖的原始声明保留在[源码归档](https://github.com/OpenArkStudio/ark/blob/main/docs/licenses/legacy-dependency-notices.txt)中。
