@@ -197,7 +197,7 @@ jobs:
           COMPILER_ARCHIVE_HIT: ${{ steps.compiler-restore.outputs.cache-hit }}
         run: node .github/scripts/cache-stats.mjs
       - name: Save compiler cache
-        if: ${{ success() && steps.compiler-start.outputs.enabled == 'true' && steps.compiler-restore.outputs.cache-hit != 'true' }}
+        if: ${{ !cancelled() && steps.compiler-start.outcome == 'success' && steps.compiler-start.outputs.enabled == 'true' && steps.compiler-restore.outputs.cache-hit != 'true' }}
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
@@ -327,7 +327,7 @@ jobs:
           COMPILER_ARCHIVE_HIT: ${{ steps.compiler-restore.outputs.cache-hit }}
         run: node .github/scripts/cache-stats.mjs
       - name: Save compiler cache
-        if: ${{ success() && steps.compiler-start.outputs.enabled == 'true' && steps.compiler-restore.outputs.cache-hit != 'true' }}
+        if: ${{ !cancelled() && steps.compiler-start.outcome == 'success' && steps.compiler-start.outputs.enabled == 'true' && steps.compiler-restore.outputs.cache-hit != 'true' }}
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
@@ -450,7 +450,7 @@ jobs:
           COMPILER_ARCHIVE_HIT: ${{ steps.compiler-restore.outputs.cache-hit }}
         run: node .github/scripts/cache-stats.mjs
       - name: Save compiler cache
-        if: ${{ success() && steps.compiler-start.outputs.enabled == 'true' && steps.compiler-restore.outputs.cache-hit != 'true' }}
+        if: ${{ !cancelled() && steps.compiler-start.outcome == 'success' && steps.compiler-start.outputs.enabled == 'true' && steps.compiler-restore.outputs.cache-hit != 'true' }}
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
