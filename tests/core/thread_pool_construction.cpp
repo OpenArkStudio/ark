@@ -14,10 +14,15 @@
 #include <thread>
 
 namespace {
-const char* active_stage = "controller";
+std::atomic<const char*> active_stage{"controller"};
+std::atomic<bool> trace_constructor_stages{};
 
 void set_active_stage(const char* stage) noexcept {
-    active_stage = stage;
+    active_stage.store(stage, std::memory_order_relaxed);
+    if (trace_constructor_stages.load(std::memory_order_relaxed))
+    {
+        std::fprintf(stderr, "constructor stage: %s\n", stage);
+    }
 }
 } // namespace
 
@@ -318,19 +323,21 @@ int constructor_failure(std::size_t index) {
     }
     bool threw{};
     arm(index);
-    active_stage = "constructing pool";
+    active_stage.store("constructing pool", std::memory_order_relaxed);
+    trace_constructor_stages.store(index < 2, std::memory_order_relaxed);
     try
     {
         ctpl::thread_pool pool(4);
         // Destruction also runs with the persistent owner-thread fault armed.
-        active_stage = "pool constructed";
+        active_stage.store("pool constructed", std::memory_order_relaxed);
     }
     catch (const std::bad_alloc&)
     {
-        active_stage = "caught bad_alloc";
+        active_stage.store("caught bad_alloc", std::memory_order_relaxed);
         threw = true;
     }
-    active_stage = "checking worker retirement";
+    trace_constructor_stages.store(false, std::memory_order_relaxed);
+    active_stage.store("checking worker retirement", std::memory_order_relaxed);
     const bool retired = workers_retired();
     const bool persistent = armed && rejected == (threw ? 1u : 0u);
     armed = false;
@@ -562,8 +569,8 @@ int main(int argc, char** argv) {
         std::fprintf(stderr,
             "terminate mode=%s stage=%s budget=%zu exception=%d armed=%d remaining=%zu attempts=%zu rejected=%zu "
             "baseline=%d failure=%d current=%d\n",
-            active_mode, active_stage, active_budget, exception_kind, armed, remaining, attempts, rejected,
-            baseline_threads, threads_at_failure, process_threads());
+            active_mode, active_stage.load(std::memory_order_relaxed), active_budget, exception_kind, armed, remaining,
+            attempts, rejected, baseline_threads, threads_at_failure, process_threads());
 #ifdef _WIN32
         void* frames[16]{};
         const auto frame_count = CaptureStackBackTrace(0, 16, frames, nullptr);
@@ -582,7 +589,7 @@ int main(int argc, char** argv) {
         const auto index = static_cast<std::size_t>(std::strtoull(argv[2], nullptr, 10));
         const auto boundary = static_cast<std::size_t>(std::strtoull(argv[3], nullptr, 10));
         active_mode = argv[1];
-        active_stage = "child dispatch";
+        active_stage.store("child dispatch", std::memory_order_relaxed);
         active_budget = index;
         if (std::string_view(argv[1]) == "constructor")
         {
