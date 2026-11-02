@@ -573,7 +573,7 @@ ark::task<> schedule_accepted_completion(ark::schedule_module& module, receiver&
 }
 } // namespace
 
-TEST_CASE("Schedule module permits one-shot continuations only in manager accepted-task polling") {
+TEST_CASE("Schedule callbacks retain their owners while managed tasks cancel") {
     ark::plugin_manager manager;
     cleanup_probe probe;
     receiver callback;
@@ -585,14 +585,23 @@ TEST_CASE("Schedule module permits one-shot continuations only in manager accept
     REQUIRE(manager.add_module("probe", &probe));
     auto& tasks = manager.create_task_group(probe);
     bool scheduled{};
-    REQUIRE(tasks.start(schedule_accepted_completion(*module, callback, scheduled)) != 0);
+    bool cancelled{};
+    REQUIRE(tasks.start(schedule_accepted_completion(*module, callback, scheduled), [&](std::exception_ptr error) {
+        REQUIRE(error);
+        CHECK_THROWS_AS(std::rethrow_exception(error), asio::system_error);
+        cancelled = true;
+    }) != 0);
+    module->add_at_schedule("2000-01-01 00:00:00", &callback, &receiver::run);
+    REQUIRE(callback.entered.wait());
     CHECK_FALSE(manager.stop(1));
     CHECK_FALSE(module->ready_to_shut());
-    // The same owner outside task polling remains a refused external root.
+    // Native callback retirement seals the scheduler independently of business
+    // task cancellation, and preserves the callback already running.
     module->add_at_schedule("2000-01-01 00:00:00", &callback, &receiver::run);
     REQUIRE(manager.update(2));
-    REQUIRE(scheduled);
-    REQUIRE(callback.entered.wait());
+    CHECK(cancelled);
+    CHECK_FALSE(scheduled);
+    CHECK(tasks.closed());
     CHECK_FALSE(module->ready_to_shut());
     CHECK(callback.calls == 1);
     CHECK(probe.pre_shut_calls == 0);
