@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 
 const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
@@ -25,6 +26,25 @@ function onlyStep(steps, predicate, description) {
   const found = steps.map((step, index) => ({ step, index })).filter(({ step }) => predicate(step));
   assert.equal(found.length, 1, `expected exactly one ${description}`);
   return found[0];
+}
+
+// Evaluate the checked-in save guard, including its explicit status function;
+// otherwise Actions would add success() and skip this step after a failure.
+function compilerSaveRuns(step, { previous = ['success'], outcome = 'success', enabled = 'true', cacheHit = 'false' } = {}) {
+  const expression = step.match(/^        if: \$\{\{ (.+) \}\}$/m)?.[1];
+  assert.ok(expression, 'compiler save must have an explicit condition');
+  assert.match(expression, /\bcancelled\(\)/, 'save must override implicit success without running after cancellation');
+  const javascript = expression
+    .replace(/steps\.([a-z][a-z0-9_-]*)/g, (_, id) => `steps[${JSON.stringify(id)}]`)
+    .replace(/\.cache-hit\b/g, "['cache-hit']");
+  return runInNewContext(javascript, {
+    cancelled: () => previous.includes('cancelled'),
+    success: () => !previous.includes('failure') && !previous.includes('cancelled'),
+    steps: {
+      'compiler-start': { outcome, outputs: { enabled } },
+      'compiler-restore': { outputs: { 'cache-hit': cacheHit } },
+    },
+  });
 }
 
 for (const [name, configureName, buildDirectory, checks] of profiles) {
@@ -107,10 +127,37 @@ for (const [name, configureName] of profiles) {
     for (const language of ['C', 'CXX']) {
       assert.ok(configure.step.includes(`"-DCMAKE_${language}_COMPILER_LAUNCHER=$env:ARK_COMPILER_LAUNCHER"`));
     }
-    assert.match(save.step, /if: \$\{\{ success\(\) && steps\.compiler-start\.outputs\.enabled == 'true' && steps\.compiler-restore\.outputs\.cache-hit != 'true' \}\}/);
+    assert.match(save.step, /if: \$\{\{ !cancelled\(\) && steps\.compiler-start\.outcome == 'success' && steps\.compiler-start\.outputs\.enabled == 'true' && steps\.compiler-restore\.outputs\.cache-hit != 'true' \}\}/);
     assert.match(save.step, /path: \$\{\{ steps\.compiler-cache\.outputs\.directory \}\}/);
     assert.match(save.step, /key: \$\{\{ steps\.compiler-cache\.outputs\.archive_key \}\}/);
     assert.equal(save.index, steps.length - 1, 'save only after all source builds and checks');
     assert.doesNotMatch(configure.step, /CMAKE_(?:C|CXX)_FLAGS=.*\/(?:Zi|Z7)/);
+  });
+
+  test(`${name} saves compiler objects after partial build or regression failures`, () => {
+    const { step } = onlyStep(jobSteps(name), step => step.includes('name: Save compiler cache\n'), 'compiler save');
+    for (const previous of [
+      ['success'],
+      ['success', 'failure', 'skipped'], // Some objects compiled before the build failed.
+      ['success', 'success', 'failure'], // Compilation succeeded, a regression failed.
+    ]) {
+      assert.equal(compilerSaveRuns(step, { previous }), true, JSON.stringify(previous));
+    }
+  });
+
+  test(`${name} never saves cancelled, disabled, uninitialized or exact-hit compiler caches`, () => {
+    const { step } = onlyStep(jobSteps(name), step => step.includes('name: Save compiler cache\n'), 'compiler save');
+    for (const scenario of [
+      { previous: ['success', 'cancelled'] },
+      { previous: ['failure', 'cancelled'] },
+      { enabled: 'false' },
+      { enabled: '' },
+      ...['failure', 'cancelled', 'skipped', ''].map(outcome => ({ outcome })),
+      { cacheHit: 'true' },
+      { previous: ['success', 'failure'], cacheHit: 'true' },
+    ]) {
+      assert.equal(compilerSaveRuns(step, scenario), false, JSON.stringify(scenario));
+    }
+    assert.equal(compilerSaveRuns(step, { cacheHit: '' }), true, 'a successful restore miss may omit cache-hit');
   });
 }

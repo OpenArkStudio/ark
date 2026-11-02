@@ -135,10 +135,11 @@ queue refs cannot read each other's entries merely because their keys match.
 Installation, version validation, cache restoration or server startup failures
 leave an empty launcher and normal compilation. Cache service I/O failures use
 `SCCACHE_IGNORE_SERVER_IO_ERROR=1`. Compiler and test failures still fail the job;
-the workflow never retries a compiler failure without the launcher. Only successful
-jobs save new compiler snapshots. A best-effort job summary reports dependency
-archive availability, compiler archive exact hits and sccache statistics. Prefix
-restoration and object hits are different observations.
+the workflow never retries a compiler failure without the launcher. After successful
+launcher startup, non-cancelled jobs save new compiler snapshots on an exact-key
+miss even if compilation or a regression fails. A best-effort job summary reports
+dependency archive availability, compiler archive exact hits and sccache statistics.
+Prefix restoration and object hits are different observations.
 
 Run `node --test tests/ci/*.test.mjs` for the cache identity/fallback and workflow
 contracts. The permanent CMake/Ninja fixture compiles C and C++ through a launcher
