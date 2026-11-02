@@ -18,6 +18,8 @@
  *
  */
 
+#include <functional>
+
 #include "ark/define.hpp"
 #include "ark/kernel/container_impl.hpp"
 #include "ark/kernel/data_list_impl.hpp"
@@ -51,8 +53,7 @@ bool kernel_module_impl::init() {
 
 bool kernel_module_impl::post_init() {
     // Schema loading completes in the metadata module's init phase.
-    auto container_func = std::bind(&kernel_module_impl::on_container_call_back, this, std::placeholders::_1,
-        std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5);
+    auto container_func = std::bind_front(&kernel_module_impl::on_container_call_back, this);
     add_common_container_call_back(std::move(container_func), 999999); // after other callbacks being done
 
     add_sync_call_back();
@@ -513,7 +514,8 @@ bool kernel_module_impl::add_common_class_event(class_event_functor&& cb, const 
             continue;
         }
 
-        add_class_call_back(iter.first, std::move(cb), prio);
+        auto callback = cb;
+        add_class_call_back(iter.first, std::move(callback), prio);
     }
 
     return true;
@@ -553,40 +555,35 @@ bool kernel_module_impl::add_move_event(const std::string& class_name, move_even
 
 void kernel_module_impl::add_sync_call_back() {
     // node sync call back
-    auto node_func = std::bind(&kernel_module_impl::on_sync_node, this, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4);
+    auto node_func = std::bind_front(&kernel_module_impl::on_sync_node, this);
 
     class_call_back_manager::add_node_sync_call_back(data_mask::pf_sync_view, std::move(node_func));
     class_call_back_manager::add_node_sync_call_back(data_mask::pf_sync_self, std::move(node_func));
 
     // table sync call back
-    auto table_func = std::bind(&kernel_module_impl::on_sync_table, this, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4);
+    auto table_func = std::bind_front(&kernel_module_impl::on_sync_table, this);
 
     class_call_back_manager::add_table_sync_call_back(data_mask::pf_sync_view, std::move(table_func));
     class_call_back_manager::add_table_sync_call_back(data_mask::pf_sync_self, std::move(table_func));
 
     // container sync call back
-    auto container_func =
-        std::bind(&kernel_module_impl::on_sync_container, this, std::placeholders::_1, std::placeholders::_2,
-            std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6);
+    auto container_func = std::bind_front(&kernel_module_impl::on_sync_container, this);
 
     class_call_back_manager::add_container_sync_call_back(data_mask::pf_sync_view, std::move(container_func));
     class_call_back_manager::add_container_sync_call_back(data_mask::pf_sync_self, std::move(container_func));
 
     // data delay call back
-    auto delay_func = std::bind(&kernel_module_impl::on_delay_sync_data, this, std::placeholders::_1,
-        std::placeholders::_2, std::placeholders::_3);
+    auto delay_func = std::bind_front(&kernel_module_impl::on_delay_sync_data, this);
 
     class_call_back_manager::add_delay_sync_call_back(data_mask::pf_sync_view, std::move(delay_func));
     class_call_back_manager::add_delay_sync_call_back(data_mask::pf_sync_self, std::move(delay_func));
 
     // send msg functor
-    auto view_func = std::bind(&kernel_module_impl::send_to_view, this, std::placeholders::_1, std::placeholders::_2);
-    sync_functors_.insert(std::make_pair(data_mask::pf_sync_view, std::forward<sync_functor>(view_func)));
+    auto view_func = std::bind_front(&kernel_module_impl::send_to_view, this);
+    sync_functors_.emplace(data_mask::pf_sync_view, std::move(view_func));
 
-    auto self_func = std::bind(&kernel_module_impl::send_to_self, this, std::placeholders::_1, std::placeholders::_2);
-    sync_functors_.insert(std::make_pair(data_mask::pf_sync_self, std::forward<sync_functor>(self_func)));
+    auto self_func = std::bind_front(&kernel_module_impl::send_to_self, this);
+    sync_functors_.emplace(data_mask::pf_sync_self, std::move(self_func));
 }
 
 int kernel_module_impl::on_sync_node(

@@ -8,6 +8,7 @@
 #include <string>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 #include "../network/doctest.h"
 
@@ -329,4 +330,83 @@ TEST_CASE("legacy direct-library XML logger configuration remains explicit and u
     logger.log_t(ark::detail::log_source_location(), spdlog::level::info, "legacy explicit config works");
     logger.log_oss(spdlog::level::info, "legacy", "oss works");
     CHECK_FALSE(logger.init_logger(ark::logging_settings{}, "another.log"));
+}
+
+TEST_CASE("Logging callback reset restores configured output formatting and level filtering") {
+    log_directory files;
+    std::string route;
+    SUBCASE("direct settings") {
+        route = "direct";
+    }
+#ifdef ARK_LOGGING_CONFIG_TESTS
+    SUBCASE("TOML settings") {
+        route = "toml";
+    }
+#endif
+#ifdef OPEN_FILE_LOG
+    SUBCASE("legacy XML settings") {
+        route = "xml";
+    }
+#endif
+
+    const auto output_directory = files.directory / "default";
+    ark::logging_settings settings;
+    settings.console = false;
+    settings.file = true;
+    settings.pattern = "%l|%v";
+    settings.level = "warn";
+    settings.output_path = output_directory.string();
+    ark::logger logger;
+    if (route == "xml")
+    {
+        const auto config = files.directory / "legacy.xml";
+        {
+            std::ofstream output(config);
+            output << "<xml>";
+            for (const auto& name : {"default", "oss"})
+            {
+                output << "<logger name='" << name << "' queue_count='0' path='" << (files.directory / name).string()
+                       << "'><debug console='0' level='3' pattern='%l|%v'/>"
+                       << "<release console='0' level='3' pattern='%l|%v'/></logger>";
+            }
+            output << "</xml>";
+        }
+        REQUIRE(logger.init_logger(config.string(), "callback.log"));
+    }
+    else
+    {
+#ifdef ARK_LOGGING_CONFIG_TESTS
+        if (route == "toml")
+        {
+            const auto config = files.directory / "logging.app.toml";
+            {
+                std::ofstream output(config);
+                output << "[application]\n[logging]\nconsole = false\nfile = true\n"
+                       << "level = 'warn'\npattern = '%l|%v'\nqueue_count = 0\noutput_path = '"
+                       << output_directory.generic_string() << "'\n";
+            }
+            settings = ark::load_application_manifest(config.string()).logging;
+        }
+#endif
+        REQUIRE(logger.init_logger(settings, "callback.log"));
+    }
+
+    logger.log_t({"callback.cpp", 41, ""}, spdlog::level::warn, "initial {{literal}}");
+    std::vector<std::pair<spdlog::level::level_enum, std::string>> captured;
+    logger.set_log_func(
+        [&](spdlog::level::level_enum level, const std::string& content) { captured.emplace_back(level, content); });
+    logger.log_t({"callback.cpp", 42, ""}, spdlog::level::trace, "custom {{literal}}");
+    logger.set_log_func({});
+    logger.log_t({"callback.cpp", 43, ""}, spdlog::level::info, "filtered after reset");
+    std::string content = "{owned}";
+    logger.log_t({"callback.cpp", 44, ""}, spdlog::level::err, "restored {}", content);
+    content.clear();
+
+    REQUIRE(captured.size() == 1);
+    CHECK(captured[0].first == spdlog::level::trace);
+    CHECK(captured[0].second == "[callback.cpp:42]custom {literal}");
+    const auto output = filename_calculator::calc_filename(native_filename(output_directory / "callback.log"));
+    CHECK(read_log(output) == std::string("warning|[callback.cpp:41]initial {literal}") +
+                                  spdlog::details::os::default_eol + "error|[callback.cpp:44]restored {owned}" +
+                                  spdlog::details::os::default_eol);
 }

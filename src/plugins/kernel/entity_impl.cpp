@@ -19,6 +19,7 @@
  */
 
 #include <atomic>
+#include <functional>
 #include <memory>
 
 #include "ark/kernel/container_impl.hpp"
@@ -46,8 +47,7 @@ entity_impl::entity_impl(std::shared_ptr<class_meta> class_meta_ptr, const guid_
     opt_charactor_ = std::make_shared<entity_opt_charactor>(map_id, map_entity_id);
 
     // data node
-    auto func = std::bind(
-        &entity_impl::on_node_call_back, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+    auto func = std::bind_front(&entity_impl::on_node_call_back, this);
     node_manager_ = std::make_shared<node_manager>(class_meta_ptr, data_list, std::move(func));
 
     // data table
@@ -580,8 +580,7 @@ table* entity_impl::find_table(const uint32_t index) {
     auto table_ptr = table_manager_->find_table(index);
     if (nullptr == table_ptr)
     {
-        auto func = std::bind(&entity_impl::on_table_call_back, this, std::placeholders::_1, std::placeholders::_2,
-            std::placeholders::_3, std::placeholders::_4, std::placeholders::_5);
+        auto func = std::bind_front(&entity_impl::on_table_call_back, this);
         table_ptr = table_manager_->create_table(index, std::move(func));
     }
 

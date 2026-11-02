@@ -56,28 +56,20 @@ private:
         return (x << k) | (x >> ((sizeof(result_type) * 8) - static_cast<result_type>(k)));
     }
 
-    template<class, bool>
-    struct next_init;
-
-    template<class element_type>
-    struct next_init<element_type, true>
-    {
-        static inline result_type call(seed_type& s) {
-            return s[0] + s[3];
+    result_type next_init() {
+        if constexpr (is_plus)
+        {
+            return xoshinro_seed_[0] + xoshinro_seed_[3];
         }
-    };
-
-    template<class element_type>
-    struct next_init<element_type, false>
-    {
-        static inline result_type call(seed_type& s) {
-            return rotl(s[iidx] * 5, 7) * 9;
+        else
+        {
+            return rotl(xoshinro_seed_[iidx] * 5, 7) * 9;
         }
-    };
+    }
 
 protected:
     result_type next() {
-        const result_type ret = next_init<uint_type, is_plus>::call(xoshinro_seed_);
+        const result_type ret = next_init();
         const result_type t = xoshinro_seed_[1] << n1;
 
         xoshinro_seed_[2] ^= xoshinro_seed_[0];

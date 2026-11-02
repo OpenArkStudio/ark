@@ -149,6 +149,10 @@ add_dependencies(check-entity-stream check-nested-stream-allocation)
 
 add_executable(ark_logging_tests main.cpp logging_paths.cpp logging_source.cpp)
 target_link_libraries(ark_logging_tests PRIVATE ark::core)
+if(ARK_BUILD_CONFIG)
+    target_link_libraries(ark_logging_tests PRIVATE ark::config)
+    target_compile_definitions(ark_logging_tests PRIVATE ARK_LOGGING_CONFIG_TESTS)
+endif()
 add_dependencies(ark_logging_tests ark_core_header_checks)
 add_custom_target(check-logging
     COMMAND $<TARGET_FILE:ark_logging_tests>
@@ -427,7 +431,7 @@ if(ARK_BUILD_CONFIG)
 endif()
 
 if(ARK_BUILD_PROTO)
-    add_executable(ark_kernel_initialization_tests main.cpp module_initialization.cpp kernel_resource_ownership.cpp table_row_allocation.cpp entity_config_copy.cpp entity_json_loading.cpp kernel_delayed_sync.cpp entity_nested_snapshot.cpp entity_snapshot.cpp entity_snapshot_interface.cpp
+    add_executable(ark_kernel_initialization_tests main.cpp module_initialization.cpp kernel_callbacks.cpp kernel_resource_ownership.cpp table_row_allocation.cpp entity_config_copy.cpp entity_json_loading.cpp kernel_delayed_sync.cpp entity_nested_snapshot.cpp entity_snapshot.cpp entity_snapshot_interface.cpp
         ../../src/plugins/kernel/class_call_back_manager.cpp
         ../../src/plugins/kernel/class_meta.cpp
         ../../src/plugins/kernel/class_meta_module_impl.cpp
@@ -443,6 +447,7 @@ if(ARK_BUILD_PROTO)
         ../../src/plugins/kernel/static_entity_impl.cpp
         ../../src/plugins/kernel/table_impl.cpp
         ../../src/plugins/kernel/table_meta.cpp)
+    target_sources(ark_kernel_initialization_tests PRIVATE kernel_common_class_callbacks.cpp)
     target_link_libraries(ark_kernel_initialization_tests PRIVATE ark::kernel ark::utility ark::proto ark::kernel_json)
     if(TARGET ark_game_plugin AND TARGET ark_kernel_plugin AND TARGET ark_bus_plugin AND TARGET ark_utility_plugin)
         target_sources(ark_kernel_initialization_tests PRIVATE ../server/game_initialization.cpp

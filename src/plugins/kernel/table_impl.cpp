@@ -18,6 +18,7 @@
  *
  */
 
+#include <functional>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -353,8 +354,7 @@ row* table_impl::create_row(uint32_t row, const data_list& args) {
     auto class_meta_ptr = table_meta_->get_class_meta();
     ARK_ASSERT_RET_VAL(class_meta_ptr != nullptr, nullptr);
 
-    auto func = std::bind(&table_impl::on_row_changed, this, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4);
+    auto func = std::bind_front(&table_impl::on_row_changed, this);
 
     if (last_incarnation_ == std::numeric_limits<std::uint64_t>::max())
     {

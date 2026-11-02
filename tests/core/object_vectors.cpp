@@ -26,6 +26,16 @@ struct vector_object
     int& destroyed;
 };
 
+struct incomplete_object;
+
+static_assert(std::is_same_v<ark::vector_value_type<int, false>::value_type, int*>);
+static_assert(std::is_same_v<ark::vector_value_type<int, true>::value_type, std::shared_ptr<int>>);
+static_assert(std::is_same_v<ark::vector_value_type<const int, false>::value_type, const int*>);
+static_assert(std::is_same_v<ark::vector_value_type<const int, true>::value_type, std::shared_ptr<const int>>);
+static_assert(std::is_same_v<ark::vector_value_type<incomplete_object, false>::value_type, incomplete_object*>);
+static_assert(
+    std::is_same_v<ark::vector_value_type<incomplete_object, true>::value_type, std::shared_ptr<incomplete_object>>);
+
 using raw_objects = ark::pointer_vector<vector_object>;
 using shared_objects = ark::shared_vector<vector_object>;
 

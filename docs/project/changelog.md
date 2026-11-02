@@ -8,7 +8,19 @@
 
 - Application and logger settings share one manifest, with console INFO defaults and optional file output, formatting and named loggers in the same file.
 
+### Improvements
+
+- Core type dispatch and Kernel callback adapters use standard C++20 facilities while preserving existing trait aliases, generated random sequences and callback argument behavior.
+- Zstandard dictionary and context handles have explicit RAII ownership; moving a populated compressor transfers its resources safely.
+
+### Fixes
+
+- Common Entity callbacks remain callable for every registered class instead of leaving later classes with moved-from functions.
+- XXTEA rejects malformed buffers before reading them and releases temporary allocations on string exceptions, preserving existing ciphertext.
+
 ### Upgrade notes
+
+- `zstd_compress` is move-only and its object layout changes. Replace copying with moving, borrowing or constructing an independent instance, and rebuild consumers/plugins together. See [compression ownership](../reference/utility.md#compression-buffers-and-concurrency).
 
 - Required-provider declarations change the concrete bases of `config_module_impl`, `kernel_module_impl`, `game_net_module_impl` and the Login/Proxy/Master/World/Dir/Router implementations. Update references to their former `module_base` specializations and rebuild affected consumers/plugins together; interface keys and wire formats remain unchanged. See [Kernel migration](../reference/kernel.md) and [server migration](../concepts/server-architecture.md).
 

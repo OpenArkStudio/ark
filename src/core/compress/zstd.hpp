@@ -20,10 +20,13 @@
 
 #pragma once
 
+#include <cstdlib>
 #include <map>
+#include <memory>
 #include <string>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <utility>
 #include <vector>
 
 #include <zstd.h>
@@ -45,30 +48,56 @@ namespace ark {
 class zstd_compress final
 {
 private:
-    /// compress dict list
-    std::map<uint16_t, ZSTD_CDict* const> compress_dicts_;
+    struct resource_deleter
+    {
+        void operator()(ZSTD_CCtx* value) const noexcept {
+            ZSTD_freeCCtx(value);
+        }
 
-    /// decompress dict list
-    std::map<uint16_t, ZSTD_DDict* const> decompress_dicts_;
+        void operator()(ZSTD_DCtx* value) const noexcept {
+            ZSTD_freeDCtx(value);
+        }
 
-    ZSTD_CCtx* compress_ctx_{nullptr};
-    ZSTD_DCtx* decompress_ctx_{nullptr};
+        void operator()(ZSTD_CDict* value) const noexcept {
+            ZSTD_freeCDict(value);
+        }
+
+        void operator()(ZSTD_DDict* value) const noexcept {
+            ZSTD_freeDDict(value);
+        }
+
+        void operator()(void* value) const noexcept {
+            free(value);
+        }
+    };
+
+    struct dictionary
+    {
+        std::unique_ptr<ZSTD_CDict, resource_deleter> compress;
+        std::unique_ptr<ZSTD_DDict, resource_deleter> decompress;
+    };
+
+    std::map<uint16_t, dictionary> dictionaries_;
+    // Destroy cached contexts before the dictionaries they may reference.
+    std::unique_ptr<ZSTD_CCtx, resource_deleter> compress_ctx_;
+    std::unique_ptr<ZSTD_DCtx, resource_deleter> decompress_ctx_;
 
 public:
     zstd_compress() = default;
+    ~zstd_compress() = default;
+    zstd_compress(const zstd_compress&) = delete;
+    zstd_compress& operator=(const zstd_compress&) = delete;
+    zstd_compress(zstd_compress&&) = default;
 
-    ~zstd_compress() {
-        ZSTD_freeCCtx(compress_ctx_);
-        ZSTD_freeDCtx(decompress_ctx_);
-        for (auto& [type, c_dict] : compress_dicts_)
+    zstd_compress& operator=(zstd_compress&& other) noexcept {
+        static_assert(noexcept(dictionaries_ = std::move(other.dictionaries_)));
+        if (this != &other)
         {
-            ZSTD_freeCDict(c_dict);
+            compress_ctx_ = std::move(other.compress_ctx_);
+            decompress_ctx_ = std::move(other.decompress_ctx_);
+            dictionaries_ = std::move(other.dictionaries_);
         }
-
-        for (auto& [type, d_dict] : decompress_dicts_)
-        {
-            ZSTD_freeDDict(d_dict);
-        }
+        return *this;
     }
 
     /// simple compress and decompress
@@ -125,23 +154,15 @@ public:
      */
     bool init_z_std_dict(uint16_t dict_type, std::string const& filename, int c_level) {
         std::size_t dict_size = 0;
-        void* const dict_buffer = malloc_and_load_file_or_die(filename.c_str(), &dict_size);
+        std::unique_ptr<void, resource_deleter> dict_buffer(malloc_and_load_file_or_die(filename.c_str(), &dict_size));
+        dictionary candidate;
+        candidate.compress.reset(ZSTD_createCDict(dict_buffer.get(), dict_size, c_level));
+        ARK_ASSERT_RET_VAL(candidate.compress != nullptr, false);
+        candidate.decompress.reset(ZSTD_createDDict(dict_buffer.get(), dict_size));
+        ARK_ASSERT_RET_VAL(candidate.decompress != nullptr, false);
 
-        // compress dict
-        {
-            ZSTD_CDict* const cdict = ZSTD_createCDict(dict_buffer, dict_size, c_level);
-            ARK_ASSERT_RET_VAL(cdict != NULL, false);
-            compress_dicts_.insert(std::make_pair(dict_type, cdict));
-        }
-
-        // decompress dict
-        {
-            ZSTD_DDict* const ddict = ZSTD_createDDict(dict_buffer, dict_size);
-            ARK_ASSERT_RET_VAL(ddict != NULL, false);
-            decompress_dicts_.insert(std::make_pair(dict_type, ddict));
-        }
-
-        free(dict_buffer);
+        // Keep the first dictionary for a key, including the successful duplicate result.
+        dictionaries_.try_emplace(dict_type, std::move(candidate));
         return true;
     }
 
@@ -160,17 +181,17 @@ public:
 
         if (compress_ctx_ == nullptr)
         {
-            compress_ctx_ = ZSTD_createCCtx();
+            compress_ctx_.reset(ZSTD_createCCtx());
         }
 
         ARK_ASSERT_RET_VAL(compress_ctx_ != nullptr, false);
 
-        auto iter = compress_dicts_.find(dict_type);
-        ARK_ASSERT_RET_VAL(iter != compress_dicts_.end(), false);
+        auto iter = dictionaries_.find(dict_type);
+        ARK_ASSERT_RET_VAL(iter != dictionaries_.end(), false);
 
         std::vector<char> pre_buffer(pre_buff_size);
-        std::size_t const compressed_size =
-            ZSTD_compress_usingCDict(compress_ctx_, pre_buffer.data(), pre_buff_size, in_data, in_size, iter->second);
+        std::size_t const compressed_size = ZSTD_compress_usingCDict(
+            compress_ctx_.get(), pre_buffer.data(), pre_buff_size, in_data, in_size, iter->second.compress.get());
         if (ZSTD_isError(compressed_size))
         {
             return false;
@@ -189,11 +210,11 @@ public:
             return false;
         }
 
-        auto iter = decompress_dicts_.find(dict_type);
-        ARK_ASSERT_RET_VAL(iter != decompress_dicts_.end(), false);
-        ARK_ASSERT_RET_VAL(iter->second != nullptr, false);
+        auto iter = dictionaries_.find(dict_type);
+        ARK_ASSERT_RET_VAL(iter != dictionaries_.end(), false);
+        ARK_ASSERT_RET_VAL(iter->second.decompress != nullptr, false);
 
-        unsigned const expected_dict_id = ZSTD_getDictID_fromDDict(iter->second);
+        unsigned const expected_dict_id = ZSTD_getDictID_fromDDict(iter->second.decompress.get());
         unsigned const actual_dict_id = ZSTD_getDictID_fromFrame(in_data, in_size);
         if (actual_dict_id != expected_dict_id)
         {
@@ -202,14 +223,14 @@ public:
 
         if (decompress_ctx_ == nullptr)
         {
-            decompress_ctx_ = ZSTD_createDCtx();
+            decompress_ctx_.reset(ZSTD_createDCtx());
         }
 
         ARK_ASSERT_RET_VAL(decompress_ctx_ != nullptr, false);
 
         std::vector<char> pre_buffer(PRE_ALLOCATED_ZSTD_BUFF_SIZE);
-        std::size_t decompressed_size = ZSTD_decompress_usingDDict(
-            decompress_ctx_, pre_buffer.data(), static_cast<size_t>(r_size), in_data, in_size, iter->second);
+        std::size_t decompressed_size = ZSTD_decompress_usingDDict(decompress_ctx_.get(), pre_buffer.data(),
+            static_cast<size_t>(r_size), in_data, in_size, iter->second.decompress.get());
         // When zstd knows the content size, it will error if it doesn't match.
         if (ZSTD_isError(decompressed_size) || decompressed_size != r_size)
         {

@@ -32,7 +32,7 @@ class class_meta_module_impl final : public module_base<class_meta_module>
 {
 public:
     class_meta_module_impl() = default;
-    virtual ~class_meta_module_impl() = default;
+    ~class_meta_module_impl() override = default;
 
     bool init() override;
     bool shut() override;

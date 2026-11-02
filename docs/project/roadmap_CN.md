@@ -6,7 +6,7 @@
 
 | 领域 | 已提供 · 详细说明 | 剩余工作 |
 | --- | --- | --- |
-| 项目布局 | 插件源码共置、显式 `<ark/...>` 公开头文件映射 · [布局与接口](../reference/directory-structure_CN.md) | 逐项审查剩余模块与可选集成；C++20 和头文件布局不代表全部现代化改造完成 |
+| 项目布局 | 插件源码共置、显式 `<ark/...>` 公开头文件映射 · [布局与接口](../reference/directory-structure_CN.md) | C++20 实现与保留的兼容边界见[代码约定](code-style_CN.md#c20-实现约定)；可选集成仍遵守各自支持限制 |
 | 数据库 | 所有者线程 Asio 协程接口、拥有型值、MySQL 预处理语句／事务、Redis 命令／流水线 · [MySQL](../reference/mysql_CN.md)、[Redis](../reference/redis_CN.md) | 目标环境的恢复、持久化、取消／故障与 TLS 验收 · [已测操作与未验收范围](../guides/database-validation_CN.md#验收边界) |
 | Entity 配置 | 原生 CSV／XLSX／JSON 导出、C++／C# 字段常量、启动时加载 JSON · [工具](../guides/tools_CN.md)、[Kernel 加载](../reference/kernel_CN.md#json-实体定义与业务配置) | 不提供运行中重载、数据库迁移或客户端／服务端分包过滤 |
 | Entity 同步 | 拥有型标量／嵌套捕获、有界且带修订号的 C++ 发布端／接收端、房间标量 v1 Protobuf／Godot 接入 · [同步](../concepts/entity-sync_CN.md)、[访客房间](../guides/examples_CN.md) | 通用订阅／授权、嵌套线协议编解码及客户端适配；嵌套 C++ 状态不改变房间 v1 |
