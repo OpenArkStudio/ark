@@ -399,7 +399,8 @@ void check_redis() {
         host.pump_until([&] { return barrier.restarted(); });
         // Same public connection name and pool; no reconfigure, retry or replay.
         host.start(redis_recover(host, *database, recovered, payload), recovery);
-        require(host.tasks->pending() == 1, "Recovery was not accepted before natural drain");
+        require(host.tasks->pending() == 1, "Recovery was not accepted before application completion");
+        host.pump_until([&] { return recovery.count != 0; });
         host.stop();
         plugin_host::check_completion(recovery);
         require(request.count == 1 && observer.count == 1, "Interrupted completion repeated during recovery/drain");
@@ -409,7 +410,7 @@ void check_redis() {
                 recovered && recovered->replies[0].text == payload,
         "Redis restart result ownership changed after teardown");
     std::cout << "redis restart PASS: disconnected sent read; known-unsent outage; explicit same-pool PING/ECHO; "
-                 "owner completions once; natural idempotent drain; retained results\n";
+                 "owner completions once; idempotent resource cleanup; retained results\n";
 }
 
 #if defined(ARKNET_ENABLE_SSL)
@@ -530,7 +531,8 @@ void check_mysql() {
         host.pump_until([&] { return barrier.restarted(); });
         // Same public connection name and pool; explicitly new query, no replay.
         host.start(mysql_recover(host, *database, recovered, payload), recovery);
-        require(host.tasks->pending() == 1, "MySQL recovery was not accepted before natural drain");
+        require(host.tasks->pending() == 1, "MySQL recovery was not accepted before application completion");
+        host.pump_until([&] { return recovery.count != 0; });
         host.stop();
         plugin_host::check_completion(recovery);
         require(request.count == 1 && observer.count == 1, "MySQL interrupted completion repeated during drain");
@@ -541,7 +543,7 @@ void check_mysql() {
     mysql_unavailable(*unavailable);
     mysql_recovered(*recovered, payload);
     std::cout << "mysql restart PASS: transport/unknown sent read; known-unsent outage; explicit same-pool query; "
-                 "owner completions once; natural idempotent drain; retained results\n";
+                 "owner completions once; idempotent resource cleanup; retained results\n";
 }
 #endif
 
