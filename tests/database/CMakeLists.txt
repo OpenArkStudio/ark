@@ -36,15 +36,47 @@ add_custom_target(check-database-service-construction
         -DENABLE_SSL=${ARKNET_ENABLE_SSL} -DPROFILE=default
         -P "${CMAKE_CURRENT_SOURCE_DIR}/service_construction_allocation.cmake"
     DEPENDS ark_database_service_construction_tests USES_TERMINAL VERBATIM)
+# Build module implementations in each executable so test-only Asio allocation
+# definitions apply consistently; production plugin targets retain their defaults.
+function(ark_database_module_construction target)
+    ark_database_test(${target} module_construction_allocation.cpp
+        "${ROOT_DIR}/src/plugins/redis/redis_module.cpp")
+    target_link_libraries(${target} PRIVATE ark::redis arknet::arknet)
+    if(ARKNET_ENABLE_SSL)
+        target_sources(${target} PRIVATE "${ROOT_DIR}/src/plugins/mysql/mysql_module.cpp")
+        target_link_libraries(${target} PRIVATE ark::mysql)
+    endif()
+endfunction()
+ark_database_module_construction(ark_database_module_construction_tests)
+function(ark_database_module_construction_check target program profile)
+    add_custom_target(${target}
+        COMMAND ${CMAKE_COMMAND} -DPROGRAM=$<TARGET_FILE:${program}>
+            -DENABLE_SSL=${ARKNET_ENABLE_SSL} -DPROFILE=${profile}-empty
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/service_construction_allocation.cmake"
+        COMMAND ${CMAKE_COMMAND} -DPROGRAM=$<TARGET_FILE:${program}>
+            -DENABLE_SSL=${ARKNET_ENABLE_SSL} -DPROFILE=${profile}-populated -DPROBE_ARGS=populated
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/service_construction_allocation.cmake"
+        DEPENDS ${program} USES_TERMINAL VERBATIM)
+endfunction()
+ark_database_module_construction_check(check-database-module-construction
+    ark_database_module_construction_tests default)
+function(ark_database_asio_new_profile target)
+    target_compile_definitions(${target} PRIVATE
+        ARK_DATABASE_EXPECT_ASIO_NEW
+        BOOST_ASIO_DISABLE_STD_ALIGNED_ALLOC BOOST_ASIO_DISABLE_BOOST_ALIGN
+        ASIO_DISABLE_STD_ALIGNED_ALLOC ASIO_DISABLE_BOOST_ALIGN)
+endfunction()
 if(NOT MSVC)
     # Native Asio supports malloc-based aligned allocation, which global new
     # injection cannot observe. Exercise its supported new-based path as well.
     ark_database_test(ark_database_service_construction_new_tests service_construction_allocation.cpp)
     target_link_libraries(ark_database_service_construction_new_tests PRIVATE arknet::arknet)
-    target_compile_definitions(ark_database_service_construction_new_tests PRIVATE
-        ARK_DATABASE_EXPECT_ASIO_NEW
-        BOOST_ASIO_DISABLE_STD_ALIGNED_ALLOC BOOST_ASIO_DISABLE_BOOST_ALIGN
-        ASIO_DISABLE_STD_ALIGNED_ALLOC ASIO_DISABLE_BOOST_ALIGN)
+    ark_database_asio_new_profile(ark_database_service_construction_new_tests)
+    ark_database_module_construction(ark_database_module_construction_new_tests)
+    ark_database_asio_new_profile(ark_database_module_construction_new_tests)
+    ark_database_module_construction_check(check-database-module-construction-new
+        ark_database_module_construction_new_tests asio-new)
+    add_dependencies(check-database-module-construction check-database-module-construction-new)
     add_custom_target(check-database-service-construction-new
         COMMAND ${CMAKE_COMMAND} -DPROGRAM=$<TARGET_FILE:ark_database_service_construction_new_tests>
             -DENABLE_SSL=${ARKNET_ENABLE_SSL} -DPROFILE=asio-new
@@ -151,7 +183,7 @@ add_custom_target(check-database
         ark_database_service_retirement_tests
         ark_database_task_contract_tests
     USES_TERMINAL)
-add_dependencies(check-database check-database-service-construction)
+add_dependencies(check-database check-database-service-construction check-database-module-construction)
 
 # Compile real-service acceptance in ordinary CI without running any server work.
 add_dependencies(check-database ark_database_redis_sample_check ark_database_public_service_tests
