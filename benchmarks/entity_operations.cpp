@@ -319,9 +319,7 @@ int main(int argc, char* argv[]) {
                 std::rethrow_exception(error);
             }
             const auto state = manager.get_shutdown_state();
-            if ((state != ark::plugin_manager::shutdown_state::draining &&
-                    state != ark::plugin_manager::shutdown_state::stopping_acceptance) ||
-                !manager.get_shutdown_failure().empty())
+            if (state != ark::plugin_manager::shutdown_state::stopping || !manager.get_shutdown_failure().empty())
             {
                 fail_shutdown("terminal shutdown state");
             }
