@@ -6,7 +6,7 @@
 
 ## 停机候选版本资源清理
 
-**2026-11-02**，三个范围共 **16 次原生执行通过**。下方分别保留 12 次正常／显式取消／TLS、2 次流水线／autocommit manager-stop，以及 2 次事务 manager-stop 执行的源码和二进制身份，结果分别归属于对应构建。
+**2026-11-02**，四个范围共 **17 次原生执行通过**。下方分别保留 12 次正常／显式取消／TLS、2 次流水线／autocommit stop、2 次事务 stop，以及 1 次 Redis TLS stop 的源码和二进制身份，结果分别归属于对应构建。
 
 ### 正常流程、显式取消与 TLS（12 次执行）
 
@@ -140,11 +140,39 @@
 </CollapsibleContent>
 </Collapsible>
 
+<a id="redis-tls-管理器-stop-取消"></a>
+
+### Redis TLS 管理器 stop 取消（1 次执行）
+
+在新建、独占、密码认证并使用私有 CA 的 Redis 7.4.2 TLS 实例上，**`redis-tls-stop` 执行一次并通过**。独立准备过程验证证书链／IP、实际明文 `port=0`、指定 `tls-port`，以及自有 PID 只持有一个 TLS 监听。这是实际 TLS 证据，不从 TCP 模式推断。
+
+| 身份 | 实际执行配置 |
+| --- | --- |
+| 测试源码 | 执行时工作区干净，`779f26fb6f91b18fff1d1c54c05d403eee7eb70b`，基于 `a7f3a98fdc275379dbaf433addb14dbad6191089` |
+| 独立原生构建 | 新建取消程序与真实隐藏符号 Redis DSO；仅数据库的 C++20 Debug 构建、启用 SSL、关闭 applications／Protobuf，并行度 `2`。前述 16 次执行的产物未改动 |
+| 服务／原生入口 | Redis TLS 源码 `a0a6f23d997b024689ba157916837f493a593a34`，服务端 OpenSSL 3.5.9、客户端 OpenSSL 4.1.0；`ark_database_public_plugin_cancellation_tests redis-tls-stop` 退出码为 `0` |
+
+同一次执行先要求不相关 CA 的 PING 返回原生 `connection_failed`、SSL 证书校验传输错误、`command_may_have_run=false` 且无回复。随后目标与独立观察者管理器使用可信 TLS 连接池。服务端先显示命名流水线在计数 `1` 后阻塞于 BLPOP，外层所属线程才在根任务待完成时调用目标 `manager.stop()`。观察者在目标 stop 后继续运行，确认整个会话退出与后续 500 ms 内无重放，再读到计数 `1` 并删除键。
+
+所属执行器仅完成一次、目标任务／模块释放与重复 stop 均通过。两个宿主销毁后，拥有型原生 `cancelled`／`command_may_have_run=true`、有效部分回复及 CA 拒绝诊断仍有效。不通过目标池恢复，也不引入写重放。此范围未新增双向 TLS、主机名不匹配对照、证书轮换／撤销或 TLS 服务故障恢复。
+
+<Collapsible>
+<CollapsibleTrigger>Redis TLS manager-stop 构建指纹</CollapsibleTrigger>
+<CollapsibleContent>
+
+| 执行的二进制 | SHA256 |
+| --- | --- |
+| `ark_database_public_plugin_cancellation_tests` | `de82abcf263f1d4238b47f42f40f38a2e79d020438fc4954175b34ac1405106d` |
+| `ark_database_redis_plugin_d.dylib` | `e3e50a3eebf2f55148ad98eba0baebbad0f7dfff0cc3d3e9a26b737a5af506b7` |
+
+</CollapsibleContent>
+</Collapsible>
+
 ### 执行控制与清理
 
 每个原生子进程设置 45 秒观察期限，以及随后最多 5 秒的自有子进程终止期限，均未触及；这些是测试控制，不是生产停机默认值。服务、端口、数据、凭据和证书均由各自批次独占。结束后 schema 与 Redis 数据库为空，自有进程已停止并回收，私有数据目录、密钥与凭据配置已删除。原始回执、日志与服务端二进制指纹仅保存在本地。
 
-复现沿用[正常 DSO 模式](../../tests/database/README_CN.md#真实插件动态库与真实服务)、[故障对照](../../tests/database/README_CN.md#公开模块真实服务负面验收)、[取消程序](../../tests/database/cancellation_CN.md)、[Redis TLS 对照](../../tests/database/redis_tls_CN.md)、[manager-stop 模式](../../tests/database/cancellation_CN.md#管理器-stop-发起取消)和[事务 stop 模式](../../tests/database/cancellation_CN.md#管理器-stop-取消事务)。真实服务执行保持显式选择；`check-database` 仅编译不复现服务验收。
+复现沿用[正常 DSO 模式](../../tests/database/README_CN.md#真实插件动态库与真实服务)、[故障对照](../../tests/database/README_CN.md#公开模块真实服务负面验收)、[取消程序](../../tests/database/cancellation_CN.md)、[Redis TLS 对照](../../tests/database/redis_tls_CN.md)、[manager-stop 模式](../../tests/database/cancellation_CN.md#管理器-stop-发起取消)、[事务 stop 模式](../../tests/database/cancellation_CN.md#管理器-stop-取消事务)和 [TLS stop 模式](../../tests/database/cancellation_CN.md#redis-tls-管理器-stop-取消)。真实服务执行保持显式选择；`check-database` 仅编译不复现服务验收。
 
 ## 其他已记录范围
 
@@ -218,4 +246,4 @@ bash tests/database/owned_server_fault_actor_guards.sh
 
 ## 验收边界
 
-DSO 流程覆盖正常插件销毁与原生关闭；`dlclose`／`FreeLibrary` 成功不证明操作系统已物理移除库映像。生产容量、任意回调生命周期与热更新安全均未验收。stop 发起取消仅覆盖上述四个已观察模式；未覆盖 acquire／BEGIN／prepare／statement close／commit／rollback 取消、真实服务等待连接竞争及其他竞争、崩溃持久性、完整隔离级别、事务恢复、双向 TLS、证书轮换／撤销或 Redis TLS 故障恢复。AddressSanitizer、UndefinedBehaviorSanitizer、ThreadSanitizer、其他平台与托管 CI 均为独立范围。
+DSO 流程覆盖正常插件销毁与原生关闭；`dlclose`／`FreeLibrary` 成功不证明操作系统已物理移除库映像。生产容量、任意回调生命周期与热更新安全均未验收。stop 发起取消仅覆盖上述五个已观察模式；未覆盖 acquire／BEGIN／prepare／statement close／commit／rollback 取消、真实服务等待连接竞争及其他竞争、崩溃持久性、完整隔离级别、事务恢复、双向 TLS、证书轮换／撤销或 Redis TLS 故障恢复。AddressSanitizer、UndefinedBehaviorSanitizer、ThreadSanitizer、其他平台与托管 CI 均为独立范围。

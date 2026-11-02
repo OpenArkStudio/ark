@@ -6,7 +6,7 @@ Results apply only to the source, binary identities and operations recorded belo
 
 ## Shutdown-candidate resource cleanup
 
-On **2026-11-02**, **16 native invocations passed in three scopes**. The 12 positive/explicit-cancellation/TLS executions, 2 pipeline/autocommit manager-stop executions and 2 transaction manager-stop executions retain separate source and binary identities below. Each result is attributed to its recorded build.
+On **2026-11-02**, **17 native invocations passed in four scopes**. The 12 positive/explicit-cancellation/TLS executions, 2 pipeline/autocommit stops, 2 transaction stops and 1 Redis TLS stop retain separate source and binary identities below. Each result is attributed to its recorded build.
 
 ### Positive workflows, explicit cancellation and TLS (12 invocations)
 
@@ -140,11 +140,39 @@ The external zero records this observed discard effect, not a rollback acknowled
 </CollapsibleContent>
 </Collapsible>
 
+<a id="redis-tls-manager-stop-cancellation"></a>
+
+### Redis TLS manager-stop cancellation (1 invocation)
+
+**`redis-tls-stop` ran once and passed** against a fresh owned Redis 7.4.2 TLS instance with password authentication and private CA material. Independent setup verified the certificate chain/IP, live plaintext `port=0`, the selected `tls-port` and exactly one PID-owned TLS listener. This is TLS evidence, not an inference from the TCP modes.
+
+| Identity | Executed configuration |
+| --- | --- |
+| Tested source | Clean `779f26fb6f91b18fff1d1c54c05d403eee7eb70b`, based on `a7f3a98fdc275379dbaf433addb14dbad6191089` |
+| Separate native build | New cancellation executable and actual hidden-symbol Redis DSO; database-only C++20 Debug, SSL enabled, applications/Protobuf disabled, parallelism `2`. Earlier 16-invocation artifacts were unchanged |
+| Service / native entry | Redis TLS source `a0a6f23d997b024689ba157916837f493a593a34`, server OpenSSL 3.5.9, client OpenSSL 4.1.0; `ark_database_public_plugin_cancellation_tests redis-tls-stop` exited `0` |
+
+The same invocation first requires an unrelated-CA PING to fail specifically with native `connection_failed`, SSL certificate-verification transport error, `command_may_have_run=false` and no replies. Trusted target and independent observer managers then use verified TLS pools. The server must show the named pipeline blocked in BLPOP after counter `1` before outer-owner target `manager.stop()` with the root pending. The observer survives target stop, confirms whole-session retirement and another 500 ms without replay, reads counter `1` and deletes the keys.
+
+Exactly one owner-executor completion, target task/module retirement and idempotent stop passed. After both hosts are destroyed, owning native `cancelled`/`command_may_have_run=true`, valid partial replies and the CA-verification diagnostic remain valid. No target-pool recovery or write replay is introduced. This scope does not add mutual TLS, hostname-mismatch controls, certificate rotation/revocation or TLS service-fault recovery.
+
+<Collapsible>
+<CollapsibleTrigger>Redis TLS manager-stop build fingerprints</CollapsibleTrigger>
+<CollapsibleContent>
+
+| Executed binary | SHA256 |
+| --- | --- |
+| `ark_database_public_plugin_cancellation_tests` | `de82abcf263f1d4238b47f42f40f38a2e79d020438fc4954175b34ac1405106d` |
+| `ark_database_redis_plugin_d.dylib` | `e3e50a3eebf2f55148ad98eba0baebbad0f7dfff0cc3d3e9a26b737a5af506b7` |
+
+</CollapsibleContent>
+</Collapsible>
+
 ### Execution controls and cleanup
 
 Each native child had a 45-second observation bound and a further 5-second owned-child termination bound; no bound was reached. These are test controls, not production shutdown defaults. Services, ports, data, credentials and certificates were private to their respective batches. The schema and Redis databases were empty afterward; owned processes were stopped/reaped, and private data directories, keys and credential configurations were removed. Raw receipts, logs and server-binary fingerprints remain local.
 
-Use the existing [positive DSO modes](../../tests/database/README.md#real-plugin-dsos-against-real-services), [failure controls](../../tests/database/README.md#public-real-service-failure-checks), [cancellation runner](../../tests/database/cancellation.md), [Redis TLS controls](../../tests/database/redis_tls.md), [manager-stop modes](../../tests/database/cancellation.md#manager-stop-cancellation) and [transaction stop modes](../../tests/database/cancellation.md#manager-stop-transaction-cancellation). Real-service execution remains opt-in; `check-database` compilation does not reproduce it.
+Use the existing [positive DSO modes](../../tests/database/README.md#real-plugin-dsos-against-real-services), [failure controls](../../tests/database/README.md#public-real-service-failure-checks), [cancellation runner](../../tests/database/cancellation.md), [Redis TLS controls](../../tests/database/redis_tls.md), [manager-stop modes](../../tests/database/cancellation.md#manager-stop-cancellation), [transaction stop modes](../../tests/database/cancellation.md#manager-stop-transaction-cancellation) and [TLS stop mode](../../tests/database/cancellation.md#redis-tls-manager-stop-cancellation). Real-service execution remains opt-in; `check-database` compilation does not reproduce it.
 
 ## Other recorded scopes
 
@@ -218,4 +246,4 @@ bash tests/database/owned_server_fault_actor_guards.sh
 
 ## Acceptance boundaries
 
-DSO workflows exercise normal plugin destruction and native close calls; successful `dlclose`/`FreeLibrary` does not prove physical OS image removal. Production capacity, arbitrary callback lifetimes and hot-update safety are unverified. Stop-initiated cancellation is limited to the four observed modes. Cancellation during acquire/BEGIN/prepare/statement close/commit/rollback, real-service queued-acquire contention and other races remain excluded, alongside crash durability, complete isolation coverage, transaction recovery, mutual TLS, certificate rotation/revocation and Redis TLS fault recovery. AddressSanitizer, UndefinedBehaviorSanitizer, ThreadSanitizer, other platforms and hosted CI are separate scopes.
+DSO workflows exercise normal plugin destruction and native close calls; successful `dlclose`/`FreeLibrary` does not prove physical OS image removal. Production capacity, arbitrary callback lifetimes and hot-update safety are unverified. Stop-initiated cancellation is limited to the five observed modes. Cancellation during acquire/BEGIN/prepare/statement close/commit/rollback, real-service queued-acquire contention and other races remain excluded, alongside crash durability, complete isolation coverage, transaction recovery, mutual TLS, certificate rotation/revocation and Redis TLS fault recovery. AddressSanitizer, UndefinedBehaviorSanitizer, ThreadSanitizer, other platforms and hosted CI are separate scopes.
