@@ -16,6 +16,14 @@ Run `core-build/tests/core/ark_core_tests --help` for doctest filters. `check-ne
 also runs these tests when `ARK_BUILD_CORE_TESTS=ON`, including in the existing CI
 matrix. No database service is required.
 
+Scheduler startup ownership and constructor/queue allocation failures have permanent C++ entries:
+
+```sh
+cmake --build core-build --target check-scheduler-startup-cleanup check-scheduler-construction
+```
+
+Both are included in `check-core`. The first covers later startup-phase failure, retained callbacks and an allocation-failure child. The standalone construction program bounds its own subprocesses and rejects worker leaks, termination and lost callback owners; it needs no database or scripting runtime.
+
 String-pattern regressions exercise empty delimiters and replacement patterns with unlimited and explicit limits, empty input, existing output elements and embedded nulls. They also preserve nonempty delimiter, suffix, replacement-count and deletion behavior. Run `ark_core_tests --test-case="*String utilit*"` to select them. See [string-pattern semantics](../../docs/reference/utility.md#core-string-patterns).
 
 The public header checks include `<ark/error_code.hpp>` as the first include and

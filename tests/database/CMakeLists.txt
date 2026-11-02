@@ -31,6 +31,10 @@ ark_database_test(ark_database_service_retirement_tests main.cpp service_retirem
 target_link_libraries(ark_database_service_retirement_tests PRIVATE arknet::arknet)
 ark_database_test(ark_database_service_construction_tests service_construction_allocation.cpp)
 target_link_libraries(ark_database_service_construction_tests PRIVATE arknet::arknet)
+if(MSVC)
+    # Keep Debug STL proxy allocations outside the injected construction path.
+    target_compile_definitions(ark_database_service_construction_tests PRIVATE _ITERATOR_DEBUG_LEVEL=0)
+endif()
 add_custom_target(check-database-service-construction
     COMMAND ${CMAKE_COMMAND} -DPROGRAM=$<TARGET_FILE:ark_database_service_construction_tests>
         -DENABLE_SSL=${ARKNET_ENABLE_SSL} -DPROFILE=default
@@ -42,6 +46,10 @@ function(ark_database_module_construction target)
     ark_database_test(${target} module_construction_allocation.cpp
         "${ROOT_DIR}/src/plugins/redis/redis_module.cpp")
     target_link_libraries(${target} PRIVATE ark::redis arknet::arknet)
+    if(MSVC)
+        # Keep Debug STL proxy allocations outside the injected construction path.
+        target_compile_definitions(${target} PRIVATE _ITERATOR_DEBUG_LEVEL=0)
+    endif()
     if(ARKNET_ENABLE_SSL)
         target_sources(${target} PRIVATE "${ROOT_DIR}/src/plugins/mysql/mysql_module.cpp")
         target_link_libraries(${target} PRIVATE ark::mysql)

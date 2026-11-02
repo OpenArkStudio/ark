@@ -87,8 +87,9 @@ remove the empty entry on construction failure. These checks require no servers.
 This repairs ARK-owned construction and publication after a successful native
 pool constructor. It does not cover MSVC's `_aligned_malloc` or other allocation
 mechanisms that bypass global new, every native partial-start/thread-creation
-failure, or accepted query/transaction cleanup during failed startup. MSVC keeps
-the default controls without changing iterator debugging or injection. Existing
+failure, or accepted query/transaction cleanup during failed startup. MSVC test
+executables disable iterator-debug proxy allocations for these injected paths;
+production targets retain their normal iterator settings. Existing
 owner-thread coroutine and normal-stop regressions remain separate. No startup
 cleanup capsule or native retirement policy is introduced.
 
