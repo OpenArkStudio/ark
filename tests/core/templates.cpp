@@ -9,12 +9,12 @@
 #include <ark/lexical_cast.hpp>
 #include <ark/plugin_manager.hpp>
 
-DOCTEST_TEST_CASE("application manifest paths accept TOML and retain legacy XML suffixes") {
+DOCTEST_TEST_CASE("application manifest paths preserve TOML path strings") {
     ark::plugin_manager manager;
     manager.set_app_conf("conf/timers.app.toml");
     DOCTEST_CHECK(manager.get_app_conf() == "conf/timers.app.toml");
-    manager.set_app_conf("conf/timers.app.conf");
-    DOCTEST_CHECK(manager.get_app_conf() == "conf/timers.app.conf");
+    manager.set_app_conf("conf/with spaces/custom.toml");
+    DOCTEST_CHECK(manager.get_app_conf() == "conf/with spaces/custom.toml");
 }
 
 namespace {
