@@ -176,6 +176,17 @@ See [CI dependency archive cache](../../docs/project/contributing.md#ci-dependen
 for the ABI boundary, v1 cold transition and branch/ref visibility limits.
 These tests do not execute vcpkg ABI matching or validate hosted cache hits.
 
+The seed workflow tests restrict Windows Applications seeding to dependency/cache
+input pushes on main or an explicit main dispatch. They require identical cache
+identity, tools and complete Windows configure flags to required CI,
+without ark compilation, regression execution or compiler caching. They do not
+prove a hosted main-cache save or a later queue candidate's cache reuse; see
+[CI dependency archive cache](../../docs/project/contributing.md#ci-dependency-archive-cache).
+Seed-only checks reject disabled providers, incomplete keys and empty archives;
+saving and exact-key availability are mandatory after a miss, while an existing
+exact hit skips saving. A save action that only warns cannot bypass the final hit
+check. Required CI's archive operations remain optional.
+
 
 Windows ABI diagnostic tests use synthetic records in the format checked against
 local installed Asio, rapidxml and Protobuf metadata. They cover exact-byte package
