@@ -422,16 +422,18 @@ TEST_CASE("Logging UTF-8 output directories and filenames create native files wi
         if (route == "toml")
         {
             const auto config = files.directory / "logging.app.toml";
+            const auto path = directory.generic_u8string();
+            const std::string configured_output_path(reinterpret_cast<const char*>(path.data()), path.size());
             {
                 std::ofstream output(config, std::ios::binary);
                 REQUIRE(output.is_open());
-                const auto path = directory.generic_u8string();
                 output << "[application]\n[logging]\nconsole = false\nfile = true\npattern = '%v'\n"
-                       << "output_path = '" << std::string(reinterpret_cast<const char*>(path.data()), path.size())
-                       << "'\n";
+                       << "output_path = '" << configured_output_path << "'\n";
             }
             settings = ark::load_application_manifest(utf8_path(config)).logging;
-            CHECK(settings.output_path == utf8_path(directory));
+            // Configuration preserves UTF-8 text and its generic separators.
+            CHECK(settings.output_path == configured_output_path);
+            CHECK(ark::detail::logging_path_from_utf8(settings.output_path) == directory);
         }
 #endif
         settings.loggers["oss"] = settings;
