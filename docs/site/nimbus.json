@@ -11,5 +11,18 @@
       "@/*": "src/*"
     }
   },
-  "components": []
+  "components": [
+    {
+      "slug": "file-tree",
+      "type": "registry:ui",
+      "version": "0.19.2",
+      "source": "https://nimbus-docs.com/registry",
+      "hash": "sha256:906c84956387d5f1ff8902959604fca8fb46ca6ee5945ff37c109d3954c9ac17",
+      "files": [
+        "src/components/ui/file-tree/FileTree.astro",
+        "src/components/ui/file-tree/file-tree.client.ts",
+        "src/components/ui/file-tree/index.ts"
+      ]
+    }
+  ]
 }

@@ -9,6 +9,7 @@ const componentGroups = {
   card: ["Card"],
   "card-grid": ["CardGrid"],
   "link-card": ["LinkCard"],
+  "file-tree": ["FileTree"],
   tabs: ["TabItem", "Tabs"],
   collapsible: ["Collapsible", "CollapsibleTrigger", "CollapsibleContent"],
 };

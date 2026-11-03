@@ -58,11 +58,21 @@ test("native Nimbus components use MDX and retain nested Markdown links", () => 
 });
 
 test("component examples inside code blocks and inline code stay plain Markdown", () => {
-  const source = '# Authoring\n\nUse `<Steps>`.\n\n```md\n<Aside type="note">\n\nExample\n\n</Aside>\n```\n';
+  const source = '# Authoring\n\nUse `<Steps>` or `<FileTree>`.\n\n```md\n<Aside type="note">\n\nExample\n\n</Aside>\n<FileTree>\n- src/\n</FileTree>\n```\n';
   const result = convertPage(source, "authoring.md", new Set());
   assert.equal(pageExtension(source), ".md");
   assert.doesNotMatch(result, /import \{/);
   assert.ok(result.includes('```md\n<Aside type="note">'));
+});
+
+test("FileTree imports the official component and preserves nested directory Markdown", () => {
+  const source = '# Layout\n\n<FileTree>\n\n- src/\n  - core/\n    - plugin_manager.hpp\n- config/\n  - ...\n\n</FileTree>\n\nUse `<ark/plugin_manager.hpp>`; see [examples](guides/examples.md).\n';
+  const result = convertPage(source, "layout.md", new Set(["guides/examples.md"]));
+  assert.equal(pageExtension(source), ".mdx");
+  assert.match(result, /import \{ FileTree \} from "@\/components\/ui\/file-tree"/);
+  assert.ok(result.includes('- src/\n  - core/\n    - plugin_manager.hpp\n- config/\n  - ...'));
+  assert.ok(result.includes('`<ark/plugin_manager.hpp>`'));
+  assert.ok(result.includes('[examples](/guides/examples)'));
 });
 
 test("routing cards and parallel tabs import vendored component groups", () => {
