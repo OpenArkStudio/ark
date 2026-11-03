@@ -32,6 +32,21 @@ elseif(ARK_TEST_MODE STREQUAL "network")
     add_executable(consumer network.cpp)
     target_link_libraries(consumer PRIVATE ark::net ark::bus ark::kernel ark::utility ${CMAKE_DL_LIBS})
     target_compile_definitions(consumer PRIVATE ARK_NETWORK_TEST_LIBRARY_SUFFIX="${CMAKE_SHARED_LIBRARY_SUFFIX}")
+elseif(ARK_TEST_MODE STREQUAL "database")
+    set(ARK_TEST_DATABASE_PLUGIN_DIR "" CACHE PATH "Installed bin directory containing the matching database plugins")
+    if(NOT IS_DIRECTORY "${ARK_TEST_DATABASE_PLUGIN_DIR}")
+        message(FATAL_ERROR "Set ARK_TEST_DATABASE_PLUGIN_DIR to the installed MySQL and Redis plugin directory")
+    endif()
+    find_package(ark CONFIG REQUIRED COMPONENTS core mysql redis)
+    add_executable(consumer database.cpp)
+    target_link_libraries(consumer PRIVATE ark::mysql ark::redis ${CMAKE_DL_LIBS})
+    if(MINGW)
+        target_link_options(consumer PRIVATE -municode)
+    endif()
+    target_compile_definitions(consumer PRIVATE ARK_DATABASE_TEST_LIBRARY_SUFFIX="${CMAKE_SHARED_LIBRARY_SUFFIX}")
+    if(UNIX AND NOT WIN32 AND NOT CYGWIN)
+        target_compile_definitions(consumer PRIVATE ARK_DATABASE_TEST_DLADDR)
+    endif()
 elseif(ARK_TEST_MODE STREQUAL "http")
     if(NOT UNIX OR WIN32 OR CYGWIN)
         message(FATAL_ERROR "The installed HTTP runtime consumer requires native UNIX sockets and dladdr")
@@ -58,6 +73,12 @@ if(ARK_TEST_MODE STREQUAL "network")
             "-DARK_TEST_NETWORK_ENTITY_SCHEMA=${ARK_TEST_NETWORK_ENTITY_SCHEMA}"
             "-DARK_TEST_NETWORK_RUNTIME=${CMAKE_CURRENT_BINARY_DIR}/network runtime"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/run_network.cmake"
+        DEPENDS consumer USES_TERMINAL VERBATIM)
+elseif(ARK_TEST_MODE STREQUAL "database")
+    add_custom_target(check-consumer
+        COMMAND "${CMAKE_COMMAND}" "-DARK_TEST_DATABASE_EXECUTABLE=$<TARGET_FILE:consumer>"
+            "-DARK_TEST_DATABASE_PLUGIN_DIR=${ARK_TEST_DATABASE_PLUGIN_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/run_database.cmake"
         DEPENDS consumer USES_TERMINAL VERBATIM)
 else()
     add_custom_target(check-consumer COMMAND $<TARGET_FILE:consumer> ${consumer_args}
