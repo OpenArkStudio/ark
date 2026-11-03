@@ -15,6 +15,8 @@
 
 可选的[HTTP 服务端插件](http_CN.md)公开 `http_server_module`，其路由处理器在 arknet IO 工作线程上运行。
 
+设置 `ARK_BUILD_RUNTIME_PLUGINS=ON`、`ARK_BUILD_PLUGIN_NET=ON` 构建官方 Net 动态库；运行时开关默认随 `ARK_BUILD_APPLICATIONS`。关闭应用可省去启动器与七个服务动态库。运行时插件仍要求 AFProto 和 Boost.Asio／Beast，不增加 Standalone Asio 运行时支持。[构建选项](build-options_CN.md)说明插件选择与配置读取器要求。
+
 ## API 与私有创建
 
 Net 的全部源头文件与实现位于 `src/plugins/net/`。`ark::net` API 目标通过显式清单，

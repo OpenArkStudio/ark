@@ -136,6 +136,8 @@ cmake --build game-build
 
 使用 `<ark/plugin_manager.hpp>`、`<ark/mysql/mysql_module.hpp>` 等公开引用，不手工添加 ark 的源码或构建目录。源码消费时先调用 `add_subdirectory(path/to/ark ark-build)`，再链接相同 target。公开插件 API target 不负责加载运行时库。
 
+仅生产插件时，设置 `ARK_BUILD_APPLICATIONS=OFF`、`ARK_BUILD_RUNTIME_PLUGINS=ON`，再通过 `ARK_BUILD_PLUGIN_<NAME>` 选择插件；构建和根安装均不包含启动器与七个服务动态库。参见 [MySQL／Redis 构建命令](../reference/build-options_CN.md#原生数据库插件)。AFProto 与选中插件保留原有依赖；仅运行时插件模式仍要求 Boost，MySQL 仍要求 SSL。安装与 CPack 按实际构建的 target 收集产物，公开 API／头文件布局不变。构建或安装动态库不代表数据库服务验收。
+
 仅消费配置读取器时，调用 `find_package(ark CONFIG REQUIRED COMPONENTS config)` 并链接 `ark::config`，不会发现 core 或 arknet。使用 `COMPONENTS config_headers` 并链接 `ark::config_headers`，可仅获得 `<ark/application_manifest.hpp>` 声明；`ARK_BUILD_CONFIG=OFF` 时也可使用。请求不存在的必需组件会使包发现失败。默认发现导入 core、公开插件 target，以及已经构建的配置读取器和协议 target。
 
 移动安装前缀后无需修改包文件；依赖前缀仍须可发现且 ABI 兼容。`cmake --build app-build --target check-install` 会暂存并迁移安装目录，验证独立安装消费者。以下隔离检查在临时副本中构建，删除临时生产者源码与构建目录后，再编译运行迁移后的消费者：
