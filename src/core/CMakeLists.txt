@@ -56,6 +56,7 @@ set(ark_core_public_headers
     "random/random_xoshiro.hpp"
     "socket_func.hpp"
     "spdlog/sinks/date_and_hour_file_sink.h"
+    "spdlog/sinks/native_file.hpp"
     "spdlog/sinks/rotating_file_with_date_sink-inl.h"
     "spdlog/sinks/rotating_file_with_date_sink.h"
     "string.hpp"

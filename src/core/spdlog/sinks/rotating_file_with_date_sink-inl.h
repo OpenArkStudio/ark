@@ -17,7 +17,6 @@
 #include <tuple>
 
 #include <spdlog/common.h>
-#include <spdlog/details/file_helper.h>
 #include <spdlog/details/null_mutex.h>
 #include <spdlog/fmt/fmt.h>
 
@@ -123,7 +122,8 @@ void rotating_file_with_date_sink<mutex_type>::rotate() {
     for (auto i = max_files_; i > 0; --i)
     {
         filename_t src = calc_filename(base_filename_, i - 1);
-        if (!details::os::path_exists(src))
+        std::error_code error;
+        if (!std::filesystem::exists(ark::detail::logging_native_path(src), error))
         {
             continue;
         }
@@ -154,8 +154,11 @@ template<typename mutex_type>
 bool rotating_file_with_date_sink<mutex_type>::rename_file(
     const filename_t& src_filename, const filename_t& target_filename) {
     // try to delete the target file in case it already exists.
-    (void)details::os::remove(target_filename);
-    return details::os::rename(src_filename, target_filename) == 0;
+    std::error_code error;
+    std::filesystem::remove(ark::detail::logging_native_path(target_filename), error);
+    std::filesystem::rename(
+        ark::detail::logging_native_path(src_filename), ark::detail::logging_native_path(target_filename), error);
+    return !error;
 }
 
 } // namespace sinks

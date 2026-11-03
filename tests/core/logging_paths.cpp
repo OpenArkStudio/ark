@@ -13,16 +13,30 @@
 #include "../network/doctest.h"
 
 #include <ark/logger.hpp>
+#include <ark/spdlog/sinks/rotating_file_with_date_sink.h>
 
 namespace {
 
 using filename_calculator = spdlog::sinks::default_date_and_hour_file_name_calculator;
 
+std::string utf8_path(const std::filesystem::path& file) {
+    const auto bytes = file.u8string();
+    return {reinterpret_cast<const char*>(bytes.data()), bytes.size()};
+}
+
 spdlog::filename_t native_filename(const std::filesystem::path& file) {
 #if defined(_WIN32) && defined(SPDLOG_WCHAR_FILENAMES)
     return file.wstring();
 #else
-    return file.string();
+    return utf8_path(file);
+#endif
+}
+
+std::filesystem::path native_path(const spdlog::filename_t& filename) {
+#if defined(_WIN32) && defined(SPDLOG_WCHAR_FILENAMES)
+    return std::filesystem::path(filename);
+#else
+    return std::filesystem::path(std::u8string(filename.begin(), filename.end()));
 #endif
 }
 
@@ -112,6 +126,10 @@ std::string read_log(const std::filesystem::path& file) {
     std::ifstream input(file, std::ios::binary);
     REQUIRE(input.is_open());
     return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+}
+
+std::string read_log(const spdlog::filename_t& file) {
+    return read_log(native_path(file));
 }
 
 } // namespace
@@ -409,4 +427,202 @@ TEST_CASE("Logging callback reset restores configured output formatting and leve
     CHECK(read_log(output) == std::string("warning|[callback.cpp:41]initial {literal}") +
                                   spdlog::details::os::default_eol + "error|[callback.cpp:44]restored {owned}" +
                                   spdlog::details::os::default_eol);
+}
+
+TEST_CASE("Logging legacy XML rejects an empty document and a missing selected mode") {
+    log_directory files;
+    const auto config = files.directory / std::filesystem::path(u8"无效 配置 😀.xml");
+    std::string document;
+    std::string expected;
+    SUBCASE("empty XML document") {
+        expected = "missing root element";
+    }
+    SUBCASE("logger missing Debug and Release modes") {
+        document = "<xml><logger name='default' queue_count='0' path='unused'/></xml>";
+#ifdef ARK_RUN_MODE_DEBUG
+        expected = "missing debug logger mode";
+#else
+        expected = "missing release logger mode";
+#endif
+    }
+    {
+        std::ofstream output(config, std::ios::binary);
+        REQUIRE(output.is_open());
+        output << document;
+    }
+    ark::logger logger;
+    try
+    {
+        logger.init_logger(utf8_path(config), "invalid.log");
+        FAIL("malformed legacy logger configuration must throw");
+    }
+    catch (const std::runtime_error& error)
+    {
+        const std::string diagnostic = error.what();
+        CHECK(diagnostic.find(utf8_path(config)) != std::string::npos);
+        CHECK(diagnostic.find(expected) != std::string::npos);
+    }
+}
+
+TEST_CASE("Logging UTF-8 output directories and filenames create native files with UTF-8 content") {
+    log_directory files;
+    const auto directory = files.directory / std::filesystem::path(u8"中文 日志 😀");
+    const auto filename = std::filesystem::path(u8"子目录 🚀") / std::filesystem::path(u8"服务 𠀋.log");
+    const auto base = directory / filename;
+    const auto message = utf8_path(std::filesystem::path(u8"日志内容 中文 😀 𠀋 {literal}"));
+    std::string route;
+    SUBCASE("synchronous settings") {
+        route = "sync";
+    }
+    SUBCASE("asynchronous settings") {
+        route = "async";
+    }
+#ifdef ARK_LOGGING_CONFIG_TESTS
+    SUBCASE("TOML output_path") {
+        route = "toml";
+    }
+#endif
+#ifdef OPEN_FILE_LOG
+    SUBCASE("legacy UTF-8 XML path and filename") {
+        route = "xml";
+    }
+#endif
+    {
+        ark::logger logger;
+        if (route == "xml")
+        {
+            const auto config = files.directory / std::filesystem::path(u8"日志 配置 😀 𠀋.xml");
+            {
+                std::ofstream output(config, std::ios::binary);
+                REQUIRE(output.is_open());
+                output << "<xml>";
+                for (const auto& name : {"default", "oss"})
+                {
+                    const auto path = name == std::string("default") ? directory : directory / "oss";
+                    output << "<logger name='" << name << "' queue_count='0' path='" << utf8_path(path)
+                           << "'><debug console='0' level='2' pattern='%v'/>"
+                           << "<release console='0' level='2' pattern='%v'/></logger>";
+                }
+                output << "</xml>";
+            }
+            REQUIRE(logger.init_logger(utf8_path(config), utf8_path(filename)));
+        }
+        else
+        {
+            ark::logging_settings settings;
+            settings.console = false;
+            settings.file = true;
+            settings.output_path = utf8_path(directory);
+            settings.pattern = "%v";
+            settings.queue_count = route == "async" ? 8 : 0;
+#ifdef ARK_LOGGING_CONFIG_TESTS
+            if (route == "toml")
+            {
+                const auto config = files.directory / "logging.app.toml";
+                const auto path = directory.generic_u8string();
+                const std::string configured_output_path(reinterpret_cast<const char*>(path.data()), path.size());
+                {
+                    std::ofstream output(config, std::ios::binary);
+                    REQUIRE(output.is_open());
+                    output << "[application]\n[logging]\nconsole = false\nfile = true\npattern = '%v'\n"
+                           << "output_path = '" << configured_output_path << "'\n";
+                }
+                settings = ark::load_application_manifest(utf8_path(config)).logging;
+                // Configuration preserves UTF-8 text and its generic separators.
+                CHECK(settings.output_path == configured_output_path);
+                CHECK(ark::detail::logging_path_from_utf8(settings.output_path) == directory);
+            }
+#endif
+            settings.loggers["oss"] = settings;
+            settings.loggers["oss"].output_path = utf8_path(directory / "oss");
+            REQUIRE(logger.init_logger(settings, utf8_path(filename)));
+        }
+        logger.log_t({"utf8.cpp", 7, ""}, spdlog::level::info, "{}", message);
+        logger.log_oss(spdlog::level::info, "utf8", message);
+    }
+    const auto output = native_path(filename_calculator::calc_filename(native_filename(base)));
+    CHECK(output.parent_path().parent_path() == base.parent_path());
+    CHECK(output.filename().u8string().starts_with(u8"服务 𠀋_"));
+    CHECK(std::filesystem::is_regular_file(output));
+    CHECK(read_log(output) == "[utf8.cpp:7]" + message + spdlog::details::os::default_eol);
+    const auto oss = directory / "oss" / filename;
+    CHECK(read_log(filename_calculator::calc_filename(native_filename(oss))) ==
+          "utf8:" + message + spdlog::details::os::default_eol);
+}
+
+TEST_CASE("Logging native UTF-8 file sinks preserve append truncation and bounded size rotation") {
+    log_directory files;
+    const auto base =
+        files.directory / std::filesystem::path(u8"中文 路径 😀") / std::filesystem::path(u8"服务 𠀋.log");
+    const auto filename = native_filename(base);
+    const auto payload = utf8_path(std::filesystem::path(u8"内容 中文 😀 𠀋"));
+    const std::string eol = spdlog::details::os::default_eol;
+    SUBCASE("hourly append and truncate") {
+        const auto output = native_path(filename_calculator::calc_filename(filename));
+        std::string expected;
+        for (const bool truncate : {false, false, true})
+        {
+            {
+                auto sink = std::make_shared<spdlog::sinks::date_and_hour_file_sink_mt>(filename, truncate);
+                spdlog::logger logger("native-hourly", sink);
+                logger.set_pattern("%v");
+                logger.info("{}", payload);
+                logger.flush();
+            }
+            if (truncate)
+            {
+                expected.clear();
+            }
+            expected += payload + eol;
+            CHECK(read_log(output) == expected);
+        }
+    }
+    SUBCASE("size rotation removes oldest native file") {
+        using sink_type = spdlog::sinks::rotating_file_with_date_sink_mt;
+        const auto output = native_path(sink_type::calc_filename(filename, 0));
+        {
+            auto sink = std::make_shared<sink_type>(filename, payload.size() + 1 + eol.size(), 2);
+            spdlog::logger logger("native-size", sink);
+            logger.set_pattern("%v");
+            for (int i = 0; i < 4; ++i)
+            {
+                logger.info("{}{}", payload, i);
+            }
+            logger.flush();
+        }
+        CHECK(read_log(output) == payload + "3" + eol);
+        CHECK(read_log(sink_type::calc_filename(filename, 1)) == payload + "2" + eol);
+        CHECK(read_log(sink_type::calc_filename(filename, 2)) == payload + "1" + eol);
+        CHECK_FALSE(std::filesystem::exists(native_path(sink_type::calc_filename(filename, 3))));
+    }
+    SUBCASE("size rotation includes pre-existing native file bytes") {
+        using sink_type = spdlog::sinks::rotating_file_with_date_sink_mt;
+        const auto output = native_path(sink_type::calc_filename(filename, 0));
+        REQUIRE(std::filesystem::create_directories(output.parent_path()));
+        {
+            std::ofstream existing(output, std::ios::binary);
+            REQUIRE(existing.is_open());
+            existing << payload << eol;
+        }
+        {
+            auto sink = std::make_shared<sink_type>(filename, payload.size() + eol.size(), 2);
+            spdlog::logger logger("native-existing-size", sink);
+            logger.set_pattern("%v");
+            logger.info("replacement");
+            logger.flush();
+        }
+        CHECK(read_log(output) == "replacement" + eol);
+        CHECK(read_log(sink_type::calc_filename(filename, 1)) == payload + eol);
+    }
+    SUBCASE("native file open failures retain the spdlog exception contract") {
+        const auto blocker = files.directory / std::filesystem::path(u8"不是目录 😀");
+        {
+            std::ofstream file(blocker, std::ios::binary);
+            REQUIRE(file.is_open());
+            file << "existing file";
+        }
+        CHECK_THROWS_AS(
+            spdlog::sinks::date_and_hour_file_sink_mt(native_filename(blocker / base.filename())), spdlog::spdlog_ex);
+        CHECK(read_log(blocker) == "existing file");
+    }
 }

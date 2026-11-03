@@ -15,7 +15,7 @@ struct logger_settings
     bool file{false};
     std::string level{"info"};
     std::string pattern{"%^[%Y%m%d %H:%M:%S.%e][%-5l]%v%$"};
-    std::string output_path{"./binlog"};
+    std::string output_path{"./binlog"}; // UTF-8, including on Windows.
     std::size_t queue_count{0};
 };
 

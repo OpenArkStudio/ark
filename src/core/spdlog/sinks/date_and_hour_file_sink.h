@@ -14,10 +14,11 @@
 #include <string>
 #include <tuple>
 
-#include "spdlog/details/file_helper.h"
 #include "spdlog/details/null_mutex.h"
 #include "spdlog/fmt/fmt.h"
 #include "spdlog/sinks/base_sink.h"
+
+#include "ark/spdlog/sinks/native_file.hpp"
 
 namespace spdlog {
 
@@ -64,12 +65,9 @@ struct default_date_and_hour_file_name_calculator
         const auto day =
             fmt::format(SPDLOG_FILENAME_T("{:04d}{:02d}{:02d}"), tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday);
         const auto name = fmt::format(SPDLOG_FILENAME_T("{}_{:02d}{}"), basename, tm.tm_hour, ext);
-        const auto path = std::filesystem::path(pre_dir) / day / name;
-#if defined(_WIN32) && defined(SPDLOG_WCHAR_FILENAMES)
-        return path.wstring();
-#else
-        return path.string();
-#endif
+        const auto path = ark::detail::logging_native_path(pre_dir) / ark::detail::logging_native_path(day) /
+                          ark::detail::logging_native_path(name);
+        return ark::detail::logging_filename(path);
     }
 };
 
@@ -128,7 +126,7 @@ private:
 
     filename_t base_filename_;
     log_clock::time_point rotation_tp_;
-    details::file_helper file_helper_;
+    ark::detail::logging_file file_helper_;
     bool truncate_;
 };
 

@@ -70,11 +70,15 @@ output_path = "./binlog/oss"
 | `console` / `file` | `true` / `false` | 布尔输出开关，至少启用一项。文件输出必须显式启用，按日期目录和小时文件名轮转。 |
 | `level` | `"info"` | `trace`、`debug`、`info`、`warn`、`error`、`critical` 或 `off`。 |
 | `pattern` | 上例格式 | 不含 NUL 的非空 spdlog 格式字符串。 |
-| `output_path` | `"./binlog"` | 不含 NUL 的非空路径；相对路径以进程工作目录为基准。应用名和 Bus ID 组成文件名。启用文件输出时自动创建父目录。 |
+| `output_path` | `"./binlog"` | 不含 NUL 的非空 UTF-8 路径；相对路径以进程工作目录为基准。应用名和 Bus ID 组成文件名。启用文件输出时自动创建父目录。 |
 | `queue_count` | `0` | 0..65535 的整数；0 表示同步输出，正数启用独立异步队列。 |
 | `loggers` | 空 | 具名表继承基础设置，再覆盖提供的字段。`oss` 选择 OSS 日志；未配置时 OSS 共用默认日志。其他名称可通过 `create_logger()` 使用。 |
 
 Debug 和 Release 使用相同设置。XML 应用清单可在 `<plugins>` 旁添加 `<logging console="true" file="false" level="info" queue_count="0"><logger name="oss" level="warn"/></logging>`，属性名和默认值相同。XML 布尔值也接受 `1` 和 `0`。插件专用的服务和业务配置继续单独组织。
+
+日志接口的字符串路径在所有平台统一使用 UTF-8：包括 `logger_settings::output_path`、旧 XML 中的 `path` 属性，以及 `logger::init_logger(path, filename)` 的配置文件路径和日志文件名。框架文件 sink 在创建目录、打开文件和轮转时转换为原生文件系统表示，Windows 使用 UTF-16 路径。中文、空格和非 BMP 字符均可使用，无需启用 spdlog 文件名宏。文件内容保留传入的 UTF-8 字节。日期目录、小时文件名、按大小轮转的保留策略、日志级别、同步／异步队列和默认设置保持原有行为。
+
+**UTF-8 迁移：**Windows 使用方若原先传入活动代码页／ANSI 路径字节，必须先转换为 UTF-8。已有 UTF-8 配置文本继续保持 UTF-8，不要转成 ANSI。公开字符串类型和函数签名不变。框架文件 sink 的实现布局发生变化，包含这些 sink 的应用、插件和其他使用方应一起重新编译；不要通过修改 `SPDLOG_WCHAR_FILENAMES` 等第三方 ABI 宏完成迁移。
 
 **不兼容迁移：**从启动命令移除 `--log_conf` / `-l`；显式提供任一参数会以退出码 `1` 结束。将旧 XML 中选用的 `debug`/`release` 设置迁入 `[logging]`：`path` 改为 `output_path`，数值日志级别 0..6 改为上述名称，`console` 改用布尔值。需要保留文件输出时设置 `file = true`；保留原有异步队列时设置 `queue_count = 1024`。新 API 的文件输出由运行时设置控制，不受 `ARK_OPEN_FILE_LOG` 影响；该构建选项仍控制旧版库接口的默认值。`application_manifest` 的公开布局已改变，应用、插件和使用方必须一起重新编译。直接调用库的 XML 重载 `logger::init_logger(path, filename)` 继续保留，启动器不使用该重载。
 
