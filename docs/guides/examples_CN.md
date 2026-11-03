@@ -1,6 +1,6 @@
 # 按能力命名的示例
 
-内置示例使用能力名称。构建时开启 applications 和 examples；此次命名调整不改变启用集合或 update 参与方式。
+内置示例使用能力名称，构建时开启 applications 和 examples。默认的 Timers、Module Lifecycle、Entity Operations 不需要 Consul、Etcd、Kafka 或 OSS 服务；这四项集成已[归档](../reference/directory-structure_CN.md#归档集成)，运行时构建默认关闭。
 
 | 目录／应用名 | 插件库名 | 用途与支持状态 |
 | --- | --- | --- |
@@ -12,7 +12,7 @@
 | `examples/redis_sample`／`redis_sample` | `redis_sample_plugin` | 原生 Redis 协程示例；应用示例列表中仍关闭，数据库测试检查其装配 |
 | `examples/physics_scene`／`physics_scene` | `physics_scene_plugin` | 关闭，依赖不支持的旧 PhysX 3；保留源码与清单不代表集成可运行 |
 | `examples/http_server`／`http_server` | `http_server_plugin` | 默认应用示例中关闭；支持[类型化创建与受控动态库回归](../reference/http_CN.md#旧-http-示例的类型化创建) |
-| `examples/http_client`／`http_client_sample` | `http_client_sample_plugin` | 默认应用示例中关闭；使用固定外部端点演示 future／回调 POST 与 etcd 租约 |
+| `examples/http_client`／`http_client_sample` | `http_client_sample_plugin` | 默认应用示例中关闭；保留使用固定外部端点的 future／回调 POST 与已归档 Etcd Client 租约演示 |
 
 每个目录中的 hpp/cpp 继续并排存放。可从 [timers 快速开始](../get-started/quick-start_CN.md)入手。
 通用启动脚本选择 `conf/<name>.app.toml`，因此进程名称和应用清单都应使用能力名称。Kernel 示例仍需要业务元数据。
