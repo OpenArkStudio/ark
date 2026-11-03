@@ -13,10 +13,10 @@
 namespace ark {
 
 const static std::string physic_scene_path = "physic/scene";
-const static std::string physic_config_path = "physic/PhysicConfig.xml";
+const static std::string physic_config_path = "physic/physic.toml";
 const static std::string physic_slash = "/";
 const static std::string physic_mesh_file_end = ".obj";
-const static std::string physic_collider_file_end = ".xml";
+const static std::string physic_collider_file_end = ".json";
 const static std::string physic_cooked_path = "physic/cache";
 const static physx::PxVec3 zero_vec3 = physx::PxVec3();
 const static physx::PxReal zero_real = 0.0F;

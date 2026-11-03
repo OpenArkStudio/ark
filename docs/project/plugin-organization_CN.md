@@ -16,44 +16,68 @@
 
 ## 目录布局
 
-```text
-ark/
-├── src/
-│   ├── core/            # 核心源码与 target 定义
-│   ├── config/          # 应用清单与共享文件／TOML 读取
-│   ├── application/     # 应用启动器
-│   ├── plugins/         # 官方插件实现与 CMake 文件
-│   │   ├── kernel/
-│   │   ├── net/          # 公开头、传输实现与私有创建
-│   │   ├── bus/          # 公开模块接口与私有创建
-│   │   ├── utility/
-│   │   ├── http/         # 公开路由接口与私有创建
-│   │   ├── mysql/
-│   │   └── redis/
-│   ├── proto/
-│   └── server/
-├── examples/            # 示例应用与业务插件
-├── tests/               # 核心与跨插件集成测试
-├── benchmarks/          # 可独立编译运行的基准程序
-├── tools/               # 开发与配置工具
-├── cmake/
-└── docs/                # 中英文文档与 Nimbus 站点
-```
+<FileTree>
+
+- ark/
+  - src/
+    - core/ — 核心源码与 target 定义
+      - ...
+    - config/ — 应用清单与共享文件／TOML 读取
+      - ...
+    - application/ — 应用启动器
+      - ...
+    - plugins/ — 官方插件实现与 CMake 文件
+      - kernel/
+        - ...
+      - net/ — 公开头、传输实现与私有创建
+        - ...
+      - bus/ — 公开模块接口与私有创建
+        - ...
+      - utility/
+        - ...
+      - http/ — 公开路由接口与私有创建
+        - ...
+      - mysql/
+        - ...
+      - redis/
+        - ...
+    - proto/
+      - ...
+    - server/
+      - ...
+  - examples/ — 示例应用与业务插件
+    - ...
+  - tests/ — 核心与跨插件集成测试
+    - ...
+  - benchmarks/ — 可独立编译运行的基准程序
+    - ...
+  - tools/ — 开发与配置工具
+    - ...
+  - cmake/
+    - ...
+  - docs/ — 中英文文档与 Nimbus 站点
+    - ...
+
+</FileTree>
 
 上图列出主要目录。Consul、etcd、Kafka 等现有官方插件也按同一规则组织。Lua、Actor 的接入仍在规划中，上表列出的是它们的建议实现位置。
 
 MySQL、Redis、Utility、Net、Bus、HTTP 和 Kernel 采用同目录布局，下面以数据库插件为例：
 
-```text
-src/plugins/mysql/
-├── CMakeLists.txt
-├── mysql_module.hpp    # 显式公开接口；映射为 ark/mysql/mysql_module.hpp
-├── mysql_module.cpp    # 隐藏实现类与单一私有工厂
-├── mysql_plugin.hpp    # 私有插件类型和工厂声明，不进入公共头映射
-├── mysql_plugin.cpp    # 注册/注销与显式动态库入口
-└── detail/             # 私有原生服务、协程桥和事务状态
-tests/database/         # 协议、DSO 与显式真实服务检查
-```
+<FileTree>
+
+- src/plugins/mysql/
+  - CMakeLists.txt
+  - mysql_module.hpp — 显式公开接口；映射为 ark/mysql/mysql_module.hpp
+  - mysql_module.cpp — 隐藏实现类与单一私有工厂
+  - mysql_plugin.hpp — 私有插件类型和工厂声明，不进入公共头映射
+  - mysql_plugin.cpp — 注册/注销与显式动态库入口
+  - detail/ — 私有原生服务、协程桥和事务状态
+    - ...
+- tests/database/ — 协议、DSO 与显式真实服务检查
+  - ...
+
+</FileTree>
 
 插件使用说明放在 `docs/`，示例应用放在 `examples/`。公共接口按能力定义，数据库客户端类型尽量保留在实现内。
 

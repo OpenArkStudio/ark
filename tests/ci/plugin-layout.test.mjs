@@ -25,6 +25,7 @@ test('all plugin APIs map headers without enabling runtime plugins or their driv
 project(plugin_mapping_consumer LANGUAGES NONE)
 set(ROOT_DIR "${root}")
 set(ARK_BUILD_APPLICATIONS ON)
+set(ARK_BUILD_RUNTIME_PLUGINS ON)
 set(ARK_BUILD_PROTO OFF)
 add_library(core INTERFACE)
 add_library(ark::core ALIAS core)

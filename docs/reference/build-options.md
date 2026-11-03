@@ -2,9 +2,10 @@
 
 | Option | Default | Purpose |
 | --- | --- | --- |
-| `ARK_BUILD_APPLICATIONS` | `ON` | Build applications and the selected runtime plugins |
-| `ARK_BUILD_CONFIG` | `ON` for applications or core tests, otherwise `OFF` | Build the shared application/plugin configuration reader; network regressions also build it for HTTP |
-| `ARK_BUILD_PROTO` | Value of `ARK_BUILD_APPLICATIONS` | Generate and build protocol messages; applications require it |
+| `ARK_BUILD_APPLICATIONS` | `ON` | Build the launcher, seven server libraries and enabled application examples/tests |
+| `ARK_BUILD_RUNTIME_PLUGINS` | Value of `ARK_BUILD_APPLICATIONS` | Build official runtime libraries selected by `ARK_BUILD_PLUGIN_<NAME>` |
+| `ARK_BUILD_CONFIG` | `ON` for applications, runtime plugins or core tests, otherwise `OFF` | Build the shared application/plugin configuration reader; network regressions also build it for HTTP |
+| `ARK_BUILD_PROTO` | `ON` for applications or runtime plugins, otherwise `OFF` | Generate and build protocol messages; both build modes require it |
 | `ARK_BUILD_NETWORK_TESTS` | `OFF` | Build focused C++ network/logging regressions |
 | `ARK_BUILD_TESTS` | `ON` | Build legacy test programs |
 | `ARK_BUILD_CORE_TESTS` | Value of `ARK_BUILD_TESTS` | Build C++20 core and optional Protobuf regressions |
@@ -26,28 +27,44 @@
 | `ARKNET_REVISION` | Repository-pinned commit | Select the fetched arknet revision; an existing CMake cache retains its value |
 | `ASIO_STANDALONE` | `OFF` | `OFF` selects Boost; `ON` selects Standalone Asio |
 
-The project requires C++20 through CMake and disables compiler extensions. Applications and network tests require Boost.Asio and Boost.Beast. Standalone Asio is available for core-only and native database development builds; explicitly disable applications and network tests when selecting it. CMake rejects unsupported combinations before fetching dependencies. A local arknet checkout is a development override, not a copy inside ark.
+The project requires C++20 through CMake and disables compiler extensions. Applications, official runtime plugins and network tests require Boost.Asio and Boost.Beast. Standalone Asio is available for core-only and native database development builds; explicitly disable all three build modes when selecting it. CMake rejects unsupported combinations before fetching dependencies. A local arknet checkout is a development override, not a copy inside ark.
 
 When upgrading arknet, use a new build directory or explicitly change the cached revision. A nonempty `ARKNET_SOURCE_DIR` takes precedence over fetching the pin; see [Upgrade arknet](../get-started/installation.md#upgrade-arknet).
 
 Official plugin options use `ARK_BUILD_PLUGIN_<NAME>`. The default runtime selection is `kernel`, `net`, `bus` and `utility`; enable the optional MySQL/Redis targets to build native coroutine plugins. Protocol and plugin-load tests do not replace real-server deployment acceptance. See [project layout](directory-structure.md), [protocol generation](protobuf.md) and [network builds](../networking.md).
 
+The two build switches select independent target groups; defaults are evaluated in a fresh CMake cache.
+
+| Applications | Runtime plugins | Target groups |
+| --- | --- | --- |
+| OFF | OFF | Public APIs and separately enabled tools/tests |
+| OFF | ON | Selected official plugin DSOs and AFProto; no launcher/server libraries |
+| ON | OFF | Launcher, seven server libraries and enabled application examples/tests |
+| ON | ON | Original application and selected plugin build |
+
+Application-only builds need compatible plugin libraries at deployment. The optional guest-room server acceptance requires Kernel, Utility, Bus and Net runtime targets; CMake reports a missing provider when that acceptance target is enabled. Bus and HTTP runtime libraries require the configuration reader; other selected plugins may use `ARK_BUILD_CONFIG=OFF`. Kernel JSON follows the Kernel runtime selection, configuration tool or Protobuf core tests. Existing cache values remain unchanged when switching modes.
+
 With `ARK_BUILD_EXAMPLES` enabled, the [coroutine task example](../guides/tasks.md) also builds with applications disabled. Enabled application plugin examples still require application builds. HTTP example construction tests can run separately with core tests; see [HTTP examples](http.md#legacy-http-example-construction).
 
 See [MySQL](mysql.md) and [Redis](redis.md) for plugin configuration and coroutine APIs.
 
-The optional [configuration exporter](../guides/tools.md#build-the-native-exporter) has an exporter-only build path with applications, Protobuf, core tests and the runtime configuration reader disabled. It does not configure framework networking or runtime plugins. XLSX uses OpenXLSX 0.5.1; JSON validation reuses `ark::kernel_json`. `check-config-tool` runs its native regressions and CLI checks. Selecting the vcpkg feature supplies packages but does not enable the CMake target.
+The optional [configuration exporter](../guides/tools.md#build-the-native-exporter) has an exporter-only build path with applications, runtime plugins, Protobuf, core tests and the runtime configuration reader disabled. It does not configure framework networking or runtime plugins. XLSX uses OpenXLSX 0.5.1; JSON validation reuses `ark::kernel_json`. `check-config-tool` runs its native regressions and CLI checks. Selecting the vcpkg feature supplies packages but does not enable the CMake target.
 
 Consul, Etcd Client, Kafka and OSS SDK are [archived](directory-structure.md#archived-integrations), with feature development paused. Default examples need none of their services; sources, public headers, CMake targets and existing compatibility checks remain available. Existing caches may retain Etcd Client's earlier `ON` value; use a new build directory or explicitly set `-DARK_BUILD_PLUGIN_ETCD_CLIENT=OFF`.
 
 ## Native database plugins
 
-With the dependencies from the installation guide available, build both optional runtime plugins:
+With the dependencies from the installation guide available, build and install only the two database runtime plugins, without the launcher or server libraries:
 
 ```sh
-cmake -S . -B build -DARK_BUILD_APPLICATIONS=ON \
+cmake -S . -B database-runtime-build \
+  -DARK_BUILD_APPLICATIONS=OFF -DARK_BUILD_RUNTIME_PLUGINS=ON \
+  -DARK_BUILD_EXAMPLES=OFF -DARK_BUILD_TESTS=OFF -DARK_BUILD_CORE_TESTS=OFF \
+  -DARK_BUILD_PLUGIN_KERNEL=OFF -DARK_BUILD_PLUGIN_NET=OFF \
+  -DARK_BUILD_PLUGIN_BUS=OFF -DARK_BUILD_PLUGIN_UTILITY=OFF \
   -DARK_BUILD_PLUGIN_MYSQL=ON -DARK_BUILD_PLUGIN_REDIS=ON -DARKNET_ENABLE_SSL=ON
-cmake --build build --target ark_mysql_plugin ark_redis_plugin
+cmake --build database-runtime-build --parallel 2
+cmake --install database-runtime-build --prefix /path/to/ark-prefix
 ```
 
 Explicit inventories generate public-header mappings at configure time. `ark::<name>` carries the include root even with runtime plugins disabled. Each header has one co-located source; mappings are build artifacts, not another source tree.
@@ -90,4 +107,4 @@ Core headers live under `src/core/`; `ark::core` supplies public header usage re
 
 Net's 18 public headers exclude `http_client_module_impl.hpp`; use `<ark/net/http_client_module.hpp>` and public interface lookup. This removal changes source/ABI compatibility; see [Net migration](network.md#api-and-private-construction). Private factory declarations are not installed.
 
-Kafka remains off by default (`ARK_BUILD_PLUGIN_KAFKA=OFF`). With the existing driver dependencies, applications, Protobuf and core tests enabled, `ARK_BUILD_PLUGIN_KAFKA=ON` adds `check-kafka-construction` and `check-kafka-plugin` to `check-core`. The first exercises actual factory/assembly plus controlled DSO lifecycle and enabled updates; the second also checks production DSO exports. No broker is contacted. Disabling Kafka avoids Kafka dependency discovery in core tests. See [Kafka construction migration](directory-structure.md#typed-kafka-construction) for rebuild requirements and verification boundaries.
+Kafka remains off by default (`ARK_BUILD_PLUGIN_KAFKA=OFF`). With the existing driver dependencies, runtime plugins, Protobuf and core tests enabled, `ARK_BUILD_PLUGIN_KAFKA=ON` adds `check-kafka-construction` and `check-kafka-plugin` to `check-core`. The first exercises actual factory/assembly plus controlled DSO lifecycle and enabled updates; the second also checks production DSO exports. No broker is contacted. Disabling Kafka avoids Kafka dependency discovery in core tests. See [Kafka construction migration](directory-structure.md#typed-kafka-construction) for rebuild requirements and verification boundaries.

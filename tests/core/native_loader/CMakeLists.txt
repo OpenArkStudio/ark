@@ -33,6 +33,9 @@ elseif(UNIX)
 endif()
 add_executable(ark_native_loader_tests host.cpp)
 set_property(TARGET ark_native_loader_tests PROPERTY LINK_LIBRARIES ark::core)
+if(MINGW)
+    target_link_options(ark_native_loader_tests PRIVATE -municode)
+endif()
 ark_native_loader_set_output(ark_native_loader_tests "${loader_host_directory}")
 
 get_target_property(host_links ark_native_loader_tests LINK_LIBRARIES)
@@ -58,6 +61,7 @@ foreach(configuration IN LISTS loader_output_configurations)
 endforeach()
 add_custom_target(check-native-loader
     COMMAND ${CMAKE_COMMAND} "-DPROGRAM=$<TARGET_FILE:ark_native_loader_tests>"
+        "-DPLUGIN=$<TARGET_FILE:ark_loader_dependent>"
         "-DPLUGIN_DIR=$<TARGET_FILE_DIR:ark_loader_dependent>"
         "-DDEPENDENCY=$<TARGET_FILE:ark_loader_sibling>"
         "-DWORKING_DIR=${CMAKE_CURRENT_BINARY_DIR}/working directory"

@@ -18,9 +18,13 @@
  *
  */
 
+#include <algorithm>
+#include <memory>
+#include <utility>
+
 #include "ark/physic/physic_config_module_impl.hpp"
 #include "ark/plugin_manager.hpp"
-#include "ark/xml.hpp"
+#include "physic_resources.hpp"
 
 #ifdef ARK_PLATFORM_WIN
 #include <direct.h>
@@ -131,127 +135,69 @@ bool physic_config_module_impl::load_terrain(physic_scene& scene, const std::str
 }
 
 bool physic_config_module_impl::load_collider(physic_scene& scene, const std::string& file_path) {
-    xml xml_doc(file_path);
-    auto root = xml_doc.get_root_node();
-    ARK_ASSERT_RET_VAL(root.is_valid(), false);
-
-    for (auto node = root.find_node("node"); node.is_valid(); node.next_node())
+    const auto resources = physic_resources::read_colliders(file_path);
+    const auto native_vector = [](const std::array<float, 3>& value) {
+        return physx::PxVec3(value[0], value[1], value[2]);
+    };
+    for (const auto& resource : resources)
     {
-        collider* collider = nullptr;
-
-        auto name = node.get_string("Collider");
-        if (name == "BoxCollider")
+        std::unique_ptr<ark::collider> object;
+        switch (resource.type)
         {
-            auto box_collider = ARK_NEW box_collider();
-            collider = box_collider;
-
-            auto value = node.get_string("Position");
-            ARK_ASSERT_RET_VAL(vec3_from_string(box_collider->position, value), false);
-
-            value = node.get_string("Center");
-            ARK_ASSERT_RET_VAL(vec3_from_string(box_collider->center, value), false);
-
-            value = node.get_string("Size");
-            ARK_ASSERT_RET_VAL(vec3_from_string(box_collider->size, value), false);
+        case physic_resources::collider_type::box:
+        {
+            auto box = std::make_unique<box_collider>();
+            box->position = native_vector(resource.position);
+            box->center = native_vector(resource.center);
+            box->size = native_vector(resource.size);
+            object = std::move(box);
+            break;
         }
-        else if (name == "CapsuleCollider")
+        case physic_resources::collider_type::capsule:
         {
-            auto capsule_collider = ARK_NEW capsule_collider();
-            collider = capsule_collider;
-
-            auto value = node.get_string("Position");
-            ARK_ASSERT_RET_VAL(vec3_from_string(capsule_collider->position, value), false);
-
-            value = node.get_string("Center");
-            ARK_ASSERT_RET_VAL(vec3_from_string(capsule_collider->center, value), false);
-
-            capsule_collider->radius = misc::from_string<physx::PxReal>(node.get_string("Radius"));
-            capsule_collider->height = misc::from_string<physx::PxReal>(node.get_string("Height"));
+            auto capsule = std::make_unique<capsule_collider>();
+            capsule->position = native_vector(resource.position);
+            capsule->center = native_vector(resource.center);
+            capsule->radius = resource.radius;
+            capsule->height = resource.height;
+            object = std::move(capsule);
+            break;
         }
-        else if (name == "SphereCollider")
+        case physic_resources::collider_type::sphere:
         {
-            auto sphere_collider = ARK_NEW sphere_collider();
-            collider = sphere_collider;
-
-            auto value = node.get_string("Position");
-            ARK_ASSERT_RET_VAL(vec3_from_string(sphere_collider->position, value), false);
-
-            value = node.get_string("Center");
-            ARK_ASSERT_RET_VAL(vec3_from_string(sphere_collider->center, value), false);
-
-            sphere_collider->radius = misc::from_string<physx::PxReal>(node.get_string("Radius"));
+            auto sphere = std::make_unique<sphere_collider>();
+            sphere->position = native_vector(resource.position);
+            sphere->center = native_vector(resource.center);
+            sphere->radius = resource.radius;
+            object = std::move(sphere);
+            break;
         }
-        else if (name == "MeshCollider")
+        case physic_resources::collider_type::mesh:
         {
-            auto mesh_collider = ARK_NEW mesh_collider();
-            collider = mesh_collider;
-
-            auto value = node.get_string("Vertices");
-            std::vector<std::string> slices;
-            string_utils::split(slices, value, ',');
-            ARK_ASSERT_RET_VAL(slices.size() % 3 == 0, false);
-
-            auto count = slices.size() / 3;
-            ARK_ASSERT_RET_VAL(count > 0, false);
-
-            ///vertices
-            mesh_collider->vertices = ARK_NEW_ARRAY(physx::PxVec3, count);
-            ARK_ASSERT_RET_VAL(mesh_collider->vertices != nullptr, false);
-
-            for (size_t i = 0; i < count; i++)
+            auto mesh = std::make_unique<mesh_collider>();
+            mesh->position = native_vector(resource.position);
+            mesh->convex = resource.convex;
+            mesh->vertex_count = static_cast<std::uint32_t>(resource.vertices.size());
+            mesh->vertices = new physx::PxVec3[mesh->vertex_count];
+            for (std::size_t i = 0; i < resource.vertices.size(); ++i)
             {
-                mesh_collider->vertices[i] = get_vec3(slices[i * 3], slices[i * 3 + 1], slices[i * 3 + 2]);
+                mesh->vertices[i] = native_vector(resource.vertices[i]);
             }
-            mesh_collider->vertex_count = count;
-
-            ///indices
-            value = node.get_string("Triangles");
-            slices.clear();
-            string_utils::split(slices, value, ',');
-            ARK_ASSERT_RET_VAL(slices.size() % 3 == 0, false);
-
-            count = slices.size();
-            mesh_collider->triangles = ARK_NEW_ARRAY(physx::PxU32, count);
-            ARK_ASSERT_RET_VAL(mesh_collider->triangles != nullptr, false);
-
-            for (size_t i = 0; i < count; i++)
-            {
-                mesh_collider->triangles[i] = misc::from_string<physx::PxU32>(slices[i].data());
-            }
-            mesh_collider->triangle_count = count;
-
-            value = node.get_string("Position");
-            ARK_ASSERT_RET_VAL(vec3_from_string(mesh_collider->position, value), false);
-
-            if (misc::from_string<int32_t>(node.get_string("IsConvex")) > 0)
-            {
-                mesh_collider->convex = true;
-            }
-            else
-            {
-                mesh_collider->convex = false;
-            }
-
-            mesh_collider->mesh_file.cooked_path = gen_cooked_file_path(file_path);
+            mesh->triangle_count = static_cast<std::uint32_t>(resource.triangles.size());
+            mesh->triangles = new physx::PxU32[mesh->triangle_count];
+            std::copy(resource.triangles.begin(), resource.triangles.end(), mesh->triangles);
+            mesh->mesh_file.cooked_path = gen_cooked_file_path(file_path);
+            object = std::move(mesh);
+            break;
         }
-        else if (name == "TerrainCollider")
-        {
-            ///terrain collider position
-            auto value = node.get_string("Position");
-            ARK_ASSERT_RET_VAL(vec3_from_string(scene.position, value), false);
+        case physic_resources::collider_type::terrain:
+            scene.position = native_vector(resource.position);
             continue;
         }
-
-        if (collider == nullptr)
-        {
-            ARK_LOG_ERROR("no this type of collider collider={}", name);
-            return false;
-        }
-
-        collider->trigger = misc::from_string<int32_t>(node.get_string("IsTrigger")) > 0 ? true : false;
-        scene.colliders.push_back(collider);
+        object->trigger = resource.trigger;
+        scene.colliders.push_back(object.get());
+        object.release();
     }
-
     return true;
 }
 
@@ -357,45 +303,15 @@ bool physic_config_module_impl::get_scene_file_list(
 }
 
 bool physic_config_module_impl::load_config() {
-    std::string file_path = get_plugin_manager()->GetResPath() + physic_config_path;
-
-    xml xml_doc(file_path);
-    auto root = xml_doc.get_root_node();
-    ARK_ASSERT_RET_VAL(root.is_valid(), false);
-
-    for (auto node = root.find_node("node"); node.is_valid(); node.next_node())
-    {
-        config_.simulate = (misc::from_string<int32_t>(node.get_string("SimulateOn")) > 0);
-
-        config_.dispatcher_threads = misc::from_string<physx::PxU32>(node.get_string("DispatcherThreadsNum"));
-
-        auto frequency = misc::from_string<physx::PxU32>(node.get_string("Frequency"));
-        ARK_ASSERT_RET_VAL(frequency > 0, false);
-        config_.step = 1.0F / frequency;
-
-        config_.pvd_host = node.get_string("PVDHost");
-        config_.pvd_port = misc::from_string<int32_t>(node.get_string("PVDPort"));
-        config_.pvd_timeout = misc::from_string<uint32_t>(node.get_string("PVDTimeOut"));
-    }
-
+    const auto path = get_plugin_manager()->GetResPath() + physic_config_path;
+    const auto settings = physic_resources::read_settings(path);
+    config_.simulate = settings.simulate;
+    config_.dispatcher_threads = settings.dispatcher_threads;
+    config_.step = 1.0F / static_cast<float>(settings.frequency_hz);
+    config_.pvd_host = settings.debugger_host;
+    config_.pvd_port = settings.debugger_port;
+    config_.pvd_timeout = settings.debugger_timeout_ms;
     return true;
-}
-
-bool physic_config_module_impl::vec3_from_string(physx::PxVec3& vec3, const std::string& value) {
-    std::vector<std::string> slices;
-    string_utils::split(slices, value, ',');
-
-    ARK_ASSERT_RET_VAL(slices.size() == 3, false);
-
-    vec3 = get_vec3(slices[0], slices[1], slices[2]);
-
-    return true;
-}
-
-physx::PxVec3 physic_config_module_impl::get_vec3(
-    const AFSlice& slice_x, const AFSlice& slice_y, const AFSlice& slice_z) {
-    return physx::PxVec3(misc::from_string<physx::PxReal>(slice_x.data()),
-        misc::from_string<physx::PxReal>(slice_y.data()), misc::from_string<physx::PxReal>(slice_z.data()));
 }
 
 std::string physic_config_module_impl::gen_cooked_file_path(const std::string& file_path) {
