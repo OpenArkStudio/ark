@@ -64,7 +64,30 @@ Actions cache branch/ref visibility still applies; see the [Actions cache refere
 This change does not make caches from another merge-queue ref readable. A compatible v2 archive on the default branch is needed to seed queue
 runs that cannot access each other's entries.
 
-Missing identity, unsupported dependency layout or archive paths keep persistence
+`Dependency cache seed` (`.github/workflows/vcpkg-seed.yml`) creates that baseline
+for Windows Applications on `main`. It runs after main pushes change `vcpkg.json`,
+`vcpkg-configuration.json`, `ports/**`, `.gitattributes`, the cache-key helper or
+the seed workflow itself. Its first deployment also starts the seed job.
+For a new runner image or a missing baseline, explicitly run
+`gh workflow run vcpkg-seed.yml --ref main`; manual runs on other refs skip the job.
+There is no schedule. Policy tests require the seed's cache identity, tool versions
+and complete Windows configuration to match the required Applications job;
+changes to those inputs must update both workflows.
+
+The seed runs CMake configuration and dependency installation, then saves archives
+in main's cache scope. It does not build ark targets, run the native regression
+matrix or enable Windows compiler caching, and it does not replace required CI.
+The seed fails if configuration fails, the files provider/key is unavailable,
+package archives are empty, or a required save fails to produce a verifiable exact
+cache entry. An existing exact hit skips saving. After saving, a metadata-only
+exact-key lookup and an explicit hit check also reject warning-only upload failures.
+Restore and diagnostics remain best effort; required CI's caches remain optional.
+Seed success confirms current archive availability, not reuse by a later candidate.
+Confirm that candidate's archive restore and matching vcpkg package reuse before
+claiming a warm build or timing improvement. Image/ABI changes and cache eviction
+can still cause cold builds.
+
+In required CI, missing identity, unsupported dependency layout or archive paths keep persistence
 disabled with `VCPKG_BINARY_SOURCES=clear`. Cache-service failures retain ordinary
 source configuration, compilation and regressions. The cache covers archives only,
 not installed trees. Project object caching is configured separately below. Local Node tests validate the
@@ -99,8 +122,7 @@ become a new native acceptance requirement. Cache keys/providers, compiler
 tracking and build settings remain unchanged. Compare the fingerprints across
 runs to narrow an ABI difference; equal reported fields do not establish equal
 unreported inputs. This report is neither a cache-hit verdict nor a performance
-measurement. In the investigated Windows pair, all 74 package ABIs differed;
-the particular input causing that difference remains unproven.
+measurement.
 
 
 ## CI compiler object cache

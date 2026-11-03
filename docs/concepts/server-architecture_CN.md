@@ -98,3 +98,20 @@ cmake --build out/server-construction --target check-server-launcher --parallel 
 验证现有的有限业务操作时，可启用示例及 Kernel、Utility 后运行 `check-typed-examples`。其中真实 EntityOperations 动态库使用仓库内的清单和元数据，创建并检查玩家数据、表格和自定义值，再于退出时销毁实体。此进程内业务示例与独立的 Login 传输组合分别验证不同边界，两者尚未组成网络游戏登录流程。
 
 启动控制器在失败时输出子进程退出码或信号，以及该测试子进程日志的最后 16 KiB。永久早退用例验证启动诊断不会丢失；现有启动与停服时限保持不变。
+
+## 验证组合插件流程
+
+在 POSIX 上启用应用、Protobuf、核心测试及 Bus、Net、Utility、Kernel、HTTP 五个插件后运行：
+
+```sh
+cmake --build <build-directory> --target check-system-composition --parallel 2
+```
+
+| 检查项 | 验证行为 |
+| --- | --- |
+| Entity | 仓库内 JSON 创建 `GuestPlayer`；所属线程将 HP 从 100 改为 85；模块销毁后拥有型快照仍有效 |
+| 传输 | Protobuf 服务消息与二进制 HTTP `/echo` 同时工作；服务端重启后按现有 30 秒策略重连 |
+| 资源清理 | 路由捕获释放、HTTP／SS 端点关闭、重复 `stop()` 成功，所有子进程退出码为 0 |
+| 运行上限 | 共三个对端进程，最多同时存活两个；网络操作两秒、局部观察五秒、控制器总期限 55 秒 |
+
+目标会打印私有配置／日志目录；结果应记录所测版本。强制终止子进程视为失败。这项本机流程不覆盖账号、持久化、HTTP 驱动的 Entity 变更、跨主机行为或容量。`check-static-services` 单独覆盖静态服务资格与非法端点诊断。

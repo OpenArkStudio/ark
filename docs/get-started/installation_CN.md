@@ -148,6 +148,22 @@ cmake -DARK_SOURCE_DIR="$PWD" -DARK_TEST_WORK=/tmp/ark-install-check \
 
 工作目录必须尚不存在。使用新目录并添加 `-DARK_TEST_BUILD_CONFIG=OFF`，可检查声明与 core 包；依赖为启用 SSL 的 arknet 时，添加 `-DARK_TEST_MYSQL=ON` 可编译公开 MySQL 接口，但不运行数据库服务。需要工具链时，通过 `ARK_TEST_TOOLCHAIN` 同时传给生产者与消费者。
 
+HTTP 消费者另有显式启用的安装运行时入口：
+
+```sh
+cmake -S tests/consumer/http -B http-installed-build \
+  -DARK_TEST_HTTP_INSTALLED=ON -DCMAKE_BUILD_TYPE=Debug \
+  '-DCMAKE_PREFIX_PATH=/path/to/relocated-prefix;/path/to/dependencies' \
+  -DARK_TEST_HTTP_PLUGIN_DIR=/path/to/relocated-prefix/bin
+cmake --build http-installed-build --parallel 2 --target check-http-installed
+```
+
+| 入口 | 覆盖范围与前提 |
+| --- | --- |
+| `tests/consumer/http` 的 `check-sdk` | 保留原有 build-tree 公开头消费检查；安装运行时模式默认关闭。 |
+| `check-http-installed` | 仅原生 UNIX；通过 `find_package(ark)` 和已安装 HTTP DSO，检查 `dladdr` 实现路径、一次 HTTP 200、路由捕获销毁、端点关闭及重复停止。进程总期限为 15 秒，超时退出码为 124；3 秒接收与 5 秒清理观察仍分别保留。需要回环网络权限和启用 `ARK_BUILD_PLUGIN_HTTP=ON` 构建的 ABI 兼容安装；Debug／Release 配置及依赖前缀应与生产者一致。本地已验收 macOS Debug；没有 Windows 运行时入口。 |
+| `tests/install/check_install.cmake` 的 `ARK_TEST_HTTP=ON` | 暂存并搬迁安装后加入同一个 HTTP 消费者。设置 `ARK_TEST_CONFIG=Debug` 或 `Release`；`ARK_TEST_HTTP_BINDIR` 默认 `bin`，可指定生产者自定义的相对二进制目录。需要已启用 HTTP 运行时的应用构建；core-only 的 `run_isolated.cmake` 生产者不构建该 DSO。 |
+
 ## 生成归档包
 
 完成构建后，通过安装规则生成标准归档：

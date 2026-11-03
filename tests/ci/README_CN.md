@@ -123,6 +123,13 @@ ABI 边界、v1 冷启动迁移和分支／引用可见性限制见
 [CI 依赖包归档缓存](../../docs/project/contributing_CN.md#ci-依赖包归档缓存)。
 这些测试不执行 vcpkg ABI 匹配，也不验证托管环境的缓存命中。
 
+种子工作流测试将 Windows Applications 种子限定为 main 上依赖／缓存输入的推送，
+或显式在 main 手动触发；要求缓存身份、工具和完整 Windows 配置参数与必需 CI 一致，
+不编译 ark、不执行原生回归、不启用编译缓存。测试不能证明托管 main 缓存保存或后续队列候选的复用，
+详见 [CI 依赖包归档缓存](../../docs/project/contributing_CN.md#ci-依赖包归档缓存)。
+种子专用检查拒绝禁用的 provider、不完整 key 和空归档；未命中时必须保存并验证精确条目可用，
+已精确命中时跳过保存。仅 warning 的保存失败不能绕过最终命中检查；必需 CI 的归档操作继续可选。
+
 
 Windows ABI 诊断测试使用合成记录，格式已对照本地安装的 Asio、rapidxml 和 Protobuf 元数据确认。
 测试覆盖原始字节的包 ABI 散列、固定字段值指纹、CRLF、格式错误／重复记录、元数据缺失、
