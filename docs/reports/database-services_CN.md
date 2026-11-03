@@ -4,6 +4,36 @@
 
 结果仅适用于下方记录的源码、二进制身份与操作。[资源生命周期合同](../project/lifecycle-closeout_CN.md)区分业务完成与进程资源清理；其他场景保留各自测试修订。
 
+## 公开插件持续循环
+
+**2026-11-03** 的 **300 秒**本机测试完成 **1,351 轮／4,053 次调用**，退出码全部为 `0`。每轮运行永久程序 `ark_database_public_plugin_service_tests` 的 `redis`、`mysql`、`mysql-transactions` 三种模式，使用全新独占服务。
+
+| 范围 | 记录结果 |
+| --- | --- |
+| 操作 | Redis 二进制命令／流水线；MySQL 查询、二进制预处理插入、提交／回滚及独立连接可见性 |
+| 资源存续期 | 真实插件 DSO、所属执行器完成通知、宿主销毁后结果仍有效，以及重复资源 stop |
+| 服务 | Redis 7.4.2 认证 TCP；MySQL Community 8.4.13 arm64 认证且校验证书的 TLS |
+| 清理 | Redis 数据库和 MySQL schema 均为空；自有服务停止；私有数据、密钥和凭据文件已删除 |
+| 候选源码 | `c9aa911a4893ffa2681925e8ebf13e703f8f4c16` |
+| 复用构建 | `3948d881ccf2486231cb401b73888b8a0426f2bb`；完整源码差异仅含 HTTP 启动代码／测试和文档，数据库、core、配置及构建输入均未改变 |
+| 测试机 | Apple M4 Pro、48 GiB 内存、macOS 27.0.1（26A434）、arm64 |
+| 客户端构建 | C++20 Debug、Boost 1.92.0、OpenSSL 4.1.0；arknet `a0dfe09cd543e75cfb5996e537ce2fa49f2a758f`，Boost.Asio、启用 SSL |
+
+使用[永久公开插件服务程序](../../tests/database/README_CN.md#真实插件动态库与真实服务)的上述三种模式即可运行；内部批次由 shell 编排，原始日志仅保留在本地。这项有限时长的正确性测试不证明吞吐量、长期稳定性、持久性或生产容量。
+
+<Collapsible>
+<CollapsibleTrigger>执行程序指纹</CollapsibleTrigger>
+<CollapsibleContent>
+
+| 二进制 | SHA256 |
+| --- | --- |
+| `ark_database_public_plugin_service_tests` | `262fff76884d51e987ff0ca80e96f5358436234c791078c2d07c7a9446567f10` |
+| `ark_database_mysql_plugin_d.dylib` | `1c70d7a96dbebb9ff0b0dbee16ef966674f53788d13c1e7c6d6fec4a26ab6a4e` |
+| `ark_database_redis_plugin_d.dylib` | `41031ee20933400f7949d2db1d606e4c5ad324808effaa4be95ec71dbec5e3de` |
+
+</CollapsibleContent>
+</Collapsible>
+
 ## 停机候选版本资源清理
 
 **2026-11-02**，四个范围共 **17 次原生执行通过**。下方分别保留 12 次正常／显式取消／TLS、2 次流水线／autocommit stop、2 次事务 stop，以及 1 次 Redis TLS stop 的源码和二进制身份，结果分别归属于对应构建。

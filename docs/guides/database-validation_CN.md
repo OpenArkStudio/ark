@@ -13,6 +13,7 @@
 
 | 能力 | 已记录结果 | 运行工具／说明 | 详细记录 |
 | --- | --- | --- | --- |
+| 公开插件持续循环 | 300 秒内 4,053 次调用成功：Redis、MySQL 与 MySQL 事务 | `ark_database_public_plugin_service_tests` | [时长与构建身份](../reports/database-services_CN.md#公开插件持续循环) |
 | 停机候选版本资源清理 | 四个源码／二进制范围共 17 次执行通过：12 次正常／显式取消／TLS、2 次流水线／autocommit stop、2 次事务 stop、1 次 Redis TLS stop | 正常／取消／TLS 与 manager-stop 原生入口 | [候选版本记录](../reports/database-services_CN.md#停机候选版本资源清理) |
 | 管理器 stop 发起取消 | 目标请求待完成时由 stop 取消；独立观察者确认连接退出、计数为一与仅一次完成 | [C++ `redis-stop`／`mysql-stop`](../../tests/database/cancellation_CN.md#管理器-stop-发起取消) | [两个模式的源码与结果](../reports/database-services_CN.md#管理器-stop-发起取消) |
 | 管理器 stop 取消事务／预处理 | 精确会话活动与未提交写入观察后 stop；结果保留未知／未确认，观察者确认原会话退出与外部计数零，无伪造回滚确认 | [C++ 事务 stop 模式](../../tests/database/cancellation_CN.md#管理器-stop-取消事务) | [独立构建与结果](../reports/database-services_CN.md#管理器-stop-取消事务) |
