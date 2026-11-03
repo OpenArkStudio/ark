@@ -26,7 +26,6 @@
 #include "ark/container/map.hpp"
 #include "ark/net/net.hpp"
 #include "ark/noncopyable.hpp"
-#include "ark/proto.hpp"
 #include "ark/socket_func.hpp"
 
 namespace ark {
