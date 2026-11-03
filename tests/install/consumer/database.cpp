@@ -36,6 +36,11 @@ void require(bool condition, const std::string& reason) {
     }
 }
 
+std::string path_utf8(const std::filesystem::path& path) {
+    const auto bytes = path.u8string();
+    return {reinterpret_cast<const char*>(bytes.data()), bytes.size()};
+}
+
 void require_implementation(const ark::module* module, const std::filesystem::path& expected_dso) {
     require(module, "installed database interface RTTI mismatch");
 #ifdef ARK_DATABASE_TEST_DLADDR
@@ -49,16 +54,13 @@ void require_implementation(const ark::module* module, const std::filesystem::pa
         std::filesystem::canonical(library.dli_fname) == expected_dso, "database implementation came from another DSO");
     std::cout << "Database implementation DSO: " << library.dli_fname << '\n';
 #else
-    std::cout << "Database plugin requested through ark loader (native address probe unavailable): " << expected_dso
-              << '\n';
+    std::cout << "Database plugin requested through ark loader (native address probe unavailable): "
+              << path_utf8(expected_dso) << '\n';
 #endif
 }
 
-} // namespace
-
-int main(int argc, char** argv) {
-    require(argc == 2, "expected installed plugin directory");
-    const auto plugin_directory = std::filesystem::canonical(argv[1]);
+int run(const std::filesystem::path& directory) {
+    const auto plugin_directory = std::filesystem::canonical(directory);
 #ifdef _DEBUG
     constexpr auto mysql_filename = "ark_mysql_plugin_d" ARK_DATABASE_TEST_LIBRARY_SUFFIX;
     constexpr auto redis_filename = "ark_redis_plugin_d" ARK_DATABASE_TEST_LIBRARY_SUFFIX;
@@ -75,7 +77,7 @@ int main(int argc, char** argv) {
     ark::logger::init(&log);
     log.set_log_func([](spdlog::level::level_enum, const std::string& line) { std::cout << line << std::endl; });
     ark::plugin_manager manager;
-    require(manager.start(ark::date_time::get_now_time(), plugin_directory.string() + "/", "",
+    require(manager.start(ark::date_time::get_now_time(), path_utf8(plugin_directory) + "/", "",
                 {{"ark_mysql_plugin", ""}, {"ark_redis_plugin", ""}}),
         "installed database plugin startup failed: " + manager.get_startup_failure());
     require_implementation(manager.find_module<ark::mysql_module>(), mysql_dso);
@@ -101,4 +103,16 @@ int main(int argc, char** argv) {
         "database stop/unload did not complete");
     require(manager.stop(ark::date_time::get_now_time()), "database repeated stop failed");
     std::cout << "Database state=stopped; modules removed; plugin unload succeeded; repeated stop passed" << std::endl;
+    return 0;
+}
+
+} // namespace
+
+#if defined(_WIN32) && !defined(__CYGWIN__)
+int wmain(int argc, wchar_t** argv) {
+#else
+int main(int argc, char** argv) {
+#endif
+    require(argc == 2, "expected installed plugin directory");
+    return run(std::filesystem::path(argv[1]));
 }
