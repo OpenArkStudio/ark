@@ -604,8 +604,8 @@ void exercise_resource_cleanup(const std::filesystem::path& runtime, unsigned sh
     ark::plugin_manager manager;
     manager.set_bus_id(ark::bus_addr(1, 1, 31, 1).bus_id);
     require(manager.start(0, (runtime / "bin").string() + "/", (runtime / "conf").string() + "/",
-                {{"ark_utility_plugin", ""}, {"ark_kernel_plugin", "kernel.plugin.conf"},
-                    {"ark_bus_plugin", "guest_room.bus.toml"}, {"ark_net_plugin", ""}, {"guest_room_plugin", ""}}),
+                {{"ark_utility_plugin", ""}, {"ark_kernel_plugin", ""}, {"ark_bus_plugin", "guest_room.bus.toml"},
+                    {"ark_net_plugin", ""}, {"guest_room_plugin", ""}}),
         "actual room DSO startup failed: " + manager.get_startup_failure());
     auto* network = manager.find_module<ark::net_service_manager_module>();
     require(network != nullptr, "missing actual Net module");

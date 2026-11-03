@@ -197,7 +197,7 @@ data:
 
     [[plugins]]
     name = "ark_kernel_plugin"
-    config = "kernel.plugin.conf"
+    config = ""
 
     [[plugins]]
     name = "ark_utility_plugin"
@@ -223,11 +223,6 @@ data:
     host = "0.0.0.0"
     port = 9090
     threads = 4
-  kernel.plugin.conf: |-
-    <?xml version="1.0"?>
-    <xml>
-        <conf ConfDir="conf/" ConfigClassFilePath="../resource/meta/config_class.config" EntityClassFilePath="../resource/meta/entity_class.config" />
-    </xml>
   login.app.toml: |-
     [application]
     plugin_library_dir = "bin/"
@@ -416,7 +411,7 @@ data:
 
     [[plugins]]
     name = "ark_kernel_plugin"
-    config = "kernel.plugin.conf"
+    config = ""
 
     [[plugins]]
     name = "ark_utility_plugin"
@@ -512,7 +507,7 @@ data:
 
     [[plugins]]
     name = "ark_kernel_plugin"
-    config = "kernel.plugin.conf"
+    config = ""
 
     [[plugins]]
     name = "ark_utility_plugin"
@@ -528,7 +523,7 @@ data:
 
     [[plugins]]
     name = "ark_kernel_plugin"
-    config = "kernel.plugin.conf"
+    config = ""
 
     [[plugins]]
     name = "ark_utility_plugin"

@@ -8,7 +8,6 @@ Enable applications, configuration, Protobuf and the Kernel/Utility plugins alon
 cmake -S . -B app-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DARK_BUILD_BENCHMARKS=ON
 cmake --build app-build --target ark_entity_operations_benchmark -j2
 mkdir -p run/entity-benchmark/conf
-cp config/kernel.plugin.conf run/entity-benchmark/conf/
 cp -R examples/entity_operations/resource run/entity-benchmark/
 cd run/entity-benchmark
 ../../app-build/benchmarks/ark_entity_operations_benchmark --plugin-dir ../../app-build/bin --iterations 5000000

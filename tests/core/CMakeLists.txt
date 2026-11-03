@@ -507,9 +507,8 @@ if(ARK_BUILD_PROTO)
             DEPENDS ark_kernel_initialization_tests USES_TERMINAL VERBATIM)
         add_dependencies(check-server-plugins check-game-initialization)
     endif()
-    # CI configures Debug, whose duplicate-ID guard aborts instead of returning.
-    # Compile the exercised implementation and its dependencies with NDEBUG in an
-    # independent executable; ark::kernel supplies interfaces, not runtime code.
+    # Keep cleared-manager queries in an independent NDEBUG executable; Debug
+    # retains the existing assertion. ark::kernel supplies interfaces, not runtime code.
     add_executable(ark_kernel_resource_ownership_tests main.cpp kernel_resource_ownership.cpp
         ../../src/plugins/kernel/class_call_back_manager.cpp
         ../../src/plugins/kernel/class_meta.cpp
@@ -578,7 +577,7 @@ endif()
 
 if(ARK_BUILD_PROTO AND TARGET ark_kernel_plugin AND TARGET ark_utility_plugin)
     add_executable(ark_kernel_plugin_tests ../app/kernel_plugin.cpp)
-    set_property(TARGET ark_kernel_plugin_tests PROPERTY LINK_LIBRARIES ark::kernel)
+    set_property(TARGET ark_kernel_plugin_tests PROPERTY LINK_LIBRARIES ark::kernel ark::kernel_json)
     add_custom_target(check-kernel-plugin
         COMMAND ${CMAKE_COMMAND} "-DPROGRAM=$<TARGET_FILE:ark_kernel_plugin_tests>"
             "-DPLUGIN_DIR=$<TARGET_FILE_DIR:ark_kernel_plugin>"

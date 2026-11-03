@@ -8,16 +8,9 @@ endforeach()
 foreach(sample timers module_lifecycle entity_operations)
     set(directory "${RUNTIME_DIR}/${sample}")
     file(MAKE_DIRECTORY "${directory}/conf" "${directory}/resource/meta")
-    file(COPY "${SOURCE_ROOT}/config/kernel.plugin.conf" DESTINATION "${directory}/conf")
-    # ModuleLifecycle needs external business metadata. Reuse the minimal schema shape
-    # from the kernel initialization regression, without changing exported data.
-    file(WRITE "${directory}/resource/meta/config_class.config"
-        "<xml><config id=\"attribute\" meta=\"meta/attribute.config\" res=\"meta/attribute.data\"/></xml>")
-    file(WRITE "${directory}/resource/meta/entity_class.config" "<xml><config meta=\"meta/player.config\"/></xml>")
-    file(WRITE "${directory}/resource/meta/attribute.config"
-        "<xml><meta field=\"id\" type=\"uint64\"/><meta field=\"level\" type=\"int\"/></xml>")
-    file(WRITE "${directory}/resource/meta/attribute.data" "<xml><data id=\"42\" level=\"7\"/></xml>")
-    file(WRITE "${directory}/resource/meta/player.config" "<xml><meta class=\"Player\" type=\"class\"/></xml>")
+    file(WRITE "${directory}/resource/meta/entity_schema.json" [=[
+{"format":"ark.entity-schema","version":1,"classes":[{"name":"Player","fields":[],"tables":[],"containers":[]},{"name":"attribute","fields":[{"name":"id","index":1,"type":"uint32"},{"name":"level","index":2,"type":"int32"}],"tables":[],"containers":[]}],"configs":[{"class":"attribute","rows":[{"id":42,"level":7}]}]}
+]=])
     if(sample STREQUAL "entity_operations")
         file(COPY "${SOURCE_ROOT}/examples/entity_operations/resource/" DESTINATION "${directory}/resource")
     endif()

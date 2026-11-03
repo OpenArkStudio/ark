@@ -3,7 +3,6 @@
 
 #include <algorithm>
 #include <charconv>
-#include <filesystem>
 #include <limits>
 
 #include "ark/kernel/class_meta_manager.hpp"
@@ -11,22 +10,11 @@
 #include "ark/kernel/entity_json.hpp"
 #include "ark/kernel/node_impl.hpp"
 #include "ark/kernel/static_entity_manager.hpp"
-#include "resource_path.hpp"
 
 namespace ark::detail {
 
 inline std::string entity_json_file() {
-    return resource_file("meta/entity_schema.json");
-}
-
-inline bool has_entity_json() {
-    std::error_code error;
-    const auto exists = std::filesystem::exists(entity_json_file(), error);
-    if (error)
-    {
-        throw entity_json::error(entity_json_file(), "/", "could not inspect selected JSON: " + error.message());
-    }
-    return exists;
+    return "resource/meta/entity_schema.json";
 }
 
 inline data_type entity_json_type(entity_json::value_type type) {

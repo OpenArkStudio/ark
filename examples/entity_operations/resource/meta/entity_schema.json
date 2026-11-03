@@ -1,0 +1,78 @@
+{
+  "format": "ark.entity-schema",
+  "version": 1,
+  "classes": [
+    {
+      "name": "Player",
+      "fields": [
+        {
+          "name": "name",
+          "index": 11,
+          "type": "string"
+        },
+        {
+          "name": "gender",
+          "index": 12,
+          "type": "int32"
+        },
+        {
+          "name": "career",
+          "index": 13,
+          "type": "int32"
+        },
+        {
+          "name": "camp",
+          "index": 14,
+          "type": "int32"
+        },
+        {
+          "name": "last_map_id",
+          "index": 15,
+          "type": "int32"
+        },
+        {
+          "name": "level",
+          "index": 16,
+          "type": "int32"
+        }
+      ],
+      "tables": [
+        {
+          "name": "items",
+          "index": 28,
+          "class": "ItemBag"
+        }
+      ],
+      "containers": [
+        {
+          "name": "bag",
+          "index": 29,
+          "class": "ItemBag"
+        }
+      ]
+    },
+    {
+      "name": "ItemBag",
+      "fields": [
+        {
+          "name": "guid",
+          "index": 1,
+          "type": "int64"
+        },
+        {
+          "name": "config_id",
+          "index": 2,
+          "type": "uint32"
+        },
+        {
+          "name": "count",
+          "index": 3,
+          "type": "int32"
+        }
+      ],
+      "tables": [],
+      "containers": []
+    }
+  ],
+  "configs": []
+}

@@ -23,7 +23,7 @@ get_filename_component(binary_root "${BIN_DIR}" ABSOLUTE)
 get_filename_component(runtime_root "${RUNTIME_DIR}" ABSOLUTE)
 file(MAKE_DIRECTORY "${runtime_root}/bin" "${runtime_root}/conf")
 file(COPY "${binary_root}/" DESTINATION "${runtime_root}/bin")
-file(COPY "${source_root}/config/guest_room.app.toml" "${source_root}/config/kernel.plugin.conf"
+file(COPY "${source_root}/config/guest_room.app.toml"
     DESTINATION "${runtime_root}/conf")
 file(READ "${source_root}/config/guest_room.bus.toml" bus)
 string(REPLACE "127.0.0.1:19100" "${endpoint_host}:${PORT}" bus "${bus}")
