@@ -2,9 +2,10 @@
 
 | 选项 | 默认值 | 用途 |
 | --- | --- | --- |
-| `ARK_BUILD_APPLICATIONS` | `ON` | 构建应用及选中的运行时插件 |
-| `ARK_BUILD_CONFIG` | 应用或核心测试启用时为 `ON`，否则为 `OFF` | 构建应用／插件共享配置读取器；网络回归也会为 HTTP 构建读取器 |
-| `ARK_BUILD_PROTO` | 与 `ARK_BUILD_APPLICATIONS` 一致 | 生成并构建协议消息；构建应用时必须启用 |
+| `ARK_BUILD_APPLICATIONS` | `ON` | 构建启动器、七个服务动态库和启用的应用示例／测试 |
+| `ARK_BUILD_RUNTIME_PLUGINS` | 与 `ARK_BUILD_APPLICATIONS` 一致 | 构建 `ARK_BUILD_PLUGIN_<NAME>` 选中的官方运行时动态库 |
+| `ARK_BUILD_CONFIG` | 应用、运行时插件或核心测试启用时为 `ON`，否则为 `OFF` | 构建应用／插件共享配置读取器；网络回归也会为 HTTP 构建读取器 |
+| `ARK_BUILD_PROTO` | 应用或运行时插件启用时为 `ON`，否则为 `OFF` | 生成并构建协议消息；两种构建模式均要求启用 |
 | `ARK_BUILD_NETWORK_TESTS` | `OFF` | 构建独立 C++ 网络与日志回归测试 |
 | `ARK_BUILD_TESTS` | `ON` | 构建原有测试程序 |
 | `ARK_BUILD_CORE_TESTS` | 与 `ARK_BUILD_TESTS` 一致 | 构建 C++20 核心与可选的 Protobuf 回归测试 |
@@ -26,28 +27,44 @@
 | `ARKNET_REVISION` | 仓库固定的 commit | 指定获取 arknet 时使用的版本；已有 CMake 缓存会保留原值 |
 | `ASIO_STANDALONE` | `OFF` | `OFF` 选择 Boost，`ON` 选择 Standalone Asio |
 
-项目通过 CMake 要求 C++20，并禁用编译器扩展。应用和网络测试需要 Boost.Asio 与 Boost.Beast。仅构建核心或原生数据库开发测试时可以选择 Standalone Asio，须明确关闭应用和网络测试；不支持的组合会在获取依赖前由 CMake 报错。本地 arknet 路径是开发覆盖项，不会把网络库复制进 ark。
+项目通过 CMake 要求 C++20，并禁用编译器扩展。应用、官方运行时插件和网络测试需要 Boost.Asio 与 Boost.Beast。仅构建核心或原生数据库开发测试时可以选择 Standalone Asio，须明确关闭这三种构建模式；不支持的组合会在获取依赖前由 CMake 报错。本地 arknet 路径是开发覆盖项，不会把网络库复制进 ark。
 
 升级 arknet 时，使用新的构建目录，或显式修改缓存中的引用。`ARKNET_SOURCE_DIR` 非空时优先使用本地源码，不按固定 commit 获取依赖；具体操作见[升级 arknet](../get-started/installation_CN.md#升级-arknet)。
 
 官方插件选项采用 `ARK_BUILD_PLUGIN_<NAME>`。默认运行时插件为 `kernel`、`net`、`bus` 和 `utility`；启用 MySQL 或 Redis 构建选项可使用原生协程插件；本机协议测试与插件加载检查不能替代真实数据库部署验收。参见[项目结构](directory-structure_CN.md)、[协议生成](protobuf_CN.md)与[网络构建](../networking_CN.md)。
 
+两个构建开关分别选择独立的目标组；默认值在新的 CMake 缓存中计算。
+
+| 应用 | 运行时插件 | 目标组 |
+| --- | --- | --- |
+| OFF | OFF | 公开 API 及单独启用的工具／测试 |
+| OFF | ON | 选中的官方插件动态库与 AFProto；不构建启动器／服务动态库 |
+| ON | OFF | 启动器、七个服务动态库及启用的应用示例／测试 |
+| ON | ON | 原有应用及选中插件的构建组合 |
+
+仅构建应用时，部署仍需兼容的插件动态库。可选的 guest-room 服务端验收需要 Kernel、Utility、Bus、Net 运行时 target；启用该验收 target 时，CMake 会明确报告缺失的提供者。Bus 和 HTTP 运行时库要求配置读取器；其余选中插件可使用 `ARK_BUILD_CONFIG=OFF`。Kernel JSON 随 Kernel 运行时选择、配置工具或 Protobuf 核心测试启用。切换模式不会覆盖已有缓存值。
+
 开启 `ARK_BUILD_EXAMPLES` 时，[协程任务示例](../guides/tasks_CN.md)可以在关闭应用的情况下独立构建；默认启用的应用插件示例仍要求开启应用构建。HTTP 示例创建测试可以随核心测试单独运行，详见 [HTTP 示例](http_CN.md#旧-http-示例的类型化创建)。
 
 数据库插件的配置与接口见 [MySQL](mysql_CN.md) 和 [Redis](redis_CN.md)。
 
-可选的[配置导出器](../guides/tools_CN.md#构建原生导出器)支持关闭应用、Protobuf、核心测试与运行时配置读取器后单独构建，不配置框架网络或运行时插件。XLSX 使用 OpenXLSX 0.5.1，JSON 校验复用 `ark::kernel_json`。`check-config-tool` 执行原生回归与 CLI 检查。选择 vcpkg feature 只提供软件包，不会启用 CMake 目标。
+可选的[配置导出器](../guides/tools_CN.md#构建原生导出器)支持关闭应用、运行时插件、Protobuf、核心测试与运行时配置读取器后单独构建，不配置框架网络或运行时插件。XLSX 使用 OpenXLSX 0.5.1，JSON 校验复用 `ark::kernel_json`。`check-config-tool` 执行原生回归与 CLI 检查。选择 vcpkg feature 只提供软件包，不会启用 CMake 目标。
 
 Consul、Etcd Client、Kafka 和 OSS SDK 已[归档](directory-structure_CN.md#归档集成)，暂停功能开发。默认示例不需要这四项服务；保留源码、公开头、CMake 目标及现有兼容性检查。已有缓存可能保留 Etcd Client 的旧 `ON` 值；使用新构建目录，或显式设置 `-DARK_BUILD_PLUGIN_ETCD_CLIENT=OFF`。
 
 ## 原生数据库插件
 
-按安装指南准备依赖后，可同时构建两个可选插件：
+按安装指南准备依赖后，可仅构建并安装两个数据库运行时插件，不生成启动器或服务动态库：
 
 ```sh
-cmake -S . -B build -DARK_BUILD_APPLICATIONS=ON \
+cmake -S . -B database-runtime-build \
+  -DARK_BUILD_APPLICATIONS=OFF -DARK_BUILD_RUNTIME_PLUGINS=ON \
+  -DARK_BUILD_EXAMPLES=OFF -DARK_BUILD_TESTS=OFF -DARK_BUILD_CORE_TESTS=OFF \
+  -DARK_BUILD_PLUGIN_KERNEL=OFF -DARK_BUILD_PLUGIN_NET=OFF \
+  -DARK_BUILD_PLUGIN_BUS=OFF -DARK_BUILD_PLUGIN_UTILITY=OFF \
   -DARK_BUILD_PLUGIN_MYSQL=ON -DARK_BUILD_PLUGIN_REDIS=ON -DARKNET_ENABLE_SSL=ON
-cmake --build build --target ark_mysql_plugin ark_redis_plugin
+cmake --build database-runtime-build --parallel 2
+cmake --install database-runtime-build --prefix /path/to/ark-prefix
 ```
 
 配置期按显式清单生成公开头映射，`ark::<name>` 传递包含目录，运行时插件关闭时仍可用。每个头只有一份共置源码；映射属于构建树，不是第二棵源码。
@@ -90,4 +107,4 @@ config = ""
 
 Net 的 18 个公开头不再包含 `http_client_module_impl.hpp`；使用 `<ark/net/http_client_module.hpp>` 并查找公开接口。此移除属于源码／ABI 兼容性变化，详见 [Net 迁移](network_CN.md#api-与私有创建)。私有工厂声明不安装。
 
-Kafka 继续默认关闭（`ARK_BUILD_PLUGIN_KAFKA=OFF`）。准备原有驱动依赖并启用应用、Protobuf 和核心测试后，`ARK_BUILD_PLUGIN_KAFKA=ON` 会将 `check-kafka-construction`、`check-kafka-plugin` 加入 `check-core`。前者验证真实工厂／装配、受控动态库生命周期及启用 update；后者另检查生产动态库导出。测试不连接 broker。关闭 Kafka 时，核心测试不发现 Kafka 依赖。重建要求与验收边界见 [Kafka 构造迁移](directory-structure_CN.md#kafka-类型化构造)。
+Kafka 继续默认关闭（`ARK_BUILD_PLUGIN_KAFKA=OFF`）。准备原有驱动依赖并启用运行时插件、Protobuf 和核心测试后，`ARK_BUILD_PLUGIN_KAFKA=ON` 会将 `check-kafka-construction`、`check-kafka-plugin` 加入 `check-core`。前者验证真实工厂／装配、受控动态库生命周期及启用 update；后者另检查生产动态库导出。测试不连接 broker。关闭 Kafka 时，核心测试不发现 Kafka 依赖。重建要求与验收边界见 [Kafka 构造迁移](directory-structure_CN.md#kafka-类型化构造)。
