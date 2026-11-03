@@ -98,6 +98,14 @@ TEST_CASE("Physic resources load all shipped collider types with zero-based mesh
     CHECK(colliders[3].type == type::terrain);
     CHECK(colliders[4].type == type::mesh);
     CHECK(colliders[5].type == type::sphere);
+    CHECK(colliders[0].position[0] == 10);
+    CHECK(colliders[0].position[2] == 10);
+    CHECK(colliders[0].center[0] == 0);
+    CHECK(colliders[0].radius == 0.5F);
+    CHECK(colliders[0].height == 2);
+    CHECK(colliders[1].size[0] == 2);
+    CHECK(colliders[1].trigger);
+    CHECK(colliders[3].position[0] == -250);
     CHECK(colliders[2].convex);
     CHECK_FALSE(colliders[4].convex);
     CHECK(colliders[5].radius == 2);

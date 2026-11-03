@@ -18,7 +18,9 @@
  *
  */
 
+#include <algorithm>
 #include <memory>
+#include <utility>
 
 #include "ark/physic/physic_config_module_impl.hpp"
 #include "ark/plugin_manager.hpp"
