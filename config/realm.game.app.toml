@@ -16,7 +16,7 @@ config = ""
 
 [[plugins]]
 name = "AFRealmGamePlugin"
-config = "realm.plugin.conf"
+config = "realm.plugin.toml"
 
 [[plugins]]
 name = "ark_kafka_plugin"

@@ -20,4 +20,4 @@ config = "consul.plugin.toml"
 
 [[plugins]]
 name = "TerrariaGame"
-config = "terraria.game.plugin.conf"
+config = "terraria.game.plugin.toml"
