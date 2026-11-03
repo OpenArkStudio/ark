@@ -190,6 +190,15 @@ OSS SDK retains its three public headers and types through typed construction; r
 
 Header mapping does not establish Consul, Kafka or OSS SDK runtime compatibility. Physic and `physics_scene` still require the unsupported legacy PhysX 3 integration and retain their explicit configuration failure; no passing PhysX build is claimed.
 
+### Physics resource formats
+
+| Resource | Format |
+| --- | --- |
+| `resources/physic/physic.toml` | Simulation frequency, worker count and debugger settings |
+| `resources/physic/scene/<scene>/colliders.json` | Version 1 collider data; mesh indices start at zero |
+
+The former `PhysicConfig.xml` and `Collider.xml` inputs are retired. Export coordinates as numeric triples and mesh triangles as zero-based indices; the old town sample's indices were one-based and have been corrected. `check-physic-resources` validates the real parser and shipped data without a PhysX SDK, through the existing core checks when configuration and Protobuf tests are enabled. This does not validate the SDK adapter or enable the unsupported plugin.
+
 
 ## Built-in server source layout
 

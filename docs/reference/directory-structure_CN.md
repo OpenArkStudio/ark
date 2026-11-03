@@ -181,6 +181,15 @@ OSS SDK 使用类型化构造，保留全部三个公开头和类型；公开类
 
 头文件映射检查不代表 Consul、Kafka、OSS SDK 的运行时兼容性已经验证。Physic 与 `physics_scene` 仍依赖未受支持的旧版 PhysX 3 集成，保留明确的配置失败；此处没有宣称 PhysX 构建通过。
 
+### 物理资源格式
+
+| 资源 | 格式 |
+| --- | --- |
+| `resources/physic/physic.toml` | 模拟频率、工作线程数和调试器设置 |
+| `resources/physic/scene/<scene>/colliders.json` | 版本 1 的碰撞数据；网格索引从 0 开始 |
+
+原 `PhysicConfig.xml`、`Collider.xml` 输入已退役。坐标导出为三个数字，三角形使用从 0 开始的顶点索引；旧 town 样例原先从 1 开始，现已修正。`check-physic-resources` 不依赖 PhysX SDK，随启用配置与 Protobuf 测试的核心检查验证真实读取器和仓库数据；它不验证 SDK 适配，也不启用当前未受支持的插件。
+
 ## 安装目录
 
 [安装](../get-started/installation_CN.md#安装并消费-cmake-包)后，逻辑 `<ark/...>` 头位于 `<prefix>/include/ark/`。CMake 包文件位于 GNUInstallDirs 库目录下的 `cmake/ark/`，选定启动程序与运行时插件位于 `bin/`，配置样例与许可证位于 `share/ark/`。安装消费者使用 `find_package(ark CONFIG REQUIRED)` 和 `ark::core`／`ark::<plugin>`；源码消费者使用 `add_subdirectory` 和相同 target，无需指定生成映射路径。安装导出不包含源码或构建目录；arknet 等依赖仍由外部提供。`tests/install/` 保存独立安装消费者与删除临时生产者后的迁移检查。
