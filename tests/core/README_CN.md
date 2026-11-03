@@ -71,10 +71,12 @@ cmake --build hash-header-build --target check-murmur-hash-header
 
 另外四个 `check-app-startup-failures` 子进程使用绝对和相对 Unicode TOML/XML
 清单路径、Unicode 工作目录和含补充平面字符的 UTF-8 应用名。
-长参数 `--flag=value` 和分开的短参数均须在动态库核对应用名字节后，
-才进入同一个受控 init 失败。独占控制台的 Windows 子进程还核对原生宽字符标题。
-这些用例使用纯控制台日志，不证明独立的公开日志文件路径边界，POSIX 运行也不代表
-Windows 验收。
+长参数 `--flag=value` 和分开的短参数均须在动态库核对应用名字节，并通过
+`ARK_LOG_INFO` 写出固定 UTF-8 标记后，才进入同一个受控 init 失败。
+同步纯文件日志的输出路径包含 Unicode、空格与补充平面字符；每次运行使用新目录，
+控制器要求日期目录下生成准确的 Unicode 应用名／Bus 文件名，并核对真实文件中的
+UTF-8 标记。独占控制台的 Windows 子进程还核对原生宽字符标题。
+这覆盖执行平台上的启动器／文件日志完整路径，POSIX 运行仍不代表 Windows 验收。
 
 启用 Protobuf 时，`check-core` 还包含 `check-proto-configuration`。该检查执行两个平台分支的生产 target 配置，核对传递给消费者的 DLL 导入定义和运行时目录，并通过真实 protoc 输出验证消息／描述符导出及原有无导出标注路径。生成 fixture 使用 Ninja，不编译 Windows 二进制。真实 Kernel DSO 测试保留宿主持有的生成 Protobuf 消息和跨 DSO 转换，继续覆盖公开 DLL 边界。
 

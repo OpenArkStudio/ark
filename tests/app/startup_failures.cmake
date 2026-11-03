@@ -17,28 +17,40 @@ set(plugin_name ark_app_startup_failure_plugin)
 
 # Exercise the production argument entry point and inherited native working
 # directory. Non-BMP text cannot round-trip through legacy Windows code pages.
-# The fixture checks the manager's application-name bytes before failing init.
-set(unicode_runtime "${RUNTIME_DIR}/运行-é-🧪 with spaces")
+# Each run owns fresh log directories so earlier files cannot satisfy the checks.
+string(RANDOM LENGTH 16 ALPHABET 0123456789abcdef unicode_run)
+set(unicode_runtime "${RUNTIME_DIR}/运行-é-🧪 with spaces/${unicode_run}")
 file(MAKE_DIRECTORY "${unicode_runtime}/清单-é-🧪")
+message(STATUS "UTF-8 launcher runtime: ${unicode_runtime}")
 foreach(format toml app.conf)
-    set(relative_manifest "清单-é-🧪/应用-é-🧪.${format}")
-    set(manifest "${unicode_runtime}/${relative_manifest}")
-    if(format STREQUAL "toml")
-        file(WRITE "${manifest}"
-            "[application]\nplugin_library_dir = \"${toml_plugin_directory}\"\n"
-            "[logging]\nconsole = true\nfile = false\npattern = '%v'\n"
-            "[[plugins]]\nname = \"${plugin_name}\"\nconfig = 'utf8:init'\n")
-    else()
-        file(WRITE "${manifest}"
-            "<xml><plugins plugin_lib_dir=\"${xml_plugin_directory}\">"
-            "<plugin name=\"${plugin_name}\" conf=\"utf8:init\"/></plugins>"
-            "<logging console=\"true\" file=\"false\" pattern=\"%v\"/></xml>\n")
-    endif()
     foreach(path_kind absolute relative)
+        set(relative_manifest "清单-é-🧪/应用-é-🧪-${path_kind}.${format}")
+        set(manifest "${unicode_runtime}/${relative_manifest}")
+        set(relative_output "日志-é-🧪 with spaces/${format}-${path_kind}")
         if(path_kind STREQUAL "absolute")
             set(arguments "--name=应用-é-🧪" "--app_conf=${manifest}")
+            set(log_directory "${unicode_runtime}/${relative_output}")
         else()
             set(arguments -n "应用-é-🧪" -a "${relative_manifest}")
+            set(log_directory "${relative_output}")
+        endif()
+        string(REPLACE "\\" "\\\\" toml_log_directory "${log_directory}")
+        string(REPLACE "\"" "\\\"" toml_log_directory "${toml_log_directory}")
+        string(REPLACE "&" "&amp;" xml_log_directory "${log_directory}")
+        string(REPLACE "\"" "&quot;" xml_log_directory "${xml_log_directory}")
+        string(REPLACE "<" "&lt;" xml_log_directory "${xml_log_directory}")
+        if(format STREQUAL "toml")
+            file(WRITE "${manifest}"
+                "[application]\nplugin_library_dir = \"${toml_plugin_directory}\"\n"
+                "[logging]\nconsole = false\nfile = true\nqueue_count = 0\nlevel = 'info'\npattern = '%v'\n"
+                "output_path = \"${toml_log_directory}\"\n"
+                "[[plugins]]\nname = \"${plugin_name}\"\nconfig = 'utf8:init'\n")
+        else()
+            file(WRITE "${manifest}"
+                "<xml><plugins plugin_lib_dir=\"${xml_plugin_directory}\">"
+                "<plugin name=\"${plugin_name}\" conf=\"utf8:init\"/></plugins>"
+                "<logging console=\"false\" file=\"true\" queue_count=\"0\" level=\"info\" "
+                "pattern=\"%v\" output_path=\"${xml_log_directory}\"/></xml>\n")
         endif()
         execute_process(COMMAND "${PROGRAM}" --busid=1.0.1.1 ${arguments}
             WORKING_DIRECTORY "${unicode_runtime}"
@@ -55,7 +67,30 @@ foreach(format toml app.conf)
         if(NOT "${observed}" STREQUAL "${expected}")
             message(FATAL_ERROR "UTF-8 ${path_kind}/${format}: argument verification or lifecycle differed\n${errors}")
         endif()
-        message(STATUS "UTF-8 ${path_kind}/${format}: Unicode manifest, working directory and application name verified")
+        file(GLOB_RECURSE logs LIST_DIRECTORIES false "${unicode_runtime}/${relative_output}/*.log")
+        if(NOT logs)
+            message(FATAL_ERROR "UTF-8 ${path_kind}/${format}: no new file in the exact Unicode log directory")
+        endif()
+        set(marker_count 0)
+        foreach(log IN LISTS logs)
+            file(RELATIVE_PATH relative_log "${unicode_runtime}/${relative_output}" "${log}")
+            if(NOT relative_log MATCHES "^[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]/应用-é-🧪_1[.]0[.]1[.]1_[0-9][0-9][.]log$")
+                message(FATAL_ERROR "UTF-8 ${path_kind}/${format}: Unicode application/Bus log filename differed: ${relative_log}")
+            endif()
+            file(READ "${log}" contents)
+            string(REGEX MATCHALL "launcher UTF-8 日志标记-é-🧪" markers "${contents}")
+            list(LENGTH markers file_marker_count)
+            math(EXPR marker_count "${marker_count} + ${file_marker_count}")
+        endforeach()
+        # Permit a real date/hour rollover while requiring exactly one marker
+        # across only this child's fresh output files.
+        if(NOT marker_count EQUAL 1)
+            message(FATAL_ERROR "UTF-8 ${path_kind}/${format}: expected one exact UTF-8 fixture marker, got ${marker_count}")
+        endif()
+        if(output MATCHES "ARK Server start|launcher UTF-8")
+            message(FATAL_ERROR "UTF-8 ${path_kind}/${format}: file-only logging unexpectedly wrote to the console")
+        endif()
+        message(STATUS "UTF-8 ${path_kind}/${format}: manifest, working directory, application name and file log verified")
     endforeach()
 endforeach()
 

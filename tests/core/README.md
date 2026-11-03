@@ -90,10 +90,14 @@ Four additional `check-app-startup-failures` children use absolute and relative
 Unicode TOML/XML manifest paths, a Unicode working directory and a UTF-8
 application name containing a supplementary character. Long `--flag=value` and
 separate short-option arguments reach the same controlled init failure only after
-the DSO verifies the exact application-name bytes. A Windows child with a
-private console also checks its native wide title. These cases use console-only
-logging; they do not establish the separate public logger file-path boundary or
-Windows acceptance from a POSIX run.
+the DSO verifies the exact application-name bytes and writes a fixed UTF-8 marker
+through `ARK_LOG_INFO`. Synchronous file-only logging uses Unicode output paths
+containing spaces and supplementary characters. Each run gets fresh directories;
+the controller requires the exact Unicode application/Bus filename below its
+date directory and verifies the UTF-8 marker in the real file. A Windows child
+with a private console also checks its native wide title. This covers the
+integrated launcher/file-logger path on the executing platform; a POSIX run does
+not establish Windows acceptance.
 
 `check-kernel-initialization` loads real metadata and static data from
 `resource/meta/`. It checks four kernel/config initialization orders with both

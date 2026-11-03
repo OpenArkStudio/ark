@@ -126,6 +126,8 @@ ARK_EXPORT_FUNC void DllEntryPlugin(
             }
         }
 #endif
+        using ark::logger;
+        ARK_LOG_INFO("{}", "launcher UTF-8 日志标记-é-🧪");
         std::cerr << "app-startup-test:unicode_arguments_verified\n";
     }
     fixture = new startup_failure_module;
