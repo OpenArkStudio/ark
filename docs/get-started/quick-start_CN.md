@@ -44,12 +44,15 @@ Copy-Item config/timers.app.toml run/timers/conf/
 
 运行所需的文件如下：
 
-```text
-run/timers/
-├── bin/       同一次构建的 app、ark_utility_plugin 和 timers_plugin
-└── conf/
-    └── timers.app.toml
-```
+<FileTree>
+
+- run/timers/
+  - bin/ — 同一次构建的 app、ark_utility_plugin 和 timers_plugin
+    - ...
+  - conf/
+    - timers.app.toml
+
+</FileTree>
 
 复制命令会带入同次构建的其他产物；`timers.app.toml` 只选择上述两个库，无需单独的 `timers.conf` 或 `resource/`。
 
