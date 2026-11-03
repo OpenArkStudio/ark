@@ -18,6 +18,7 @@
 #include <arknet/http/http_server.hpp>
 #include <arknet/http/request.hpp>
 
+#include <ark/bus.hpp>
 #include <ark/net/http_client_module.hpp>
 #include <ark/plugin_manager.hpp>
 #include "owner_drain.hpp"
