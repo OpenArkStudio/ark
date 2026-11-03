@@ -16,6 +16,8 @@
 *
 *********************************************************/
 
+// OpenArkStudio modifications: retire partial constructor workers and preserve
+// callback/future ownership until queue publication succeeds.
 #ifndef __ctpl_stl_thread_pool_H__
 #define __ctpl_stl_thread_pool_H__
 
@@ -80,7 +82,15 @@ public:
 
     thread_pool(int nThreads) {
         this->init();
-        this->resize(nThreads);
+        try
+        { this->resize(nThreads); }
+        catch (...)
+        {
+            // A failed constructor does not run ~thread_pool(). Retire any
+            // workers already created before their joinable threads unwind.
+            this->stop(true);
+            throw;
+        }
     }
 
     // the destructor waits for all the functions in the queue to be finished
@@ -175,7 +185,10 @@ public:
             this->isStop = true;
             for (int i = 0, n = this->size(); i < n; ++i)
             {
-                *this->flags[i] = true; // command the threads to stop
+                if (i < static_cast<int>(this->flags.size()) && this->flags[i])
+                {
+                    *this->flags[i] = true; // command the threads to stop
+                }
             }
             this->clear_queue(); // empty the queue
         }
@@ -193,7 +206,7 @@ public:
         }
         for (int i = 0; i < static_cast<int>(this->threads.size()); ++i)
         { // wait for the computing threads to finish
-            if (this->threads[i]->joinable())
+            if (this->threads[i] && this->threads[i]->joinable())
             {
                 this->threads[i]->join();
             }
@@ -209,11 +222,13 @@ public:
     auto push(F&& f, Rest&&... rest) -> std::future<decltype(f(0, rest...))> {
         auto pck = std::make_shared<std::packaged_task<decltype(f(0, rest...))(int)>>(
             std::bind(std::forward<F>(f), std::placeholders::_1, std::forward<Rest>(rest)...));
-        auto _f = new std::function<void(int id)>([pck](int id) { (*pck)(id); });
-        this->q.push(_f);
+        auto result = pck->get_future();
+        auto _f = std::make_unique<std::function<void(int id)>>([pck](int id) { (*pck)(id); });
         std::unique_lock<std::mutex> lock(this->mutex);
+        this->q.push(_f.get());
+        _f.release(); // publication transfers ownership to the queue/worker
         this->cv.notify_one();
-        return pck->get_future();
+        return result;
     }
 
     // run the user's function that excepts argument int - id of the running thread. returned value is templatized
@@ -221,11 +236,13 @@ public:
     template<typename F>
     auto push(F&& f) -> std::future<decltype(f(0))> {
         auto pck = std::make_shared<std::packaged_task<decltype(f(0))(int)>>(std::forward<F>(f));
-        auto _f = new std::function<void(int id)>([pck](int id) { (*pck)(id); });
-        this->q.push(_f);
+        auto result = pck->get_future();
+        auto _f = std::make_unique<std::function<void(int id)>>([pck](int id) { (*pck)(id); });
         std::unique_lock<std::mutex> lock(this->mutex);
+        this->q.push(_f.get());
+        _f.release(); // publication transfers ownership to the queue/worker
         this->cv.notify_one();
-        return pck->get_future();
+        return result;
     }
 
 private:

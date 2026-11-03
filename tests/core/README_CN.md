@@ -15,6 +15,14 @@ cmake --build core-build --target check-core
 启用 `ARK_BUILD_CORE_TESTS=ON` 时，`check-network` 也会运行这些用例，现有 CI
 矩阵会执行该入口。测试不需要数据库服务。
 
+调度器启动所有权、构造和入队分配失败使用仓库内的 C++ 测试入口：
+
+```sh
+cmake --build core-build --target check-scheduler-startup-cleanup check-scheduler-construction
+```
+
+两者均纳入 `check-core`。前者验证后续启动阶段失败、回调保留和持续分配失败子进程；独立构造程序自行限制子进程时长，拒绝线程泄漏、异常终止和捕获对象丢失，不依赖数据库或脚本运行时。
+
 字符串匹配回归覆盖空分隔符、空替换模式、有限与无限次数、空输入、已有输出元素和内嵌空字符，并保留非空分隔符、剩余后缀、替换次数与删除语义。执行 `ark_core_tests --test-case="*String utilit*"` 可单独运行。参见[字符串匹配规则](../../docs/reference/utility_CN.md#core-字符串匹配)。
 
 C++20 语言回归验证六种精确整数类型分类、限定符与引用处理、常量值、异常契约和固定 UID 位分配结果。独立 array-map 头文件检查还会拒绝重新引入旧语言兼容宏。

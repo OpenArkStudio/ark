@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cassert>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -199,15 +200,20 @@ struct mysql_transaction_owner : std::enable_shared_from_this<mysql_transaction_
 
     mysql_transaction_owner(std::shared_ptr<arknet::mysql::pool> pool, mysql_transaction_limits limits,
         arknet::mysql::query_options query_limits)
-        : pool(std::move(pool))
-        , queue(std::make_shared<queue_type>(limits.max_transactions, limits.max_input_bytes))
-        , states(limits.max_transactions)
-        , limits(query_limits)
-        , max_input_bytes(limits.max_input_bytes) {
-        if (!this->pool)
+        : mysql_transaction_owner(limits, query_limits) {
+        if (!pool)
         {
             throw std::invalid_argument("MySQL transaction service requires an existing pool");
         }
+        this->pool = std::move(pool);
+    }
+
+    // Allocate the complete passive owner before its enclosing connection starts IO.
+    mysql_transaction_owner(mysql_transaction_limits limits, arknet::mysql::query_options query_limits)
+        : queue(std::make_shared<queue_type>(limits.max_transactions, limits.max_input_bytes))
+        , states(limits.max_transactions)
+        , limits(query_limits)
+        , max_input_bytes(limits.max_input_bytes) {
     }
 
     void check_owner() const {
@@ -894,6 +900,23 @@ public:
     mysql_transaction_service(std::shared_ptr<arknet::mysql::pool> pool, mysql_transaction_limits limits,
         arknet::mysql::query_options query_limits = {})
         : owner_(std::make_shared<mysql_transaction_owner>(std::move(pool), limits, query_limits)) {
+    }
+
+    // Internal connection-construction channel. Bind before publishing or starting work.
+    struct prepared_t
+    {
+    };
+
+    mysql_transaction_service(
+        prepared_t, mysql_transaction_limits limits, arknet::mysql::query_options query_limits = {})
+        : owner_(std::make_shared<mysql_transaction_owner>(limits, query_limits)) {
+    }
+
+    void bind_pool(std::shared_ptr<arknet::mysql::pool> pool) noexcept {
+        assert(pool && !owner_->pool && owner_->thread == std::this_thread::get_id());
+        assert(
+            std::none_of(owner_->states.begin(), owner_->states.end(), [](const auto& state) { return bool(state); }));
+        owner_->pool = std::move(pool);
     }
 
     ~mysql_transaction_service() {

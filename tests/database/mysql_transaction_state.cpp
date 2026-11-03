@@ -31,6 +31,28 @@ TEST_CASE("Private MySQL transactions require a supplied pool and explicit nonze
     CHECK(pool->close_and_wait());
 }
 
+TEST_CASE("Prepared MySQL transactions allocate without a pool and bind without allocating another owner") {
+    {
+        mysql_transaction_service prepared(mysql_transaction_service::prepared_t{}, {2, 1024});
+        CHECK(prepared.quiescent());
+        CHECK(prepared.active() == 0);
+        CHECK(prepared.retained_input_bytes() == 0);
+    }
+    auto pool = std::make_shared<arknet::mysql::pool>(arknet::mysql::pool_options{});
+    {
+        mysql_transaction_service prepared(mysql_transaction_service::prepared_t{}, {2, 1024});
+        static_assert(noexcept(prepared.bind_pool(pool)));
+        CHECK(pool.use_count() == 1);
+        prepared.bind_pool(pool);
+        CHECK(pool.use_count() == 2);
+        CHECK(prepared.quiescent());
+        prepared.stop_accepting();
+        CHECK(prepared.logically_drained());
+    }
+    CHECK(pool.use_count() == 1);
+    CHECK(pool->close_and_wait());
+}
+
 TEST_CASE("Invalid transaction deadlines reject inline before acquiring a connection") {
     auto pool = std::make_shared<arknet::mysql::pool>(arknet::mysql::pool_options{});
     {

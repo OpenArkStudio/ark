@@ -145,8 +145,23 @@ bool redis_module_impl::configure(std::string name, redis_options options) {
     {
         throw std::invalid_argument("Redis connection name must not be empty");
     }
-    auto connection = std::make_shared<state::connection>(state_->runtime, std::move(options));
-    state_->connections.emplace(std::move(name), std::move(connection));
+    // Allocate the destination node and buckets before starting native IO.
+    auto [entry, inserted] = state_->connections.try_emplace(std::move(name), nullptr);
+    if (!inserted)
+    {
+        return false;
+    }
+    try
+    {
+        auto connection = std::make_shared<state::connection>(state_->runtime, std::move(options));
+        entry->second = std::move(connection);
+    }
+    catch (...)
+    {
+        // This unpublished entry is still empty; preserve same-name retry.
+        state_->connections.erase(entry);
+        throw;
+    }
     return true;
 }
 
