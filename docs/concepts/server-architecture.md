@@ -98,3 +98,20 @@ This is launcher and transport acceptance. Login currently starts a listener wit
 For a bounded existing business operation, enable examples and Kernel/Utility and run `check-typed-examples`. Its real EntityOperations library uses the checked-in manifest and metadata to create and inspect player data/tables/custom values, then destroys entities during shutdown. That in-process business demonstration and the separate Login transport composition verify different boundaries; they do not form an implemented network game-login flow.
 
 The launcher controller reports the child exit code or signal and the last 16 KiB of its owned child log on failure. A permanent early-exit probe verifies that startup diagnostics are retained; the existing startup and shutdown deadlines are unchanged.
+
+## Verify a combined plugin flow
+
+On POSIX, enable applications, Protobuf, core tests and the Bus, Net, Utility, Kernel and HTTP plugins, then run:
+
+```sh
+cmake --build <build-directory> --target check-system-composition --parallel 2
+```
+
+| Check | Observed behavior |
+| --- | --- |
+| Entity | Checked-in JSON creates `GuestPlayer`; owner-thread HP changes from 100 to 85; an owning snapshot survives module destruction |
+| Transport | Protobuf service messages and binary HTTP `/echo` run together; a server restart uses the existing 30-second reconnect policy |
+| Resource cleanup | Route captures are released, HTTP/SS endpoints close, repeated `stop()` succeeds and all children exit 0 |
+| Bounds | Three peer processes, at most two live together; 2-second network operations, 5-second local observations and a 55-second controller deadline |
+
+The target prints its private configuration/log directory. Record the tested revision with the result. Forced child termination is a failure. This local flow does not cover accounts, persistence, HTTP-driven Entity mutation, cross-host behavior or capacity. `check-static-services` separately covers eligibility and invalid-endpoint diagnostics.
