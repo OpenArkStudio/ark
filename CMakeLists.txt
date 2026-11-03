@@ -52,16 +52,24 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 # CMake switches
 #---------------------------------------------------------------------------------------
 option(ASIO_STANDALONE "Use Standalone Asio instead of Boost.Asio" OFF)
-option(ARK_BUILD_APPLICATIONS "Build ark applications and plugins" ON)
-option(ARK_BUILD_PROTO "Generate and build protocol messages" ${ARK_BUILD_APPLICATIONS})
+option(ARK_BUILD_APPLICATIONS "Build the ark launcher, servers and application examples" ON)
+option(ARK_BUILD_RUNTIME_PLUGINS "Build selected official runtime plugin libraries" ${ARK_BUILD_APPLICATIONS})
+set(ark_proto_default OFF)
+if(ARK_BUILD_APPLICATIONS OR ARK_BUILD_RUNTIME_PLUGINS)
+    set(ark_proto_default ON)
+endif()
+option(ARK_BUILD_PROTO "Generate and build protocol messages" ${ark_proto_default})
 option(ARK_BUILD_NETWORK_TESTS "Build network migration regressions" OFF)
-if(ASIO_STANDALONE AND (ARK_BUILD_APPLICATIONS OR ARK_BUILD_NETWORK_TESTS))
+if(ASIO_STANDALONE AND (ARK_BUILD_APPLICATIONS OR ARK_BUILD_RUNTIME_PLUGINS OR ARK_BUILD_NETWORK_TESTS))
     message(FATAL_ERROR
-        "ark applications and network tests require Boost.Asio and Boost.Beast for HTTP/WebSocket. "
+        "ark applications, runtime plugins and network tests require Boost.Asio and Boost.Beast for HTTP/WebSocket. "
         "Set ASIO_STANDALONE=OFF. Standalone Asio remains available for core-only and native database development builds.")
 endif()
 if(ARK_BUILD_APPLICATIONS AND NOT ARK_BUILD_PROTO)
     message(FATAL_ERROR "ARK_BUILD_APPLICATIONS requires ARK_BUILD_PROTO")
+endif()
+if(ARK_BUILD_RUNTIME_PLUGINS AND NOT ARK_BUILD_PROTO)
+    message(FATAL_ERROR "ARK_BUILD_RUNTIME_PLUGINS requires ARK_BUILD_PROTO")
 endif()
 option(ARK_BUILD_DATABASE_TESTS "Build private native database integration development tests" OFF)
 option(ARK_BUILD_BENCHMARKS "Build standalone benchmark programs" OFF)
@@ -79,7 +87,7 @@ option(ARK_BUILD_CONFIG_TOOL_TESTS "Build native configuration exporter regressi
 option(ARK_BUILD_COMPRESSION_TESTS "Build bounded compression regressions (zlib, Zstandard and LZ4)" OFF)
 option(ARK_BUILD_EXAMPLES "Enable build examples" ON)
 set(ark_config_default OFF)
-if(ARK_BUILD_APPLICATIONS OR ARK_BUILD_CORE_TESTS)
+if(ARK_BUILD_APPLICATIONS OR ARK_BUILD_RUNTIME_PLUGINS OR ARK_BUILD_CORE_TESTS)
     set(ark_config_default ON)
 endif()
 option(ARK_BUILD_CONFIG "Build the shared application and plugin configuration reader" ${ark_config_default})
@@ -162,7 +170,7 @@ else (UNIX)
 endif ()
 
 # A tool-only build does not configure the framework's networking or plugins.
-if(ARK_BUILD_CONFIG_TOOL AND NOT ARK_BUILD_APPLICATIONS AND NOT ARK_BUILD_PROTO
+if(ARK_BUILD_CONFIG_TOOL AND NOT ARK_BUILD_APPLICATIONS AND NOT ARK_BUILD_RUNTIME_PLUGINS AND NOT ARK_BUILD_PROTO
     AND NOT ARK_BUILD_CORE_TESTS AND NOT ARK_BUILD_NETWORK_TESTS AND NOT ARK_BUILD_CONFIG
     AND NOT ARK_BUILD_DATABASE_TESTS AND NOT ARK_BUILD_DATABASE_BENCHMARKS
     AND NOT ARK_BUILD_BENCHMARKS AND NOT ARK_BUILD_COMPRESSION_TESTS)

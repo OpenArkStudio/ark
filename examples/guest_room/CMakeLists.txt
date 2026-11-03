@@ -11,6 +11,13 @@ target_compile_definitions(ark_guest_room_codec_tests PRIVATE
     ARK_GUEST_ROOM_VECTORS="${CMAKE_CURRENT_SOURCE_DIR}/wire-vectors.json")
 
 if(UNIX)
+    foreach(plugin kernel utility bus net)
+        if(NOT TARGET ark_${plugin}_plugin)
+            string(TOUPPER "${plugin}" plugin_option)
+            message(FATAL_ERROR
+                "check-guest-room-server requires ark_${plugin}_plugin; enable ARK_BUILD_RUNTIME_PLUGINS and ARK_BUILD_PLUGIN_${plugin_option}")
+        endif()
+    endforeach()
     add_executable(ark_guest_room_server_tests ../../tests/guest_room/server.cpp)
     set_property(TARGET ark_guest_room_server_tests PROPERTY LINK_LIBRARIES ark::net ark::kernel ark::proto nlohmann_json::nlohmann_json)
     # The controlled host observes this example's concrete type. Launcher child

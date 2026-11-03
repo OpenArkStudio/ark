@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import { selectScope, validateGate } from '../../.github/scripts/ci-policy.mjs';
 
@@ -251,6 +252,20 @@ test('workflow source jobs reuse Linux Boost and full acceptance retains exactly
   assert.match(jobBlock('applications'), /run: cmake --build ci-build --target check-core/);
   assert.match(jobBlock('database'), /run: cmake --build ci-database --target check-database\n/);
   assert.match(jobBlock('database'), /run: cmake --build ci-database --target check-database-benchmark/);
+});
+
+test('network display names expand sanitizer labels while retaining the machine matrix values', () => {
+  const template = jobBlock('network').match(/^    name: (.+)$/m)?.[1];
+  assert.ok(template);
+  const labels = { none: 'none', address: 'AddressSanitizer + UndefinedBehaviorSanitizer', thread: 'ThreadSanitizer' };
+  const names = matrices('network').full.map(matrix => {
+    const before = { ...matrix };
+    const name = template.replace(/\$\{\{ (.+?) \}\}/g, (_, expression) => runInNewContext(expression, { matrix }));
+    assert.equal(name, `Network - ${matrix.os} - Boost - ${labels[matrix.sanitizer]}`);
+    assert.deepEqual(matrix, before, 'display evaluation must not change matrix inputs');
+    return name;
+  });
+  assert.equal(new Set(names).size, names.length, 'each profile keeps a unique check name');
 });
 
 test('Applications CI reaches the actual HTTP DSO lifecycle through check-core', () => {

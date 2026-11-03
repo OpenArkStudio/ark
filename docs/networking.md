@@ -11,7 +11,7 @@ is included.
 ## Dependencies
 
 - CMake 3.21+ and a C++20 compiler: GCC 12+, Clang with C++20 support, or VS 2022.
-- Boost 1.90+ for applications and network tests, using Boost.Asio and Boost.Beast.
+- Boost 1.90+ for applications, official runtime plugins and network tests, using Boost.Asio and Boost.Beast.
 - Standalone Asio 1.38.0+ is optional for core-only and native database development builds.
 - spdlog/fmt and readerwriterqueue from the pinned vcpkg baseline.
 - Protobuf, Zstandard and zlib when building applications and plugins.
@@ -21,10 +21,10 @@ The vcpkg manifest pins the package baseline. CMake retrieves arknet from its
 pinned revision in the independent repository. To validate a development checkout,
 set `ARKNET_SOURCE_DIR` to its absolute path.
 
-Applications and the current network tests use HTTP/WebSocket, which require
-Boost.Beast. CMake rejects `ASIO_STANDALONE=ON` with either
-`ARK_BUILD_APPLICATIONS=ON` or `ARK_BUILD_NETWORK_TESTS=ON` before retrieving
-dependencies. It does not silently change the selected Asio library.
+Applications, official runtime plugins and the current network tests retain the
+Boost.Asio/Boost.Beast dependency. CMake rejects `ASIO_STANDALONE=ON` with
+`ARK_BUILD_APPLICATIONS=ON`, `ARK_BUILD_RUNTIME_PLUGINS=ON` or
+`ARK_BUILD_NETWORK_TESTS=ON` before retrieving dependencies. It does not silently change the selected Asio library.
 
 Use Protobuf, Abseil and utf8_range from the same installation prefix. When
 setting `Protobuf_DIR` manually, select matching `absl_DIR` and `utf8_range_DIR`.
@@ -94,13 +94,13 @@ cmake --build app-build --target check-core
 ## Standalone Asio builds
 
 Standalone Asio remains available for core-only builds and optional native
-database development tests. Disable applications and network tests explicitly:
+database development tests. Disable applications, official runtime plugins and network tests explicitly:
 
 ```sh
 cmake -S . -B core-build -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
   -DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON -DVCPKG_MANIFEST_FEATURES=config \
-  -DARK_BUILD_APPLICATIONS=OFF -DARK_BUILD_PROTO=OFF \
+  -DARK_BUILD_APPLICATIONS=OFF -DARK_BUILD_RUNTIME_PLUGINS=OFF -DARK_BUILD_PROTO=OFF \
   -DARK_BUILD_NETWORK_TESTS=OFF -DARK_BUILD_CORE_TESTS=ON \
   -DASIO_STANDALONE=ON
 cmake --build core-build --target check-core

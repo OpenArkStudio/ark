@@ -15,6 +15,8 @@ See [network builds and tests](../networking.md), [ark::net](https://github.com/
 
 The optional routed [HTTP server plugin](http.md) exposes `http_server_module`; its route handlers run on arknet IO workers.
 
+Build the official Net DSO with `ARK_BUILD_RUNTIME_PLUGINS=ON` and `ARK_BUILD_PLUGIN_NET=ON`; the runtime switch defaults to `ARK_BUILD_APPLICATIONS`. Set applications to `OFF` to omit the launcher and seven server libraries. Runtime plugins still require AFProto and Boost.Asio/Beast; this does not add Standalone Asio runtime support. [Build options](build-options.md) describe plugin selection and configuration-reader requirements.
+
 ## API and private construction
 
 All Net source headers and implementations live in `src/plugins/net/`. The

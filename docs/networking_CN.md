@@ -10,7 +10,7 @@ ARK 使用 C++20，直接采用独立仓库的
 ## 依赖
 
 - CMake 3.21 及以上；GCC 12+、支持 C++20 的 Clang，或 VS 2022。
-- 应用和网络测试使用 Boost 1.90+，依赖 Boost.Asio 和 Boost.Beast。
+- 应用、官方运行时插件和网络测试使用 Boost 1.90+，依赖 Boost.Asio 和 Boost.Beast。
 - 仅构建核心或原生数据库开发测试时，可以选择 Standalone Asio 1.38.0+。
 - 固定 vcpkg 基线中的 spdlog/fmt 和 readerwriterqueue。
 - 构建应用和插件时需要 Protobuf、Zstandard 和 zlib。
@@ -18,9 +18,10 @@ ARK 使用 C++20，直接采用独立仓库的
 可选 feature 与许可声明见[依赖管理](dependencies_CN.md)。vcpkg 清单固定包版本基线。CMake 从 arknet 的独立仓库获取固定提交。
 验证开发版本时，将 `ARKNET_SOURCE_DIR` 设为该仓库的绝对路径。
 
-应用和当前网络测试包含 HTTP/WebSocket，需要 Boost.Beast。
-如果同时设置 `ASIO_STANDALONE=ON` 与 `ARK_BUILD_APPLICATIONS=ON` 或
-`ARK_BUILD_NETWORK_TESTS=ON`，CMake 会在获取依赖前明确报错，不会静默更换 Asio 依赖库。
+应用、官方运行时插件和当前网络测试保留 Boost.Asio／Boost.Beast 依赖。
+如果同时设置 `ASIO_STANDALONE=ON` 与 `ARK_BUILD_APPLICATIONS=ON`、
+`ARK_BUILD_RUNTIME_PLUGINS=ON` 或 `ARK_BUILD_NETWORK_TESTS=ON`，
+CMake 会在获取依赖前明确报错，不会静默更换 Asio 依赖库。
 
 Protobuf、Abseil 和 utf8_range 使用同一安装前缀。手工指定 `Protobuf_DIR` 时，
 同时选择配套的 `absl_DIR` 和 `utf8_range_DIR`。
@@ -84,13 +85,13 @@ cmake --build app-build --target check-core
 ## Standalone Asio 构建
 
 仅构建核心或可选原生数据库开发测试时，仍可使用 Standalone Asio。
-请明确关闭应用和网络测试：
+请明确关闭应用、官方运行时插件和网络测试：
 
 ```sh
 cmake -S . -B core-build -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
   -DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON -DVCPKG_MANIFEST_FEATURES=config \
-  -DARK_BUILD_APPLICATIONS=OFF -DARK_BUILD_PROTO=OFF \
+  -DARK_BUILD_APPLICATIONS=OFF -DARK_BUILD_RUNTIME_PLUGINS=OFF -DARK_BUILD_PROTO=OFF \
   -DARK_BUILD_NETWORK_TESTS=OFF -DARK_BUILD_CORE_TESTS=ON \
   -DASIO_STANDALONE=ON
 cmake --build core-build --target check-core
