@@ -19,6 +19,18 @@ namespace {
 
 using filename_calculator = spdlog::sinks::default_date_and_hour_file_name_calculator;
 
+// Retired file-based logger configuration must not survive as a no-op overload.
+template<typename logger_type>
+concept accepts_file_configuration =
+    requires(logger_type& value, const std::string& path) { value.init_logger(path, path); };
+
+template<typename configuration_type>
+concept loads_file_configuration =
+    requires(configuration_type& value, const std::string& path) { value.load_log_conf(path); };
+
+static_assert(!accepts_file_configuration<ark::logger>);
+static_assert(!loads_file_configuration<ark::log_conf>);
+
 std::string utf8_path(const std::filesystem::path& file) {
     const auto bytes = file.u8string();
     return {reinterpret_cast<const char*>(bytes.data()), bytes.size()};
@@ -325,31 +337,6 @@ TEST_CASE("owned asynchronous logging drains its queue when the wrapper is relea
     CHECK(spdlog::get("default:" + (files.directory / "drain.log").string()) == nullptr);
 }
 
-TEST_CASE("legacy direct-library XML logger configuration remains explicit and usable") {
-    log_directory files;
-    const auto config_path = files.directory / "legacy.xml";
-    const auto default_dir = files.directory / "legacy-default";
-    const auto oss_dir = files.directory / "legacy-oss";
-    {
-        std::ofstream output(config_path);
-        output << "<xml>";
-        for (const auto& [name, directory] : {std::pair{"default", default_dir}, std::pair{"oss", oss_dir}})
-        {
-            output << "<logger name='" << name << "' queue_count='0' path='" << directory.string() << "'>"
-                   << "<debug console='1' level='2' pattern='%v'/>"
-                   << "<release console='1' level='2' pattern='%v'/></logger>";
-        }
-        output << "</xml>";
-    }
-    ark::logger logger;
-    REQUIRE(logger.init_logger(config_path.string(), "legacy.log"));
-    CHECK(spdlog::get((default_dir / "legacy.log").string()) != nullptr);
-    CHECK(spdlog::get((oss_dir / "legacy.log").string()) != nullptr);
-    logger.log_t(ark::detail::log_source_location(), spdlog::level::info, "legacy explicit config works");
-    logger.log_oss(spdlog::level::info, "legacy", "oss works");
-    CHECK_FALSE(logger.init_logger(ark::logging_settings{}, "another.log"));
-}
-
 TEST_CASE("Logging callback reset restores configured output formatting and level filtering") {
     log_directory files;
     std::string route;
@@ -361,11 +348,6 @@ TEST_CASE("Logging callback reset restores configured output formatting and leve
         route = "toml";
     }
 #endif
-#ifdef OPEN_FILE_LOG
-    SUBCASE("legacy XML settings") {
-        route = "xml";
-    }
-#endif
 
     const auto output_directory = files.directory / "default";
     ark::logging_settings settings;
@@ -375,39 +357,20 @@ TEST_CASE("Logging callback reset restores configured output formatting and leve
     settings.level = "warn";
     settings.output_path = output_directory.string();
     ark::logger logger;
-    if (route == "xml")
+#ifdef ARK_LOGGING_CONFIG_TESTS
+    if (route == "toml")
     {
-        const auto config = files.directory / "legacy.xml";
+        const auto config = files.directory / "logging.app.toml";
         {
             std::ofstream output(config);
-            output << "<xml>";
-            for (const auto& name : {"default", "oss"})
-            {
-                output << "<logger name='" << name << "' queue_count='0' path='" << (files.directory / name).string()
-                       << "'><debug console='0' level='3' pattern='%l|%v'/>"
-                       << "<release console='0' level='3' pattern='%l|%v'/></logger>";
-            }
-            output << "</xml>";
+            output << "[application]\n[logging]\nconsole = false\nfile = true\n"
+                   << "level = 'warn'\npattern = '%l|%v'\nqueue_count = 0\noutput_path = '"
+                   << output_directory.generic_string() << "'\n";
         }
-        REQUIRE(logger.init_logger(config.string(), "callback.log"));
+        settings = ark::load_application_manifest(config.string()).logging;
     }
-    else
-    {
-#ifdef ARK_LOGGING_CONFIG_TESTS
-        if (route == "toml")
-        {
-            const auto config = files.directory / "logging.app.toml";
-            {
-                std::ofstream output(config);
-                output << "[application]\n[logging]\nconsole = false\nfile = true\n"
-                       << "level = 'warn'\npattern = '%l|%v'\nqueue_count = 0\noutput_path = '"
-                       << output_directory.generic_string() << "'\n";
-            }
-            settings = ark::load_application_manifest(config.string()).logging;
-        }
 #endif
-        REQUIRE(logger.init_logger(settings, "callback.log"));
-    }
+    REQUIRE(logger.init_logger(settings, "callback.log"));
 
     logger.log_t({"callback.cpp", 41, ""}, spdlog::level::warn, "initial {{literal}}");
     std::vector<std::pair<spdlog::level::level_enum, std::string>> captured;
@@ -429,41 +392,6 @@ TEST_CASE("Logging callback reset restores configured output formatting and leve
                                   spdlog::details::os::default_eol);
 }
 
-TEST_CASE("Logging legacy XML rejects an empty document and a missing selected mode") {
-    log_directory files;
-    const auto config = files.directory / std::filesystem::path(u8"无效 配置 😀.xml");
-    std::string document;
-    std::string expected;
-    SUBCASE("empty XML document") {
-        expected = "missing root element";
-    }
-    SUBCASE("logger missing Debug and Release modes") {
-        document = "<xml><logger name='default' queue_count='0' path='unused'/></xml>";
-#ifdef ARK_RUN_MODE_DEBUG
-        expected = "missing debug logger mode";
-#else
-        expected = "missing release logger mode";
-#endif
-    }
-    {
-        std::ofstream output(config, std::ios::binary);
-        REQUIRE(output.is_open());
-        output << document;
-    }
-    ark::logger logger;
-    try
-    {
-        logger.init_logger(utf8_path(config), "invalid.log");
-        FAIL("malformed legacy logger configuration must throw");
-    }
-    catch (const std::runtime_error& error)
-    {
-        const std::string diagnostic = error.what();
-        CHECK(diagnostic.find(utf8_path(config)) != std::string::npos);
-        CHECK(diagnostic.find(expected) != std::string::npos);
-    }
-}
-
 TEST_CASE("Logging UTF-8 output directories and filenames create native files with UTF-8 content") {
     log_directory files;
     const auto directory = files.directory / std::filesystem::path(u8"中文 日志 😀");
@@ -482,59 +410,33 @@ TEST_CASE("Logging UTF-8 output directories and filenames create native files wi
         route = "toml";
     }
 #endif
-#ifdef OPEN_FILE_LOG
-    SUBCASE("legacy UTF-8 XML path and filename") {
-        route = "xml";
-    }
-#endif
     {
         ark::logger logger;
-        if (route == "xml")
+        ark::logging_settings settings;
+        settings.console = false;
+        settings.file = true;
+        settings.output_path = utf8_path(directory);
+        settings.pattern = "%v";
+        settings.queue_count = route == "async" ? 8 : 0;
+#ifdef ARK_LOGGING_CONFIG_TESTS
+        if (route == "toml")
         {
-            const auto config = files.directory / std::filesystem::path(u8"日志 配置 😀 𠀋.xml");
+            const auto config = files.directory / "logging.app.toml";
             {
                 std::ofstream output(config, std::ios::binary);
                 REQUIRE(output.is_open());
-                output << "<xml>";
-                for (const auto& name : {"default", "oss"})
-                {
-                    const auto path = name == std::string("default") ? directory : directory / "oss";
-                    output << "<logger name='" << name << "' queue_count='0' path='" << utf8_path(path)
-                           << "'><debug console='0' level='2' pattern='%v'/>"
-                           << "<release console='0' level='2' pattern='%v'/></logger>";
-                }
-                output << "</xml>";
+                const auto path = directory.generic_u8string();
+                output << "[application]\n[logging]\nconsole = false\nfile = true\npattern = '%v'\n"
+                       << "output_path = '" << std::string(reinterpret_cast<const char*>(path.data()), path.size())
+                       << "'\n";
             }
-            REQUIRE(logger.init_logger(utf8_path(config), utf8_path(filename)));
+            settings = ark::load_application_manifest(utf8_path(config)).logging;
+            CHECK(settings.output_path == utf8_path(directory));
         }
-        else
-        {
-            ark::logging_settings settings;
-            settings.console = false;
-            settings.file = true;
-            settings.output_path = utf8_path(directory);
-            settings.pattern = "%v";
-            settings.queue_count = route == "async" ? 8 : 0;
-#ifdef ARK_LOGGING_CONFIG_TESTS
-            if (route == "toml")
-            {
-                const auto config = files.directory / "logging.app.toml";
-                {
-                    std::ofstream output(config, std::ios::binary);
-                    REQUIRE(output.is_open());
-                    const auto path = directory.generic_u8string();
-                    output << "[application]\n[logging]\nconsole = false\nfile = true\npattern = '%v'\n"
-                           << "output_path = '" << std::string(reinterpret_cast<const char*>(path.data()), path.size())
-                           << "'\n";
-                }
-                settings = ark::load_application_manifest(utf8_path(config)).logging;
-                CHECK(settings.output_path == utf8_path(directory));
-            }
 #endif
-            settings.loggers["oss"] = settings;
-            settings.loggers["oss"].output_path = utf8_path(directory / "oss");
-            REQUIRE(logger.init_logger(settings, utf8_path(filename)));
-        }
+        settings.loggers["oss"] = settings;
+        settings.loggers["oss"].output_path = utf8_path(directory / "oss");
+        REQUIRE(logger.init_logger(settings, utf8_path(filename)));
         logger.log_t({"utf8.cpp", 7, ""}, spdlog::level::info, "{}", message);
         logger.log_oss(spdlog::level::info, "utf8", message);
     }

@@ -17,13 +17,14 @@
 
 ### Fixes
 
-- Logger output directories, filenames and legacy XML configuration paths support UTF-8, including Windows native UTF-16 file operations, while preserving existing rotation and output settings.
+- Logger output directories and filenames support UTF-8, including Windows native UTF-16 file operations, while preserving existing rotation and output settings.
 - Common Entity callbacks remain callable for every registered class instead of leaving later classes with moved-from functions.
 - XXTEA rejects malformed buffers before reading them and releases temporary allocations on string exceptions, preserving existing ciphertext.
 
 ### Upgrade notes
 
-- **BREAKING CHANGE:** Logger string paths now uniformly use UTF-8. Windows callers passing ANSI/active-code-page bytes must convert them before calling the logger. Public types/signatures remain unchanged; rebuild applications/plugins that include framework file sinks. See [UTF-8 migration](../service-manifests.md#embedded-logging).
+- **BREAKING CHANGE:** Remove standalone XML logger configuration, `log_conf::load_log_conf()` / `get_default()` and `logger::init_logger(conf_file, filename)`. Use `logging_settings` or pass `manifest.logging` from the application TOML to the settings overload; rebuild applications/plugins and consumers. See [logger migration](../service-manifests.md#embedded-logging).
+- **BREAKING CHANGE:** Logger string paths now uniformly use UTF-8. Windows callers passing ANSI/active-code-page bytes must convert them before calling the logger. The settings API retains string path types; rebuild applications/plugins that include framework file sinks. See [UTF-8 migration](../service-manifests.md#embedded-logging).
 - **BREAKING CHANGE:** Remove `module::stop_accepting()` overrides and Net external-root helper registrations; HTTP no longer uses manager-state business admission or continuation exceptions. Move business shutdown into application procedures and rebuild the launcher, all plugins and consumers together. Resource waiting remains unlimited by default, with optional `--shutdown_timeout_ms`. See [lifecycle migration](lifecycle-closeout.md#migration-and-remaining-boundaries).
 
 - `zstd_compress` is move-only and its object layout changes. Replace copying with moving, borrowing or constructing an independent instance, and rebuild consumers/plugins together. See [compression ownership](../reference/utility.md#compression-buffers-and-concurrency).

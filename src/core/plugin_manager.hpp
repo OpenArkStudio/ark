@@ -36,6 +36,7 @@
 #include <utility>
 #include <vector>
 
+#include "ark/define.hpp"
 #include "ark/dynamic_library.hpp"
 #include "ark/logger.hpp"
 #include "ark/module.hpp"
