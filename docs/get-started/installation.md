@@ -157,7 +157,7 @@ cmake --build http-installed-build --parallel 2 --target check-http-installed
 | Entry | Coverage and prerequisites |
 | --- | --- |
 | `check-sdk` in `tests/consumer/http` | Existing build-tree public-header consumer; installed-runtime mode defaults to OFF. |
-| `check-http-installed` | Native UNIX only; uses `find_package(ark)` and the installed HTTP DSO, checks its implementation path with `dladdr`, one HTTP 200 response, route-capture destruction, endpoint closure and repeated stop. Requires loopback access and an ABI-compatible HTTP installation built with `ARK_BUILD_PLUGIN_HTTP=ON`; match the producer's Debug/Release configuration and dependency prefixes. Locally validated on macOS Debug; no Windows runtime entry. |
+| `check-http-installed` | Native UNIX only; uses `find_package(ark)` and the installed HTTP DSO, checks its implementation path with `dladdr`, one HTTP 200 response, route-capture destruction, endpoint closure and repeated stop. A 15-second process deadline exits with code 124; the 3-second receive and 5-second cleanup observations remain separate. Requires loopback access and an ABI-compatible HTTP installation built with `ARK_BUILD_PLUGIN_HTTP=ON`; match the producer's Debug/Release configuration and dependency prefixes. Locally validated on macOS Debug; no Windows runtime entry. |
 | `tests/install/check_install.cmake` with `ARK_TEST_HTTP=ON` | Adds the same HTTP consumer after staging and relocation. Set `ARK_TEST_CONFIG=Debug` or `Release`; `ARK_TEST_HTTP_BINDIR` defaults to `bin` and may name the producer's custom relative binary directory. Use an application build with the HTTP runtime enabled; the core-only `run_isolated.cmake` producer does not build that DSO. |
 
 ## Create an archive

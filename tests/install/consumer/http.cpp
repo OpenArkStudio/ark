@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <signal.h>
 #include <string>
 #include <sys/socket.h>
 #include <thread>
@@ -30,6 +31,12 @@ static_assert(std::is_same_v<decltype(std::declval<ark::http_server_module&>().g
 #endif
 
 namespace {
+
+void on_process_deadline(int) {
+    constexpr char message[] = "installed HTTP consumer exceeded its 15-second process deadline\n";
+    static_cast<void>(::write(STDERR_FILENO, message, sizeof(message) - 1));
+    ::_exit(124);
+}
 
 [[noreturn]] void fail(const std::string& reason) {
     std::cerr << reason << std::endl;
@@ -55,6 +62,14 @@ int make_socket() {
 } // namespace
 
 int main(int argc, char** argv) {
+    struct sigaction deadline_action
+    {
+    };
+
+    deadline_action.sa_handler = on_process_deadline;
+    require(sigemptyset(&deadline_action.sa_mask) == 0 && ::sigaction(SIGALRM, &deadline_action, nullptr) == 0,
+        "process deadline signal setup failed");
+    ::alarm(15);
     require(argc == 3, "expected installed plugin directory and independent runtime directory");
     const auto plugin_directory = std::filesystem::canonical(argv[1]);
 #ifdef _DEBUG
@@ -148,5 +163,6 @@ int main(int argc, char** argv) {
     require(::connect(probe, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == -1 && errno == ECONNREFUSED,
         "HTTP endpoint did not refuse connections after stop");
     ::close(probe);
-    std::cout << "HTTP state=stopped; route capture destroyed; endpoint closed; repeated stop passed\n";
+    std::cout << "HTTP state=stopped; route capture destroyed; endpoint closed; repeated stop passed" << std::endl;
+    ::alarm(0);
 }
