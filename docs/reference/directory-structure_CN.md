@@ -153,14 +153,14 @@ cmake --build http-sdk-build --target check-sdk --parallel 2
 | 源码路径 | 用途与部署位置 |
 | --- | --- |
 | `config/` | 配置样例；将所需文件复制到运行目录的 `conf/` |
-| `resources/excel/` | 离线编辑的配置工作表 |
-| `resources/meta/`、`resources/server/` | 生成的元数据与业务数据；部署到运行目录的 `resource/` |
-| `resources/client/`、`resources/mysql/` | 客户端输出目录占位和数据库结构资源 |
-| `resources/code/` | 复制到公开头文件前的元数据生成代码 |
-| `tools/` | 配置导出器和保留的历史工具；状态见工具指南 |
+| `resources/entity_config/` | 原生显式索引 CSV 字段／配置模板 |
+| `resources/excel/` | 保留的源工作簿；原生导出前需调整旧行布局 |
+| `resources/meta/`、`resources/code/`、`resources/client/` | 输出占位；原生导出器向独立目录写入经过检查的 bundle |
+| `resources/mysql/`、`resources/photon/proto/` | 保留的 SQL schema 和 Photon Proto／SQL 资源 |
+| `tools/` | 原生 JSON 配置导出器和历史脚手架；状态见工具指南 |
 | `deployment/scripts/` | 启动和停止脚本；可复制到运行目录，或显式传入运行目录 |
 
-运行包继续使用 `bin/`、`conf/` 和按需提供的 `resource/`；日志由配置写入运行目录的 `binlog/`。源码目录改名不改变业务 XML、资源格式或运行时查找规则。见[运行脚本迁移](../guides/applications_CN.md#迁移旧命令)。
+运行包继续使用 `bin/`、`conf/` 和按需提供的 `resource/`；日志由配置写入运行目录的 `binlog/`。Kernel 启动前需部署导出的 `resource/meta/entity_schema.json`；旧 `resources/server/` XML 导出物与 Photon XML 生成器已移除。见[运行脚本迁移](../guides/applications_CN.md#迁移旧命令)。
 
 旧文中的 `bin/`、`frame/`、`dep/` 目录不是当前源码布局。生成流程见[配置工具](../guides/tools_CN.md)，进程启动见[应用启动器](../guides/applications_CN.md)。协议公开头文件与兼容边界见 [Protobuf 消息](protobuf_CN.md)。
 

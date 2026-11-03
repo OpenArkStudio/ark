@@ -75,113 +75,23 @@ C++ 导出器本身不需要 .NET。
 
 XLSX 公式会被拒绝，已有缓存结果也不例外。请导出计算后的值或使用 CSV。超出 `[-9007199254740991, 9007199254740991]` 的整数必须使用 XLSX **文本**单元格，尤其是 `18446744073709551615` 等 `uint64` 值；电子表格的数值单元格可能已丢失精度。字符串和 GUID 也需要文本单元格。CSV 可以保留十进制整数文本，但无法恢复已经舍入的电子表格值。
 
-把 `meta/entity_schema.json` 放到运行目录的 `resource/meta/`。文件存在时它是权威资源，选中的 JSON 非法会使启动失败，不会回退 XML；文件不存在时仍保留旧 XML 路径。创建 Entity 时先完成 schema 零值／延迟初始化，再复制选中的静态配置，最后按字段应用显式参数；包括零值在内的参数只覆盖传入的字段。工具不负责热更新服务器、迁移数据库或按客户端／服务端过滤分发字段。
+把 `meta/entity_schema.json` 放到运行目录的 `resource/meta/`。Kernel 要求提供这份 JSON；文件缺失或内容非法都会使启动失败，不回退到 XML。创建 Entity 时先完成 schema 零值／延迟初始化，再复制选中的静态配置，最后按字段应用显式参数；包括零值在内的参数只覆盖传入的字段。工具不负责热更新服务器、迁移数据库或按客户端／服务端过滤分发字段。
 
-## 旧版 Python/XML 工作流
+## 源工作簿与保留工具
 
-`tools/config_tool/config_tool.py` 与 `tools/gen-config.*` 为仍使用旧 XML 的应用保留原有 XLSX 到 XML 流程。它们使用 `resources/excel/`，不读取原生字段表布局，也不生成 `entity_schema.json`。以下命令与布局仅适用于这套旧流程。
+`resources/excel/` 保留原始源工作簿。其历史行布局不等同于上文原生字段表格式；
+使用 `ark_config_tool` 前，需要整理制作数据并确定稳定索引。
+原 Python/XML 导出器、`gen-config.*` 包装脚本、仅有配置的 GCM 目录，以及缺少维护源码的
+Photon XML 生成脚本／二进制均已移除。`resources/server/` 中的旧 XML 导出物不是运行时输入。
+这套 JSON 导出流程不会覆盖 `src/core/meta_define.hpp`。
 
-
-使用 Python 3 运行旧生成器，并在所选 Python 环境中安装 `openpyxl`。只有打包独立可执行文件时才需要 PyInstaller。
-
-```sh
-python3 tools/config_tool/config_tool.py --help
-python3 tools/config_tool/config_tool.py --path /path/to/resource
-```
-
-| 参数 | 必填 | 含义 |
-| --- | --- | --- |
-| `--path` / `-p` | 是 | 包含 `excel/`、`meta/`、`server/`、`code/` 的资源根目录 |
-| `--help` / `-h` | 否 | 输出参数说明 |
-
-参数帮助虽然写着「excel file path」，实际应传入**资源根目录**，不是 `.xlsx` 文件或 `excel/` 子目录。生成器在该根目录下写文件，并要求输出目录已经存在。
-
-## 在临时资源副本中导出
-
-先在仓库根目录复制附带的资源目录，再修改工作簿。macOS/Linux：
-
-```sh
-resource_demo=$(mktemp -d)
-cp -R resources/. "$resource_demo/"
-python3 tools/config_tool/config_tool.py --path "$resource_demo"
-printf '%s\n' "$resource_demo"
-```
-
-Windows PowerShell，需先准备 Python 和 openpyxl：
-
-```powershell
-$resourceDemo = Join-Path ([System.IO.Path]::GetTempPath()) ("ark-resource-" + [guid]::NewGuid())
-New-Item -ItemType Directory -Path $resourceDemo | Out-Null
-Copy-Item resources/* $resourceDemo -Recurse -Force
-python tools/config_tool/config_tool.py --path $resourceDemo
-Write-Output $resourceDemo
-```
-
-附带的工作簿会在副本中生成以下文件：
-
-| 输出 | 用途 |
+| 路径 | 当前用途 |
 | --- | --- |
-| `meta/entity_class.config`、`meta/common.meta`、`meta/player.meta` | 实体元数据索引和定义 |
-| `meta/config_class.config`、`meta/item.meta` 等配置 `.meta` 文件 | 配置元数据索引和字段定义 |
-| `server/item.config`、`server/attribute.config`、`server/language.config`、`server/map.config` | 配置数据行 |
-| `code/meta_define.hpp` | 生成的 C++ 名称和字段索引 |
-| `code/AFMetaDefine.cs` | 生成的 C# 定义 |
+| `tools/entity_config/` | 上文描述的原生 CSV／XLSX／JSON 导出器 |
+| `tools/plugin_and_module_tool/` | 保留旧接口的历史脚本、模板和 x86-64 macOS 二进制，没有当前 SDK 兼容性证明 |
+| `tools/gen-plugin-and-module.bat` | 该历史脚手架的包装脚本 |
+| `resources/photon/proto/` | 保留 Protobuf schema 和 SQL 输出；读取这些源码不需要已删除的 XML 生成器 |
 
-部署前先检查生成的 XML 和定义。当前生成器不会另外导出一套客户端资源，也不会迁移数据库结构或重新加载运行中的进程。Kernel 加载这些数据时，需要把所需的 `meta/`、`server/` 输出放到运行目录的 `resource/` 下，详见[应用启动器](applications_CN.md#确定配置路径)。
-
-## 修改普通配置工作簿
-
-使用 `.xlsx` 格式。对于 `item.xlsx` 等普通配置，生成器读取第一张工作表，每列表示一个字段：
-
-| 行 | 含义 | `item.xlsx` 第一列 |
-| --- | --- | --- |
-| 1 | 字段名 | `id` |
-| 2 | 字段类型 | `uint64` |
-| 3 | 目标标签 | `a` |
-| 4 | 引用 | 空 |
-| 5 | 说明 | `id` |
-| 第 6 行起 | 数据值 | `100001`、`100002` 等 |
-
-`entity_class.xlsx` 使用另一种布局描述实体类和字段，应以仓库附带工作簿为模板。修改 C++ 标识符时，不要顺带改变类名、字段名和反射字符串，它们属于资源约定。
-
-<Aside type="caution" title="检查生成的资源范围">
-
-现有导出器不提供完整的工作簿校验。不要依赖 `target` 标签隔离服务端和客户端字段，也不要假设空单元格会转换成应用默认值。部署前应检查输出 XML、字段类型和预期分发范围。
-
-</Aside>
-
-## 更新仓库中的生成头文件
-
-资源变更经过检查后，在工作分支运行包装脚本。脚本导出仓库的 `resources/`，按项目 clang-format 规则格式化 `code/meta_define.hpp`，再复制到 `src/core/meta_define.hpp`，会覆盖这些生成文件。
-
-macOS/Linux 上选择 Python 环境和项目支持的 clang-format 版本：
-
-```sh
-PYTHON=python3 CLANG_FORMAT=clang-format sh tools/gen-config.sh
-```
-
-Windows 按需设置 `PYTHON`、`CLANG_FORMAT` 后运行 `tools/gen-config.bat`。直接运行 `config_tool.py` **不会**执行最后的头文件复制。
-
-生成头文件使用 snake_case 的 C++ 名称，保留 `Player` 等资源字符串：
-
-```cpp
-#include "ark/meta_define.hpp"
-
-const auto& class_name = ark::entity_meta_player::self_name();
-const auto field_index = ark::meta_name_index::get_index(class_name, "map_id");
-```
-
-类或字段不存在时返回索引 `0`。C# 输出保留原有命名规范。资源命名和格式变化需要单独确定兼容规则，生成的 C++ 名称变化不代表资源 schema 已迁移。
-
-## 工具目录中的其他内容
-
-| 目录 | 当前用途 |
-| --- | --- |
-| `entity_config` | 原生 Entity JSON 导出器 |
-| `config_tool` | 旧版 Python/XML 导出器 |
-| `plugin_and_module_tool` | 使用旧接口的历史脚手架模板，不应作为当前 SDK 示例；创建方式见[模块](modules_CN.md)和[插件](plugins_CN.md)指南 |
-| `gcm` | 仅有配置示例，当前目录未提供可执行的环境管理工具 |
-
-Photon 的历史协议资源保留在 `resources/photon/`，其中只有 x86-64 macOS/Linux 解析器二进制，仓库没有对应生成器源码；本次未验证其兼容性，也不将其列为当前可用工具。脚手架目录中的历史可执行文件同样未通过当前 SDK 验证。
-
-工具源码位于 [tools](https://github.com/OpenArkStudio/ark/tree/main/tools)。应用的 TOML/XML 插件列表、日志配置与生成的 Kernel 资源是不同的配置输入。
+新代码应按[模块](modules_CN.md)和[插件](plugins_CN.md)指南编写，不使用历史脚手架生成。
+工具源码位于 [tools](https://github.com/OpenArkStudio/ark/tree/main/tools)。
+应用／插件参数和日志使用 TOML，Kernel 定义与业务配置使用导出的 JSON bundle，职责分别组织。
