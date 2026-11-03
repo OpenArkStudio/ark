@@ -21,6 +21,7 @@
 #pragma once
 
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <source_location>
 #include <string_view>
@@ -117,26 +118,49 @@ public:
     }
 
     void load_log_conf(std::string const& filename) {
-        xml xml(filename);
-        auto root_node = xml.get_root_node();
+        std::ifstream input(detail::logging_path_from_utf8(filename), std::ios::binary);
+        if (!input)
+        {
+            throw std::runtime_error("cannot open file " + filename);
+        }
+        rapidxml::file<> contents(input);
+        rapidxml::xml_document<> document;
+        document.parse<rapidxml::parse_validate_closing_tags>(contents.data());
+        const auto* root = document.first_node();
+        if (!root)
+        {
+            throw std::runtime_error("invalid logger configuration " + filename + ": missing root element");
+        }
+        const auto attribute = [](const rapidxml::xml_node<>* node, const char* key, const char* fallback = "") {
+            const auto* value = node->first_attribute(key);
+            return value ? value->value() : fallback;
+        };
 
-        for (auto logger_node = root_node.find_node("logger"); logger_node.is_valid(); logger_node.next_node())
+        for (const auto* logger_node = root->first_node("logger"); logger_node;
+             logger_node = logger_node->next_sibling())
         {
             // create AFLogConfData
             auto conf_data = std::make_shared<log_conf_data>();
-            auto name = logger_node.get_string("name");
-            conf_data->sink_queue_count = logger_node.get_uint32("queue_count");
-            conf_data->output_path = logger_node.get_string("path");
+            const std::string name = attribute(logger_node, "name");
+            conf_data->sink_queue_count = misc::from_string<uint32_t>(attribute(logger_node, "queue_count", "0"));
+            conf_data->output_path = attribute(logger_node, "path");
 
 #ifdef ARK_RUN_MODE_DEBUG
-            auto mode_node = logger_node.find_node("debug");
+            constexpr auto mode = "debug";
 #else
-            auto mode_node = logger_node.find_node("release");
+            constexpr auto mode = "release";
 #endif //ARK_RUN_MODE_DEBUG
+            const auto* mode_node = logger_node->first_node(mode);
+            if (!mode_node)
+            {
+                throw std::runtime_error(
+                    "invalid logger configuration " + filename + ": missing " + mode + " logger mode");
+            }
 
-            conf_data->consol = mode_node.get_bool("console");
-            conf_data->level = static_cast<spdlog::level::level_enum>(mode_node.get_uint32("level"));
-            conf_data->pattern = mode_node.get_string("pattern");
+            conf_data->consol = misc::from_string<bool>(attribute(mode_node, "console", "0"));
+            conf_data->level =
+                static_cast<spdlog::level::level_enum>(misc::from_string<uint32_t>(attribute(mode_node, "level", "0")));
+            conf_data->pattern = attribute(mode_node, "pattern");
 
             conf_datas_.insert(name, conf_data);
         }
@@ -173,7 +197,9 @@ public:
     }
 
     void init(std::string const& filename, const std::string& identity = {}) {
-        const auto file_path = (std::filesystem::path(log_conf_->output_path) / filename).string();
+        const auto native_path =
+            detail::logging_path_from_utf8(log_conf_->output_path) / detail::logging_path_from_utf8(filename);
+        const auto file_path = detail::logging_path_to_utf8(native_path);
         log_name_ = identity.empty() ? file_path : identity + ":" + file_path;
         std::vector<spdlog::sink_ptr> sinks_vec;
 
@@ -183,7 +209,8 @@ public:
             {
             case k_log_sink_type::date_and_hour_sink:
             {
-                auto date_and_hour_sink = std::make_shared<spdlog::sinks::date_and_hour_file_sink_mt>(file_path);
+                auto date_and_hour_sink =
+                    std::make_shared<spdlog::sinks::date_and_hour_file_sink_mt>(detail::logging_filename(native_path));
                 sinks_vec.emplace_back(date_and_hour_sink);
             }
             break;
@@ -268,6 +295,7 @@ public:
         singleton<logger>::set_instance(instance);
     }
 
+    // Public string paths and filenames are UTF-8 on every platform.
     bool init_logger(const logging_settings& settings, const std::string& log_filename) {
         if (default_logger_ != nullptr)
         {
@@ -312,6 +340,7 @@ public:
         return true;
     }
 
+    // Both the legacy XML configuration path and log filename are UTF-8.
     bool init_logger(std::string const& conf_file, std::string const& log_filename) {
         if (default_logger_ != nullptr)
         {
