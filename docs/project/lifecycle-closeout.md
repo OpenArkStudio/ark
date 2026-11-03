@@ -13,7 +13,7 @@ The framework orders startup and releases process resources. Application and ope
 
 Declared provider keys order all four startup phases provider-first. Missing providers/cycles fail before hooks; undeclared modules are independent. Ready-node ties use registration keys, not manifest order. Installation and partial hooks can already acquire resources, so topology is not acquisition rollback.
 
-On startup failure the launcher reports phase/owner, invokes only independent cleanup explicitly enrolled before acquisition, and exits `1` through `_Exit` (plus Windows `TerminateProcess`). The preallocated registry holds up to 16 owners, visits reverse enrollment order and stops at unsafe/failed cleanup. Normal shutdown hooks, object/static destruction, DSO unload and same-process retry do not run. Callback-free Timer/Schedule and idle Net HTTP client retirement are separate from HTTP listener owner retention and database construction ordering; none provides generic live-IO or business rollback. See the [resource boundaries](startup-failure-cleanup.md#remaining-io-boundaries).
+On startup failure the launcher reports phase/owner, invokes only independent cleanup explicitly enrolled before acquisition, and exits `1` through `_Exit` (plus Windows `TerminateProcess`). The preallocated registry holds up to 16 owners, visits reverse enrollment order and stops at unsafe/failed cleanup. Normal shutdown hooks, object/static destruction, DSO unload and same-process retry do not run. Callback-free Timer/Schedule and idle Net HTTP client retirement are separate from Net/HTTP listener owner retention and database construction ordering; none provides generic live-IO or business rollback. See the [resource boundaries](startup-failure-cleanup.md#remaining-io-boundaries).
 
 ## Resource shutdown
 
@@ -93,4 +93,12 @@ Startup fail-fast and the registered startup-cleanup contract are unchanged. Sha
 
 Permanent targets include Core task/dependency/cleanup tests, `check-app-business-runtime`, `check-app-shutdown-deadlines`, `check-native-unload` and the affected official plugin suites. Their existence is not a passing receipt for this revision: report exact commands, tested source and results when running them. Owned-child observation deadlines terminate retained test processes; they are not successful framework shutdown.
 
-The [database service report](../reports/database-services.md) preserves earlier real-service evidence, including natural drain at its recorded revision. That history does not verify cancellation-based process shutdown. Local native tests, hosted CI, deployed documentation and production capacity remain separate claims.
+The [database service report](../reports/database-services.md#public-database-service-workflows) records **17 passing modes on 2026-11-03** using build `3948d881`, with equivalent database/core/configuration/dependency/build inputs at `10e385b4`. The [acceptance index](../guides/database-validation.md) links the native entries and their limits.
+
+| Evidence | Executed boundary and result |
+| --- | --- |
+| Positive workflows | 3 actual-DSO modes, 1,351 cycles / 4,053 exit-`0` invocations in 300 seconds; owning results, commit/rollback visibility and resource stop |
+| Failure controls | 2 modes, each once, exit `0`; real module factories/implementations linked into the host, covering authentication rejection, observed timeouts and explicit recovery |
+| Cancellation, TLS and manager stop | 12 actual-DSO modes, each once, exit `0`: 4 explicit request-cancellation modes, 3 TLS controls and 5 pending-request manager-stop modes. Cancellation/stop checks independently observe the tagged active operation and target-session retirement |
+
+MySQL cancellation retains `outcome_unknown=true`; cancelled transaction/prepared results remain `unconfirmed`, and an observed external zero is not a rollback acknowledgement or global exactly-once guarantee. These bounded database observations add no general startup-IO or shutdown guarantee, long-duration stability or production-capacity conclusion. Direct-module positive, restart, isolation and server-termination evidence retain their own recorded revisions. Local native tests, hosted CI and deployed documentation remain separate evidence states.

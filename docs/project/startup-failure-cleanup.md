@@ -121,13 +121,25 @@ The action checks requests, queued results and active callback frames under the 
 
 Actions still run in reverse enrollment order. A newer unsafe owner can prevent this capsule from being visited; an idle HTTP client is not a guarantee that the complete startup attempt is clean. Fail-fast exit `1` remains mandatory, with no same-process retry.
 
+## Net TCP and RUDP listener ownership
+
+`create_server()` prepares the service callback registration and stable bus slot before TCP/RUDP native start. The installed Net module owns the complete service, receiver and transport graph before workers can be acquired; native start success alone does not publish it.
+
+| Result | Ownership and visibility |
+| --- | --- |
+| Successful start | Publish the entry for ordinary getters/update; an existing bus slot rejects another start without replacing its owner |
+| Ordinary false return | Perform the existing synchronous service shutdown, then erase the slot; a completed cleanup permits another call |
+| Native start or false-return cleanup throws | Retain the complete unpublished entry; getters/update skip it and another call cannot overwrite its occupied slot |
+
+This is retention in an already installed module, not a new startup-cleanup action. After a managed startup failure, no business update or normal shutdown is driven to retire this graph: the module, borrowed providers and code remain live until mandatory exit `1`. A callback lifetime token does not prove native retirement. Normal process shutdown still closes owned services before clearing them; no same-process startup retry or general listener rollback is added. `check-net-listener-startup` is included in the Protobuf-enabled `check-core` path.
+
 ## Remaining IO boundaries
 
 | Resource | Existing boundary | Outside automatic failed-start retirement |
 | --- | --- | --- |
 | Routed HTTP listener | The [complete owner](#guarded-http-listener-ownership) retains every native attempt, reservation and independent callback state before binding/start can fail | Any native endpoint object, exposed router or active lease returns `unsafe`; the action does not stop IO or destroy business captures |
 | MySQL / Redis connections | Named slots, passive service bookkeeping, bridges and transaction state precede native pool acquisition | No database startup-cleanup capsule; ordinary `stop()` / `close_and_wait()` is not a failure-registry action or SQL rollback |
-| Other Net listeners / clients | Service and transport objects own ordinary IO state; the [quiet HTTP client](#quiet-net-http-client-cleanup) is a separate enrolled resource | Other listener/client graphs have no registered failure action; native retirement and borrowed callback/provider lifetimes still need their own policy |
+| Net listeners / other clients | [TCP/RUDP listeners](#net-tcp-and-rudp-listener-ownership) retain incomplete starts in installed owners; the [quiet HTTP client](#quiet-net-http-client-cleanup) is a separate enrolled resource | No registered failure action retires TCP/RUDP listeners or other client graphs; native retirement and borrowed callback/provider lifetimes still need their own policy |
 
 For additional IO enrollment, keep callback code, receivers, bridge/runtime and complete native owners alive until a proven retirement barrier. Ordinary module update may execute business code on partial startup and is not a cleanup pump. The callback-free Schedule path and quiet HTTP client can synchronously join native workers; neither provides a preemptible deadline. Pinned arknet's [pool close](https://github.com/OpenArkStudio/arknet/blob/a0dfe09cd543e75cfb5996e537ce2fa49f2a758f/include/arknet/mysql/pool.hpp#L972) may wait. Retained work therefore still needs an explicit completion/cancellation policy and retirement observation, rather than a detached close or inferred external rollback.
 

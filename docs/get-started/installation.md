@@ -166,6 +166,22 @@ cmake --build http-installed-build --parallel 2 --target check-http-installed
 | `check-http-installed` | Native UNIX only; uses `find_package(ark)` and the installed HTTP DSO, checks its implementation path with `dladdr`, one HTTP 200 response, route-capture destruction, endpoint closure and repeated stop. A 15-second process deadline exits with code 124; the 3-second receive and 5-second cleanup observations remain separate. Requires loopback access and an ABI-compatible HTTP installation built with `ARK_BUILD_PLUGIN_HTTP=ON`; match the producer's Debug/Release configuration and dependency prefixes. Locally validated on macOS Debug; no Windows runtime entry. |
 | `tests/install/check_install.cmake` with `ARK_TEST_HTTP=ON` | Adds the same HTTP consumer after staging and relocation. Set `ARK_TEST_CONFIG=Debug` or `Release`; `ARK_TEST_HTTP_BINDIR` defaults to `bin` and may name the producer's custom relative binary directory. Use an application build with the HTTP runtime enabled; the core-only `run_isolated.cmake` producer does not build that DSO. |
 
+To check installed production MySQL and Redis plugins without connecting to a database, use the database entry after installing and moving the prefix:
+
+```sh
+cmake -S tests/consumer/database -B database-installed-build \
+  -DCMAKE_BUILD_TYPE=Debug \
+  '-DCMAKE_PREFIX_PATH=/path/to/relocated-prefix;/path/to/dependencies' \
+  -DARK_TEST_DATABASE_PLUGIN_DIR=/path/to/relocated-prefix/bin
+cmake --build database-installed-build --parallel 2 --target check-database-installed
+```
+
+| Entry | Scope and prerequisites |
+| --- | --- |
+| `check-database-installed` | Uses `find_package(ark)` with `ark::mysql` / `ark::redis`, public headers and the production `ark_mysql_plugin` / `ark_redis_plugin` DSOs. Checks module lookup, unconfigured initial lifecycle, resource stop, module removal, successful plugin unload and repeated stop. The CMake runner bounds the whole process to 15 seconds; the cooperative cleanup observation is 5 seconds. Native UNIX additionally checks each implementation path with `dladdr`; this probe is excluded elsewhere. Locally validated on macOS Debug only; Windows/Linux runtime acceptance and physical OS image removal are not established. |
+| Installation | Enable `ARK_BUILD_APPLICATIONS`, `ARK_BUILD_PLUGIN_MYSQL` and `ARK_BUILD_PLUGIN_REDIS`, build and install the selected outputs, and use an SSL-enabled arknet dependency. Match the producer's Debug/Release configuration and ABI-compatible dependency prefixes. This check never configures a connection or issues a query/command; it does not replace real-service or protocol tests. |
+| `tests/install/check_install.cmake` with `ARK_TEST_DATABASE=ON` | Adds the same consumer after installation, prefix relocation and exported-path auditing. Set `ARK_TEST_CONFIG=Debug` or `Release`; `ARK_TEST_DATABASE_BINDIR` defaults to `bin` and supports a custom relative binary directory. The core-only `run_isolated.cmake` producer does not build these runtime plugins. The existing `ARK_TEST_MYSQL` mode remains an interface compilation check. |
+
 ## Create an archive
 
 After building, CPack creates standard archives from the install rules:
