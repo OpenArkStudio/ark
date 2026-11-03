@@ -1,6 +1,6 @@
 # Examples by capability
 
-The bundled examples use capability names. Configure with applications and examples enabled; this naming change does not change the enabled set or update participation.
+The bundled examples use capability names. Configure with applications and examples enabled. The default Timers, Module Lifecycle and Entity Operations examples require no Consul, Etcd, Kafka or OSS services; these four integrations are [archived](../reference/directory-structure.md#archived-integrations). Their runtime builds remain off by default.
 
 | Directory / application name | Plugin stem | Purpose and supported status |
 | --- | --- | --- |
@@ -12,7 +12,7 @@ The bundled examples use capability names. Configure with applications and examp
 | `examples/redis_sample` / `redis_sample` | `redis_sample_plugin` | Native Redis coroutine example; disabled in the application example list, assembly checked by database tests |
 | `examples/physics_scene` / `physics_scene` | `physics_scene_plugin` | Disabled; requires unsupported legacy PhysX 3. The checked-in sources and manifest do not establish a runnable integration |
 | `examples/http_server` / `http_server` | `http_server_plugin` | Disabled as an application example; [typed construction and controlled DSO regression](../reference/http.md#legacy-http-example-construction) |
-| `examples/http_client` / `http_client_sample` | `http_client_sample_plugin` | Disabled as an application example; future/callback POST and etcd lease demonstration with fixed external endpoints |
+| `examples/http_client` / `http_client_sample` | `http_client_sample_plugin` | Disabled as an application example; retained future/callback POST and archived Etcd Client lease demonstration with fixed external endpoints |
 
 hpp/cpp files remain adjacent in each directory. Start with the [timers quick start](../get-started/quick-start.md). The generic launcher helpers select `conf/<name>.app.toml`, so use the capability name for both the process and application manifest. Kernel examples still require their business metadata.
 

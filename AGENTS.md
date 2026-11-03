@@ -140,6 +140,15 @@ branch or worktree when the existing checkout contains uncommitted changes.
   Verify accepted source before claiming the new layout is available. Hot-update
   and Registry design discussions remain paused.
 
+## Archived integrations
+
+- Consul, Etcd Client, Kafka and OSS SDK are archived. Keep their existing source
+  locations, public header paths, CMake targets and explicit opt-in build options.
+  Their runtime plugins default to OFF and default examples require none of their
+  services. Retained construction/export checks are compatibility checks only.
+  Do not resume feature work, driver/protocol integration or modernization of
+  these four plugins unless the user explicitly re-enables that work.
+
 ## Process shutdown ownership
 
 - Applications/operators complete announcements, business-ingress closure, player

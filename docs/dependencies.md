@@ -13,7 +13,7 @@ source tree or dependency submodule initialization.
 | Manifest reader | `config` (default) | `tomlplusplus` → `tomlplusplus::tomlplusplus` |
 | Applications | `application` | `args` → `taywee::args`, Protobuf, zlib, Zstandard |
 | Compression regressions | `compression-tests` | zlib, Zstandard, LZ4; `ARK_BUILD_COMPRESSION_TESTS=ON` |
-| etcd client plugin | `etcd-client` | `nlohmann-json` → `nlohmann_json::nlohmann_json` |
+| Archived etcd client plugin | `etcd-client` | `nlohmann-json` → `nlohmann_json::nlohmann_json` |
 | Native database development | `database` | OpenSSL |
 
 spdlog's imported target propagates its external fmt dependency and compile
@@ -21,9 +21,8 @@ definitions. Consumers of `ark::core` inherit both packages without manual inclu
 paths or definitions. `args` and JSON are found only when the application or etcd
 plugin is enabled, respectively; JSON is private to the etcd plugin.
 
-The application build enables the etcd plugin by default. Select
-`-DVCPKG_MANIFEST_FEATURES="application;boost;etcd-client"` for that build. To omit
-etcd, set `-DARK_BUILD_PLUGIN_ETCD_CLIENT=OFF` and leave out `etcd-client`.
+Consul, Etcd Client, Kafka and OSS SDK are [archived](reference/directory-structure.md#archived-integrations), with runtime plugins off by default. The application build uses
+`-DVCPKG_MANIFEST_FEATURES="application;boost"`; archived Etcd Client remains explicitly selectable with `-DARK_BUILD_PLUGIN_ETCD_CLIENT=ON` and the additional `etcd-client` feature.
 Manifest features select packages; the corresponding `ARK_BUILD_*` options select
 CMake targets. They do not automatically enable each other.
 

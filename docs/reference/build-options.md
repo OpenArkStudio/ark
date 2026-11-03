@@ -12,6 +12,10 @@
 | `ARK_BUILD_CONFIG_TOOL_TESTS` | Value of `ARK_BUILD_TESTS` | Build native exporter and generated C++ header regressions when the exporter is enabled |
 | `ARK_BUILD_EXAMPLES` | `ON` | Build enabled examples |
 | `ARK_BUILD_HTTP_EXAMPLE_TESTS` | `ON` for core tests with Boost and HTTP/Net/Etcd Client API targets, otherwise `OFF` | Compile and run actual HTTP example DSOs with isolated service doubles; explicit `OFF` is respected |
+| `ARK_BUILD_PLUGIN_CONSUL` | `OFF` | Archived Consul runtime plugin; explicit opt-in retained |
+| `ARK_BUILD_PLUGIN_ETCD_CLIENT` | `OFF` | Archived Etcd Client runtime plugin; requires the `etcd-client` vcpkg feature |
+| `ARK_BUILD_PLUGIN_KAFKA` | `OFF` | Archived Kafka runtime plugin; requires the existing driver dependencies |
+| `ARK_BUILD_PLUGIN_OSSSDK` | `OFF` | Archived OSS SDK scaffold; explicit opt-in retained |
 | `ARK_BUILD_PLUGIN_MYSQL` | `OFF` | Build the native MySQL coroutine plugin; requires `ARKNET_ENABLE_SSL=ON` |
 | `ARK_BUILD_PLUGIN_REDIS` | `OFF` | Build the native Redis coroutine plugin; enable SSL for TLS pools |
 | `ARK_BUILD_DATABASE_TESTS` | `OFF` | Build native database and public plugin regressions; requires an explicit `ARKNET_SOURCE_DIR` |
@@ -26,13 +30,15 @@ The project requires C++20 through CMake and disables compiler extensions. Appli
 
 When upgrading arknet, use a new build directory or explicitly change the cached revision. A nonempty `ARKNET_SOURCE_DIR` takes precedence over fetching the pin; see [Upgrade arknet](../get-started/installation.md#upgrade-arknet).
 
-Official plugin options use `ARK_BUILD_PLUGIN_<NAME>`. The default runtime selection is `kernel`, `net`, `bus`, `utility` and `etcd_client`; enable the optional MySQL/Redis targets to build native coroutine plugins. Protocol and plugin-load tests do not replace real-server deployment acceptance. See [project layout](directory-structure.md), [protocol generation](protobuf.md) and [network builds](../networking.md).
+Official plugin options use `ARK_BUILD_PLUGIN_<NAME>`. The default runtime selection is `kernel`, `net`, `bus` and `utility`; enable the optional MySQL/Redis targets to build native coroutine plugins. Protocol and plugin-load tests do not replace real-server deployment acceptance. See [project layout](directory-structure.md), [protocol generation](protobuf.md) and [network builds](../networking.md).
 
 With `ARK_BUILD_EXAMPLES` enabled, the [coroutine task example](../guides/tasks.md) also builds with applications disabled. Enabled application plugin examples still require application builds. HTTP example construction tests can run separately with core tests; see [HTTP examples](http.md#legacy-http-example-construction).
 
 See [MySQL](mysql.md) and [Redis](redis.md) for plugin configuration and coroutine APIs.
 
 The optional [configuration exporter](../guides/tools.md#build-the-native-exporter) has an exporter-only build path with applications, Protobuf, core tests and the runtime configuration reader disabled. It does not configure framework networking or runtime plugins. XLSX uses OpenXLSX 0.5.1; JSON validation reuses `ark::kernel_json`. `check-config-tool` runs its native regressions and CLI checks. Selecting the vcpkg feature supplies packages but does not enable the CMake target.
+
+Consul, Etcd Client, Kafka and OSS SDK are [archived](directory-structure.md#archived-integrations), with feature development paused. Default examples need none of their services; sources, public headers, CMake targets and existing compatibility checks remain available. Existing caches may retain Etcd Client's earlier `ON` value; use a new build directory or explicitly set `-DARK_BUILD_PLUGIN_ETCD_CLIENT=OFF`.
 
 ## Native database plugins
 
@@ -52,9 +58,9 @@ Explicit inventories generate public-header mappings at configure time. `ark::<n
 | Kernel | Retains all 38 headers, including `kernel_plugin.hpp` |
 | Consul, Etcd Client, Kafka, OSS SDK, Physic | Retains all 22 public headers, including implementation/assembly |
 
-Registration keys, public visibility and optional policies stay unchanged. [Kernel](kernel.md#typed-kernel-construction), [Consul](directory-structure.md#typed-consul-construction), [Etcd Client](directory-structure.md#typed-etcd-client-construction), [OSS SDK](directory-structure.md#typed-oss-sdk-construction) and [Kafka](directory-structure.md#typed-kafka-construction) construction changes public layouts: rebuild consumers; private factories remain unmapped/uninstalled. Header mapping does not validate optional drivers.
+Registration keys, public visibility and explicit opt-in builds are retained. [Kernel](kernel.md#typed-kernel-construction), [Consul](directory-structure.md#typed-consul-construction), [Etcd Client](directory-structure.md#typed-etcd-client-construction), [OSS SDK](directory-structure.md#typed-oss-sdk-construction) and [Kafka](directory-structure.md#typed-kafka-construction) construction changes public layouts: rebuild consumers; private factories remain unmapped/uninstalled. Header mapping does not validate optional drivers.
 
-Applications CI explicitly enables Consul and Etcd Client on Linux, macOS and Windows. Its `check-core` run includes their construction, DLL lifecycle and production export checks; these checks require no Consul or Etcd service and do not establish service interoperability. Etcd Client keeps its existing default `ON` selection and can be disabled with `ARK_BUILD_PLUGIN_ETCD_CLIENT=OFF`. Building it requires the existing `nlohmann_json` package (`etcd-client` vcpkg feature); disabling it does not add that JSON dependency to core tests.
+Applications CI explicitly enables Consul and Etcd Client on Linux, macOS and Windows. Its `check-core` run includes their construction, DLL lifecycle and production export checks; these checks require no Consul or Etcd service and do not establish service interoperability. Archived Etcd Client defaults to `OFF`, retaining `ARK_BUILD_PLUGIN_ETCD_CLIENT=ON` as an explicit opt-in. Building it requires the existing `nlohmann_json` package (`etcd-client` vcpkg feature); disabling it does not add that JSON dependency to core tests.
 
 OSS SDK remains optional and off by default (`ARK_BUILD_PLUGIN_OSSSDK=OFF`). Core tests include its real factory/assembly and controlled DSO checks without Protobuf or a runtime plugin. With the runtime plugin selected, `check-oss-sdk-plugin` also loads the actual DSO and checks its exports; `check-core` includes the applicable checks. The implementation is still a TODO scaffold, with no object-storage client or service acceptance. See [OSS SDK construction migration](directory-structure.md#typed-oss-sdk-construction).
 

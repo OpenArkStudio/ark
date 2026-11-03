@@ -67,9 +67,7 @@ add_executable(my_service main.cpp)
 target_link_libraries(my_service PRIVATE ark::core ark::net)
 ```
 
-The default runtime plugin selection is `kernel`, `net`, `bus`, `utility` and
-`etcd_client`. Other existing plugins are opt-in and require their driver dependencies;
-the directory migration alone does not validate those integrations.
+The default runtime plugin selection is `kernel`, `net`, `bus` and `utility`. Consul, Etcd Client, Kafka and OSS SDK are archived and default to off; their explicit opt-in options remain available. Other existing plugins are opt-in and require their driver dependencies; the directory migration alone does not validate those integrations.
 
 ## Naming and formatting
 
@@ -180,6 +178,19 @@ With `ARK_BUILD_APPLICATIONS=ON`, CMake builds seven server libraries: Game, Log
 
 [Installation](../get-started/installation.md#install-and-consume-the-cmake-package) preserves logical `<ark/...>` headers under `<prefix>/include/ark/`. CMake package files use the GNUInstallDirs library directory under `cmake/ark/`; selected launcher and runtime plugins install under `bin/`. Configuration samples and licensing are under `share/ark/`. Consumers use `find_package(ark CONFIG REQUIRED)` and `ark::core` / `ark::<plugin>` targets; source consumers use `add_subdirectory` with the same target names. Neither requires a generated mapping path. Source/build directories are absent from installed exports; arknet and other dependencies remain external. `tests/install/` contains independent installed consumers and the disposable-producer relocation test.
 
+## Archived integrations
+
+Consul, Etcd Client, Kafka and OSS SDK are archived; feature development is paused until explicitly re-enabled by the user. Source stays under the directories below. Public headers, API targets, runtime target names and explicit opt-in builds are retained. All four runtime options default to `OFF`; Timers, Module Lifecycle and Entity Operations need none of their services. Retained construction/export checks preserve compatibility and do not establish external-service acceptance. Existing compatibility checks explicitly enabled by CI remain in place.
+
+| Source directory | Public API / header prefix | Runtime target | Opt-in option |
+| --- | --- | --- | --- |
+| `src/plugins/consul/` | `ark::consul` / `<ark/consul/...>` | `ark_consul_plugin` | `ARK_BUILD_PLUGIN_CONSUL=ON` |
+| `src/plugins/etcd_client/` | `ark::etcd_client` / `<ark/etcd_client/...>` | `ark_etcd_client_plugin` | `ARK_BUILD_PLUGIN_ETCD_CLIENT=ON` |
+| `src/plugins/kafka/` | `ark::kafka` / `<ark/kafka/...>` | `ark_kafka_plugin` | `ARK_BUILD_PLUGIN_KAFKA=ON` |
+| `src/plugins/osssdk/` | `ark::osssdk` / `<ark/osssdk/...>` | `ark_oss_sdk_plugin` | `ARK_BUILD_PLUGIN_OSSSDK=ON` |
+
+Opt-in runtime builds still require applications, Protobuf and the existing plugin dependencies. The following construction notes document retained compatibility boundaries for these archived plugins.
+
 ## Typed Consul construction
 
 **Breaking ABI/layout change:** `consul_module_impl` now inherits `module_base<consul_module>` and `consul_plugin` inherits `plugin_base<consul_plugin>`. Rebuild Consul and consumers together. All three public headers, their `<ark/consul/...>` paths, public types and request methods remain available through `ark::consul`; the interface itself is unchanged. The C++ plugin boundary does not promise compiler-independent ABI compatibility.
@@ -200,7 +211,7 @@ cmake --build build --target check-consul-construction --parallel 2
 
 The private `etcd_client_factory.hpp` returns `std::unique_ptr<etcd_client_module>` and is excluded from public mappings and installation. Explicit `DllEntryPlugin` / `DllExitPlugin` retain the existing platform exports and logger setup. Registration uses the original interface RTTI key and `module_update::disabled`; unregistration destroys the owned module. HTTP-client lookup, endpoint handling, timeout argument order, lease requests and callbacks are unchanged. The existing `keepalive` stub remains incomplete; this construction change adds no protocol or Registry capability.
 
-Etcd Client remains selected by default for application builds, with `ARK_BUILD_PLUGIN_ETCD_CLIENT=OFF` available to disable it. Its existing `nlohmann_json` package is required only when building the plugin (`etcd-client` vcpkg feature). With `ARK_BUILD_APPLICATIONS=ON`, `ARK_BUILD_PLUGIN_ETCD_CLIENT=ON`, `ARK_BUILD_PROTO=ON` and `ARK_BUILD_CORE_TESTS=ON`, run:
+Archived Etcd Client defaults to `OFF`; `ARK_BUILD_PLUGIN_ETCD_CLIENT=ON` explicitly selects its retained runtime build. Its existing `nlohmann_json` package is required only when building the plugin (`etcd-client` vcpkg feature). With `ARK_BUILD_APPLICATIONS=ON`, `ARK_BUILD_PLUGIN_ETCD_CLIENT=ON`, `ARK_BUILD_PROTO=ON` and `ARK_BUILD_CORE_TESTS=ON`, run:
 
 ```sh
 cmake --build build --target check-etcd-client-plugin --parallel 1

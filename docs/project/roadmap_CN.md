@@ -11,7 +11,8 @@
 | Entity 配置 | 原生 CSV／XLSX／JSON 导出、C++／C# 字段常量、启动时加载 JSON · [工具](../guides/tools_CN.md)、[Kernel 加载](../reference/kernel_CN.md#json-实体定义与业务配置) | 不提供运行中重载、数据库迁移或客户端／服务端分包过滤 |
 | Entity 同步 | 拥有型标量／嵌套捕获、有界且带修订号的 C++ 发布端／接收端、房间标量 v1 Protobuf／Godot 接入 · [同步](../concepts/entity-sync_CN.md)、[访客房间](../guides/examples_CN.md) | 通用订阅／授权、嵌套线协议编解码及客户端适配；嵌套 C++ 状态不改变房间 v1 |
 | 启动与停机 | 必需提供方图与有序启动、受管任务取消、消费者优先的逐模块清理与对象析构、全部 DSO 最后关闭，以及最多 16 个 owner 的可选逆序启动清理 · [生命周期状态](lifecycle-closeout_CN.md)、[启动器](../guides/applications_CN.md)、[任务](../guides/tasks_CN.md) | 应用／运维在停止进程前完成公告、关入口、踢人和保存；共享 IO 启动失败清理及未声明的外部回调生命周期不受自动保证覆盖 |
-| 可选插件 | Kafka 构造／导出检查、OSS SDK 骨架、明确不支持 PhysX 3 配置 · [插件边界](../reference/directory-structure_CN.md) | Kafka broker／驱动验收与 OSS 客户端／请求功能 |
+| 归档插件 | Consul、Etcd Client、Kafka、OSS SDK：保留源码、公开头、目标、显式启用和兼容性检查；运行时插件默认关闭 · [归档集成](../reference/directory-structure_CN.md#归档集成) | 暂停功能开发，未经用户明确重新启用不继续改造 |
+| 可选物理集成 | 明确不支持 PhysX 3 配置 · [插件边界](../reference/directory-structure_CN.md) | 暂无已验证的 PhysX 3 集成 |
 
 数据库真实服务验收记录保留各自测试的源码版本、macOS 环境与操作。访客房间演示经过有界原生检查和本机 Godot 测试。这些证据不构成生产容量或所有部署环境的验收。
 

@@ -175,10 +175,10 @@ Windows 库路径使用 UTF-8。加载器先转换为使用本地分隔符的绝
 | --- | --- | --- |
 | [Net](../reference/network_CN.md#api-与私有创建) | 私有工厂返回 `std::unique_ptr<http_client_module>`；应用使用 `<ark/net/http_client_module.hpp>` 与类型化查找 | 启用 update；旧 `http_client_module_impl.hpp` 从公开／安装接口移除 |
 | [Kernel](../reference/kernel_CN.md#kernel-类型化构造) | 保留公开 `*_impl`、`kernel_plugin` 类型与头路径；私有工厂头不安装 | 公开类布局改变；接口键、update 选择和注册顺序不变 |
-| [Consul](../reference/directory-structure_CN.md#consul-类型化构造) | 保留全部三个公开头与类型；私有工厂不安装 | 公开实现／插件布局改变；接口 RTTI 键、禁用 update 不变；链接说明测试入口与依赖条件 |
-| [Etcd Client](../reference/directory-structure_CN.md#etcd-client-类型化构造) | 保留全部五个公开头与类型；类型化基类、返回接口的私有工厂与显式入口／出口 | 公开实现／插件布局改变；接口 RTTI 键、禁用 update 不变；链接说明可选 JSON 依赖与无需 Etcd 服务的测试 |
-| [OSS SDK](../reference/directory-structure_CN.md#oss-sdk-类型化构造) | 保留全部三个公开头／类型；类型化基类和返回接口的私有工厂 | 公开布局改变；接口 RTTI 键、禁用 update 不变；类型化注销替代未定义的旧调用；仍为 TODO 骨架；链接说明构建与测试边界 |
-| [Kafka](../reference/directory-structure_CN.md#kafka-类型化构造) | 保留四个公开头、两个 RdKafka 回调基类；类型化构造与显式入口 | 公开布局改变；接口键、启用逐帧 update 不变；运行时插件默认关闭；链接说明驱动要求与无需 broker 连接的测试 |
+| [Consul（已归档）](../reference/directory-structure_CN.md#consul-类型化构造) | 保留全部三个公开头与类型；私有工厂不安装 | 公开实现／插件布局改变；接口 RTTI 键、禁用 update 不变；链接说明测试入口与依赖条件 |
+| [Etcd Client（已归档）](../reference/directory-structure_CN.md#etcd-client-类型化构造) | 保留全部五个公开头与类型；类型化基类、返回接口的私有工厂与显式入口／出口 | 公开实现／插件布局改变；接口 RTTI 键、禁用 update 不变；链接说明可选 JSON 依赖与无需 Etcd 服务的测试 |
+| [OSS SDK（已归档）](../reference/directory-structure_CN.md#oss-sdk-类型化构造) | 保留全部三个公开头／类型；类型化基类和返回接口的私有工厂 | 公开布局改变；接口 RTTI 键、禁用 update 不变；类型化注销替代未定义的旧调用；仍为 TODO 骨架；链接说明构建与测试边界 |
+| [Kafka（已归档）](../reference/directory-structure_CN.md#kafka-类型化构造) | 保留四个公开头、两个 RdKafka 回调基类；类型化构造与显式入口 | 公开布局改变；接口键、启用逐帧 update 不变；运行时插件默认关闭；链接说明驱动要求与无需 broker 连接的测试 |
 
 ## 日志对象与单例生命周期
 

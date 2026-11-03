@@ -1,6 +1,6 @@
 # 快速开始
 
-运行 Timers，确认应用能够加载插件并进入模块生命周期。它只使用 `ark_utility_plugin` 和 `timers_plugin`，不需要 Consul、数据库服务或 Excel 配置生成步骤。
+运行 Timers，确认应用能够加载插件并进入模块生命周期。它只使用 `ark_utility_plugin` 和 `timers_plugin`，不需要 Consul、Etcd、Kafka、OSS、数据库服务或 Excel 配置生成步骤。
 
 <Steps>
 

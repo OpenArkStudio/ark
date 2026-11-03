@@ -26,7 +26,7 @@ ark 的公开目标会启用 MSVC 标准预处理器模式（`/Zc:preprocessor`�
 ```sh
 cmake -S . -B app-build -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
-  -DVCPKG_MANIFEST_FEATURES="application;boost;etcd-client" \
+  -DVCPKG_MANIFEST_FEATURES="application;boost" \
   -DASIO_STANDALONE=OFF -DCMAKE_BUILD_TYPE=Release
 ```
 
@@ -37,7 +37,7 @@ cmake -S . -B app-build -G Ninja \
 ```powershell
 cmake -S . -B app-build -G Ninja `
   "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
-  "-DVCPKG_MANIFEST_FEATURES=application;boost;etcd-client" `
+  "-DVCPKG_MANIFEST_FEATURES=application;boost" `
   -DASIO_STANDALONE=OFF -DCMAKE_BUILD_TYPE=Release
 ```
 
@@ -70,7 +70,7 @@ cmake -S . -B app-build-macos -G Ninja \
   -DCMAKE_CXX_COMPILER="$(xcrun --sdk macosx --find clang++)" \
   -DCMAKE_OSX_SYSROOT="$ark_macos_sdk" \
   -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
-  -DVCPKG_MANIFEST_FEATURES="application;boost;etcd-client" \
+  -DVCPKG_MANIFEST_FEATURES="application;boost" \
   -DASIO_STANDALONE=OFF -DCMAKE_BUILD_TYPE=Release
 cmake --build app-build-macos --parallel 2
 ```
@@ -82,6 +82,12 @@ cmake --build app-build-macos --parallel 2
 这组编译器与 SDK 存在与包含顺序有关的标准头文件兼容问题，可能报 `INFINITY` 或 `DBL_EPSILON` 未声明。遇到这些错误时，按上面的命令选择配套的 Apple Clang 和 SDK，并使用新的构建目录。
 
 </Aside>
+
+## 归档插件
+
+Consul、Etcd Client、Kafka 和 OSS SDK 已[归档](../reference/directory-structure_CN.md#归档集成)，四个运行时插件均默认关闭；上述安装与默认示例不需要这四项服务。源码、公开头、CMake target 和显式启用选项继续保留，安装公共头不代表运行时功能或外部服务验收。仅在明确需要保留的集成时选择对应 `ARK_BUILD_PLUGIN_<NAME>=ON` 并准备原有依赖；Etcd Client 还需增加 vcpkg `etcd-client` feature。
+
+已有 CMake 缓存会保留旧值，包括 Etcd Client 原有的 `ON`。使用新构建目录，或显式传入 `-DARK_BUILD_PLUGIN_ETCD_CLIENT=OFF`，以采用归档后的默认选择。现有 CI 显式启用的兼容性检查仍保留。
 
 ## 升级 arknet
 
