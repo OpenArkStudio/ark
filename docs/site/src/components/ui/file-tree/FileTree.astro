@@ -16,6 +16,8 @@
  *   - Trailing `/` → directory (collapsible, folder icon)
  *   - `**name**` → highlighted entry
  *   - `...` → placeholder ellipsis
+ *   - `name/ — purpose` → visible, selectable description beside the name
+ *     (plain Markdown retains the same description in AI exports)
  */
 import Icon from "@cloudflare/nimbus-docs/components/Icon.astro";
 import { cn } from "@/lib/cn";
@@ -103,6 +105,11 @@ const { class: className, ...attrs } = Astro.props;
     background: var(--nb-accent);
   }
 
+  .file-tree :global(summary:focus-visible) {
+    outline: 2px solid var(--nb-ring, currentColor);
+    outline-offset: 2px;
+  }
+
   /* File rows */
   .file-tree :global([data-file]) {
     display: flex;
@@ -151,6 +158,27 @@ const { class: className, ...attrs } = Astro.props;
     min-width: 0;
     line-height: 1rem;
     overflow-wrap: anywhere;
+    user-select: text;
+  }
+
+  .file-tree :global(.ft-content) {
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.125rem 0.5rem;
+    min-width: 0;
+    user-select: text;
+  }
+
+  .file-tree :global(.ft-description) {
+    flex: 1 1 14rem;
+    min-width: 0;
+    font-family: var(--nb-font-sans, system-ui, sans-serif);
+    line-height: 1.25rem;
+    color: var(--nb-muted-foreground);
+    overflow-wrap: anywhere;
+    user-select: text;
   }
 
   /* Highlighted entries */

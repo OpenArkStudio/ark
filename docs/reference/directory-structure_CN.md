@@ -9,38 +9,38 @@ ark 使用 C++20。核心与官方插件放在本仓库，业务插件放在应�
 
 <FileTree>
 
-- src/
-  - core/
+- src/ — 框架实现
+  - core/ — 模块生命周期与 Entity 基础
     - ...
-  - application/
+  - application/ — 应用启动器与停服入口
     - ...
-  - config/
+  - config/ — 共享 TOML 配置读取器
     - ...
-  - proto/
+  - proto/ — Protobuf 定义与代码生成
     - ...
-  - plugins/
+  - plugins/ — 内置插件实现
     - ...
-  - server/
+  - server/ — 内置服务端角色
     - ...
-- tests/
-  - core/
+- tests/ — 正确性与接口消费检查
+  - core/ — 生命周期与核心数据回归
     - ...
-  - network/
+  - network/ — 传输与 HTTP 回归
     - ...
-  - database/
+  - database/ — 数据库集成回归
     - ...
-  - consumer/
+  - consumer/ — 公开头与安装包消费者
     - ...
-- examples/
+- examples/ — 能力示例与业务插件
   - ...
-- config/
+- config/ — 应用与插件 TOML 样例
   - ...
-- resources/
+- resources/ — Entity JSON 业务资源与制作输入
   - ...
-- tools/
+- tools/ — 原生 JSON 导出器与开发工具
   - ...
-- deployment/
-  - scripts/
+- deployment/ — 容器与 Kubernetes 示例
+  - scripts/ — 单应用启动与停止脚本
     - ...
   - ...
 
@@ -64,7 +64,7 @@ ark 使用 C++20。核心与官方插件放在本仓库，业务插件放在应�
 
 配置期按显式清单复制普通文件，仅清理受控映射目录中的陈旧副本；MySQL、Redis、Utility、Net、Bus、HTTP 排除私有装配／工厂。通过 `ark::mysql`、`ark::redis`、`ark::utility`、`ark::net`、`ark::bus`、`ark::http`、`ark::kernel` 保留逻辑路径，运行时插件关闭时仍可用。仅手写 `-I <源码>/include` 不足；使用目标包含目录，编辑共置源码头而非生成副本。
 
-核心头文件只有 `src/core/` 中的一份源码。`ark::core` 将显式公开清单映射到选定构建目录，保留 `<ark/plugin_manager.hpp>` 等包含路径。修改源码头文件，不编辑生成副本。启动程序仍为 `app`／`app_d`，清单格式保持不变。
+核心头文件只有 `src/core/` 中的一份源码。`ark::core` 将显式公开清单映射到选定构建目录，保留 `<ark/plugin_manager.hpp>` 等包含路径。修改源码头文件，不编辑生成副本。启动程序仍为 `app`／`app_d`，应用清单只接受 TOML。
 
 `<ark/buffer.hpp>` 保留原有公开路径，所有权改为仅支持移动；源码／布局发生变化，需要重建受影响的 Core／Net 消费者。迁移、分配钩子兼容性与定向测试见[收包缓冲的所有权](network_CN.md#收包缓冲的所有权)。
 

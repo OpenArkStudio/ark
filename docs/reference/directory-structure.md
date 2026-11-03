@@ -10,38 +10,38 @@ Build artifacts belong to each CMake build directory: `cmake -S . -B out/release
 
 <FileTree>
 
-- src/
-  - core/
+- src/ — Framework implementation
+  - core/ — Module lifecycle and Entity foundations
     - ...
-  - application/
+  - application/ — Application launcher and shutdown entry
     - ...
-  - config/
+  - config/ — Shared TOML configuration reader
     - ...
-  - proto/
+  - proto/ — Protobuf schemas and code generation
     - ...
-  - plugins/
+  - plugins/ — Built-in plugin implementations
     - ...
-  - server/
+  - server/ — Built-in server roles
     - ...
-- tests/
-  - core/
+- tests/ — Correctness and interface-consumption checks
+  - core/ — Lifecycle and core data regressions
     - ...
-  - network/
+  - network/ — Transport and HTTP regressions
     - ...
-  - database/
+  - database/ — Database integration regressions
     - ...
-  - consumer/
+  - consumer/ — Public header and installed-package consumers
     - ...
-- examples/
+- examples/ — Capability examples and business plugins
   - ...
-- config/
+- config/ — Application and plugin TOML samples
   - ...
-- resources/
+- resources/ — Entity JSON and authoring resources
   - ...
-- tools/
+- tools/ — Native JSON exporter and development tools
   - ...
-- deployment/
-  - scripts/
+- deployment/ — Container and Kubernetes examples
+  - scripts/ — Single-application launch and stop helpers
     - ...
   - ...
 
@@ -66,7 +66,7 @@ Protobuf headers are placed under the build directory, exposed through `ark::pro
 
 Configure-time explicit inventories copy ordinary files and remove stale mappings only within controlled directories. MySQL, Redis, Utility, Net, Bus and HTTP exclude private assembly/factories. `ark::mysql`, `ark::redis`, `ark::utility`, `ark::net`, `ark::bus`, `ark::http`, `ark::kernel` preserve logical paths even with runtime plugins disabled. Handwritten `-I <source>/include` alone is insufficient; use target include roots and edit co-located source headers, not generated copies.
 
-Core has one source copy under `src/core/`. `ark::core` maps its explicit public headers into the selected build tree, preserving `<ark/plugin_manager.hpp>` and nested include paths. Edit source headers rather than generated copies. The `app`/`app_d` executable and manifest format are unchanged.
+Core has one source copy under `src/core/`. `ark::core` maps its explicit public headers into the selected build tree, preserving `<ark/plugin_manager.hpp>` and nested include paths. Edit source headers rather than generated copies. The `app`/`app_d` executable names are retained; application manifests accept TOML only.
 
 `<ark/buffer.hpp>` retains its public path with move-only ownership; rebuild affected Core/Net consumers for the source/layout change. See [receive-buffer ownership](network.md#receive-buffer-ownership) for migration, allocation-hook compatibility and focused tests.
 

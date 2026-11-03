@@ -18,32 +18,32 @@ These repositories use different generations of interfaces and build systems. Co
 
 <FileTree>
 
-- ark/
-  - src/
-    - core/ — Core source and target definitions
+- ark/ — Framework repository
+  - src/ — Framework implementation
+    - core/ — Module lifecycle and Entity foundations
       - ...
-    - config/ — Application manifests and shared file/TOML reading
+    - config/ — Shared TOML configuration reader
       - ...
     - application/ — Application launcher
       - ...
-    - plugins/ — Official plugin implementations and CMake files
-      - kernel/
+    - plugins/ — Built-in plugin implementations
+      - kernel/ — Entity metadata, state and JSON loading
         - ...
       - net/ — Public headers, transports and private creation
         - ...
       - bus/ — Public module interfaces and private creation
         - ...
-      - utility/
+      - utility/ — GUIDs, timers, scheduling and compression
         - ...
       - http/ — Public routing interface and private creation
         - ...
-      - mysql/
+      - mysql/ — MySQL coroutine access plugin
         - ...
-      - redis/
+      - redis/ — Redis coroutine access plugin
         - ...
-    - proto/
+    - proto/ — Protobuf schemas and code generation
       - ...
-    - server/
+    - server/ — Built-in server roles
       - ...
   - examples/ — Example applications and business plugins
     - ...
@@ -51,9 +51,9 @@ These repositories use different generations of interfaces and build systems. Co
     - ...
   - benchmarks/ — Standalone C++ benchmark programs
     - ...
-  - tools/ — Development and configuration tools
+  - tools/ — Native JSON exporter and development tools
     - ...
-  - cmake/
+  - cmake/ — Target, header-mapping and package helpers
     - ...
   - docs/ — English/Chinese documentation and Nimbus site
     - ...
@@ -66,8 +66,8 @@ MySQL, Redis, Utility, Net, Bus, HTTP and Kernel use a co-located layout; the da
 
 <FileTree>
 
-- src/plugins/mysql/
-  - CMakeLists.txt
+- src/plugins/mysql/ — MySQL coroutine access plugin
+  - CMakeLists.txt — Plugin build target
   - mysql_module.hpp — Explicit public API, mapped as ark/mysql/mysql_module.hpp
   - mysql_module.cpp — Hidden implementation class and one private factory
   - mysql_plugin.hpp — Private plugin type/factory declarations, excluded from public header mapping

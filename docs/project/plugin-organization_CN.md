@@ -18,32 +18,32 @@
 
 <FileTree>
 
-- ark/
-  - src/
-    - core/ — 核心源码与 target 定义
+- ark/ — 框架仓库
+  - src/ — 框架实现
+    - core/ — 模块生命周期与 Entity 基础
       - ...
-    - config/ — 应用清单与共享文件／TOML 读取
+    - config/ — 共享 TOML 配置读取器
       - ...
     - application/ — 应用启动器
       - ...
-    - plugins/ — 官方插件实现与 CMake 文件
-      - kernel/
+    - plugins/ — 内置插件实现
+      - kernel/ — Entity 元数据、状态与 JSON 加载
         - ...
       - net/ — 公开头、传输实现与私有创建
         - ...
       - bus/ — 公开模块接口与私有创建
         - ...
-      - utility/
+      - utility/ — GUID、定时器、调度与压缩
         - ...
       - http/ — 公开路由接口与私有创建
         - ...
-      - mysql/
+      - mysql/ — MySQL 协程访问插件
         - ...
-      - redis/
+      - redis/ — Redis 协程访问插件
         - ...
-    - proto/
+    - proto/ — Protobuf 定义与代码生成
       - ...
-    - server/
+    - server/ — 内置服务端角色
       - ...
   - examples/ — 示例应用与业务插件
     - ...
@@ -51,9 +51,9 @@
     - ...
   - benchmarks/ — 可独立编译运行的基准程序
     - ...
-  - tools/ — 开发与配置工具
+  - tools/ — 原生 JSON 导出器与开发工具
     - ...
-  - cmake/
+  - cmake/ — 目标、头映射与安装包辅助
     - ...
   - docs/ — 中英文文档与 Nimbus 站点
     - ...
@@ -66,8 +66,8 @@ MySQL、Redis、Utility、Net、Bus、HTTP 和 Kernel 采用同目录布局，�
 
 <FileTree>
 
-- src/plugins/mysql/
-  - CMakeLists.txt
+- src/plugins/mysql/ — MySQL 协程访问插件
+  - CMakeLists.txt — 插件构建目标
   - mysql_module.hpp — 显式公开接口；映射为 ark/mysql/mysql_module.hpp
   - mysql_module.cpp — 隐藏实现类与单一私有工厂
   - mysql_plugin.hpp — 私有插件类型和工厂声明，不进入公共头映射

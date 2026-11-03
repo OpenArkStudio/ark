@@ -46,11 +46,11 @@ The required runtime files are:
 
 <FileTree>
 
-- run/timers/
+- run/timers/ — Isolated Timers runtime
   - bin/ — app + ark_utility_plugin + timers_plugin from the same build
     - ...
-  - conf/
-    - timers.app.toml
+  - conf/ — TOML application configuration
+    - timers.app.toml — Select Utility and Timers
 
 </FileTree>
 
@@ -113,8 +113,8 @@ A failed plugin load or module startup callback stops later startup stages and u
 ## Continue with your application
 
 - [Create a module](../guides/modules.md) and [Create a plugin](../guides/plugins.md) explain how to register behavior.
-- [Application launcher](../guides/applications.md) explains Bus identity, plugin selection and configuration paths. Applications that load Kernel data also need their generated `resource/` files.
-- [Configuration tools](../guides/tools.md) shows the separate Excel-to-resource workflow. Its Python requirements do not apply to this sample or to the C++ network tests.
+- [Application launcher](../guides/applications.md) explains Bus identity, plugin selection and configuration paths. Applications that load Kernel data need `resource/meta/entity_schema.json`.
+- [Configuration tools](../guides/tools.md) explains the native CSV/XLSX/JSON exporter. Timers needs neither the exporter nor business resources.
 - [Network regression tests](../networking.md) verify network behavior independently. Applications that select Consul or database plugins need those services and their own settings.
 
 ## Read the typed sample construction
