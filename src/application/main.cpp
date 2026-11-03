@@ -25,6 +25,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <args.hxx>
 
@@ -42,13 +45,33 @@
 using namespace ark;
 
 #ifdef ARK_PLATFORM_WIN
+static bool utf16_text(const std::string& text, std::wstring& native) {
+    const auto count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.c_str(), -1, nullptr, 0);
+    if (count == 0)
+    {
+        return false;
+    }
+    native.resize(count);
+    if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.c_str(), -1, native.data(), count) == 0)
+    {
+        return false;
+    }
+    native.resize(count - 1);
+    return true;
+}
+
 // command control
 std::thread g_cmd_thread;
 
 // mini-dump
 void create_dump_file(const std::string& dump_file_path_name, EXCEPTION_POINTERS* exception_ptr) {
+    std::wstring native_path;
+    if (!utf16_text(dump_file_path_name, native_path))
+    {
+        return;
+    }
     HANDLE h_dump_file =
-        CreateFile(dump_file_path_name.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        CreateFileW(native_path.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
     MINIDUMP_EXCEPTION_INFORMATION dump_info;
     dump_info.ExceptionPointers = exception_ptr;
@@ -68,7 +91,8 @@ long application_crash_handler(EXCEPTION_POINTERS* exception_ptr) {
 
     create_dump_file(dump_name.c_str(), exception_ptr);
 
-    FatalAppExit(-1, dump_name.c_str());
+    std::wstring native_dump_name;
+    FatalAppExitW(-1, utf16_text(dump_name, native_dump_name) ? native_dump_name.c_str() : L"Application crashed");
     return EXCEPTION_EXECUTE_HANDLER;
 }
 
@@ -260,7 +284,14 @@ bool parse_args(int argc, char* argv[], std::chrono::milliseconds& shutdown_time
             ARK_FORMAT("{}-{}-{}", name.Get(), busid.Get(), plugin_manager::instance()->get_bus_id());
         // Set process name
 #ifdef ARK_PLATFORM_WIN
-        SetConsoleTitle(process_name.c_str());
+        std::wstring title;
+        if (!utf16_text(process_name, title))
+        {
+            std::cerr << "Application name could not be converted to UTF-16" << std::endl;
+            configuration_error = true;
+            return false;
+        }
+        SetConsoleTitleW(title.c_str());
 #elif defined(ARK_PLATFORM_LINUX)
         // Do not need to change process name
 #endif
@@ -308,7 +339,7 @@ bool main_loop(std::exception_ptr* error = nullptr) {
 #endif
 }
 
-int main(int argc, char* argv[]) {
+static int run_application(int argc, char* argv[]) {
     std::chrono::milliseconds shutdown_timeout{};
     bool configuration_error = false;
     if (!parse_args(argc, argv, shutdown_timeout, configuration_error))
@@ -502,3 +533,49 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
+
+#ifdef ARK_PLATFORM_WIN
+int wmain(int argc, wchar_t* argv[]) {
+    std::vector<std::string> arguments;
+    std::vector<char*> utf8_argv;
+    try
+    {
+        arguments.reserve(argc);
+        utf8_argv.reserve(argc + 1);
+        for (int index = 0; index < argc; ++index)
+        {
+            const auto count =
+                WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, argv[index], -1, nullptr, 0, nullptr, nullptr);
+            if (count == 0)
+            {
+                std::fputs("Application arguments contain invalid UTF-16\n", stderr);
+                return 1;
+            }
+            std::string argument(count, '\0');
+            if (WideCharToMultiByte(
+                    CP_UTF8, WC_ERR_INVALID_CHARS, argv[index], -1, argument.data(), count, nullptr, nullptr) == 0)
+            {
+                std::fputs("Application arguments could not be converted to UTF-8\n", stderr);
+                return 1;
+            }
+            argument.resize(count - 1);
+            arguments.push_back(std::move(argument));
+        }
+        for (auto& argument : arguments)
+        {
+            utf8_argv.push_back(argument.data());
+        }
+        utf8_argv.push_back(nullptr);
+    }
+    catch (const std::exception&)
+    {
+        std::fputs("Application arguments could not be prepared as UTF-8\n", stderr);
+        return 1;
+    }
+    return run_application(argc, utf8_argv.data());
+}
+#else
+int main(int argc, char* argv[]) {
+    return run_application(argc, argv);
+}
+#endif

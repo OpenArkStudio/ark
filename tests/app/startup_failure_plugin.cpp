@@ -106,6 +106,30 @@ ARK_EXPORT_FUNC void DllEntryPlugin(
     ark::plugin_manager* manager, const std::string& plugin_name, ark::logger* shared_logger) {
     ark::logger::init(shared_logger);
     const auto& mode = manager->get_plugin_conf(plugin_name);
+    if (mode == "utf8:init")
+    {
+        if (manager->get_app_name() != "应用-é-🧪")
+        {
+            throw std::runtime_error("Launcher lost UTF-8 application-name arguments");
+        }
+#ifdef ARK_PLATFORM_WIN
+        // A shared console title can change in another process. Check it only
+        // when this child owns its console, avoiding cross-test interference.
+        DWORD console_process{};
+        if (GetConsoleProcessList(&console_process, 1) == 1 && console_process == GetCurrentProcessId())
+        {
+            wchar_t title[256]{};
+            const auto expected_title = L"应用-é-🧪-1.0.1.1-" + std::to_wstring(manager->get_bus_id());
+            if (GetConsoleTitleW(title, 256) == 0 || std::wstring_view(title) != expected_title)
+            {
+                throw std::runtime_error("Launcher lost the native Unicode console title");
+            }
+        }
+#endif
+        using ark::logger;
+        ARK_LOG_INFO("{}", "launcher UTF-8 日志标记-é-🧪");
+        std::cerr << "app-startup-test:unicode_arguments_verified\n";
+    }
     fixture = new startup_failure_module;
     fixture->fail_at(mode);
     fixture->start_owned_io();
