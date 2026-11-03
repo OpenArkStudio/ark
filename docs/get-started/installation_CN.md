@@ -166,6 +166,30 @@ cmake --build http-installed-build --parallel 2 --target check-http-installed
 | `check-http-installed` | 仅原生 UNIX；通过 `find_package(ark)` 和已安装 HTTP DSO，检查 `dladdr` 实现路径、一次 HTTP 200、路由捕获销毁、端点关闭及重复停止。进程总期限为 15 秒，超时退出码为 124；3 秒接收与 5 秒清理观察仍分别保留。需要回环网络权限和启用 `ARK_BUILD_PLUGIN_HTTP=ON` 构建的 ABI 兼容安装；Debug／Release 配置及依赖前缀应与生产者一致。本地已验收 macOS Debug；没有 Windows 运行时入口。 |
 | `tests/install/check_install.cmake` 的 `ARK_TEST_HTTP=ON` | 暂存并搬迁安装后加入同一个 HTTP 消费者。设置 `ARK_TEST_CONFIG=Debug` 或 `Release`；`ARK_TEST_HTTP_BINDIR` 默认 `bin`，可指定生产者自定义的相对二进制目录。需要已启用 HTTP 运行时的应用构建；core-only 的 `run_isolated.cmake` 生产者不构建该 DSO。 |
 
+网络插件组合另有独立安装消费者。生产者设置
+`ARK_BUILD_APPLICATIONS=OFF`、`ARK_BUILD_RUNTIME_PLUGINS=ON`，启用 Kernel、Net、
+Bus、Utility 插件选项，再通过上面的根 `cmake --install` 命令安装。可以先整体搬迁
+安装前缀，再配置消费者：
+
+```sh
+cmake -S tests/consumer/network -B network-installed-build \
+  -DCMAKE_BUILD_TYPE=Debug \
+  '-DCMAKE_PREFIX_PATH=/path/to/relocated-prefix;/path/to/dependencies' \
+  -DARK_TEST_NETWORK_PLUGIN_DIR=/path/to/relocated-prefix/bin \
+  -DARK_TEST_NETWORK_BUS_CONFIG="$PWD/config/guest_room.bus.toml" \
+  -DARK_TEST_NETWORK_ENTITY_SCHEMA="$PWD/examples/guest_room/resource/meta/entity_schema.json"
+cmake --build network-installed-build --parallel 2 --target check-network-installed
+```
+
+此原生 UNIX 入口使用 `find_package(ark)` 和公开头，通过 `dladdr` 核对四个实现
+DSO 的路径，把 canonical 资源复制到私有工作目录，仅替换 Bus 回环端口。检查
+Bus 选择、Utility GUID、Kernel 配置／修改及拥有自身数据的快照、一次在管理器线程
+处理的 Net TCP 请求与 Bus 回包，以及模块移除、回调／端点销毁、已接收连接／监听器
+关闭和重复停止。Debug／Release 配置与依赖前缀须匹配生产者。外层进程护栏为
+15 秒，请求和协作清理观察各 5 秒，不修改生产超时。本地 macOS Debug 验收覆盖
+迁移后的运行时组合；跨主机部署、其他平台和性能仍需分别验收。已有 build-tree
+五插件组合及安装 HTTP 检查分别覆盖各自路径。
+
 ## 生成归档包
 
 完成构建后，通过安装规则生成标准归档：

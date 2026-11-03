@@ -168,6 +168,34 @@ cmake --build http-installed-build --parallel 2 --target check-http-installed
 | `check-http-installed` | Native UNIX only; uses `find_package(ark)` and the installed HTTP DSO, checks its implementation path with `dladdr`, one HTTP 200 response, route-capture destruction, endpoint closure and repeated stop. A 15-second process deadline exits with code 124; the 3-second receive and 5-second cleanup observations remain separate. Requires loopback access and an ABI-compatible HTTP installation built with `ARK_BUILD_PLUGIN_HTTP=ON`; match the producer's Debug/Release configuration and dependency prefixes. Locally validated on macOS Debug; no Windows runtime entry. |
 | `tests/install/check_install.cmake` with `ARK_TEST_HTTP=ON` | Adds the same HTTP consumer after staging and relocation. Set `ARK_TEST_CONFIG=Debug` or `Release`; `ARK_TEST_HTTP_BINDIR` defaults to `bin` and may name the producer's custom relative binary directory. Use an application build with the HTTP runtime enabled; the core-only `run_isolated.cmake` producer does not build that DSO. |
 
+The network bundle has a separate installed consumer. Build a producer with
+`ARK_BUILD_APPLICATIONS=OFF`, `ARK_BUILD_RUNTIME_PLUGINS=ON` and the Kernel, Net,
+Bus and Utility plugin options enabled; install it with the root `cmake --install`
+command above. The prefix may then be moved as a whole before consumer configuration:
+
+```sh
+cmake -S tests/consumer/network -B network-installed-build \
+  -DCMAKE_BUILD_TYPE=Debug \
+  '-DCMAKE_PREFIX_PATH=/path/to/relocated-prefix;/path/to/dependencies' \
+  -DARK_TEST_NETWORK_PLUGIN_DIR=/path/to/relocated-prefix/bin \
+  -DARK_TEST_NETWORK_BUS_CONFIG="$PWD/config/guest_room.bus.toml" \
+  -DARK_TEST_NETWORK_ENTITY_SCHEMA="$PWD/examples/guest_room/resource/meta/entity_schema.json"
+cmake --build network-installed-build --parallel 2 --target check-network-installed
+```
+
+This native UNIX entry uses `find_package(ark)` and public headers, verifies all
+four implementation DSO paths with `dladdr`, and copies the canonical resources
+into a private working directory, replacing only the Bus loopback port. It checks
+Bus selection, Utility GUID generation, Kernel profile/mutation and an owning
+snapshot, one Net TCP request with a Bus reply on the manager thread, then module
+removal, callback/endpoint retirement, accepted-connection/listener closure and
+repeated stop. Match the producer's Debug/Release configuration and dependency
+prefixes. The process guard is 15 seconds; request and cooperative shutdown
+observations are five seconds each, without changing production timeouts. Local
+macOS Debug validation covers the relocated runtime bundle; cross-host deployment,
+other platforms and performance remain separate acceptance work. The existing
+build-tree five-plugin composition and installed HTTP checks cover their own paths.
+
 ## Create an archive
 
 After building, CPack creates standard archives from the install rules:

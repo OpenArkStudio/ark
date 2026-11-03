@@ -17,6 +17,21 @@ elseif(ARK_TEST_MODE STREQUAL "net")
     find_package(ark CONFIG REQUIRED COMPONENTS net)
     add_executable(consumer net.cpp)
     target_link_libraries(consumer PRIVATE ark::net)
+elseif(ARK_TEST_MODE STREQUAL "network")
+    if(NOT UNIX OR WIN32 OR CYGWIN)
+        message(FATAL_ERROR "The installed network runtime consumer requires native UNIX sockets and dladdr")
+    endif()
+    set(ARK_TEST_NETWORK_PLUGIN_DIR "" CACHE PATH "Installed bin directory containing the matching network plugins")
+    set(ARK_TEST_NETWORK_BUS_CONFIG "" CACHE FILEPATH "Canonical guest-room Bus configuration")
+    set(ARK_TEST_NETWORK_ENTITY_SCHEMA "" CACHE FILEPATH "Canonical guest-room entity schema")
+    if(NOT IS_DIRECTORY "${ARK_TEST_NETWORK_PLUGIN_DIR}" OR
+            NOT EXISTS "${ARK_TEST_NETWORK_BUS_CONFIG}" OR NOT EXISTS "${ARK_TEST_NETWORK_ENTITY_SCHEMA}")
+        message(FATAL_ERROR "Set the installed network plugin directory and canonical Bus/entity resource files")
+    endif()
+    find_package(ark CONFIG REQUIRED COMPONENTS core net bus kernel utility)
+    add_executable(consumer network.cpp)
+    target_link_libraries(consumer PRIVATE ark::net ark::bus ark::kernel ark::utility ${CMAKE_DL_LIBS})
+    target_compile_definitions(consumer PRIVATE ARK_NETWORK_TEST_LIBRARY_SUFFIX="${CMAKE_SHARED_LIBRARY_SUFFIX}")
 elseif(ARK_TEST_MODE STREQUAL "http")
     if(NOT UNIX OR WIN32 OR CYGWIN)
         message(FATAL_ERROR "The installed HTTP runtime consumer requires native UNIX sockets and dladdr")
@@ -35,5 +50,16 @@ else()
     add_executable(consumer core.cpp)
     target_link_libraries(consumer PRIVATE ark::core)
 endif()
-add_custom_target(check-consumer COMMAND $<TARGET_FILE:consumer> ${consumer_args}
-    DEPENDS consumer USES_TERMINAL VERBATIM)
+if(ARK_TEST_MODE STREQUAL "network")
+    add_custom_target(check-consumer
+        COMMAND "${CMAKE_COMMAND}" "-DARK_TEST_NETWORK_EXECUTABLE=$<TARGET_FILE:consumer>"
+            "-DARK_TEST_NETWORK_PLUGIN_DIR=${ARK_TEST_NETWORK_PLUGIN_DIR}"
+            "-DARK_TEST_NETWORK_BUS_CONFIG=${ARK_TEST_NETWORK_BUS_CONFIG}"
+            "-DARK_TEST_NETWORK_ENTITY_SCHEMA=${ARK_TEST_NETWORK_ENTITY_SCHEMA}"
+            "-DARK_TEST_NETWORK_RUNTIME=${CMAKE_CURRENT_BINARY_DIR}/network runtime"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/run_network.cmake"
+        DEPENDS consumer USES_TERMINAL VERBATIM)
+else()
+    add_custom_target(check-consumer COMMAND $<TARGET_FILE:consumer> ${consumer_args}
+        DEPENDS consumer USES_TERMINAL VERBATIM)
+endif()
