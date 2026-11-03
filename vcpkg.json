@@ -6,7 +6,6 @@
   "builtin-baseline": "0699a19d0c6386247ce50d4dedbb8217d484d536",
   "dependencies": [
     "asio",
-    "rapidxml",
     "spdlog",
     "readerwriterqueue"
   ],

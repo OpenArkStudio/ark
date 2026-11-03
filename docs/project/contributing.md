@@ -98,7 +98,7 @@ improvement require separate CI evidence.
 ### Windows ABI diagnostics
 
 After dependency configuration and the existing archive-save step, Windows
-Applications logs a bounded JSON report for Asio, rapidxml and Protobuf. The
+Applications logs a bounded JSON report for Asio, spdlog and Protobuf. The
 helper reads only `ci-build/vcpkg_installed/x64-windows/share/<port>/vcpkg_abi_info.txt`,
 without searching directories or invoking build tools. It rejects symbolic links,
 non-regular files, malformed records, unexpected triplets and files over 64 KiB.

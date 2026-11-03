@@ -117,7 +117,9 @@ cmake --install app-build --prefix "$PWD/ark-prefix"
 
 启用 Protobuf 时，Windows 还会把共享消息库 `AFProto.dll`（Debug 为 `AFProto_d.dll`）安装到 `bin/`，把导入库安装到库目录。消息 DLL 必须与宿主／插件及兼容的 Protobuf 运行时配置一起部署；原来链接静态 AFProto 的消费者需要重新构建。`ark::proto` target 名称保留，并提供生成消息的导入定义。非 Windows 构建继续使用静态 AFProto。参见[协议链接与迁移](../reference/protobuf_CN.md#构建与包含)。
 
-arknet 仍是独立依赖：通过其自身构建单独安装兼容的 0.2.3 或更新版本包，并保持 Boost／Standalone Asio、SSL 设置与 ark 一致。ark 不把获取的或本地 arknet 源码复制到安装目录。消费者通过工具链或 `CMAKE_PREFIX_PATH` 提供其他依赖：core 使用 spdlog 1.17+、readerwriterqueue 和 RapidXML；构建了生成协议时还需要 Protobuf。header-only toml++ 作为私有实现编译进配置读取器；如果构建使用编译型 toml++ 库，安装后的读取器消费者会发现对应依赖包。可选驱动头与库仍需对应集成的依赖；安装公开头不代表这些集成已通过验证。分发依赖二进制时应保留对应许可证。
+arknet 仍是独立依赖：通过其自身构建单独安装兼容的 0.2.3 或更新版本包，并保持 Boost／Standalone Asio、SSL 设置与 ark 一致。ark 不把获取的或本地 arknet 源码复制到安装目录。消费者通过工具链或 `CMAKE_PREFIX_PATH` 提供其他依赖：core 使用 spdlog 1.17+、readerwriterqueue；构建了生成协议时还需要 Protobuf。header-only toml++ 作为私有实现编译进配置读取器；如果构建使用编译型 toml++ 库，安装后的读取器消费者会发现对应依赖包。可选驱动头与库仍需对应集成的依赖；安装公开头不代表这些集成已通过验证。分发依赖二进制时应保留对应许可证。
+
+运行配置使用 TOML，Entity 定义与业务资源使用 JSON。`<ark/xml.hpp>` 包装器及 RapidXML 依赖已退役。迁移时须一起重建应用和插件，并安装到干净前缀；覆盖安装不会自动删除旧包遗留的头文件。
 
 如需使用已经安装的 arknet，配置时添加 `-DARK_USE_INSTALLED_ARKNET=ON`。该选项优先于 `ARKNET_SOURCE_DIR` 与 `ARKNET_REVISION`；原有源码构建方式继续受支持。
 

@@ -65,6 +65,13 @@ branch or worktree when the existing checkout contains uncommitted changes.
 
 ## C++ and repository style
 
+- Application, plugin and logger settings use TOML; Entity definitions and
+  business data use the current JSON schema/export format. Reject retired XML
+  manifests and require JSON resources rather than falling back to XML. Do not
+  restore the public XML wrapper or RapidXML build dependency. Keep samples,
+  deployment payloads, tools, tests and both document languages aligned.
+  Optional XLSX import remains supported by the native exporter; its internal
+  document format does not make XML a runtime configuration API.
 - Use C++20 and consistent `snake_case` names, including types, functions and
   members (`ark::plugin_manager`, `find_module()`, `module_name_`). Do not manually
   edit generated protobuf output; change the schema or generation source.

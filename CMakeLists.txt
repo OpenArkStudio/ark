@@ -224,8 +224,6 @@ else()
     endif()
 endif()
 
-find_package(RapidXML REQUIRED)
-set(RAPIDXML_INCLUDE_DIR "${RapidXML_INCLUDE_DIR}")
 add_subdirectory(src/config)
 
 add_subdirectory(src/core)
@@ -237,7 +235,6 @@ target_link_libraries(ark_sdk INTERFACE ark::core)
 
 # include and link directories
 include_directories(
-        ${RAPIDXML_INCLUDE_DIR}
         ${ROOT_DIR}/src
         ${ROOT_DIR}/src/server)
 

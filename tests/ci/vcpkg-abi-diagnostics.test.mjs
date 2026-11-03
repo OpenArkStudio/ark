@@ -14,7 +14,7 @@ const hash = value => createHash('sha256').update(value).digest('hex');
 const safeFields = ['triplet', 'triplet_abi', 'features', 'cmake', 'powershell', 'compiler_hash',
   'portfile.cmake', 'ports.cmake', 'vcpkg.json', 'post_build_checks', 'sbom_info',
   'vcpkg-cmake', 'vcpkg-cmake-config', 'abseil', 'utf8-range'];
-// Record structure confirmed against installed Asio, rapidxml and Protobuf metadata.
+// Record structure confirmed against installed Asio, spdlog and Protobuf metadata.
 // Values are synthetic; raw local ABI files are not copied into the repository.
 const metadata = 'cmake 4.4.4\nfeatures core\nportfile.cmake recipe-hash\nports.cmake helper-hash\n' +
   'post_build_checks 2\ntriplet x64-windows\ntriplet_abi triplet-toolchain-compiler-hashes\n' +
@@ -28,7 +28,7 @@ function fixture(t) {
     mkdirSync(dirname(file(port)), { recursive: true });
     writeFileSync(file(port), contents);
   };
-  for (const port of ['asio', 'rapidxml', 'protobuf']) write(port);
+  for (const port of ['asio', 'spdlog', 'protobuf']) write(port);
   return { root, file, write };
 }
 
@@ -81,25 +81,25 @@ test('each metadata file has a strict 64 KiB bound, including the parser entry p
   assert.equal(parse(exact).status, 'available');
   assert.deepEqual(parse(exact + '\n'), { status: 'unavailable', reason: 'oversized-metadata' });
   f.write('asio', exact);
-  f.write('rapidxml', exact + '\n');
+  f.write('spdlog', exact + '\n');
   const report = abiDiagnostics(f);
   assert.equal(report.packages[0].status, 'available');
-  assert.deepEqual(report.packages[1], { port: 'rapidxml', status: 'unavailable', reason: 'oversized-metadata' });
+  assert.deepEqual(report.packages[1], { port: 'spdlog', status: 'unavailable', reason: 'oversized-metadata' });
   assert.equal(report.packages[2].status, 'available');
 });
 
 test('only the three fixed installed paths are read, with independent unavailable states', t => {
   const f = fixture(t);
   const before = readFileSync(f.file('asio'));
-  rmSync(f.file('rapidxml'));
+  rmSync(f.file('spdlog'));
   f.write('protobuf', 'unsupported-format\n');
-  writeFileSync(join(dirname(f.file('rapidxml')), 'x64-windows.vcpkg_abi_info.txt'), metadata);
+  writeFileSync(join(dirname(f.file('spdlog')), 'x64-windows.vcpkg_abi_info.txt'), metadata);
   const report = abiDiagnostics(f);
   assert.equal(report.schema, 1);
   assert.equal(report.kind, 'vcpkg-abi-diagnostics');
   assert.equal(report.triplet, 'x64-windows');
   assert.deepEqual(report.packages.map(p => [p.port, p.status]),
-    [['asio', 'available'], ['rapidxml', 'unavailable'], ['protobuf', 'unavailable']]);
+    [['asio', 'available'], ['spdlog', 'unavailable'], ['protobuf', 'unavailable']]);
   assert.equal(report.packages[1].reason, 'missing-metadata');
   assert.equal(report.packages[2].reason, 'malformed-metadata');
   assert.deepEqual(readFileSync(f.file('asio')), before, 'diagnostics never rewrite metadata');
@@ -111,7 +111,7 @@ test('missing directories and non-regular metadata return fixed unavailable reas
   mkdirSync(f.file('asio'));
   assert.equal(abiDiagnostics(f).packages[0].reason, 'unsafe-path');
   assert.ok(abiDiagnostics({ root: join(f.root, 'not-present') }).packages.every(p => p.reason === 'missing-metadata'));
-  assert.ok(abiDiagnostics({ root: f.file('rapidxml') }).packages.every(p => p.reason === 'unsafe-path'));
+  assert.ok(abiDiagnostics({ root: f.file('spdlog') }).packages.every(p => p.reason === 'unsafe-path'));
 });
 
 test('metadata and ancestor symlinks never lead outside the fixed installed directory', { skip: process.platform === 'win32' }, t => {
@@ -121,8 +121,8 @@ test('metadata and ancestor symlinks never lead outside the fixed installed dire
   rmSync(f.file('asio'));
   symlinkSync(secret, f.file('asio'));
   assert.equal(abiDiagnostics(f).packages[0].reason, 'unsafe-path');
-  rmSync(dirname(f.file('rapidxml')), { recursive: true });
-  symlinkSync(dirname(f.file('protobuf')), dirname(f.file('rapidxml')));
+  rmSync(dirname(f.file('spdlog')), { recursive: true });
+  symlinkSync(dirname(f.file('protobuf')), dirname(f.file('spdlog')));
   assert.equal(abiDiagnostics(f).packages[1].reason, 'unsafe-path');
   const alias = join(f.root, 'root-alias');
   symlinkSync(f.root, alias);

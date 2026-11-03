@@ -4,7 +4,7 @@ import { closeSync, constants, fstatSync, lstatSync, openSync, readSync } from '
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const ports = ['asio', 'rapidxml', 'protobuf'];
+const ports = ['asio', 'spdlog', 'protobuf'];
 const triplet = 'x64-windows';
 const maxBytes = 64 * 1024;
 // Names are fixed: unknown metadata keys can themselves contain paths or secrets.

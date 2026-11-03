@@ -67,7 +67,6 @@ set(ark_core_public_headers
     "time/date_time.hpp"
     "time/timer.hpp"
     "uid_generator.hpp"
-    "xml.hpp"
 )
 set(ark_core_include_dir "${CMAKE_CURRENT_BINARY_DIR}/public-include")
 set(mapped_headers)
@@ -96,7 +95,7 @@ target_include_directories(ark_core INTERFACE
     "$<BUILD_INTERFACE:${ark_core_include_dir}>"
     "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
 target_link_libraries(ark_core INTERFACE ark::config_headers arknet::arknet spdlog::spdlog_header_only
-    readerwriterqueue::readerwriterqueue RapidXML::RapidXML ${CMAKE_DL_LIBS})
+    readerwriterqueue::readerwriterqueue ${CMAKE_DL_LIBS})
 target_compile_definitions(ark_core INTERFACE
     $<$<BOOL:${ARK_USE_GUID_32}>:ARK_USE_GUID_32>
     $<$<BOOL:${ARK_DOCKER_ALPINE}>:ARK_DOCKER_ALPINE>

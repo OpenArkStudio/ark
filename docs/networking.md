@@ -13,7 +13,7 @@ is included.
 - CMake 3.21+ and a C++20 compiler: GCC 12+, Clang with C++20 support, or VS 2022.
 - Boost 1.90+ for applications and network tests, using Boost.Asio and Boost.Beast.
 - Standalone Asio 1.38.0+ is optional for core-only and native database development builds.
-- RapidXML, spdlog/fmt and readerwriterqueue from the pinned vcpkg baseline.
+- spdlog/fmt and readerwriterqueue from the pinned vcpkg baseline.
 - Protobuf, Zstandard and zlib when building applications and plugins.
 
 See [dependency selection](dependencies.md) for optional features and license notices.

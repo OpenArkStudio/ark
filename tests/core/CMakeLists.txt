@@ -339,15 +339,6 @@ add_custom_target(check-app-shutdown
     USES_TERMINAL)
 add_dependencies(check-core check-app-shutdown)
 
-add_executable(ark_xml_tests main.cpp xml.cpp)
-target_link_libraries(ark_xml_tests PRIVATE ark::core)
-target_compile_definitions(ark_xml_tests PRIVATE ARK_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
-add_custom_target(check-xml
-    COMMAND $<TARGET_FILE:ark_xml_tests>
-    DEPENDS ark_xml_tests
-    USES_TERMINAL)
-add_dependencies(check-core check-xml)
-
 if(ARK_BUILD_CONFIG)
     add_library(ark_config_shared_probe SHARED ../consumer/config/shared.cpp)
     set_property(TARGET ark_config_shared_probe PROPERTY LINK_LIBRARIES ark::config tomlplusplus::tomlplusplus)

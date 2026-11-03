@@ -12,7 +12,7 @@ ARK 使用 C++20，直接采用独立仓库的
 - CMake 3.21 及以上；GCC 12+、支持 C++20 的 Clang，或 VS 2022。
 - 应用和网络测试使用 Boost 1.90+，依赖 Boost.Asio 和 Boost.Beast。
 - 仅构建核心或原生数据库开发测试时，可以选择 Standalone Asio 1.38.0+。
-- 固定 vcpkg 基线中的 RapidXML、spdlog/fmt 和 readerwriterqueue。
+- 固定 vcpkg 基线中的 spdlog/fmt 和 readerwriterqueue。
 - 构建应用和插件时需要 Protobuf、Zstandard 和 zlib。
 
 可选 feature 与许可声明见[依赖管理](dependencies_CN.md)。vcpkg 清单固定包版本基线。CMake 从 arknet 的独立仓库获取固定提交。
