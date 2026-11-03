@@ -16,4 +16,4 @@ config = ""
 
 [[plugins]]
 name = "AFRealmMasterPlugin"
-config = "realm.plugin.conf"
+config = "realm.plugin.toml"

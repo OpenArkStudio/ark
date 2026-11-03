@@ -22,7 +22,6 @@
 
 #include "ark/physic/physic_config_module.hpp"
 #include "ark/plugin_manager.hpp"
-#include "base/AFSlice.hpp"
 
 namespace ark {
 
@@ -45,8 +44,6 @@ private:
         std::multimap<std::string, std::string>& sub_path_list);
     bool load_config();
 
-    bool vec3_from_string(physx::PxVec3& vec3, const std::string& value);
-    physx::PxVec3 get_vec3(const AFSlice& slice_x, const AFSlice& slice_y, const AFSlice& slice_z);
     std::string gen_cooked_file_path(const std::string& file_path);
     void create_file_path(const std::string& file_path);
 

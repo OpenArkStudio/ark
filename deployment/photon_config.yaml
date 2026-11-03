@@ -1,7 +1,7 @@
 apiVersion: v1
 data:
   bus.plugin.toml: |
-    # Bus runtime configuration. Business data files remain XML.
+    # Bus runtime configuration. Kernel business data uses JSON.
     [bus]
 
     [[bus.applications]]
@@ -183,13 +183,6 @@ data:
     [[plugins]]
     name = "ark_dir_plugin"
     config = ""
-  freebird.app.conf: |-
-    <plugins plugin_lib_dir="bin/" plugin_conf_dir="conf/">
-        <plugin name="ark_utility_plugin" conf="" />
-        <plugin name="ark_redis_plugin" conf="" />
-        <plugin name="ark_http_plugin" conf="http.plugin.toml" />
-        <plugin name="AFFreeBirdPlugin" conf="freebird.plugin.conf" />
-    </Plugins>
   game.app.toml: |-
     [application]
     plugin_library_dir = "bin/"
@@ -314,12 +307,15 @@ data:
 
     [[plugins]]
     name = "PhotonPlugin"
-    config = "photon.example.plugin.conf"
-  photon.example.plugin.conf: |-
-    <?xml version="1.0"?>
-    <conf>
-        <set OpenID="test1" Name="anna" Level="100" MaxPlayerCount="8" ModifyPlayerCount="6" ServerIP="127.0.0.1" />
-    </conf>
+    config = "photon.example.plugin.toml"
+  photon.example.plugin.toml: |-
+    # External plugin settings: coordinate and validate the TOML reader with its owner before use.
+    open_id = "test1"
+    name = "anna"
+    level = 100
+    max_player_count = 8
+    modify_player_count = 6
+    server_ip = "127.0.0.1"
   photon.game.app.toml: |-
     [application]
     plugin_library_dir = "bin/"
@@ -343,20 +339,18 @@ data:
 
     [[plugins]]
     name = "AFPhotonGamePlugin"
-    config = "photon.game.plugin.conf"
-  photon.game.plugin.conf: |-
-    <?xml version="1.0"?>
-    <conf>
-        <common>
-            <set name="CompressType" value="1" />
-            <set name="CompressSize" value="100" />
-        </common>
-        <game>
-            <set name="MaxPlayerCount" value="8" />
-            <set name="SendInterval" value="33" />
-            <set name="IPAddress" value="127.0.0.1" />
-        </game>
-    </conf>
+    config = "photon.game.plugin.toml"
+  photon.game.plugin.toml: |-
+    # External plugin settings: coordinate and validate the TOML reader with its owner before use.
+
+    [common]
+    compress_type = 1
+    compress_size = 100
+
+    [game]
+    max_player_count = 8
+    send_interval = 33
+    ip_address = "127.0.0.1"
   photon.master.app.toml: |-
     [application]
     plugin_library_dir = "bin/"
@@ -380,22 +374,20 @@ data:
 
     [[plugins]]
     name = "AFPhotonMasterPlugin"
-    config = "photon.master.plugin.conf"
-  photon.master.plugin.conf: |-
-    <?xml version="1.0"?>
-    <conf>
-        <common>
-            <set name="CompressType" value="1" />
-            <set name="CompressSize" value="100" />
-        </common>
-        <master>
-            <set name="AppStatsPublishInterval" value="5000" />
-            <set name="GameExpiryCheckPeriod" value="1" />
-            <set name="PersistentGameExpiryMinute" value="60" />
-            <set name="GameListLimit" value="0" />
-            <set name="ReqRoomMaxCount" value="100" />
-        </master>
-    </conf>
+    config = "photon.master.plugin.toml"
+  photon.master.plugin.toml: |-
+    # External plugin settings: coordinate and validate the TOML reader with its owner before use.
+
+    [common]
+    compress_type = 1
+    compress_size = 100
+
+    [master]
+    app_stats_publish_interval = 5000
+    game_expiry_check_period = 1
+    persistent_game_expiry_minute = 60
+    game_list_limit = 0
+    req_room_max_count = 100
   physic.app.toml: |-
     [application]
     plugin_library_dir = "bin/"
