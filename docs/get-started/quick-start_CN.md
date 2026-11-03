@@ -88,7 +88,7 @@ cd run/timers
 
 </Tabs>
 
-Debug 程序名为 `app_d` 或 `app_d.exe`，插件文件在平台后缀前带有 `_d`。将整套 Debug 产物放入独立运行目录，XML 中的插件名称保持不变。
+Debug 程序名为 `app_d` 或 `app_d.exe`，插件文件在平台后缀前带有 `_d`。将整套 Debug 产物放入独立运行目录，TOML 中的插件名称保持不变。
 
 </Step>
 

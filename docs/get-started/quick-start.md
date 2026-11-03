@@ -88,7 +88,7 @@ cd run/timers
 
 </Tabs>
 
-Debug builds use `app_d` or `app_d.exe` and plugin filenames with `_d` before the platform suffix. Use the complete Debug output in its own runtime directory; the XML plugin names stay unchanged.
+Debug builds use `app_d` or `app_d.exe` and plugin filenames with `_d` before the platform suffix. Use the complete Debug output in its own runtime directory; the TOML plugin names stay unchanged.
 
 </Step>
 

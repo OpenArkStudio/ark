@@ -1,0 +1,34 @@
+# External plugin settings: coordinate and validate the TOML reader with its owner before use.
+
+[common]
+compress_type = 2
+compress_size = 100
+version = "0.1.1"
+check_access_key = 1
+enable_kafka_broker = 0
+kafka_broker = "139.196.31.197:9092"
+oss_origin_name_space = "realm_oss."
+oss_replace_name_space = "xd_game_hff_"
+
+[master]
+app_stats_publish_interval = 5000
+game_expiry_check_period = 1
+persistent_game_expiry_minute = 60
+game_list_limit = 0
+req_room_max_count = 100
+
+[game]
+max_player_count = 8
+frame_sync_interval = 33
+ip_address = "127.0.0.1"
+send_active_time_interval = 2
+absence_time_interval = 10
+timeout_offline_interval = 120
+timeout_leave_room_interval = 300
+computer_check_interval = 3
+vote_be_computer_interval = 1
+enable_vote_computer = 0
+vote_computer_cd_time = 30
+vote_computer_valid_interval = 5
+vote_surrender_valid_interval = 20
+enable_owner_leave_destroy_room = 0

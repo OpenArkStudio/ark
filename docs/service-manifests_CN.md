@@ -1,10 +1,10 @@
 # 应用插件清单
 
-应用插件清单指定要加载的插件库及配置文件，通过 `-a` / `--app_conf` 传入 `.toml` 清单或原有 `.app.conf` XML 清单。TOML 解析失败时直接报错，不会回退到 XML。
+应用插件清单指定要加载的插件库及配置文件，通过 `-a` / `--app_conf` 传入以小写 `.toml` 结尾的 TOML 路径。XML 清单和其他后缀会在插件启动前被拒绝；TOML 解析失败不会回退到其他格式。
 
 ## TOML 格式
 
-仓库中的 [timers.app.toml](../config/timers.app.toml) 采用 TOML 1.0 语法；迁移前的 XML 清单保留在解析器回归测试中：
+仓库中的 [timers.app.toml](../config/timers.app.toml) 采用 TOML 1.0 语法：
 
 ```toml
 [application]
@@ -46,7 +46,7 @@ cd run/timers
 ./bin/app --busid=1.0.0.1 --name=timers -a conf/timers.app.toml
 ```
 
-Debug 构建使用 `app_d`。Bus、HTTP 和 Consul 的运行参数使用 TOML，应用清单只指定这些文件的路径。Bus 字段见[运行配置](reference/bus_CN.md#配置进程与连接关系)，HTTP／Consul 示例见下文。日志使用同一应用清单；Kernel 和业务导出数据保留 XML 格式。
+Debug 构建使用 `app_d`。Bus、HTTP 和 Consul 的运行参数使用 TOML，应用清单只指定这些文件的路径。Bus 字段见[运行配置](reference/bus_CN.md#配置进程与连接关系)，HTTP／Consul 示例见下文。应用／插件运行参数和日志使用 TOML。Kernel 接口／类型定义与业务配置使用 JSON，Kernel 只读取 `meta/entity_schema.json`。
 
 ## 内嵌日志配置
 
@@ -74,13 +74,23 @@ output_path = "./binlog/oss"
 | `queue_count` | `0` | 0..65535 的整数；0 表示同步输出，正数启用独立异步队列。 |
 | `loggers` | 空 | 具名表继承基础设置，再覆盖提供的字段。`oss` 选择 OSS 日志；未配置时 OSS 共用默认日志。其他名称可通过 `create_logger()` 使用。 |
 
-Debug 和 Release 使用相同设置。XML 应用清单可在 `<plugins>` 旁添加 `<logging console="true" file="false" level="info" queue_count="0"><logger name="oss" level="warn"/></logging>`，属性名和默认值相同。XML 布尔值也接受 `1` 和 `0`。插件专用的服务和业务配置继续单独组织。
+Debug 和 Release 使用相同设置。日志配置放在应用 TOML 中，或通过程序直接传入 `logging_settings`；插件运行参数 TOML 与 Kernel／业务 JSON 分别组织。
 
-日志接口的字符串路径在所有平台统一使用 UTF-8：包括 `logger_settings::output_path`、旧 XML 中的 `path` 属性，以及 `logger::init_logger(path, filename)` 的配置文件路径和日志文件名。框架文件 sink 在创建目录、打开文件和轮转时转换为原生文件系统表示，Windows 使用 UTF-16 路径。中文、空格和非 BMP 字符均可使用，无需启用 spdlog 文件名宏。文件内容保留传入的 UTF-8 字节。日期目录、小时文件名、按大小轮转的保留策略、日志级别、同步／异步队列和默认设置保持原有行为。
+日志输出路径和文件名在所有平台统一使用 UTF-8：包括 `logger_settings::output_path`，以及 `logger::init_logger(settings, filename)` 的日志文件名。框架文件 sink 在创建目录、打开文件和轮转时转换为原生文件系统表示，Windows 使用 UTF-16 路径。中文、空格和非 BMP 字符均可使用，无需启用 spdlog 文件名宏。文件内容保留传入的 UTF-8 字节。日期目录、小时文件名、按大小轮转的保留策略、日志级别、同步／异步队列和默认设置保持原有行为。
 
-**UTF-8 迁移：**Windows 使用方若原先传入活动代码页／ANSI 路径字节，必须先转换为 UTF-8。已有 UTF-8 配置文本继续保持 UTF-8，不要转成 ANSI。公开字符串类型和函数签名不变。框架文件 sink 的实现布局发生变化，包含这些 sink 的应用、插件和其他使用方应一起重新编译；不要通过修改 `SPDLOG_WCHAR_FILENAMES` 等第三方 ABI 宏完成迁移。
+**UTF-8 迁移：**Windows 使用方若原先传入活动代码页／ANSI 路径字节，必须先转换为 UTF-8。已有 UTF-8 配置文本继续保持 UTF-8，不要转成 ANSI。保留的 settings 接口继续使用字符串路径和文件名；不要通过修改 `SPDLOG_WCHAR_FILENAMES` 等第三方 ABI 宏完成迁移。
 
-**不兼容迁移：**从启动命令移除 `--log_conf` / `-l`；显式提供任一参数会以退出码 `1` 结束。将旧 XML 中选用的 `debug`/`release` 设置迁入 `[logging]`：`path` 改为 `output_path`，数值日志级别 0..6 改为上述名称，`console` 改用布尔值。需要保留文件输出时设置 `file = true`；保留原有异步队列时设置 `queue_count = 1024`。新 API 的文件输出由运行时设置控制，不受 `ARK_OPEN_FILE_LOG` 影响；该构建选项仍控制旧版库接口的默认值。`application_manifest` 的公开布局已改变，应用、插件和使用方必须一起重新编译。直接调用库的 XML 重载 `logger::init_logger(path, filename)` 继续保留，启动器不使用该重载。
+**不兼容迁移：**独立 XML 日志配置已移除。`log_conf::load_log_conf()`、仅供 XML 使用的 `get_default()`，以及 `logger::init_logger(conf_file, filename)` 不再存在，不提供兼容重载。将旧 XML 中选用的 `debug`/`release` 值迁入应用 TOML 的 `[logging]`，或直接构造 `ark::logging_settings`。`path` 改为 `output_path`，数值日志级别 0..6 改为上述名称，`console` 改用布尔值。需要保留文件输出时设置 `file = true`；保留原有异步队列时设置 `queue_count = 1024`。从启动命令移除 `--log_conf` / `-l`。API 移除后，应用、插件和使用方应一起重新编译。
+
+直接调用库时，可复用启动器读取的同一组清单设置：
+
+```cpp
+const auto manifest = ark::load_application_manifest("conf/service.app.toml");
+ark::logger log;
+log.init_logger(manifest.logging, "service.log");
+```
+
+也可以向同一重载传入直接构造的 `ark::logging_settings`。文件输出由 `settings.file` 控制，不受 `ARK_OPEN_FILE_LOG` 影响；该构建选项仅控制底层 `log_conf_data` 的默认值。
 
 日志结构错误会包含应用路径和字段，并在插件加载前失败。文件初始化失败也以退出码 `1` 结束。异步输出仍受既有紧急退出行为限制；需要日志在调用内完成时使用 `queue_count = 0`。既有启动失败诊断继续通过紧急 stderr 路径输出。
 
@@ -113,22 +123,11 @@ Consul 目标端口必须为 1–65535。未知表或字段、缺失字段、类
 
 ## XML 兼容性
 
-原有包装节点和属性名继续有效：
-
-```xml
-<xml>
-    <plugins plugin_lib_dir="bin/" plugin_conf_dir="conf/">
-        <plugin name="ark_utility_plugin" conf=""/>
-        <plugin name="timers_plugin"/>
-    </plugins>
-</xml>
-```
-
-应用加载器要求根节点下包含 `plugins` 子节点，直接以 `<plugins>` 为根节点的文件不属于应用清单。目录属性和 `conf` 省略时仍为空字符串，未知 XML 属性仍被忽略。重复或空插件名和嵌入的 NUL 字符现在会在清单读取阶段被拒绝，避免将歧义或截断数据传入插件加载阶段。清单读取失败时，应用在调用 `plugin_manager::start()` 前以非零状态退出。
+XML 应用清单不再受支持。按上文表结构转换为 TOML，并以小写 `.toml` 后缀保存；仅重命名 XML 文件不会转换内容。读取器会在读文件前拒绝非 TOML 路径。清单错误使应用在调用 `plugin_manager::start()` 前以状态 `1` 结束。
 
 ## C++ 和构建集成
 
-`src/config/` 维护应用清单声明与编译后的共享配置读取器。`ark::config` 是启用位置无关代码的静态 CMake 目标，可供动态插件链接，公开头文件仅依赖 C++ 标准库。应用和 Bus／HTTP／Consul 插件共享文件读取、TOML 语法与编码解析，以及隐藏配置值的定位诊断。应用清单的结构校验保留在 `application_manifest.cpp`，各插件继续负责字段和取值范围校验。MySQL 和 Redis 继续通过接口配置连接，不新增文件格式。公开读取函数 `load_application_manifest()` 对 `.toml` 后缀使用 TOML，对其他路径使用 XML；应用的 `-a` 参数仍保留前述清单路径限制。
+`src/config/` 维护应用清单声明与编译后的共享配置读取器。`ark::config` 是启用位置无关代码的静态 CMake 目标，可供动态插件链接，公开头文件仅依赖 C++ 标准库。应用和 Bus／HTTP／Consul 插件共享文件读取、TOML 语法与编码解析，以及隐藏配置值的定位诊断。应用清单的结构校验保留在 `application_manifest.cpp`，各插件继续负责字段和取值范围校验。MySQL 和 Redis 继续通过接口配置连接，不新增文件格式。公开读取函数 `load_application_manifest()` 要求小写 `.toml` 后缀，只解析 TOML。XML 或其他后缀产生 `application_manifest_error`；`.toml` 文件中的 XML 内容会按 TOML 语法报错，不回退。
 
 ```cpp
 #include <ark/application_manifest.hpp>
@@ -142,7 +141,7 @@ target_link_libraries(my_loader PRIVATE ark::config)
 
 CMake 将源码 `src/config/application_manifest.hpp` 映射到构建树的 `src/config/public-include/ark/application_manifest.hpp`。仅使用声明时链接 `ark::config_headers`；即使 `ARK_BUILD_CONFIG=OFF`，`ark::core` 也会传递这个轻量目标。声明映射不会引入解析器或网络依赖。手写 `-I <源码>/include` 的调用需要改用目标传递的包含目录。
 
-构建应用或核心测试时，`ARK_BUILD_CONFIG` 默认为 `ON`，其他情况下默认为 `OFF`；应用构建要求启用此选项。网络回归使用 HTTP 实现，因此即使应用与 `ARK_BUILD_CONFIG` 关闭，也会创建 `ark::config`。目标内部使用 MIT 许可的 [toml++](https://github.com/marzer/tomlplusplus)：CMake 优先查找已安装的 3.4 或更新版本的 `tomlplusplus` 包，否则获取固定提交 `30172438cee64926dc41fdd9c11fb3ba5b2ba9de` 对应的 v3.4.0。此目标不会向 `ark::core` / `ark::ark` 的使用者传播解析器头文件和宏。XML 继续使用已有的 RapidXML 依赖。
+构建应用或核心测试时，`ARK_BUILD_CONFIG` 默认为 `ON`，其他情况下默认为 `OFF`；应用构建要求启用此选项。网络回归使用 HTTP 实现，因此即使应用与 `ARK_BUILD_CONFIG` 关闭，也会创建 `ark::config`。目标内部使用 MIT 许可的 [toml++](https://github.com/marzer/tomlplusplus)：CMake 优先查找已安装的 3.4 或更新版本的 `tomlplusplus` 包，否则获取固定提交 `30172438cee64926dc41fdd9c11fb3ba5b2ba9de` 对应的 v3.4.0。此目标不会向 `ark::core` / `ark::ark` 的使用者传播解析器头文件和宏。
 
 运行 `cmake --build out --target check-application-manifest check-plugin-configuration check-bus-configuration` 可执行原生回归；`ARK_BUILD_CONFIG=ON` 时，`check-core` 也会运行这些测试。
 
@@ -155,15 +154,15 @@ cmake -S tests/consumer/config -B config-headers-build -G Ninja -DARK_BUILD_CONF
 cmake --build config-headers-build --target check-config-headers
 ```
 
-仅声明构建不查找 toml++ 或 RapidXML；编译读取器时，需要与 `ark::config` 相同的解析器和 RapidXML 依赖。这两种独立配置构建都不需要网络依赖。
+仅声明构建不查找解析器；编译读取器时，内部使用与 `ark::config` 相同的 toml++ 依赖。这两种独立配置构建都不需要网络依赖。
 
 ## 内置应用清单迁移
 
-内置的 24 份可解析应用清单由 `config/<name>.app.conf` 改为
-`config/<name>.app.toml`。这是文件路径兼容性变更：重新复制清单，更新启动参数、
-部署挂载键和外部脚本中的路径。`deployment/scripts/run.sh` 与 `run.bat` 现在只查找
-`conf/<name>.app.toml`，不会自动回退到 XML；需要保留旧 XML 清单时，直接向启动器
-传入其原有 `--app_conf` 路径。运行时目录仍为 `conf/`。
+内置 24 份应用清单使用 `config/<name>.app.toml`。
+重新复制清单，并更新启动参数、部署挂载键和外部脚本中指向
+`config/<name>.app.conf` 的路径。`deployment/scripts/run.sh` 与 `run.bat` 要求
+`conf/<name>.app.toml`。自行维护的 XML 清单必须先转换为 TOML，再把新 `.toml`
+路径传给 `--app_conf`。运行时目录仍为 `conf/`。
 
 | 原 XML 字段 | TOML 字段 | 保留的语义 |
 | --- | --- | --- |
@@ -175,11 +174,9 @@ cmake --build config-headers-build --target check-config-headers
 每份清单保留原插件声明顺序；管理器仍使用无序映射，声明顺序不构成模块生命周期顺序保证。
 `world` 的旧 `plugins/@path` 和部分清单的 `res` 节点原本不由应用清单读取器处理；
 迁移不为它们增加含义，`world` 的两个目录前缀和各插件配置名继续为空。
-Kernel 和业务数据 XML、未知插件配置解析器保持原格式。
+Kernel 只读取 `meta/entity_schema.json` 中的 JSON 接口／类型定义和业务配置；原 Kernel XML 输入需要迁入该 JSON schema。应用／插件运行参数和日志使用 TOML。
 
 ConfigMap 中相应应用键改为 `.app.toml`，包括仅用于部署示例的三份 `photon.*` 清单；
 Photon 的启动参数同步使用这些键，外部业务插件名和插件配置名保持不变。
-Freebird 是明确排除项：它依赖外部 `AFFreeBirdPlugin` 和仓库未提供的
-`freebird.plugin.conf`，旧清单直接以 `plugins` 为根，不能通过当前应用清单读取器；
-ConfigMap 中该示例另有大小写不匹配的结束标签。保留这些旧文件，不把格式迁移当作
-已修复或验收过该外部应用。
+Freebird 仍不属于支持的内置 TOML 清单：它依赖外部 `AFFreeBirdPlugin` 和仓库未提供的
+`freebird.plugin.conf`。其原有 XML 示例不受支持；格式迁移不代表该外部应用已通过验收。

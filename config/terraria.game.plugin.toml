@@ -1,0 +1,7 @@
+# External plugin settings: coordinate and validate the TOML reader with its owner before use.
+
+[login]
+xd_login = false
+
+[net]
+cs_timeout_interval = 10

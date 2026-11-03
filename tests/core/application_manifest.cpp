@@ -4,9 +4,11 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <set>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "../network/doctest.h"
 
@@ -14,13 +16,122 @@
 
 namespace {
 
-constexpr std::array<std::string_view, 24> migrated_application_presets = {"db.app.toml", "dir.app.toml",
-    "entity_operations.app.toml", "game.app.toml", "http_client_sample.app.toml", "http_server.app.toml",
-    "login.app.toml", "master.app.toml", "module_lifecycle.app.toml", "mysql_sample.app.toml", "oss.app.toml",
-    "physic.app.toml", "physics_scene.app.toml", "proxy.app.toml", "realm.example.app.toml", "realm.game.app.toml",
-    "realm.master.app.toml", "redis_sample.app.toml", "remote_log.app.toml", "router.app.toml", "simulate.app.toml",
-    "terraria.game.app.toml", "timers.app.toml", "world.app.toml"};
-constexpr std::array<std::string_view, 1> native_application_presets = {"guest_room.app.toml"};
+struct preset_expectation
+{
+    std::string_view filename;
+    ark::application_manifest manifest;
+};
+
+// Explicit TOML schema values for shipped presets; no retired XML parser or
+// fixture participates in the oracle. Kernel has no separate plugin config.
+ark::application_manifest expected_manifest(std::string_view library_dir, std::string_view config_dir,
+    std::initializer_list<std::pair<std::string_view, std::string_view>> plugins) {
+    ark::application_manifest result;
+    result.plugin_library_dir = library_dir;
+    result.plugin_config_dir = config_dir;
+    for (const auto& [name, config] : plugins)
+    {
+        result.plugins.emplace(std::string(name), std::string(config));
+    }
+    return result;
+}
+
+const std::array<preset_expectation, 25> application_presets = {{
+    {"db.app.toml", expected_manifest("bin/", "conf/",
+                        {{"ark_utility_plugin", ""}, {"ark_consul_plugin", "consul.plugin.toml"},
+                            {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}})},
+    {"dir.app.toml", expected_manifest("bin/", "conf/",
+                         {{"ark_utility_plugin", ""}, {"ark_consul_plugin", "consul.plugin.toml"},
+                             {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}, {"ark_dir_plugin", ""}})},
+    {"entity_operations.app.toml",
+        expected_manifest("bin/", "conf/",
+            {{"ark_kernel_plugin", ""}, {"ark_utility_plugin", ""}, {"entity_operations_plugin", ""}})},
+    {"game.app.toml",
+        expected_manifest("bin/", "conf/",
+            {{"ark_kernel_plugin", ""}, {"ark_utility_plugin", ""}, {"ark_consul_plugin", "consul.plugin.toml"},
+                {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}, {"ark_game_plugin", ""}})},
+    {"guest_room.app.toml",
+        expected_manifest("bin/", "conf/",
+            {{"ark_utility_plugin", ""}, {"ark_kernel_plugin", ""}, {"ark_bus_plugin", "guest_room.bus.toml"},
+                {"ark_net_plugin", ""}, {"guest_room_plugin", ""}})},
+    {"http_client_sample.app.toml",
+        expected_manifest("bin/", "conf/",
+            {{"ark_utility_plugin", ""}, {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""},
+                {"ark_etcd_client_plugin", ""}, {"http_client_sample_plugin", ""}})},
+    {"http_server.app.toml",
+        expected_manifest("bin/", "conf/",
+            {{"ark_utility_plugin", ""}, {"ark_http_plugin", "http.plugin.toml"}, {"http_server_plugin", ""}})},
+    {"login.app.toml",
+        expected_manifest("bin/", "conf/",
+            {{"ark_utility_plugin", ""}, {"ark_consul_plugin", "consul.plugin.toml"},
+                {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}, {"ark_login_plugin", ""}})},
+    {"master.app.toml",
+        expected_manifest("bin/", "conf/",
+            {{"ark_utility_plugin", ""}, {"ark_consul_plugin", "consul.plugin.toml"},
+                {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}, {"ark_master_plugin", ""}})},
+    {"module_lifecycle.app.toml",
+        expected_manifest(
+            "bin/", "conf/", {{"ark_kernel_plugin", ""}, {"ark_utility_plugin", ""}, {"module_lifecycle_plugin", ""}})},
+    {"mysql_sample.app.toml",
+        expected_manifest("bin/", "conf/", {{"ark_mysql_plugin", ""}, {"mysql_sample_plugin", ""}})},
+    {"oss.app.toml", expected_manifest("bin/", "conf/",
+                         {{"ark_utility_plugin", ""}, {"ark_consul_plugin", "consul.plugin.toml"},
+                             {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}})},
+    {"physic.app.toml", expected_manifest("bin/", "conf/", {{"ark_physic_plugin", ""}})},
+    {"physics_scene.app.toml",
+        expected_manifest(
+            "bin/", "conf/", {{"ark_utility_plugin", ""}, {"ark_physic_plugin", ""}, {"physics_scene_plugin", ""}})},
+    {"proxy.app.toml",
+        expected_manifest("bin/", "conf/",
+            {{"ark_kernel_plugin", ""}, {"ark_utility_plugin", ""}, {"ark_consul_plugin", "consul.plugin.toml"},
+                {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}, {"ark_proxy_plugin", ""}})},
+    {"realm.example.app.toml", expected_manifest("bin/", "conf/",
+                                   {{"ark_utility_plugin", ""}, {"ark_bus_plugin", "bus.plugin.toml"},
+                                       {"ark_net_plugin", ""}, {"RealmExamplePlugin", "realm.example.plugin.toml"}})},
+    {"realm.game.app.toml",
+        expected_manifest("bin/", "conf/",
+            {{"ark_utility_plugin", ""}, {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""},
+                {"AFRealmGamePlugin", "realm.plugin.toml"}, {"ark_kafka_plugin", ""}})},
+    {"realm.master.app.toml", expected_manifest("bin/", "conf/",
+                                  {{"ark_utility_plugin", ""}, {"ark_bus_plugin", "bus.plugin.toml"},
+                                      {"ark_net_plugin", ""}, {"AFRealmMasterPlugin", "realm.plugin.toml"}})},
+    {"redis_sample.app.toml", expected_manifest("bin/", "conf/",
+                                  {{"ark_utility_plugin", ""}, {"ark_redis_plugin", ""}, {"redis_sample_plugin", ""}})},
+    {"remote_log.app.toml", expected_manifest("bin/", "conf/",
+                                {{"ark_utility_plugin", ""}, {"ark_consul_plugin", "consul.plugin.toml"},
+                                    {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}})},
+    {"router.app.toml", expected_manifest("bin/", "conf/",
+                            {{"ark_utility_plugin", ""}, {"ark_consul_plugin", "consul.plugin.toml"},
+                                {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}})},
+    {"simulate.app.toml",
+        expected_manifest("bin/", "conf/",
+            {{"ark_physic_plugin", ""}, {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""},
+                {"ark_consul_plugin", "consul.plugin.toml"}, {"ark_utility_plugin", ""}, {"ark_simulate_plugin", ""}})},
+    {"terraria.game.app.toml",
+        expected_manifest("bin/", "conf/",
+            {{"ark_utility_plugin", ""}, {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""},
+                {"ark_consul_plugin", "consul.plugin.toml"}, {"TerrariaGame", "terraria.game.plugin.toml"}})},
+    {"timers.app.toml", expected_manifest("bin/", "conf/", {{"ark_utility_plugin", ""}, {"timers_plugin", ""}})},
+    {"world.app.toml", expected_manifest("", "",
+                           {{"ark_kernel_plugin", ""}, {"ark_utility_plugin", ""}, {"ark_consul_plugin", ""},
+                               {"ark_bus_plugin", ""}, {"ark_net_plugin", ""}, {"ark_world_plugin", ""}})},
+}};
+
+// Deployment-only applications retain their external plugin names and paths.
+const std::array<preset_expectation, 3> deployment_only_presets = {{
+    {"photon.example.app.toml",
+        expected_manifest("bin/", "conf/",
+            {{"ark_utility_plugin", ""}, {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""},
+                {"ark_consul_plugin", "consul.plugin.toml"}, {"PhotonPlugin", "photon.example.plugin.toml"}})},
+    {"photon.game.app.toml",
+        expected_manifest("bin/", "conf/",
+            {{"ark_utility_plugin", ""}, {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""},
+                {"ark_consul_plugin", "consul.plugin.toml"}, {"AFPhotonGamePlugin", "photon.game.plugin.toml"}})},
+    {"photon.master.app.toml",
+        expected_manifest("bin/", "conf/",
+            {{"ark_utility_plugin", ""}, {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""},
+                {"ark_consul_plugin", "consul.plugin.toml"}, {"AFPhotonMasterPlugin", "photon.master.plugin.toml"}})},
+}};
 
 std::string utf8_path(const std::filesystem::path& path) {
     const auto encoded = path.u8string();
@@ -80,68 +191,28 @@ void check_error(const std::string& path, bool has_position = true) {
     }
 }
 
-} // namespace
-
-DOCTEST_TEST_CASE("TOML and XML samples produce equivalent owning application manifests") {
-    const auto base = std::filesystem::path(ARK_TEST_SOURCE_DIR) / "config";
-    const auto toml = ark::load_application_manifest(utf8_path(base / "timers.app.toml"));
-    const auto xml = ark::load_application_manifest(
-        utf8_path(base.parent_path() / "tests/core/fixtures/application_presets/timers.app.conf"));
-    DOCTEST_CHECK(toml.plugin_library_dir == "bin/");
-    DOCTEST_CHECK(toml.plugin_config_dir == "conf/");
-    DOCTEST_REQUIRE(toml.plugins.size() == 2);
-    DOCTEST_CHECK(toml.plugins.at("ark_utility_plugin").empty());
-    DOCTEST_CHECK(toml.plugins.at("timers_plugin").empty());
-    DOCTEST_CHECK(toml.plugin_library_dir == xml.plugin_library_dir);
-    DOCTEST_CHECK(toml.plugin_config_dir == xml.plugin_config_dir);
-    DOCTEST_CHECK(toml.plugins == xml.plugins);
-}
-
-namespace {
-
-void check_equivalent_manifest(const ark::application_manifest& actual, const ark::application_manifest& legacy) {
-    DOCTEST_CHECK(actual.plugin_library_dir == legacy.plugin_library_dir);
-    DOCTEST_CHECK(actual.plugin_config_dir == legacy.plugin_config_dir);
-    DOCTEST_CHECK(actual.plugins == legacy.plugins);
-    // Retain the same insertion sequence and resulting traversal on this STL.
-    // An unordered map does not establish a public lifecycle-order contract.
+void check_manifest(const ark::application_manifest& actual, const ark::application_manifest& expected) {
+    DOCTEST_CHECK(actual.plugin_library_dir == expected.plugin_library_dir);
+    DOCTEST_CHECK(actual.plugin_config_dir == expected.plugin_config_dir);
+    DOCTEST_CHECK(actual.plugins == expected.plugins);
+    // Compare source-preserving traversal on this STL. Lifecycle order comes
+    // from the modules' declared dependencies.
     DOCTEST_CHECK(
-        std::equal(actual.plugins.begin(), actual.plugins.end(), legacy.plugins.begin(), legacy.plugins.end()));
-}
-
-void check_migrated_manifest(
-    const ark::application_manifest& actual, ark::application_manifest legacy, std::string_view name) {
-    constexpr std::array<std::string_view, 4> json_kernel_presets = {
-        "entity_operations.app.toml", "game.app.toml", "module_lifecycle.app.toml", "proxy.app.toml"};
-    if (std::find(json_kernel_presets.begin(), json_kernel_presets.end(), name) != json_kernel_presets.end())
-    {
-        DOCTEST_REQUIRE(legacy.plugins.at("ark_kernel_plugin") == "kernel.plugin.conf");
-        DOCTEST_CHECK(actual.plugins.at("ark_kernel_plugin").empty());
-        // Only Kernel's ignored config entry changes in this migration. Updating
-        // the mapped value preserves the legacy map's insertion/traversal order.
-        legacy.plugins.at("ark_kernel_plugin").clear();
-    }
-    check_equivalent_manifest(actual, legacy);
+        std::equal(actual.plugins.begin(), actual.plugins.end(), expected.plugins.begin(), expected.plugins.end()));
 }
 
 } // namespace
 
-DOCTEST_TEST_CASE("migrated built-in TOML presets retain their legacy XML application schema") {
+DOCTEST_TEST_CASE("built-in TOML application presets match their explicit plugin schema") {
     const auto root = std::filesystem::path(ARK_TEST_SOURCE_DIR);
-    size_t count = 0;
-    for (const auto name : migrated_application_presets)
+    for (const auto& preset : application_presets)
     {
-        DOCTEST_CAPTURE(name);
-        auto legacy = std::filesystem::path(name);
-        legacy.replace_extension(".conf");
-        check_migrated_manifest(ark::load_application_manifest(utf8_path(root / "config" / name)),
-            ark::load_application_manifest(utf8_path(root / "tests/core/fixtures/application_presets" / legacy)), name);
-        ++count;
+        DOCTEST_CAPTURE(preset.filename);
+        check_manifest(ark::load_application_manifest(utf8_path(root / "config" / preset.filename)), preset.manifest);
     }
-    DOCTEST_CHECK(count == 24);
 }
 
-DOCTEST_TEST_CASE("native guest-room TOML declares its complete plugin configuration without legacy XML") {
+DOCTEST_TEST_CASE("guest-room TOML declares its complete plugin configuration") {
     const auto root = std::filesystem::path(ARK_TEST_SOURCE_DIR);
     const auto manifest = ark::load_application_manifest(utf8_path(root / "config/guest_room.app.toml"));
     DOCTEST_CHECK(manifest.plugin_library_dir == "bin/");
@@ -154,18 +225,13 @@ DOCTEST_TEST_CASE("native guest-room TOML declares its complete plugin configura
     DOCTEST_CHECK(manifest.plugins.at("guest_room_plugin").empty());
 }
 
-DOCTEST_TEST_CASE("every built-in TOML application preset has an explicit migrated or native classification") {
+DOCTEST_TEST_CASE("every built-in TOML application preset has an explicit schema expectation") {
     const auto root = std::filesystem::path(ARK_TEST_SOURCE_DIR);
     std::set<std::string> expected;
-    for (const auto name : migrated_application_presets)
+    for (const auto& preset : application_presets)
     {
-        DOCTEST_CAPTURE(name);
-        DOCTEST_CHECK(expected.emplace(name).second);
-    }
-    for (const auto name : native_application_presets)
-    {
-        DOCTEST_CAPTURE(name);
-        DOCTEST_CHECK(expected.emplace(name).second);
+        DOCTEST_CAPTURE(preset.filename);
+        DOCTEST_CHECK(expected.emplace(preset.filename).second);
     }
     std::set<std::string> actual;
     for (const auto& entry : std::filesystem::directory_iterator(root / "config"))
@@ -178,19 +244,23 @@ DOCTEST_TEST_CASE("every built-in TOML application preset has an explicit migrat
             actual.insert(name);
         }
     }
-    for (const auto& name : expected)
-    {
-        DOCTEST_CAPTURE(name);
-        DOCTEST_CHECK(actual.contains(name));
-    }
     DOCTEST_CHECK(actual == expected);
 }
 
-DOCTEST_TEST_CASE("deployment TOML application payloads retain their legacy XML schema") {
+DOCTEST_TEST_CASE("deployment TOML application payloads match their explicit plugin schema") {
     const auto root = std::filesystem::path(ARK_TEST_SOURCE_DIR);
     std::ifstream input(root / "deployment/photon_config.yaml");
     DOCTEST_REQUIRE(input.is_open());
     manifest_files files;
+    const std::set<std::string> expected_application_keys = {"db.app.toml", "dir.app.toml", "game.app.toml",
+        "login.app.toml", "master.app.toml", "oss.app.toml", "photon.example.app.toml", "photon.game.app.toml",
+        "photon.master.app.toml", "physic.app.toml", "proxy.app.toml", "redis_sample.app.toml", "remote_log.app.toml",
+        "router.app.toml", "timers.app.toml", "module_lifecycle.app.toml", "entity_operations.app.toml",
+        "physics_scene.app.toml", "http_server.app.toml", "simulate.app.toml", "world.app.toml"};
+    const std::set<std::string> expected_plugin_keys = {"bus.plugin.toml", "consul.plugin.toml", "http.plugin.toml",
+        "photon.example.plugin.toml", "photon.game.plugin.toml", "photon.master.plugin.toml"};
+    std::set<std::string> application_keys;
+    std::set<std::string> plugin_keys;
     size_t count = 0;
     bool has_data = false;
     bool has_kind = false;
@@ -201,12 +271,27 @@ DOCTEST_TEST_CASE("deployment TOML application payloads retain their legacy XML 
         has_data = has_data || line == "data:";
         has_kind = has_kind || line == "kind: ConfigMap";
         has_metadata = has_metadata || line == "metadata:";
+        if (line.starts_with("  ") && !line.starts_with("    "))
+        {
+            const auto scalar = line.find(": |");
+            if (scalar != std::string::npos)
+            {
+                const auto key = line.substr(2, scalar - 2);
+                DOCTEST_CAPTURE(key);
+                DOCTEST_CHECK((key.ends_with(".app.toml") || key.ends_with(".plugin.toml")));
+                if (key.ends_with(".plugin.toml"))
+                {
+                    DOCTEST_CHECK(plugin_keys.emplace(key).second);
+                }
+            }
+        }
         if (!line.starts_with("  ") || !line.ends_with(".app.toml: |-"))
         {
             continue;
         }
         const auto name = line.substr(2, line.size() - 2 - 4);
         DOCTEST_CAPTURE(name);
+        DOCTEST_CHECK(application_keys.emplace(name).second);
         std::string payload;
         while (input.peek() == ' ' || input.peek() == '\n')
         {
@@ -219,25 +304,32 @@ DOCTEST_TEST_CASE("deployment TOML application payloads retain their legacy XML 
             }
             payload += (line.empty() ? "" : line.substr(4)) + "\n";
         }
-        auto legacy = std::filesystem::path(name);
-        legacy.replace_extension(".conf");
-        check_migrated_manifest(ark::load_application_manifest(files.write(payload, name)),
-            ark::load_application_manifest(utf8_path(root / "tests/core/fixtures/application_presets" / legacy)), name);
+        const auto matches = [&](const auto& preset) { return name == preset.filename; };
+        const auto actual = ark::load_application_manifest(files.write(payload, name));
+        const auto expected = std::find_if(application_presets.begin(), application_presets.end(), matches);
+        if (expected != application_presets.end())
+        {
+            check_manifest(actual, expected->manifest);
+        }
+        else
+        {
+            const auto external = std::find_if(deployment_only_presets.begin(), deployment_only_presets.end(), matches);
+            DOCTEST_REQUIRE(external != deployment_only_presets.end());
+            check_manifest(actual, external->manifest);
+        }
         ++count;
     }
     DOCTEST_CHECK(count == 21);
+    DOCTEST_CHECK(application_keys == expected_application_keys);
+    DOCTEST_CHECK(plugin_keys == expected_plugin_keys);
+    DOCTEST_CHECK(plugin_keys.size() == 6);
     DOCTEST_CHECK(has_data);
     DOCTEST_CHECK(has_kind);
     DOCTEST_CHECK(has_metadata);
 }
 
-DOCTEST_TEST_CASE("XML entities and TOML strings preserve literal configuration characters") {
+DOCTEST_TEST_CASE("TOML strings preserve literal configuration characters") {
     manifest_files files;
-    const auto xml = ark::load_application_manifest(files.write(
-        R"(<xml><plugins plugin_lib_dir="bin &amp; &quot;quoted&quot;\" plugin_conf_dir="配置/#' ">
-<plugin name="plugin &amp; &quot;quoted&quot;" conf="settings/#' &amp; &lt;literal&gt;.conf"/>
-</plugins></xml>)",
-        "characters.app.conf"));
     const auto toml = ark::load_application_manifest(files.write(
         R"([application]
 plugin_library_dir = 'bin & "quoted"\'
@@ -246,7 +338,7 @@ plugin_config_dir = "配置/#' "
 name = 'plugin & "quoted"'
 config = "settings/#' & <literal>.conf"
 )"));
-    check_equivalent_manifest(toml, xml);
+    DOCTEST_CHECK(toml.plugin_config_dir == "配置/#' ");
     DOCTEST_CHECK(toml.plugin_library_dir == R"(bin & "quoted"\)");
     DOCTEST_CHECK(toml.plugins.at(R"(plugin & "quoted")") == "settings/#' & <literal>.conf");
 }
@@ -265,7 +357,7 @@ name = 'SecondPlugin'
 config = ''
 [[plugins]]
 name = 'ThirdPlugin'
-config = 'nested/service.xml'
+config = 'nested/service.toml'
 )"));
     }
     DOCTEST_CHECK(manifest.plugin_library_dir == "relative.with.dots/bin");
@@ -273,35 +365,18 @@ config = 'nested/service.xml'
     DOCTEST_REQUIRE(manifest.plugins.size() == 3);
     DOCTEST_CHECK(manifest.plugins.at("FirstPlugin").empty());
     DOCTEST_CHECK(manifest.plugins.at("SecondPlugin").empty());
-    DOCTEST_CHECK(manifest.plugins.at("ThirdPlugin") == "nested/service.xml");
+    DOCTEST_CHECK(manifest.plugins.at("ThirdPlugin") == "nested/service.toml");
 }
 
 DOCTEST_TEST_CASE("Missing directories and omitted or empty plugin arrays retain empty manifest semantics") {
     manifest_files files;
-    const std::array<std::string_view, 3> inputs = {
-        "[application]\n", "plugins = []\n[application]\n", "<xml><plugins/></xml>"};
-    for (std::size_t index = 0; index < inputs.size(); ++index)
+    for (const auto input : {"[application]\n", "plugins = []\n[application]\n"})
     {
-        const auto manifest = ark::load_application_manifest(
-            files.write(inputs[index], index == 2 ? "empty.app.conf" : "empty.app.toml"));
+        const auto manifest = ark::load_application_manifest(files.write(input));
         DOCTEST_CHECK(manifest.plugin_library_dir.empty());
         DOCTEST_CHECK(manifest.plugin_config_dir.empty());
         DOCTEST_CHECK(manifest.plugins.empty());
     }
-}
-
-DOCTEST_TEST_CASE("XML retains legacy attribute names optional conf and unknown attributes") {
-    manifest_files files;
-    const auto manifest = ark::load_application_manifest(files.write(
-        R"(<xml><plugins plugin_lib_dir="bin/" plugin_conf_dir="../conf/" ignored="yes">
-<plugin name="FirstPlugin"/><plugin name="SecondPlugin" conf="" extra="yes"/>
-</plugins></xml>)",
-        "legacy.app.conf"));
-    DOCTEST_CHECK(manifest.plugin_library_dir == "bin/");
-    DOCTEST_CHECK(manifest.plugin_config_dir == "../conf/");
-    DOCTEST_REQUIRE(manifest.plugins.size() == 2);
-    DOCTEST_CHECK(manifest.plugins.at("FirstPlugin").empty());
-    DOCTEST_CHECK(manifest.plugins.at("SecondPlugin").empty());
 }
 
 DOCTEST_TEST_CASE("TOML validates required tables exact field types and plugin names") {
@@ -330,15 +405,14 @@ DOCTEST_TEST_CASE("TOML rejects unknown fields at every schema level") {
     }
 }
 
-DOCTEST_TEST_CASE("Both manifest formats reject duplicate and empty plugin names before returning a result") {
+DOCTEST_TEST_CASE("TOML rejects duplicate and empty plugin names before returning a result") {
     manifest_files files;
-    const std::array<std::string_view, 4> invalid = {
-        "[application]\n[[plugins]]\nname = 'Plugin'\n[[plugins]]\nname = 'Plugin'\n",
-        "<xml><plugins><plugin name='Plugin'/><plugin name='Plugin'/></plugins></xml>",
-        "<xml><plugins><plugin/></plugins></xml>", "<xml><plugins><plugin name=''/></plugins></xml>"};
-    for (std::size_t index = 0; index < invalid.size(); ++index)
+    const std::array<std::string_view, 3> invalid = {
+        "[application]\n[[plugins]]\nname = 'Plugin'\n[[plugins]]\nname = 'Plugin'\n", "[application]\n[[plugins]]\n",
+        "[application]\n[[plugins]]\nname = ''\n"};
+    for (const auto input : invalid)
     {
-        check_error(files.write(invalid[index], index == 0 ? "duplicate.toml" : "invalid.app.conf"));
+        check_error(files.write(input));
     }
     auto manifest = ark::load_application_manifest(files.write("[application]\n[[plugins]]\nname = 'Original'\n"));
     DOCTEST_CHECK_THROWS_AS(
@@ -347,14 +421,16 @@ DOCTEST_TEST_CASE("Both manifest formats reject duplicate and empty plugin names
     DOCTEST_CHECK(manifest.plugins.contains("Original"));
 }
 
-DOCTEST_TEST_CASE("TOML and XML syntax errors have source positions without disclosing configuration values") {
+DOCTEST_TEST_CASE("TOML syntax errors have source positions without disclosing configuration values") {
     manifest_files files;
-    const std::array<std::string_view, 4> invalid = {"[application]\nplugin_library_dir = SECRET_SENTINEL\n",
+    const std::array<std::string_view, 5> invalid = {"[application]\nplugin_library_dir = SECRET_SENTINEL\n",
         "[application]\n[[plugins]]\nname = 'Plugin'\nname = 'SECRET_SENTINEL'\n",
-        "<xml>\n<plugins secret='SECRET_SENTINEL'></Plugins></xml>", "<xml><plugins secret=SECRET_SENTINEL/></xml>"};
+        "[application]\n[logging]\nlevel = 'info'\nlevel = 'SECRET_SENTINEL'\n",
+        "[application]\n[logging]\n[logging]\n",
+        "[application]\n[logging.loggers.oss]\nlevel = 'info'\n[logging.loggers.oss]\n"};
     for (std::size_t index = 0; index < invalid.size(); ++index)
     {
-        const auto path = files.write(invalid[index], index < 2 ? "syntax.toml" : "syntax.app.conf");
+        const auto path = files.write(invalid[index], "syntax.toml");
         check_error(path);
         try
         { static_cast<void>(ark::load_application_manifest(path)); }
@@ -374,33 +450,47 @@ DOCTEST_TEST_CASE("TOML and XML syntax errors have source positions without disc
     }
 }
 
-DOCTEST_TEST_CASE("Manifest suffix dispatch never falls back from TOML to XML") {
+DOCTEST_TEST_CASE("application manifests require a TOML suffix and never parse XML") {
     manifest_files files;
+    // Merely renaming XML does not convert its contents into TOML.
     check_error(files.write("<xml><plugins/></xml>"));
-    check_error(files.write("[application]\n", "wrong.app.conf"));
-    check_error(files.write("[application]\n", "wrong.app.toml.extra"));
-    check_error(files.write("<plugins/> unmatched", "empty.app.conf"));
-    check_error(files.write("", "empty.app.conf"));
-    check_error(files.write("<plugins/>", "direct-root.app.conf"));
+    for (const auto name : {"old.app.conf", "config.xml", "config.TOML", "config.toml.extra", "no-extension"})
+    {
+        for (const auto contents : {"<xml><plugins/></xml>", "[application]\n"})
+        {
+            const auto path = files.write(contents, name);
+            check_error(path, false);
+            try
+            {
+                static_cast<void>(ark::load_application_manifest(path));
+                DOCTEST_FAIL("non-TOML application manifest accepted");
+            }
+            catch (const ark::application_manifest_error& error)
+            {
+                DOCTEST_CHECK(std::string(error.what()).find("path must end in .toml") != std::string::npos);
+                DOCTEST_CHECK(
+                    std::string(error.what()).find("XML manifests are no longer supported") != std::string::npos);
+            }
+        }
+    }
+    // The format diagnostic is independent of filesystem existence.
+    check_error(files.path("missing.app.conf"), false);
+    check_error("", false);
 }
 
 DOCTEST_TEST_CASE("Manifest strings and input reject raw or decoded embedded NUL") {
     manifest_files files;
-    const std::array<std::string_view, 5> decoded = {"[application]\nplugin_library_dir = \"x\\u0000y\"\n",
+    const std::array<std::string_view, 4> decoded = {"[application]\nplugin_library_dir = \"x\\u0000y\"\n",
         "[application]\nplugin_config_dir = \"x\\u0000y\"\n", "[application]\n[[plugins]]\nname = \"x\\u0000y\"\n",
-        "[application]\n[[plugins]]\nname = 'Plugin'\nconfig = \"x\\u0000y\"\n",
-        "<xml><plugins><plugin name='Plugin' conf='x&#0;y'/></plugins></xml>"};
+        "[application]\n[[plugins]]\nname = 'Plugin'\nconfig = \"x\\u0000y\"\n"};
     for (std::size_t index = 0; index < decoded.size(); ++index)
     {
-        check_error(files.write(decoded[index], index == 4 ? "nul.app.conf" : "nul.toml"));
+        check_error(files.write(decoded[index], "nul.toml"));
     }
-    for (const auto name : {"raw.toml", "raw.app.conf"})
-    {
-        std::string input = name == std::string_view("raw.toml") ? "[application]\n" : "<xml><plugins/></xml>";
-        input += '\0';
-        input += "hidden data";
-        check_error(files.write(input, name));
-    }
+    std::string input = "[application]\n";
+    input += '\0';
+    input += "hidden data";
+    check_error(files.write(input, "raw.toml"));
     const auto nul_path = files.path("missing") + std::string("\0.toml", 6);
     DOCTEST_CHECK_THROWS_AS(ark::load_application_manifest(nul_path), ark::application_manifest_error);
 }
@@ -421,25 +511,20 @@ DOCTEST_TEST_CASE("TOML supports UTF8 values and native Unicode filenames and re
 DOCTEST_TEST_CASE("Missing files and unreadable directory inputs fail without partial results") {
     manifest_files files;
     check_error(files.path("missing.toml"), false);
-    check_error(files.path("missing.app.conf"), false);
     const auto directory = files.path("directory.toml");
     DOCTEST_REQUIRE(std::filesystem::create_directory(native_path(directory)));
     check_error(directory, false);
 }
 
-DOCTEST_TEST_CASE("omitted logging has a usable console INFO default in both formats") {
+DOCTEST_TEST_CASE("omitted TOML logging has a usable console INFO default") {
     manifest_files files;
-    for (const auto name : {"default.toml", "default.xml"})
-    {
-        const auto manifest = ark::load_application_manifest(
-            files.write(std::string_view(name).ends_with("toml") ? "[application]\n" : "<xml><plugins/></xml>", name));
-        DOCTEST_CHECK(manifest.logging.console);
-        DOCTEST_CHECK_FALSE(manifest.logging.file);
-        DOCTEST_CHECK(manifest.logging.level == "info");
-        DOCTEST_CHECK(manifest.logging.queue_count == 0);
-        DOCTEST_CHECK_FALSE(manifest.logging.pattern.empty());
-        DOCTEST_CHECK(manifest.logging.loggers.empty());
-    }
+    const auto manifest = ark::load_application_manifest(files.write("[application]\n"));
+    DOCTEST_CHECK(manifest.logging.console);
+    DOCTEST_CHECK_FALSE(manifest.logging.file);
+    DOCTEST_CHECK(manifest.logging.level == "info");
+    DOCTEST_CHECK(manifest.logging.queue_count == 0);
+    DOCTEST_CHECK_FALSE(manifest.logging.pattern.empty());
+    DOCTEST_CHECK(manifest.logging.loggers.empty());
 }
 
 DOCTEST_TEST_CASE("embedded logging owns overrides and named loggers inherit base settings") {
@@ -468,12 +553,6 @@ output_path = 'logs/oss'
     DOCTEST_CHECK(oss.pattern == "%v");
     DOCTEST_CHECK(oss.level == "warn");
     DOCTEST_CHECK(oss.output_path == "logs/oss");
-    const auto xml = ark::load_application_manifest(files.write(
-        R"(<xml><plugins/><logging console="false" file="true" level="debug" pattern="%v" output_path="logs with spaces/nested" queue_count="65535"><logger name="oss" level="warn" output_path="logs/oss"/></logging></xml>)",
-        "logging.xml"));
-    DOCTEST_CHECK(xml.logging.level == manifest.logging.level);
-    DOCTEST_CHECK(xml.logging.queue_count == manifest.logging.queue_count);
-    DOCTEST_CHECK(xml.logging.loggers.at("oss").output_path == oss.output_path);
 }
 
 DOCTEST_TEST_CASE("logging rejects bad fields ranges and disabled outputs before returning a manifest") {
@@ -495,22 +574,5 @@ DOCTEST_TEST_CASE("logging rejects bad fields ranges and disabled outputs before
             DOCTEST_CHECK(std::string(error.what()).find("logging") != std::string::npos);
             DOCTEST_CHECK(std::string(error.what()).find("SECRET_SENTINEL") == std::string::npos);
         }
-    }
-    for (const auto attributes : {"console='yes'", "queue_count='-1'", "level='bad'", "typo='1'"})
-    {
-        const auto path = files.write(std::string("<xml><plugins/><logging ") + attributes + "/></xml>", "bad.xml");
-        DOCTEST_CHECK_THROWS_AS(ark::load_application_manifest(path), ark::application_manifest_error);
-    }
-}
-
-DOCTEST_TEST_CASE("XML logging rejects duplicate attributes elements and nested logger settings") {
-    manifest_files files;
-    for (const auto body : {"<logging console='true' console='false'/>", "<logging/><logging/>",
-             "<logging name='ignored'/>", "<logging><logger name='oss'/><logger name='oss'/></logging>",
-             "<logging><logger name='oss'><ignored/></logger></logging>"})
-    {
-        DOCTEST_CHECK_THROWS_AS(
-            ark::load_application_manifest(files.write(std::string("<xml><plugins/>") + body + "</xml>", "bad.xml")),
-            ark::application_manifest_error);
     }
 }

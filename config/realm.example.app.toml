@@ -16,4 +16,4 @@ config = ""
 
 [[plugins]]
 name = "RealmExamplePlugin"
-config = "realm.example.plugin.conf"
+config = "realm.example.plugin.toml"

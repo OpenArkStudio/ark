@@ -1,7 +1,7 @@
 add_library(ark_core_header_checks OBJECT headers/queue.cpp headers/guid128.cpp headers/rw_lock.cpp
     headers/array_map.cpp headers/bit_value.cpp headers/consistent_hash.cpp headers/list.cpp
     headers/lock_free_queue.cpp headers/lru_map.cpp headers/map.cpp headers/thread_safe_queue.cpp
-    headers/object_vector.cpp headers/error_code.cpp headers/logger.cpp headers/murmur_hash.cpp)
+    headers/object_vector.cpp headers/error_code.cpp headers/logger.cpp headers/plugin_manager.cpp headers/murmur_hash.cpp)
 target_link_libraries(ark_core_header_checks PRIVATE ark::core)
 
 add_subdirectory(hash_header)
@@ -338,15 +338,6 @@ add_custom_target(check-app-shutdown
     DEPENDS ark_app_shutdown_tests
     USES_TERMINAL)
 add_dependencies(check-core check-app-shutdown)
-
-add_executable(ark_xml_tests main.cpp xml.cpp)
-target_link_libraries(ark_xml_tests PRIVATE ark::core)
-target_compile_definitions(ark_xml_tests PRIVATE ARK_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
-add_custom_target(check-xml
-    COMMAND $<TARGET_FILE:ark_xml_tests>
-    DEPENDS ark_xml_tests
-    USES_TERMINAL)
-add_dependencies(check-core check-xml)
 
 if(ARK_BUILD_CONFIG)
     add_library(ark_config_shared_probe SHARED ../consumer/config/shared.cpp)

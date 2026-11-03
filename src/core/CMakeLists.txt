@@ -67,7 +67,6 @@ set(ark_core_public_headers
     "time/date_time.hpp"
     "time/timer.hpp"
     "uid_generator.hpp"
-    "xml.hpp"
 )
 set(ark_core_include_dir "${CMAKE_CURRENT_BINARY_DIR}/public-include")
 set(mapped_headers)

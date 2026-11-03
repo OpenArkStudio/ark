@@ -1,0 +1,8 @@
+# External plugin settings: coordinate and validate the TOML reader with its owner before use.
+open_id = "test"
+open_id_count = 1
+name = "anna"
+level = 100
+max_player_count = 8
+modify_player_count = 6
+server = "tcp://127.0.0.1:9001"

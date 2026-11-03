@@ -36,6 +36,7 @@
 #include <utility>
 #include <vector>
 
+#include "ark/define.hpp"
 #include "ark/dynamic_library.hpp"
 #include "ark/logger.hpp"
 #include "ark/module.hpp"
@@ -426,9 +427,7 @@ public:
     }
 
     void set_app_conf(const std::string& value) {
-        ARK_ASSERT_RET_NONE(!value.empty());
-        ARK_ASSERT_RET_NONE(value.find(".app.conf") != std::string::npos || value.ends_with(".toml"));
-
+        // The manifest reader reports unsupported formats before startup.
         app_conf_path_ = value;
     }
 

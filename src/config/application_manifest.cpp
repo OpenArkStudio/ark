@@ -1,19 +1,14 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
-#include <charconv>
 #include <cstdint>
 #include <initializer_list>
 #include <string_view>
 #include <utility>
-
-#include <rapidxml.hpp>
 
 #include <ark/application_manifest.hpp>
 #include "configuration_reader.hpp"
 
 namespace ark {
 namespace {
-
-using config_detail::fail_at;
 
 [[noreturn]] void fail_at(const std::string& path, const char* reason, const toml::source_region& source) {
     throw application_manifest_error(path, reason, source.begin.line, source.begin.column);
@@ -212,137 +207,6 @@ application_manifest parse_toml(const std::string& path, std::string_view conten
     return result;
 }
 
-application_manifest parse_xml(const std::string& path, const std::string& contents) {
-    auto buffer = contents;
-    buffer.push_back('\0');
-    rapidxml::xml_document<> document;
-    try
-    { document.parse<rapidxml::parse_validate_closing_tags>(buffer.data()); }
-    catch (const rapidxml::parse_error& error)
-    { fail_at(path, "invalid XML syntax", contents, static_cast<std::size_t>(error.where<char>() - buffer.data())); }
-    const auto* root = document.first_node();
-    const auto* plugins = root == nullptr ? nullptr : root->first_node("plugins");
-    if (plugins == nullptr)
-    {
-        throw application_manifest_error(path, "missing XML plugins element", 1, 1);
-    }
-    const auto read_attribute = [&](const rapidxml::xml_node<>* node, const char* key) {
-        const auto* attribute = node->first_attribute(key);
-        if (attribute == nullptr)
-        {
-            return std::string{};
-        }
-        std::string value(attribute->value(), attribute->value_size());
-        if (value.find('\0') != std::string::npos)
-        {
-            fail_at(path, "manifest string contains NUL", contents,
-                static_cast<std::size_t>(attribute->value() - buffer.data()));
-        }
-        return value;
-    };
-    application_manifest result;
-    if (const auto* logging = root->first_node("logging"))
-    {
-        if (logging->next_sibling("logging") != nullptr)
-        {
-            fail_at(path, "duplicate XML logging element", contents,
-                static_cast<std::size_t>(logging->name() - buffer.data()));
-        }
-        const auto normalize = [&](const rapidxml::xml_node<>* element, bool named_logger) {
-            toml::table table;
-            for (const auto* attribute = element->first_attribute(); attribute; attribute = attribute->next_attribute())
-            {
-                const std::string key(attribute->name(), attribute->name_size());
-                const auto value = read_attribute(element, key.c_str());
-                const auto invalid = [&] {
-                    fail_at(path, ("invalid logging." + key).c_str(), contents,
-                        static_cast<std::size_t>(attribute->value() - buffer.data()));
-                };
-                for (const auto* previous = element->first_attribute(); previous != attribute;
-                     previous = previous->next_attribute())
-                {
-                    if (key == std::string_view(previous->name(), previous->name_size()))
-                    {
-                        invalid();
-                    }
-                }
-                if (key == "name" && named_logger)
-                {
-                    continue;
-                }
-                if (key == "console" || key == "file")
-                {
-                    if (value != "true" && value != "false" && value != "1" && value != "0")
-                    {
-                        invalid();
-                    }
-                    table.insert(key, value == "true" || value == "1");
-                }
-                else if (key == "queue_count")
-                {
-                    std::int64_t number{};
-                    const auto parsed = std::from_chars(value.data(), value.data() + value.size(), number);
-                    if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size())
-                    {
-                        invalid();
-                    }
-                    table.insert(key, number);
-                }
-                else
-                {
-                    table.insert(key, value);
-                }
-            }
-            return table;
-        };
-        auto table = normalize(logging, false);
-        toml::table named;
-        for (const auto* entry = logging->first_node(); entry; entry = entry->next_sibling())
-        {
-            if (entry->type() != rapidxml::node_element)
-            {
-                continue;
-            }
-            const auto name = read_attribute(entry, "name");
-            if (std::string_view(entry->name(), entry->name_size()) != "logger" || name.empty() || named.contains(name))
-            {
-                fail_at(path, "invalid or duplicate logging.logger name", contents,
-                    static_cast<std::size_t>(entry->name() - buffer.data()));
-            }
-            if (entry->first_node() != nullptr)
-            {
-                for (const auto* child = entry->first_node(); child; child = child->next_sibling())
-                {
-                    if (child->type() == rapidxml::node_element)
-                    {
-                        fail_at(path, "nested XML logging.logger element is invalid", contents,
-                            static_cast<std::size_t>(child->name() - buffer.data()));
-                    }
-                }
-            }
-            named.insert(name, normalize(entry, true));
-        }
-        table.insert("loggers", std::move(named));
-        result.logging = parse_logging(&table, path);
-    }
-    result.plugin_library_dir = read_attribute(plugins, "plugin_lib_dir");
-    result.plugin_config_dir = read_attribute(plugins, "plugin_conf_dir");
-    for (auto* plugin = plugins->first_node("plugin"); plugin != nullptr; plugin = plugin->next_sibling())
-    {
-        auto name = read_attribute(plugin, "name");
-        if (name.empty())
-        {
-            fail_at(path, "plugin name must not be empty", contents,
-                static_cast<std::size_t>(plugin->name() - buffer.data()));
-        }
-        if (!result.plugins.emplace(std::move(name), read_attribute(plugin, "conf")).second)
-        {
-            fail_at(path, "duplicate plugin name", contents, static_cast<std::size_t>(plugin->name() - buffer.data()));
-        }
-    }
-    return result;
-}
-
 } // namespace
 
 application_manifest_error::application_manifest_error(
@@ -366,10 +230,15 @@ std::size_t application_manifest_error::column() const noexcept {
 }
 
 application_manifest load_application_manifest(const std::string& path) {
+    if (!path.ends_with(".toml"))
+    {
+        throw application_manifest_error(
+            path, "application manifest path must end in .toml; XML manifests are no longer supported");
+    }
     try
     {
         const auto contents = config_detail::read_file(path, "manifest");
-        return path.ends_with(".toml") ? parse_toml(path, contents) : parse_xml(path, contents);
+        return parse_toml(path, contents);
     }
     catch (const config_detail::read_error& error)
     { throw application_manifest_error(path, error.reason, error.line, error.column); }

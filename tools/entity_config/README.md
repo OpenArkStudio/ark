@@ -19,5 +19,11 @@ Run `ark_config_tool --help` for the available input modes.
 索引常量，也可校验或规范化已有 JSON。构建选项、命令、字段表布局、精度要求与部署方式见
 [配置工具](../../docs/guides/tools_CN.md)。服务器加载 JSON 不需要 OpenXLSX。
 
-The Python importer in `tools/config_tool` remains the legacy XML workflow.
-`tools/config_tool` 中的 Python 导入器仅保留旧 XML 流程。
+The old Python/XML configuration exporter and wrappers are removed. The source
+workbooks under `resources/excel/` remain, but their old layout must be adapted
+to the explicit-index field/profile format before using this exporter. Kernel
+loads only `resource/meta/entity_schema.json`; it does not fall back to XML.
+
+旧 Python/XML 配置导出器及包装脚本已移除。`resources/excel/` 的源工作簿保留，
+使用本工具前需要整理为带显式索引的字段／配置表。Kernel 只读取
+`resource/meta/entity_schema.json`，不回退到 XML。

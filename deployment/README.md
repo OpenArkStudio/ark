@@ -45,8 +45,18 @@ configure a database connection. See [MySQL](../docs/reference/mysql.md) and
 [Redis](../docs/reference/redis.md) for consumer configuration. The database example targets remain disabled in the default build; retaining their
 sources and manifests does not establish runnable examples or deployment acceptance.
 
-Built-in application presets and Photon application ConfigMap keys now end in
-`.app.toml`; restage these files and update custom launch arguments and mounts.
-The launch helpers require the TOML names. The legacy external Freebird example
-is excluded; XML application loading remains available through an explicit
-`--app_conf` path. See the [migration mapping](../docs/service-manifests.md#built-in-application-preset-migration).
+Built-in application presets and Photon application ConfigMap keys use
+`.app.toml`; restage files and update custom launch arguments and mounts.
+The ConfigMap no longer contains Freebird or `kernel.plugin.conf`; its four
+former Kernel file selections are empty. XML application and plugin configuration
+payloads are retired. See the [migration mapping](../docs/service-manifests.md#built-in-application-preset-migration).
+
+Photon's external settings now use `photon.example.plugin.toml`,
+`photon.game.plugin.toml` and `photon.master.plugin.toml`. Realm and Terraria
+samples under `config/` likewise select `.plugin.toml`. Their fields preserve
+the old values with snake_case keys; integer and boolean values use native TOML
+types. External plugin library stems are unchanged. These are mechanical sample
+migrations: the old external plugins have not been shown to understand TOML.
+Coordinate the schema, update their parsers and validate the owning applications
+before using these samples. No container, cluster or external-plugin acceptance
+is established by parsing the configuration files.

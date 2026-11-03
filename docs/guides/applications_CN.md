@@ -1,6 +1,6 @@
 # 应用启动器
 
-`app` 设置进程标识、读取 TOML 或 XML 应用清单并加载插件库。首次运行见 [Timers 快速开始](../get-started/quick-start_CN.md)；本文说明配置路径、库名和启动检查。
+`app` 设置进程标识、读取 TOML 应用清单并加载插件库。首次运行见 [Timers 快速开始](../get-started/quick-start_CN.md)；本文说明配置路径、库名和启动检查。
 
 ## 命令行参数
 
@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | `--busid` / `-b` | 是 | 进程的逻辑 Bus 地址，例如 `1.0.1.1`；不是 socket 绑定地址 |
 | `--name` / `-n` | 是 | 应用名称，也用于日志文件名 |
-| `--app_conf` / `-a` | 是 | 扩展名为小写 `.toml` 的 TOML 应用配置，或旧版 XML `*.app.conf` 文件 |
+| `--app_conf` / `-a` | 是 | 扩展名必须为小写 `.toml` 的 TOML 应用配置 |
 | `--help` / `-h` | 否 | 输出启动器的参数说明 |
 
 ```sh
@@ -39,9 +39,9 @@ Windows 宽字符 API。配置文件读取和插件动态库加载在操作系�
 | --- | --- | --- |
 | 应用配置 | `--app_conf` | `conf/timers.app.toml` |
 | 日志配置 | 应用清单中可选的 `[logging]` | 省略时使用控制台 INFO 日志 |
-| 插件动态库 | TOML `plugin_library_dir` 或 XML `plugin_lib_dir` 加动态库文件名 | macOS Release 使用 `bin/timers_plugin.dylib` |
-| 插件配置 | TOML `plugin_config_dir` + `config`，或 XML `plugin_conf_dir` + `conf` | 配置文件名为 `my-plugin.conf` 时，对应 `conf/my-plugin.conf` |
-| Kernel 元数据和配置 | Kernel 使用的 `resource/` 目录 | `resource/meta/entity_class.config`、`resource/server/item.config` |
+| 插件动态库 | `application.plugin_library_dir` 加动态库文件名 | macOS Release 使用 `bin/timers_plugin.dylib` |
+| 插件配置 | `application.plugin_config_dir` + 各插件的 `config` | 配置文件名为 `my-plugin.conf` 时，对应 `conf/my-plugin.conf` |
+| Kernel 元数据和配置 | Kernel 使用的 `resource/` 目录 | 见[数据驱动配置](../concepts/data-driven_CN.md) |
 
 启动器把插件配置路径交给插件管理器，具体模块自行读取配置。Kernel 资源路径与应用配置路径相互独立，只有使用相关 Kernel 能力的应用才需要这些资源。详见[数据驱动配置](../concepts/data-driven_CN.md)和[配置工具](tools_CN.md)。
 
@@ -61,7 +61,7 @@ name = "ark_utility_plugin"
 name = "timers_plugin"
 ```
 
-通过 `--app_conf=conf/timers.app.toml` 选择该文件。`application` 表必须存在，目录字段为可省略的字符串。每个插件的 `name` 必须非空且唯一；可选的 `config` 字符串指定插件配置文件。字段校验和格式边界见[应用配置清单](../service-manifests_CN.md)。Bus、HTTP 和 Consul 插件配置使用 TOML，Bus 字段见[运行配置](../reference/bus_CN.md#配置进程与连接关系)。日志与应用共用清单；Kernel 元数据和业务导出数据保留 XML 格式。
+通过 `--app_conf=conf/timers.app.toml` 选择该文件。`application` 表必须存在，目录字段为可省略的字符串。每个插件的 `name` 必须非空且唯一；可选的 `config` 字符串指定插件配置文件。字段校验和格式边界见[应用配置清单](../service-manifests_CN.md)。Bus、HTTP 和 Consul 插件配置使用 TOML，Bus 字段见[运行配置](../reference/bus_CN.md#配置进程与连接关系)。日志与应用共用清单；插件专属配置和业务资源格式见各自模块的文档。
 
 ### 插件库命名
 
@@ -71,23 +71,24 @@ name = "timers_plugin"
 已有配置和构建命令中的 `AFUtilityPlugin`、`AFMysqlPlugin`、`Sample1Plugin` 需要更新，
 构建不再生成这些旧文件名。
 
-### 兼容已有 XML 配置
+### 迁移 XML 应用清单
 
-启动器仍接受用户维护的旧版 XML 清单，例如：
+**不兼容变更：**启动器和 `load_application_manifest()` 仅接受后缀为小写 `.toml`
+的 TOML 文件，不再支持 `*.app.conf` 等 XML 应用清单。启动器会在插件启动前输出
+清单格式错误，并以退出码 `1` 结束。仅把 XML 文件改名为 `.toml` 不够，内容也须
+重写为 TOML。
 
-```xml
-<xml>
-    <plugins plugin_lib_dir="bin/" plugin_conf_dir="conf/">
-        <plugin name="ark_utility_plugin" conf="" />
-        <plugin name="timers_plugin" conf="" />
-    </plugins>
-</xml>
-```
+| 旧 XML 字段 | TOML 对应项 |
+| --- | --- |
+| `plugins/@plugin_lib_dir` | `[application].plugin_library_dir` |
+| `plugins/@plugin_conf_dir` | `[application].plugin_config_dir` |
+| `plugin/@name` | `[[plugins]].name` |
+| `plugin/@conf` | `[[plugins]].config` |
 
-- 保留外层 `xml` 元素，启动器在其下查找 `plugins` 子元素。
-- `bin/`、`conf/` 等目录前缀保留末尾分隔符，当前加载器直接拼接字符串。
-- `name` 使用动态库名称主体，不加平台后缀，也不加 `lib` 前缀。加载器追加 `.dll`、`.so` 或 `.dylib`，Debug 构建还会在后缀前追加 `_d`。
-- `conf` 为空表示没有提供插件配置文件名。Timers 不需要单独的 `timers.conf`。
+按上面的 TOML 示例改写清单，并更新 `--app_conf` / `-a` 的路径。目录前缀继续保留
+末尾分隔符；动态库名称和可选插件配置值的含义不变。内嵌日志属性迁入 `[logging]`，
+详见[日志设置](../service-manifests_CN.md#内嵌日志配置)。CLI 参数、公开清单数据类型
+和函数签名保持不变。
 
 程序和所选插件动态库应来自同一次构建，Debug 与 Release 文件分别放置。插件条目顺序不代表依赖初始化顺序；模块通过[模块 API](modules_CN.md#声明启动依赖)声明必需 provider 注册键。管理器在安装完成后验证依赖，并按依赖顺序执行四个启动阶段，按反向缓存顺序逐个清理并销毁消费者，再处理提供方，全部动态库最后关闭。移除模块停止接收虚方法，管理器布局也改变；必须同时重建启动器和全部插件，不得混用旧二进制。
 
@@ -138,7 +139,7 @@ run.bat <Release|Debug> <name> <busid> [runtime-directory]
 运行目录默认为脚本所在目录。从源码仓库调用 `deployment/scripts/` 下的脚本时，显式传入已准备的运行目录；也可将脚本复制到运行目录根部后使用默认值。显式传入的相对路径以调用者的工作目录为基准。
 Release 使用 `bin/app`（Windows 为 `app.exe`），Debug 使用 `bin/app_d`
 （Windows 为 `app_d.exe`）。脚本读取 `conf/<name>.app.toml`，
-在前台运行应用；`name` 同时作为 `--name` 的值。使用旧版 XML、自定义清单路径、不同的进程名称或
+在前台运行应用；`name` 同时作为 `--name` 的值。使用自定义 TOML 清单路径、不同的进程名称或
 其他启动参数时，直接调用程序。
 
 按[Timers 快速开始](../get-started/quick-start_CN.md)准备运行目录后，在仓库根目录执行：
@@ -182,9 +183,9 @@ macOS/Linux 优先使用 Ctrl+C，Windows 优先在应用控制台输入 `exit`�
 | 现象 | 检查项 |
 | --- | --- |
 | 输出帮助或 `Application parameter is invalid` | 补齐三个必填参数，用 `--help` 核对拼写 |
-| 应用配置加载失败 | 检查工作目录、显式路径和文件格式；小写 `.toml` 后缀选择 TOML，旧版 `*.app.conf` 使用 XML |
+| 应用配置加载失败 | 检查工作目录、显式路径和文件格式；后缀必须为小写 `.toml`；XML 应用清单须先转换为 TOML |
 | 日志校验或初始化失败 | 检查清单诊断和 `logging.output_path` 的写入权限 |
-| `Load shared library[...] failed` | 核对 TOML `plugin_library_dir` 或 XML `plugin_lib_dir`、平台后缀、Debug 后缀，以及动态库自身的共享库依赖 |
+| `Load shared library[...] failed` | 核对 `application.plugin_library_dir`、平台后缀、Debug 后缀，以及动态库自身的共享库依赖 |
 | 插件已加载，但目标模块不存在 | 核对模块注册、启用的构建目标和依赖插件，详见[创建插件](plugins_CN.md) |
 | 内置服务角色在 `init:` 失败 | 加载 Bus 和 Net；Game 注册回调前还需要 Kernel。已检查的范围见[角色启动错误](../concepts/server-architecture_CN.md#角色启动错误) |
 | 内置服务角色在 `post_init:` 失败 | Game 需检查 Player 元数据和回调注册诊断；同时检查监听端点配置和端口占用。注册失败、创建监听器失败或服务缺失会传递到启动器，并产生退出码 `1` |
