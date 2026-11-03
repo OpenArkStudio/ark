@@ -173,6 +173,14 @@ Include `<utility>` for `std::move`. `get_data()` returns a borrowed pointer int
 
 The buffer keeps `ARK_NEW_ARRAY` / `ARK_DELETE_ARRAY` as its narrow allocation compatibility boundary, now using the same pair for construction, growth and release. This corrects the previous growth path that bypassed custom hooks with raw `new[]` / `delete[]`. Define a compatible, nonthrowing release hook consistently across translation units before including the header. Without overrides, allocation still uses throwing `new[]`: `std::bad_alloc` propagates and failed growth retains the old bytes, capacity and cursors. If a custom allocator returns null, construction retains an empty zero-capacity buffer and `write()` returns `false` without changing the existing state.
 
+Both `net_session::add_buffer()` overloads return `-1` when a write is rejected,
+retaining the unread bytes. TCP, WebSocket and RUDP receivers stop the affected
+transport instead of assembling later input across a missing fragment. On
+success the return value is the unread length capped at `INT_MAX`; use
+`get_buffer_len()` for the exact `size_t` count. Throwing allocation failures
+still propagate. Public signatures, class layouts, wire bytes and body limits
+are unchanged.
+
 A zero-length write succeeds without dereferencing its pointer; a null source with nonzero length returns `false`. Removing more than the unread length is a no-op, including an overflowing count. Unrepresentable growth throws `std::length_error` before allocation. Normal reads, writes, compaction and capacity growth retain their existing behavior.
 
 With `ARK_BUILD_CORE_TESTS=ON`, `check-buffer` runs the lifetime/move, compaction/growth, boundary, deterministic default-allocation failure and separate custom-hook regressions; it is also part of `check-core`. The allocation-failure test fails one small array request instead of requesting excessive memory. `check-network` retains the existing Net framing/fragmented-input coverage. These checks do not establish service or capacity acceptance.
@@ -195,7 +203,7 @@ Growth/copy allocation failure throws `std::bad_alloc`; allocation and clone fai
 
 **Upgrade:** capacity tracking changes `net_msg` layout; rebuild Net and consumers/plugins together. These message/event and native-header factories use standard allocation; `ARK_NEW` / `ARK_DELETE` overrides no longer customize them. Public signatures, CS/SS wire bytes and platform types remain unchanged.
 
-With `ARK_BUILD_NETWORK_TESTS=ON`, `check-net-message` covers ownership, framing and deterministic allocation failures without sockets; `check-network` includes it. Local checks do not establish shared-service or capacity acceptance.
+With `ARK_BUILD_NETWORK_TESTS=ON`, `check-net-message` covers ownership, framing and deterministic allocation failures without sockets, including null-returning receive hooks and failed-fragment reporting; `check-network` includes it. Local checks do not establish shared-service or capacity acceptance.
 
 ## Application ingress and resource closure
 

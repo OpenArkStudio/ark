@@ -133,8 +133,7 @@ bool rudp_server::start_server(std::shared_ptr<const msg_header> head, bus_id_t 
             auto session = self->get_net_session(session_ptr->get_user_data<conv_id_t>());
             if (session && !session->need_remove())
             {
-                session->add_buffer(s.data(), s.length());
-                if (!session->parse_buffer_to_msg())
+                if (session->add_buffer(s.data(), s.length()) < 0 || !session->parse_buffer_to_msg())
                 {
                     session_ptr->stop();
                 }

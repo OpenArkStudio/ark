@@ -17,6 +17,8 @@ class rudp_server final
     , public std::enable_shared_from_this<rudp_server>
     , private noncopyable
 {
+    friend struct net_listener_startup_test_access;
+
     net_event_functor net_event_cb_;
     net_msg_session_functor net_msg_cb_;
 
