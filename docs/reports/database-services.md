@@ -4,6 +4,36 @@
 
 Results apply only to the source, binary identities and operations recorded below. The [resource lifecycle contract](../project/lifecycle-closeout.md) separates business completion from process cleanup; older scopes retain their own revisions.
 
+## Repeated public-plugin workflows
+
+On **2026-11-03**, a **300-second** local run completed **1,351 cycles / 4,053 invocations**, all with exit `0`. Each cycle runs `ark_database_public_plugin_service_tests` in `redis`, `mysql` and `mysql-transactions` modes against fresh, exclusively owned services.
+
+| Scope | Recorded result |
+| --- | --- |
+| Operations | Redis binary commands/pipelines; MySQL queries, binary prepared inserts, commit/rollback and independent-connection visibility |
+| Resource lifetime | Real plugin DSOs, owner-executor completion, owning results after host destruction and repeated resource stop |
+| Services | Redis 7.4.2 with authenticated TCP; MySQL Community 8.4.13 arm64 with authenticated, verified TLS |
+| Cleanup | Redis database and MySQL schema empty; both servers stopped; private data, keys and credential files removed |
+| Candidate | `c9aa911a4893ffa2681925e8ebf13e703f8f4c16` |
+| Reused build | `3948d881ccf2486231cb401b73888b8a0426f2bb`; the complete source difference contains only HTTP startup code/tests and documentation. Database, core, configuration and build inputs are unchanged |
+| Machine | Apple M4 Pro, 48 GiB RAM, macOS 27.0.1 (26A434), arm64 |
+| Client build | C++20 Debug, Boost 1.92.0, OpenSSL 4.1.0; arknet `a0dfe09cd543e75cfb5996e537ce2fa49f2a758f`, Boost.Asio with SSL enabled |
+
+Use the [permanent public-plugin service program](../../tests/database/README.md#real-plugin-dsos-against-real-services) with the three modes above. Internal batches use shell orchestration; raw logs stay local. This bounded correctness run does not establish throughput, long-term stability, persistence or production capacity.
+
+<Collapsible>
+<CollapsibleTrigger>Executed build fingerprints</CollapsibleTrigger>
+<CollapsibleContent>
+
+| Binary | SHA256 |
+| --- | --- |
+| `ark_database_public_plugin_service_tests` | `262fff76884d51e987ff0ca80e96f5358436234c791078c2d07c7a9446567f10` |
+| `ark_database_mysql_plugin_d.dylib` | `1c70d7a96dbebb9ff0b0dbee16ef966674f53788d13c1e7c6d6fec4a26ab6a4e` |
+| `ark_database_redis_plugin_d.dylib` | `41031ee20933400f7949d2db1d606e4c5ad324808effaa4be95ec71dbec5e3de` |
+
+</CollapsibleContent>
+</Collapsible>
+
 ## Shutdown-candidate resource cleanup
 
 On **2026-11-02**, **17 native invocations passed in four scopes**. The 12 positive/explicit-cancellation/TLS executions, 2 pipeline/autocommit stops, 2 transaction stops and 1 Redis TLS stop retain separate source and binary identities below. Each result is attributed to its recorded build.
