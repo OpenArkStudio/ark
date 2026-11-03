@@ -46,11 +46,11 @@ Copy-Item config/timers.app.toml run/timers/conf/
 
 <FileTree>
 
-- run/timers/
+- run/timers/ — 独立 Timers 运行目录
   - bin/ — 同一次构建的 app、ark_utility_plugin 和 timers_plugin
     - ...
-  - conf/
-    - timers.app.toml
+  - conf/ — TOML 应用配置
+    - timers.app.toml — 选择 Utility 与 Timers
 
 </FileTree>
 

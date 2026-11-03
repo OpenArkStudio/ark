@@ -10,38 +10,38 @@ Build artifacts belong to each CMake build directory: `cmake -S . -B out/release
 
 <FileTree>
 
-- src/
-  - core/
+- src/ — Framework implementation
+  - core/ — Module lifecycle and Entity foundations
     - ...
-  - application/
+  - application/ — Application launcher and shutdown entry
     - ...
-  - config/
+  - config/ — Shared TOML configuration reader
     - ...
-  - proto/
+  - proto/ — Protobuf schemas and code generation
     - ...
-  - plugins/
+  - plugins/ — Built-in plugin implementations
     - ...
-  - server/
+  - server/ — Built-in server roles
     - ...
-- tests/
-  - core/
+- tests/ — Correctness and interface-consumption checks
+  - core/ — Lifecycle and core data regressions
     - ...
-  - network/
+  - network/ — Transport and HTTP regressions
     - ...
-  - database/
+  - database/ — Database integration regressions
     - ...
-  - consumer/
+  - consumer/ — Public header and installed-package consumers
     - ...
-- examples/
+- examples/ — Capability examples and business plugins
   - ...
-- config/
+- config/ — Application and plugin TOML samples
   - ...
-- resources/
+- resources/ — Entity JSON and authoring resources
   - ...
-- tools/
+- tools/ — Native JSON exporter and development tools
   - ...
-- deployment/
-  - scripts/
+- deployment/ — Container and Kubernetes examples
+  - scripts/ — Single-application launch and stop helpers
     - ...
   - ...
 

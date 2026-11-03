@@ -9,38 +9,38 @@ ark 使用 C++20。核心与官方插件放在本仓库，业务插件放在应�
 
 <FileTree>
 
-- src/
-  - core/
+- src/ — 框架实现
+  - core/ — 模块生命周期与 Entity 基础
     - ...
-  - application/
+  - application/ — 应用启动器与停服入口
     - ...
-  - config/
+  - config/ — 共享 TOML 配置读取器
     - ...
-  - proto/
+  - proto/ — Protobuf 定义与代码生成
     - ...
-  - plugins/
+  - plugins/ — 内置插件实现
     - ...
-  - server/
+  - server/ — 内置服务端角色
     - ...
-- tests/
-  - core/
+- tests/ — 正确性与接口消费检查
+  - core/ — 生命周期与核心数据回归
     - ...
-  - network/
+  - network/ — 传输与 HTTP 回归
     - ...
-  - database/
+  - database/ — 数据库集成回归
     - ...
-  - consumer/
+  - consumer/ — 公开头与安装包消费者
     - ...
-- examples/
+- examples/ — 能力示例与业务插件
   - ...
-- config/
+- config/ — 应用与插件 TOML 样例
   - ...
-- resources/
+- resources/ — Entity JSON 业务资源与制作输入
   - ...
-- tools/
+- tools/ — 原生 JSON 导出器与开发工具
   - ...
-- deployment/
-  - scripts/
+- deployment/ — 容器与 Kubernetes 示例
+  - scripts/ — 单应用启动与停止脚本
     - ...
   - ...
 

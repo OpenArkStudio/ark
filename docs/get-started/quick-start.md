@@ -46,11 +46,11 @@ The required runtime files are:
 
 <FileTree>
 
-- run/timers/
+- run/timers/ — Isolated Timers runtime
   - bin/ — app + ark_utility_plugin + timers_plugin from the same build
     - ...
-  - conf/
-    - timers.app.toml
+  - conf/ — TOML application configuration
+    - timers.app.toml — Select Utility and Timers
 
 </FileTree>
 

@@ -53,6 +53,39 @@ function createLabel(label: string): HTMLSpanElement {
   return span;
 }
 
+function createEntry(nodes: ChildNode[], stripTrailingSlash = false): HTMLSpanElement {
+  const text = nodes.map((node) => node.textContent ?? "").join("");
+  const separator = /\s+—\s+/.exec(text);
+  if (!separator) return createLabel(getSafeLabel(nodes, stripTrailingSlash));
+
+  const nameNodes: ChildNode[] = [];
+  let remaining = separator.index;
+  for (const node of nodes) {
+    const value = node.textContent ?? "";
+    const name = value.slice(0, Math.max(0, remaining));
+    if (name) {
+      if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === "STRONG") {
+        const strong = document.createElement("strong");
+        strong.textContent = name;
+        nameNodes.push(strong);
+      } else {
+        nameNodes.push(document.createTextNode(name));
+      }
+    }
+    remaining -= value.length;
+    if (remaining <= 0) break;
+  }
+
+  const content = document.createElement("span");
+  content.className = "ft-content";
+  content.appendChild(createLabel(getSafeLabel(nameNodes, stripTrailingSlash)));
+  const description = document.createElement("span");
+  description.className = "ft-description";
+  description.textContent = " — " + text.slice(separator.index + separator[0].length).trim();
+  content.appendChild(description);
+  return content;
+}
+
 mount("[data-file-tree]", (tree) => {
   const chevTpl = tree.querySelector<HTMLTemplateElement>("[data-ft-icon-chev]");
   const folderTpl = tree.querySelector<HTMLTemplateElement>("[data-ft-icon-folder]");
@@ -69,24 +102,20 @@ mount("[data-file-tree]", (tree) => {
     }
 
     if (childUl) {
-      const label = getSafeLabel(
-        [...li.childNodes].filter((node) => node !== childUl),
-        true,
-      );
+      const labelNodes = [...li.childNodes].filter((node) => node !== childUl);
 
       const details = document.createElement("details");
       details.open = true;
       const summary = document.createElement("summary");
       summary.appendChild(cloneIcon(chevTpl));
       summary.appendChild(cloneIcon(folderTpl));
-      summary.appendChild(createLabel(label));
+      summary.appendChild(createEntry(labelNodes, true));
       details.appendChild(summary);
       details.appendChild(childUl);
       li.replaceChildren(details);
     } else {
       li.setAttribute("data-file", "");
-      const label = getSafeLabel([...li.childNodes]);
-      li.replaceChildren(createSpacer(), cloneIcon(fileTpl), createLabel(label));
+      li.replaceChildren(createSpacer(), cloneIcon(fileTpl), createEntry([...li.childNodes]));
     }
   }
 

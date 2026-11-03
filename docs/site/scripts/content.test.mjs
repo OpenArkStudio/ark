@@ -66,11 +66,11 @@ test("component examples inside code blocks and inline code stay plain Markdown"
 });
 
 test("FileTree imports the official component and preserves nested directory Markdown", () => {
-  const source = '# Layout\n\n<FileTree>\n\n- src/\n  - core/\n    - plugin_manager.hpp\n- config/\n  - ...\n\n</FileTree>\n\nUse `<ark/plugin_manager.hpp>`; see [examples](guides/examples.md).\n';
+  const source = '# Layout\n\n<FileTree>\n\n- src/ — Framework sources\n  - core/ — Module lifecycle\n    - plugin_manager.hpp\n- config/ — TOML samples\n  - ...\n\n</FileTree>\n\nUse `<ark/plugin_manager.hpp>`; see [examples](guides/examples.md).\n';
   const result = convertPage(source, "layout.md", new Set(["guides/examples.md"]));
   assert.equal(pageExtension(source), ".mdx");
   assert.match(result, /import \{ FileTree \} from "@\/components\/ui\/file-tree"/);
-  assert.ok(result.includes('- src/\n  - core/\n    - plugin_manager.hpp\n- config/\n  - ...'));
+  assert.ok(result.includes('- src/ — Framework sources\n  - core/ — Module lifecycle\n    - plugin_manager.hpp\n- config/ — TOML samples\n  - ...'));
   assert.ok(result.includes('`<ark/plugin_manager.hpp>`'));
   assert.ok(result.includes('[examples](/guides/examples)'));
 });
