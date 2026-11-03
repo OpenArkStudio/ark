@@ -65,12 +65,9 @@ TEST_CASE("Kernel common class callbacks remain callable for every real metadata
         }
     } reset;
 
-    ark::test::metadata_files files(false);
-    {
-        std::ofstream schema("resource/meta/player.config");
-        schema.exceptions(std::ios::badbit | std::ios::failbit);
-        schema << R"(<xml><meta class="Player" type="class"/><meta class="Item" type="class"/></xml>)";
-    }
+    ark::test::metadata_files files;
+    files.write("entity_schema.json",
+        R"({"format":"ark.entity-schema","version":1,"classes":[{"name":"Player","fields":[],"tables":[],"containers":[]},{"name":"Item","fields":[],"tables":[],"containers":[]}],"configs":[]})");
     ark::plugin_manager manager;
     ark::class_meta_module_impl metadata;
     ark::config_module_impl config;

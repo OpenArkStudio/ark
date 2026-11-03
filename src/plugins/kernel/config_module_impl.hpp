@@ -39,9 +39,6 @@ public:
 
     std::shared_ptr<static_entity> find_static_entity(const id_type config_id) override;
 
-protected:
-    bool load_config(std::shared_ptr<class_meta> class_meta_ptr);
-
 private:
     bool loaded_{false};
 

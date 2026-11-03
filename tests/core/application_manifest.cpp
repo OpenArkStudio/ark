@@ -109,6 +109,21 @@ void check_equivalent_manifest(const ark::application_manifest& actual, const ar
         std::equal(actual.plugins.begin(), actual.plugins.end(), legacy.plugins.begin(), legacy.plugins.end()));
 }
 
+void check_migrated_manifest(
+    const ark::application_manifest& actual, ark::application_manifest legacy, std::string_view name) {
+    constexpr std::array<std::string_view, 4> json_kernel_presets = {
+        "entity_operations.app.toml", "game.app.toml", "module_lifecycle.app.toml", "proxy.app.toml"};
+    if (std::find(json_kernel_presets.begin(), json_kernel_presets.end(), name) != json_kernel_presets.end())
+    {
+        DOCTEST_REQUIRE(legacy.plugins.at("ark_kernel_plugin") == "kernel.plugin.conf");
+        DOCTEST_CHECK(actual.plugins.at("ark_kernel_plugin").empty());
+        // Only Kernel's ignored config entry changes in this migration. Updating
+        // the mapped value preserves the legacy map's insertion/traversal order.
+        legacy.plugins.at("ark_kernel_plugin").clear();
+    }
+    check_equivalent_manifest(actual, legacy);
+}
+
 } // namespace
 
 DOCTEST_TEST_CASE("migrated built-in TOML presets retain their legacy XML application schema") {
@@ -119,8 +134,8 @@ DOCTEST_TEST_CASE("migrated built-in TOML presets retain their legacy XML applic
         DOCTEST_CAPTURE(name);
         auto legacy = std::filesystem::path(name);
         legacy.replace_extension(".conf");
-        check_equivalent_manifest(ark::load_application_manifest(utf8_path(root / "config" / name)),
-            ark::load_application_manifest(utf8_path(root / "tests/core/fixtures/application_presets" / legacy)));
+        check_migrated_manifest(ark::load_application_manifest(utf8_path(root / "config" / name)),
+            ark::load_application_manifest(utf8_path(root / "tests/core/fixtures/application_presets" / legacy)), name);
         ++count;
     }
     DOCTEST_CHECK(count == 24);
@@ -133,7 +148,7 @@ DOCTEST_TEST_CASE("native guest-room TOML declares its complete plugin configura
     DOCTEST_CHECK(manifest.plugin_config_dir == "conf/");
     DOCTEST_REQUIRE(manifest.plugins.size() == 5);
     DOCTEST_CHECK(manifest.plugins.at("ark_utility_plugin").empty());
-    DOCTEST_CHECK(manifest.plugins.at("ark_kernel_plugin") == "kernel.plugin.conf");
+    DOCTEST_CHECK(manifest.plugins.at("ark_kernel_plugin").empty());
     DOCTEST_CHECK(manifest.plugins.at("ark_bus_plugin") == "guest_room.bus.toml");
     DOCTEST_CHECK(manifest.plugins.at("ark_net_plugin").empty());
     DOCTEST_CHECK(manifest.plugins.at("guest_room_plugin").empty());
@@ -206,8 +221,8 @@ DOCTEST_TEST_CASE("deployment TOML application payloads retain their legacy XML 
         }
         auto legacy = std::filesystem::path(name);
         legacy.replace_extension(".conf");
-        check_equivalent_manifest(ark::load_application_manifest(files.write(payload, name)),
-            ark::load_application_manifest(utf8_path(root / "tests/core/fixtures/application_presets" / legacy)));
+        check_migrated_manifest(ark::load_application_manifest(files.write(payload, name)),
+            ark::load_application_manifest(utf8_path(root / "tests/core/fixtures/application_presets" / legacy)), name);
         ++count;
     }
     DOCTEST_CHECK(count == 21);

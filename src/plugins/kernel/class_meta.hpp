@@ -46,9 +46,6 @@ private:
     // class name
     std::string name_{null_str};
 
-    // res path
-    std::string res_path_{null_str};
-
     // Validated JSON rows are retained for one coherent startup snapshot.
     std::shared_ptr<const entity_json::config_definition> json_config_;
     std::string json_config_pointer_;
@@ -76,9 +73,6 @@ public:
 
     size_t get_node_count() const;
     const std::string& get_name() const;
-
-    void set_res_path(const std::string& value);
-    const std::string& get_res_path() const;
 
     void set_json_config(std::shared_ptr<const entity_json::config_definition> config, std::string pointer);
     const std::shared_ptr<const entity_json::config_definition>& get_json_config() const;

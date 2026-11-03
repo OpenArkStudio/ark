@@ -49,33 +49,8 @@ public:
               std::filesystem::temp_directory_path() /
               ("ark-entity-config-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()))) {
         std::filesystem::create_directories(directory_ / "resource" / "meta");
-        write("config_class.config", R"(<xml>
-<config id="Player" meta="meta/player_static.config" res="meta/player.data"/>
-<config id="item" meta="meta/item_static.config" res="meta/item.data"/>
-</xml>)");
-        write("entity_class.config", R"(<xml><config meta="meta/entities.config"/></xml>)");
-        write("player_static.config", R"(<xml>
-<meta field="id" type="uint64"/><meta field="level" type="int"/><meta field="name" type="string"/>
-<meta field="config_id" type="uint32"/>
-</xml>)");
-        write("player.data", R"(<xml><data id="42" level="7" name="configured player" config_id="4045620583"/></xml>)");
-        write("item_static.config", R"(<xml>
-<meta field="id" type="uint64"/><meta field="level" type="int"/><meta field="comment" type="string"/>
-</xml>)");
-        write("item.data", R"(<xml><data id="99" level="13" comment="configured item"/></xml>)");
-        write("entities.config", R"(<xml>
-<meta class="Player" type="class"/>
-<meta class="Player" field_name="id" type="uint64"/>
-<meta class="Player" field_name="level" type="int"/>
-<meta class="Player" field_name="name" type="string"/>
-<meta class="Player" field_name="config_id" type="uint32"/>
-<meta class="Player" field_name="exp" type="int64"/>
-<meta class="Player" field_name="items" type="container" type_class="item"/>
-<meta class="item" type="class"/>
-<meta class="item" field_name="id" type="uint64"/>
-<meta class="item" field_name="level" type="int"/>
-<meta class="item" field_name="comment" type="string"/>
-</xml>)");
+        write("entity_schema.json",
+            R"({"format":"ark.entity-schema","version":1,"classes":[{"name":"Player","fields":[{"name":"id","index":10,"type":"uint32"},{"name":"level","index":16,"type":"int32"},{"name":"name","index":11,"type":"string"},{"name":"config_id","index":4,"type":"uint32"},{"name":"exp","index":17,"type":"int64"},{"name":"counter","index":30,"type":"uint64"}],"tables":[],"containers":[{"name":"items","index":28,"class":"item"}]},{"name":"item","fields":[{"name":"id","index":1,"type":"uint32"},{"name":"level","index":4,"type":"int32"},{"name":"comment","index":9,"type":"string"}],"tables":[],"containers":[]}],"configs":[{"class":"Player","rows":[{"id":42,"level":7,"name":"configured player","config_id":4045620583,"exp":0,"counter":0}]},{"class":"item","rows":[{"id":99,"level":13,"comment":"configured item"}]}]})");
         std::filesystem::current_path(directory_);
     }
 
@@ -454,19 +429,19 @@ TEST_CASE("public entity uint64 setters preserve values and report only actual c
     configured_world world;
     const auto object = world.create(10, 0);
     REQUIRE(object != nullptr);
-    const auto index = object->get_index("id");
+    const auto index = object->get_index("counter");
     REQUIRE(index != 0);
     ark::kernel_module& kernel = world.kernel;
-    REQUIRE(kernel.add_node_call_back("Player", "id", &observer, &uint64_observer::changed));
+    REQUIRE(kernel.add_node_call_back("Player", "counter", &observer, &uint64_observer::changed));
     const auto maximum = std::numeric_limits<std::uint64_t>::max();
-    REQUIRE(object->set_u_int64("id", maximum));
-    CHECK(object->get_u_int64("id") == maximum);
+    REQUIRE(object->set_u_int64("counter", maximum));
+    CHECK(object->get_u_int64("counter") == maximum);
     CHECK(object->get_u_int64(index) == maximum);
     CHECK_FALSE(object->set_u_int64(index, maximum));
     REQUIRE(object->set_u_int64(index, 42));
-    CHECK(object->get_u_int64("id") == 42);
+    CHECK(object->get_u_int64("counter") == 42);
     CHECK(object->get_u_int64(index) == 42);
-    CHECK_FALSE(object->set_u_int64("id", 42));
+    CHECK_FALSE(object->set_u_int64("counter", 42));
     REQUIRE(observer.values.size() == 2);
     CHECK(observer.values[0] == std::pair<std::uint64_t, std::uint64_t>{0, maximum});
     CHECK(observer.values[1] == std::pair<std::uint64_t, std::uint64_t>{maximum, 42});

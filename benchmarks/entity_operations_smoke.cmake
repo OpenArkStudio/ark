@@ -6,7 +6,6 @@ foreach(argument PROGRAM PLUGIN_DIR SOURCE_ROOT RUNTIME_DIR)
     endif()
 endforeach()
 file(MAKE_DIRECTORY "${RUNTIME_DIR}/conf")
-file(COPY "${SOURCE_ROOT}/config/kernel.plugin.conf" DESTINATION "${RUNTIME_DIR}/conf")
 file(COPY "${SOURCE_ROOT}/examples/entity_operations/resource" DESTINATION "${RUNTIME_DIR}")
 execute_process(COMMAND "${PROGRAM}" --plugin-dir "${PLUGIN_DIR}" --smoke
     WORKING_DIRECTORY "${RUNTIME_DIR}" RESULT_VARIABLE result

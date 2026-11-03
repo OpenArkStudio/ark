@@ -33,15 +33,15 @@ Map 通过 Kernel 查找实体、释放实例。两者在 `init()` 中保存对�
 
 ### 资源加载
 
-没有选择 JSON 结构时，元数据模块在 `init()` 中加载 `resource/meta/config_class.config` 和 `resource/meta/entity_class.config`。这两个文件引用具体的结构文件；配置结构还可指定数据资源文件。`config_module` 在 `post_init()` 中按元数据加载静态记录。
+Kernel 只读取相对于应用工作目录的 `resource/meta/entity_schema.json`。元数据 `init()` 校验完整文档，配置 `post_init()` 消费已持有的静态行快照。JSON 缺失、不可读或无效都会带源路径和 JSON Pointer 使启动失败，不读取 XML 旁置文件。Kernel 不读取插件配置文件：应用清单中的 `ark_kernel_plugin` 使用 `config = ""`。
 
-XML 加载在正常返回／C++ 异常展开时释放临时 ID 节点，Debug 断言／进程退出不保证展开。后续行被拒绝不回滚已有记录；正常 `shut()` 释放 manager，共享记录存活至最后一个所有者释放。安装后启动失败仍按现有策略退出进程。
+正常 `shut()` 释放配置 manager；共享记录存活至最后一个所有者释放。安装后启动失败仍按现有策略退出进程。
 
 业务代码应在框架完成相应初始化后查询配置。创建运行时实体前，需要存在对应类结构、地图和地图实例。类事件回调应在目标实体创建前注册。模块接入方式见[创建模块](../guides/modules_CN.md)。
 
 ## JSON 实体定义与业务配置
 
-存在 `resource/meta/entity_schema.json` 时，元数据 `init()` 校验完整版本文档并持有静态行快照，配置 `post_init()` 消费同一快照；阶段间换文件不混用结构／数据。非法 JSON 带源路径／JSON Pointer 使启动失败，不回退 XML；文件缺失时保留 XML 路径与读取器。
+`resource/meta/entity_schema.json` 是必需的版本文档。元数据 `init()` 持有经过完整校验的静态行快照，配置 `post_init()` 消费同一快照，阶段间替换文件不会混用结构与数据。
 
 文件定义类、标量字段、表、容器和配置预设。索引显式指定且保持稳定，不由数组顺序决定，也不依赖生成头文件中的 `meta_name_index`。继承字段须由编写或导出步骤展平。以下示例将应用字段放在旧 BaseEntity 索引 `1..4` 之后：
 
@@ -118,9 +118,11 @@ if (player)
 
 离线工具和 Kernel 共用 `<ark/kernel/entity_json.hpp>` 及编译目标 `ark::kernel_json`。公开的普通 C++ 模型包括 `document`、`class_definition`、`field`、`relation`、`config_definition` 和有类型的标量 `value`；`parse()`、`load()`、`validate()`、`serialize()` 复用同一校验器。头文件不暴露 nlohmann 类型，目标不依赖 Net、Boost 或 Protobuf。已安装的消费者可单独请求 `kernel_json` 组件。编写和导出流程见[配置工具](../guides/tools_CN.md)。
 
-**构建与 ABI 变更：**Kernel 应用构建现在需要 `nlohmann_json`，`application` vcpkg 特性已包含该依赖。`class_meta` 新增普通 C++ 配置快照，改变了类布局。Kernel 和 C++ 消费者须一起重新构建。继续使用原有 XML 资源不要求立即转换格式。
+**配置／API／ABI 不兼容变更：**升级前，把旧 `config_class.config`、`entity_class.config` 及其引用的 XML 结构／数据资源转换为 `resource/meta/entity_schema.json`，保留类名、成员名、数值索引、标量类型与关系 mask；展平继承字段并遵循上述 JSON 预设规则。实体操作示例已提供迁移后的结构。删除此前未被读取的 `kernel.plugin.conf`，把清单中的 Kernel `config` 置为 `""`。
 
-`check-entity-json` 检查有类型模型、数值范围、重复键精确位置、mask、引用和确定性导出。`check-kernel-initialization` 覆盖 XML／JSON 加载、预设与参数优先级、字段独立性、表列、容器所有权、启动快照一致性和所选 JSON 失败。`check-kernel-plugin` 分别在 XML、JSON 子进程中加载真实 Kernel／Utility 动态库。这些检查只证明覆盖的原生行为，不代表任意热加载或生产部署验收。
+所有 Kernel 公开类型与模块虚接口继续保留。退役 XML 专属的 `class_meta::set_res_path()`／`get_res_path()` 及其存储、实现类 XML 读取辅助函数，以及 `config_class_file_path`／`entity_class_file_path` 常量。`class_meta` 布局改变，Kernel、插件和 C++ 消费者必须一起重建。保留既有 `nlohmann_json` 依赖与公开 JSON 模型，不改变注册和生命周期顺序。
+
+`check-entity-json` 检查有类型模型、数值范围、重复键精确位置、mask、引用和确定性导出。`check-kernel-initialization` 覆盖必需 JSON 加载、预设与参数优先级、字段独立性、表列、容器所有权、启动快照一致性及 JSON 缺失／无效失败。`check-kernel-plugin` 使用真实 Kernel／Utility 动态库检查 JSON 生命周期，并在独立进程中检查缺失／无效 JSON 拒绝，以有效 XML 旁置文件证明不会回退。这些检查只证明覆盖的原生行为，不代表任意热加载或生产部署验收。
 
 ## 创建和查找实体
 
@@ -399,7 +401,7 @@ cmake --build kernel-headers-build --target check-kernel-headers --parallel 2
 
 ## Kernel 类型化构造
 
-**ABI／布局不兼容变更：** `class_meta_module_impl`、`config_module_impl`、`kernel_module_impl`、`map_module_impl` 现在继承 `module_base<原接口>`，`kernel_plugin` 继承 `plugin_base<kernel_plugin>`。原有公开类型、构造函数、方法和 38 个头路径继续保留。Kernel 与消费者必须一起重建；旧实现类／插件二进制不兼容变更后的类布局。此变更不引入跨编译器的插件 ABI。
+**ABI／布局不兼容变更：** `class_meta_module_impl`、`config_module_impl`、`kernel_module_impl`、`map_module_impl` 现在继承 `module_base<原接口>`，`kernel_plugin` 继承 `plugin_base<kernel_plugin>`。原有公开类型和 38 个头路径继续保留；上方后续的纯 JSON 迁移退役 XML 专属方法。Kernel 与消费者必须一起重建；旧实现类／插件二进制不兼容变更后的类布局。此变更不引入跨编译器的插件 ABI。
 
 插件使用私有拥有型工厂与显式 `DllEntryPlugin`／`DllExitPlugin`。`kernel_factory.hpp` 仅保留在插件源码目录，不映射、不安装。工厂返回类型保留原接口 RTTI 注册键：
 
