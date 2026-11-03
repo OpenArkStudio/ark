@@ -81,6 +81,8 @@ protected:
     void close_all_session();
 
 private:
+    friend struct net_listener_startup_test_access;
+
     std::map<conv_id_t, tcp_session_ptr> sessions_;
     size_t active_session_count_{0};
     reader_writer_lock rw_lock_;

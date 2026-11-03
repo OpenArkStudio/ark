@@ -7,23 +7,48 @@ ark 使用 C++20。核心与官方插件放在本仓库，业务插件放在应�
 
 构建产物归属于各自的 CMake 构建目录：`cmake -S . -B out/release` 将可执行文件、插件与归档输出到 `out/release/bin`。Debug 和 sanitizer 构建使用不同目录，避免产物互相覆盖。`-B build` 仍输出到 `build/bin`；部署时将所选构建的产物复制到运行目录的 `bin/`。
 
-| 路径 | 内容 |
-| --- | --- |
-| `src/core/` | 核心头文件、实现与 CMake 使用要求 |
-| `src/application/` | 应用入口与停服请求 |
-| `src/config/` | 应用清单声明、共享的文件／TOML 读取实现与私有诊断 |
-| `src/proto/` | 协议定义与 Protobuf 消息生成的 CMake 规则 |
-| `src/server/` | 内置服务端应用 |
-| `src/plugins/<name>/` | 全部官方插件头文件、实现与装配 |
-| `tests/` | 核心、网络与私有数据库回归测试 |
-| `tests/network/` | 网络与日志回归测试 |
-| `tests/consumer/` | 独立使用公共插件接口的示例项目 |
-| `examples/` | [能力示例](../guides/examples_CN.md)，hpp/cpp 继续并排存放 |
-| `config/` | 应用清单、插件和日志配置样例 |
-| `resources/` | 业务数据、工作表与历史资源 |
-| `tools/` | 离线配置工具与保留的历史工具 |
-| `deployment/scripts/` | 单应用启动与显式 PID 停止脚本 |
-| `deployment/` | 容器构建文件与 Kubernetes 示例 |
+<FileTree>
+
+- src/
+  - core/
+    - ...
+  - application/
+    - ...
+  - config/
+    - ...
+  - proto/
+    - ...
+  - plugins/
+    - ...
+  - server/
+    - ...
+- tests/
+  - core/
+    - ...
+  - network/
+    - ...
+  - database/
+    - ...
+  - consumer/
+    - ...
+- examples/
+  - ...
+- config/
+  - ...
+- resources/
+  - ...
+- tools/
+  - ...
+- deployment/
+  - scripts/
+    - ...
+  - ...
+
+</FileTree>
+
+`src/core/` 保存核心头文件、实现与 CMake 使用要求，`src/application/` 保存启动器与停服入口。`src/config/` 维护应用清单声明、共享文件／TOML 读取器与私有诊断，`src/proto/` 维护协议定义与消息生成规则。官方插件的头文件、实现和装配共置于 `src/plugins/`，内置服务端角色位于 `src/server/`。
+
+`tests/` 区分核心、网络、私有数据库回归与独立公共接口消费者。[能力示例](../guides/examples_CN.md)中的 hpp/cpp 继续并排存放。运行配置样例、业务资源与离线／历史工具分别位于 `config/`、`resources/`、`tools/`。`deployment/` 提供容器／Kubernetes 示例，`deployment/scripts/` 提供单应用启动与显式 PID 停止脚本。
 
 使用 `<ark/plugin_manager.hpp>`、`<ark/net/tcp_client.hpp>` 等公开路径包含头文件，
 不需要把实现目录加入应用的包含路径。Protobuf 生成文件位于构建目录，由 `ark::proto` 提供。
