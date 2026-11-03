@@ -86,6 +86,15 @@ exit code 1 with a manifest diagnostic, including on Windows, and is included in
 
 `check-app-startup-failures` uses the real launcher and a test DSO for all four startup phases, each returning false or throwing, with both TOML and XML manifests. It also checks a non-standard exception, a throwing plugin entrypoint, a missing library and a loadable DSO with no `DllEntryPlugin`. Before each controlled module failure or entrypoint exception, the registered test module starts and retains a real owned loopback TCP listener on an ephemeral port. The missing-entry fixture confirms native library initialization occurred before failure. All 24 children must report one exact phase/module-or-plugin diagnostic, preserve available exception details, and exit normally with code 1 without later startup calls, update, normal shutdown or uninstall. Core tests check retained failure context, unchanged exception propagation, first failure across multiple modules and owner-thread access. The listener makes ordinary static cleanup block if failed-start module ownership is retained, so the exit check covers a real active IO pool. These tests establish failure reporting and process termination, not partial-start resource cleanup or same-process recovery.
 
+Four additional `check-app-startup-failures` children use absolute and relative
+Unicode TOML/XML manifest paths, a Unicode working directory and a UTF-8
+application name containing a supplementary character. Long `--flag=value` and
+separate short-option arguments reach the same controlled init failure only after
+the DSO verifies the exact application-name bytes. A Windows child with a
+private console also checks its native wide title. These cases use console-only
+logging; they do not establish the separate public logger file-path boundary or
+Windows acceptance from a POSIX run.
+
 `check-kernel-initialization` loads real metadata and static data from
 `resource/meta/`. It checks four kernel/config initialization orders with both
 resource-relative paths and legacy paths beginning with `/`, for eight combinations.

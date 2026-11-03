@@ -15,6 +15,50 @@ string(REPLACE "<" "&lt;" xml_plugin_directory "${xml_plugin_directory}")
 string(REPLACE "\"" "\\\"" toml_plugin_directory "${plugin_directory}")
 set(plugin_name ark_app_startup_failure_plugin)
 
+# Exercise the production argument entry point and inherited native working
+# directory. Non-BMP text cannot round-trip through legacy Windows code pages.
+# The fixture checks the manager's application-name bytes before failing init.
+set(unicode_runtime "${RUNTIME_DIR}/运行-é-🧪 with spaces")
+file(MAKE_DIRECTORY "${unicode_runtime}/清单-é-🧪")
+foreach(format toml app.conf)
+    set(relative_manifest "清单-é-🧪/应用-é-🧪.${format}")
+    set(manifest "${unicode_runtime}/${relative_manifest}")
+    if(format STREQUAL "toml")
+        file(WRITE "${manifest}"
+            "[application]\nplugin_library_dir = \"${toml_plugin_directory}\"\n"
+            "[logging]\nconsole = true\nfile = false\npattern = '%v'\n"
+            "[[plugins]]\nname = \"${plugin_name}\"\nconfig = 'utf8:init'\n")
+    else()
+        file(WRITE "${manifest}"
+            "<xml><plugins plugin_lib_dir=\"${xml_plugin_directory}\">"
+            "<plugin name=\"${plugin_name}\" conf=\"utf8:init\"/></plugins>"
+            "<logging console=\"true\" file=\"false\" pattern=\"%v\"/></xml>\n")
+    endif()
+    foreach(path_kind absolute relative)
+        if(path_kind STREQUAL "absolute")
+            set(arguments "--name=应用-é-🧪" "--app_conf=${manifest}")
+        else()
+            set(arguments -n "应用-é-🧪" -a "${relative_manifest}")
+        endif()
+        execute_process(COMMAND "${PROGRAM}" --busid=1.0.1.1 ${arguments}
+            WORKING_DIRECTORY "${unicode_runtime}"
+            RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE errors TIMEOUT 15)
+        file(WRITE "${manifest}.${path_kind}.stdout.log" "${output}")
+        file(WRITE "${manifest}.${path_kind}.stderr.log" "${errors}")
+        file(WRITE "${manifest}.${path_kind}.result.txt" "${result}\n")
+        if(NOT result STREQUAL "1" OR
+                NOT errors MATCHES "Application startup failed at init: app_startup_failure_module")
+            message(FATAL_ERROR "UTF-8 ${path_kind}/${format}: expected controlled init failure\n${result}\n${output}\n${errors}")
+        endif()
+        set(expected "app-startup-test:unicode_arguments_verified;app-startup-test:owned_io_started;app-startup-test:init")
+        string(REGEX MATCHALL "app-startup-test:[a-z_]+" observed "${errors}")
+        if(NOT "${observed}" STREQUAL "${expected}")
+            message(FATAL_ERROR "UTF-8 ${path_kind}/${format}: argument verification or lifecycle differed\n${errors}")
+        endif()
+        message(STATUS "UTF-8 ${path_kind}/${format}: Unicode manifest, working directory and application name verified")
+    endforeach()
+endforeach()
+
 foreach(mode false:init false:post_init false:check_config false:pre_update
     throw:init throw:post_init throw:check_config throw:pre_update unknown:init throw:load_plugin missing_library:load_plugin missing_entry:load_plugin)
     string(REPLACE ":" ";" parts "${mode}")

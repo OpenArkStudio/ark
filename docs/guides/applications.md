@@ -24,6 +24,18 @@
 
 Relative paths resolve from the process working directory, regardless of executable or manifest location.
 
+On Windows, the launcher reads native UTF-16 command-line arguments and converts
+them to UTF-8 before parsing. Application names and manifest paths therefore use
+UTF-8 bytes inside the launcher and plugin manager; the console title uses the
+wide Windows API. Configuration file reads and plugin-library loads convert UTF-8
+paths to native UTF-16 at the operating-system boundary.
+
+**Windows encoding migration:** application names and string paths are UTF-8,
+including paths passed to public logging APIs. Callers that previously supplied
+ANSI or system-code-page bytes must convert them to UTF-8 first. A native Windows
+command line needs no manual conversion. CLI flags, C++ string types and function
+signatures are unchanged.
+
 ![Configuration paths resolved from the working directory](../assets/launcher-paths.svg)
 
 | Input | How it is selected | Example from the runtime directory |
