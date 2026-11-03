@@ -144,6 +144,22 @@ cmake -DARK_SOURCE_DIR="$PWD" -DARK_TEST_WORK=/tmp/ark-install-check \
 
 The work directory must not exist. Repeat with a new directory and `-DARK_TEST_BUILD_CONFIG=OFF` for declaration/core-only packaging. Add `-DARK_TEST_MYSQL=ON` with an SSL-enabled arknet dependency to compile the public MySQL interface; this does not run database services. Use `ARK_TEST_TOOLCHAIN` to pass a consumer/producer toolchain when required.
 
+The HTTP consumer also has an opt-in installed-runtime entry:
+
+```sh
+cmake -S tests/consumer/http -B http-installed-build \
+  -DARK_TEST_HTTP_INSTALLED=ON -DCMAKE_BUILD_TYPE=Debug \
+  '-DCMAKE_PREFIX_PATH=/path/to/relocated-prefix;/path/to/dependencies' \
+  -DARK_TEST_HTTP_PLUGIN_DIR=/path/to/relocated-prefix/bin
+cmake --build http-installed-build --parallel 2 --target check-http-installed
+```
+
+| Entry | Coverage and prerequisites |
+| --- | --- |
+| `check-sdk` in `tests/consumer/http` | Existing build-tree public-header consumer; installed-runtime mode defaults to OFF. |
+| `check-http-installed` | Native UNIX only; uses `find_package(ark)` and the installed HTTP DSO, checks its implementation path with `dladdr`, one HTTP 200 response, route-capture destruction, endpoint closure and repeated stop. Requires loopback access and an ABI-compatible HTTP installation built with `ARK_BUILD_PLUGIN_HTTP=ON`; match the producer's Debug/Release configuration and dependency prefixes. Locally validated on macOS Debug; no Windows runtime entry. |
+| `tests/install/check_install.cmake` with `ARK_TEST_HTTP=ON` | Adds the same HTTP consumer after staging and relocation. Set `ARK_TEST_CONFIG=Debug` or `Release`; `ARK_TEST_HTTP_BINDIR` defaults to `bin` and may name the producer's custom relative binary directory. Use an application build with the HTTP runtime enabled; the core-only `run_isolated.cmake` producer does not build that DSO. |
+
 ## Create an archive
 
 After building, CPack creates standard archives from the install rules:
