@@ -10,10 +10,11 @@
 #include <string>
 #include <tuple>
 
-#include <spdlog/details/file_helper.h>
 #include <spdlog/details/null_mutex.h>
 #include <spdlog/details/synchronous_factory.h>
 #include <spdlog/sinks/base_sink.h>
+
+#include "ark/spdlog/sinks/native_file.hpp"
 
 namespace spdlog {
 
@@ -42,7 +43,7 @@ private:
     std::size_t max_size_;
     std::size_t max_files_;
     std::size_t current_size_;
-    details::file_helper file_helper_;
+    ark::detail::logging_file file_helper_;
 };
 
 using rotating_file_with_date_sink_mt = rotating_file_with_date_sink<std::mutex>;
