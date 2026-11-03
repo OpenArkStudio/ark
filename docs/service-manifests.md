@@ -1,10 +1,10 @@
 # Application plugin manifests
 
-An application manifest selects plugin libraries and their configuration files. Pass a `.toml` manifest or an existing `.app.conf` XML manifest through the `-a` / `--app_conf` argument. A TOML error never falls back to XML.
+An application manifest selects plugin libraries and their configuration files. Pass a TOML path ending in lowercase `.toml` through `-a` / `--app_conf`. XML manifests and other suffixes are rejected before plugin startup; invalid TOML never falls back to another format.
 
 ## TOML format
 
-The shipped [timers.app.toml](../config/timers.app.toml) uses TOML 1.0 syntax. Its original XML manifest is retained in parser regression fixtures:
+The shipped [timers.app.toml](../config/timers.app.toml) uses TOML 1.0 syntax:
 
 ```toml
 [application]
@@ -46,7 +46,7 @@ cd run/timers
 ./bin/app --busid=1.0.0.1 --name=timers -a conf/timers.app.toml
 ```
 
-Debug builds use `app_d`. Bus, HTTP and Consul runtime settings use TOML; the application manifest only selects their paths. See the [Bus settings](reference/bus.md#configure-processes-and-relationships) and the HTTP/Consul examples below. Logging uses the same application manifest; Kernel and exported business data retain their XML formats.
+Debug builds use `app_d`. Bus, HTTP and Consul runtime settings use TOML; the application manifest only selects their paths. See the [Bus settings](reference/bus.md#configure-processes-and-relationships) and the HTTP/Consul examples below. Application/plugin runtime settings and logging use TOML. Kernel interface/type definitions and business configuration use JSON; Kernel reads only `meta/entity_schema.json`.
 
 ## Embedded logging
 
@@ -74,13 +74,23 @@ output_path = "./binlog/oss"
 | `queue_count` | `0` | Integer 0..65535; 0 is synchronous, positive values select a dedicated asynchronous queue. |
 | `loggers` | Empty | Named tables inherit the base settings and override supplied fields. `oss` selects the OSS logger; without it OSS uses the default logger. Other names remain available through `create_logger()`. |
 
-The same settings apply in Debug and Release. XML application manifests may embed `<logging console="true" file="false" level="info" queue_count="0"><logger name="oss" level="warn"/></logging>` alongside `<plugins>`, with the same attribute names and defaults. XML booleans also accept `1` and `0`. Plugin-specific service and business configuration stays separate.
+The same settings apply in Debug and Release. Keep logger settings in the application TOML or supply `logging_settings` programmatically. Plugin-specific runtime TOML and Kernel/business JSON remain separate.
 
-Logger string paths use UTF-8 on every platform: `logger_settings::output_path`, the legacy XML `path` attribute, and both the configuration path and filename passed to `logger::init_logger(path, filename)`. Framework file sinks convert these paths to the native filesystem representation at directory creation, file open and rotation; Windows uses UTF-16 paths. Chinese characters, spaces and non-BMP characters are supported without enabling spdlog filename macros. File contents retain the supplied UTF-8 bytes. Date directories, hourly filenames, size-rotation retention, log levels, synchronous/asynchronous queues and defaults keep their existing behavior.
+Logger output paths and filenames use UTF-8 on every platform: `logger_settings::output_path` and the filename passed to `logger::init_logger(settings, filename)`. Framework file sinks convert these paths to the native filesystem representation at directory creation, file open and rotation; Windows uses UTF-16 paths. Chinese characters, spaces and non-BMP characters are supported without enabling spdlog filename macros. File contents retain the supplied UTF-8 bytes. Date directories, hourly filenames, size-rotation retention, log levels, synchronous/asynchronous queues and defaults keep their existing behavior.
 
-**UTF-8 migration:** Windows callers that previously passed active-code-page/ANSI path bytes must convert them to UTF-8 before calling the logger. Keep existing UTF-8 configuration text as UTF-8; do not convert it to ANSI. Public string types and function signatures are unchanged. Rebuild applications, plugins and other consumers that include the framework file sinks because their implementation layout changed; do not change `SPDLOG_WCHAR_FILENAMES` or other third-party ABI macros to perform this migration.
+**UTF-8 migration:** Windows callers that previously passed active-code-page/ANSI path bytes must convert them to UTF-8 before calling the logger. Keep existing UTF-8 configuration text as UTF-8; do not convert it to ANSI. The retained settings API uses string paths and filenames. Do not change `SPDLOG_WCHAR_FILENAMES` or other third-party ABI macros to perform this migration.
 
-**Breaking migration:** remove `--log_conf` / `-l` from launch commands; explicitly supplying either now fails with exit code `1`. Move the selected legacy XML `debug`/`release` settings into `[logging]`: `path` becomes `output_path`, numeric levels 0..6 become the named levels above, and `console` becomes a boolean. Set `file = true` to keep file output and `queue_count = 1024` to keep the old asynchronous queue. File output in this new API follows the runtime setting, independently of `ARK_OPEN_FILE_LOG`; that build option still controls legacy library defaults. Rebuild applications, plugins and consumers because `application_manifest` has a new public layout. The direct-library XML `logger::init_logger(path, filename)` overload remains available; the launcher does not use it.
+**Breaking migration:** standalone XML logger configuration is removed. `log_conf::load_log_conf()`, its XML-only `get_default()` accessor, and `logger::init_logger(conf_file, filename)` no longer exist; there is no compatibility overload. Move selected legacy XML `debug`/`release` values into the application TOML `[logging]` table or construct `ark::logging_settings` directly. `path` becomes `output_path`, numeric levels 0..6 become the named levels above, and `console` becomes a boolean. Set `file = true` to keep file output and `queue_count = 1024` to keep the old asynchronous queue. Remove `--log_conf` / `-l` from launch commands. Rebuild applications, plugins and consumers after this API removal.
+
+Direct library callers can use the same manifest settings as the launcher:
+
+```cpp
+const auto manifest = ark::load_application_manifest("conf/service.app.toml");
+ark::logger log;
+log.init_logger(manifest.logging, "service.log");
+```
+
+Alternatively, pass an `ark::logging_settings` value to the same overload. File output follows `settings.file`, independently of `ARK_OPEN_FILE_LOG`; that build option only controls low-level `log_conf_data` defaults.
 
 Logging schema errors include the application path and field and fail before plugin loading. File initialization failures also exit with code `1`. Asynchronous output retains its existing emergency-exit limits; use `queue_count = 0` when logs must complete inline. Existing startup-failure diagnostics still use their emergency stderr path.
 
@@ -113,22 +123,11 @@ To migrate existing installations, replace the HTTP/Consul XML files with these 
 
 ## XML compatibility
 
-The existing wrapper and attributes remain valid:
-
-```xml
-<xml>
-    <plugins plugin_lib_dir="bin/" plugin_conf_dir="conf/">
-        <plugin name="ark_utility_plugin" conf=""/>
-        <plugin name="timers_plugin"/>
-    </plugins>
-</xml>
-```
-
-The application loader requires a root containing a `plugins` child; a direct `<plugins>` root is not an application manifest. Missing directory attributes and `conf` remain empty strings, and unknown XML attributes remain ignored. XML duplicate/empty names and embedded NUL are now rejected during manifest loading instead of reaching plugin loading with ambiguous or truncated data. A manifest error exits the application with a nonzero status before `plugin_manager::start()`.
+XML application manifests are no longer supported. Convert the contents to the TOML tables above and save the file with a lowercase `.toml` suffix; renaming an XML file does not convert its contents. The reader rejects non-TOML paths before reading them, and manifest failures exit the application with status `1` before `plugin_manager::start()`.
 
 ## C++ and build integration
 
-`src/config/` owns the application manifest declarations and the compiled configuration reader. `ark::config` is a position-independent static CMake target with a standard-library-only public header, so a shared plugin can link it. The application and the Bus/HTTP/Consul plugins share file reading, TOML syntax/encoding parsing and sanitized positional diagnostics. Application schema validation stays in `application_manifest.cpp`; each plugin retains its own field and range validation. MySQL and Redis retain their programmatic connection configuration and have no new file schema. The public `load_application_manifest()` reader selects TOML for a `.toml` suffix and XML for other paths; the application's `-a` argument retains the manifest path restrictions described above.
+`src/config/` owns the application manifest declarations and the compiled configuration reader. `ark::config` is a position-independent static CMake target with a standard-library-only public header, so a shared plugin can link it. The application and the Bus/HTTP/Consul plugins share file reading, TOML syntax/encoding parsing and sanitized positional diagnostics. Application schema validation stays in `application_manifest.cpp`; each plugin retains its own field and range validation. MySQL and Redis retain their programmatic connection configuration and have no new file schema. The public `load_application_manifest()` reader requires a lowercase `.toml` suffix and parses only TOML. XML and other suffixes produce `application_manifest_error`; XML content inside a `.toml` file fails TOML parsing without fallback.
 
 ```cpp
 #include <ark/application_manifest.hpp>
@@ -142,7 +141,7 @@ target_link_libraries(my_loader PRIVATE ark::config)
 
 CMake maps the source `src/config/application_manifest.hpp` to the build tree's `src/config/public-include/ark/application_manifest.hpp`. Link `ark::config_headers` for declarations only; `ark::core` also carries this lightweight target even with `ARK_BUILD_CONFIG=OFF`. This mapping does not load parser or networking dependencies. Use the target-provided include roots instead of a handwritten `-I <source>/include`.
 
-`ARK_BUILD_CONFIG` defaults to `ON` for application or core-test builds, otherwise `OFF`. Applications require it. Network regression builds also create `ark::config` for the HTTP implementation, including when applications and `ARK_BUILD_CONFIG` are off. The target privately uses [toml++](https://github.com/marzer/tomlplusplus) (MIT): CMake prefers an installed `tomlplusplus` 3.4+ package, otherwise fetches v3.4.0 at `30172438cee64926dc41fdd9c11fb3ba5b2ba9de`. The target does not propagate parser headers or macros to `ark::core` / `ark::ark` consumers. RapidXML remains the XML dependency.
+`ARK_BUILD_CONFIG` defaults to `ON` for application or core-test builds, otherwise `OFF`. Applications require it. Network regression builds also create `ark::config` for the HTTP implementation, including when applications and `ARK_BUILD_CONFIG` are off. The target privately uses [toml++](https://github.com/marzer/tomlplusplus) (MIT): CMake prefers an installed `tomlplusplus` 3.4+ package, otherwise fetches v3.4.0 at `30172438cee64926dc41fdd9c11fb3ba5b2ba9de`. The target does not propagate parser headers or macros to `ark::core` / `ark::ark` consumers.
 
 Run `cmake --build out --target check-application-manifest check-plugin-configuration check-bus-configuration` for native regressions. `check-core` includes them when `ARK_BUILD_CONFIG=ON`.
 
@@ -155,17 +154,16 @@ cmake -S tests/consumer/config -B config-headers-build -G Ninja -DARK_BUILD_CONF
 cmake --build config-headers-build --target check-config-headers
 ```
 
-The declaration-only build does not discover toml++ or RapidXML. The compiled build requires the same parser and RapidXML dependencies as `ark::config`. Neither configuration-only consumer requires network dependencies.
+The declaration-only build does not discover a parser. The compiled build privately uses the same toml++ dependency as `ark::config`. Neither configuration-only consumer requires network dependencies.
 
 ## Built-in application preset migration
 
-The 24 parseable built-in application presets move from
-`config/<name>.app.conf` to `config/<name>.app.toml`. This is a filename
-compatibility change: restage the manifests and update launch arguments, mounted
-ConfigMap keys and external scripts. `deployment/scripts/run.sh` and `run.bat`
-now require `conf/<name>.app.toml` without automatic XML fallback. To keep a
-user-maintained XML manifest, pass its existing path directly to the launcher's
-`--app_conf`. The runtime directory remains `conf/`.
+The 24 built-in application presets use `config/<name>.app.toml`.
+Restage the manifests and update launch arguments, mounted ConfigMap keys and
+external scripts that reference `config/<name>.app.conf`.
+`deployment/scripts/run.sh` and `run.bat` require `conf/<name>.app.toml`.
+User-maintained XML manifests must be converted to TOML before passing their
+new `.toml` paths to `--app_conf`. The runtime directory remains `conf/`.
 
 | Legacy XML field | TOML field | Retained meaning |
 | --- | --- | --- |
@@ -179,13 +177,12 @@ unordered map; declaration order is not a module lifecycle-order guarantee.
 The old `world` `plugins/@path` attribute and some manifests' `res` nodes were
 ignored by the application reader. Migration assigns no new meaning to them:
 `world` retains empty directory prefixes and empty per-plugin configurations.
-Kernel/business data XML and unknown plugin-specific parsers keep their formats.
+Kernel reads only `meta/entity_schema.json` for its JSON interface/type definitions and business configuration; migrate former Kernel XML inputs to this JSON schema. Application/plugin runtime settings and logging use TOML.
 
 Corresponding application keys in the ConfigMap use `.app.toml`, including the
 three deployment-only `photon.*` manifests. Photon launch arguments select the
 renamed keys; external business-plugin stems and plugin configuration names stay
-unchanged. Freebird is explicitly excluded: it depends on the external
-`AFFreeBirdPlugin` and an absent `freebird.plugin.conf`, and its direct `plugins`
-root is rejected by the current application reader. Its ConfigMap example also
-has a mismatched closing tag. The legacy examples remain as they were; migration
-does not establish that this external application works.
+unchanged. Freebird remains outside the supported built-in TOML presets: it
+depends on the external `AFFreeBirdPlugin` and an absent `freebird.plugin.conf`.
+Its former XML example is unsupported; this migration does not establish that
+the external application works.

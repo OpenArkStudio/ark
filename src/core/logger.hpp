@@ -21,7 +21,6 @@
 #pragma once
 
 #include <filesystem>
-#include <fstream>
 #include <functional>
 #include <source_location>
 #include <string_view>
@@ -39,7 +38,7 @@
 #include "ark/application_manifest.hpp"
 #include "ark/container/map.hpp"
 #include "ark/macros.hpp"
-#include "ark/xml.hpp"
+#include "ark/pattern/singleton.hpp"
 
 #ifndef ARK_PLATFORM_WIN
 #include <execinfo.h>
@@ -109,7 +108,6 @@ public:
 class log_conf final
 {
     shared_object_hashmap<std::string, log_conf_data> conf_datas_;
-    std::string default_log_name_{"default"};
 
 public:
     void set_conf_data(const std::string& name, std::shared_ptr<log_conf_data> data) {
@@ -117,61 +115,8 @@ public:
         conf_datas_.insert(name, std::move(data));
     }
 
-    void load_log_conf(std::string const& filename) {
-        std::ifstream input(detail::logging_path_from_utf8(filename), std::ios::binary);
-        if (!input)
-        {
-            throw std::runtime_error("cannot open file " + filename);
-        }
-        rapidxml::file<> contents(input);
-        rapidxml::xml_document<> document;
-        document.parse<rapidxml::parse_validate_closing_tags>(contents.data());
-        const auto* root = document.first_node();
-        if (!root)
-        {
-            throw std::runtime_error("invalid logger configuration " + filename + ": missing root element");
-        }
-        const auto attribute = [](const rapidxml::xml_node<>* node, const char* key, const char* fallback = "") {
-            const auto* value = node->first_attribute(key);
-            return value ? value->value() : fallback;
-        };
-
-        for (const auto* logger_node = root->first_node("logger"); logger_node;
-             logger_node = logger_node->next_sibling())
-        {
-            // create AFLogConfData
-            auto conf_data = std::make_shared<log_conf_data>();
-            const std::string name = attribute(logger_node, "name");
-            conf_data->sink_queue_count = misc::from_string<uint32_t>(attribute(logger_node, "queue_count", "0"));
-            conf_data->output_path = attribute(logger_node, "path");
-
-#ifdef ARK_RUN_MODE_DEBUG
-            constexpr auto mode = "debug";
-#else
-            constexpr auto mode = "release";
-#endif //ARK_RUN_MODE_DEBUG
-            const auto* mode_node = logger_node->first_node(mode);
-            if (!mode_node)
-            {
-                throw std::runtime_error(
-                    "invalid logger configuration " + filename + ": missing " + mode + " logger mode");
-            }
-
-            conf_data->consol = misc::from_string<bool>(attribute(mode_node, "console", "0"));
-            conf_data->level =
-                static_cast<spdlog::level::level_enum>(misc::from_string<uint32_t>(attribute(mode_node, "level", "0")));
-            conf_data->pattern = attribute(mode_node, "pattern");
-
-            conf_datas_.insert(name, conf_data);
-        }
-    }
-
     std::shared_ptr<log_conf_data> get_conf_data(std::string const& name) {
         return conf_datas_.find_value(name);
-    }
-
-    std::string const& get_default() const {
-        return default_log_name_;
     }
 };
 
@@ -337,39 +282,6 @@ public:
         default_logger_ = std::move(local);
         oss_logger_ = std::move(oss);
         set_log_func({});
-        return true;
-    }
-
-    // Both the legacy XML configuration path and log filename are UTF-8.
-    bool init_logger(std::string const& conf_file, std::string const& log_filename) {
-        if (default_logger_ != nullptr)
-        {
-            return false;
-        }
-        if (log_conf_ == nullptr)
-        {
-            log_conf_ = std::make_unique<log_conf>();
-            log_conf_->load_log_conf(conf_file);
-        }
-
-        // init local logger
-        auto conf_data = log_conf_->get_conf_data(log_conf_->get_default());
-        ARK_ASSERT_RET_VAL(conf_data != nullptr, false);
-
-        default_logger_ = std::make_shared<spdlogger>(conf_data);
-        default_logger_->init(log_filename);
-
-        // set log function for local logger
-        auto func = std::bind_front(&logger::log, this);
-        set_log_func(std::move(func));
-
-        // init oss logger
-        auto oss_conf_data = log_conf_->get_conf_data("oss");
-        ARK_ASSERT_RET_VAL(oss_conf_data != nullptr, false);
-
-        oss_logger_ = std::make_shared<spdlogger>(oss_conf_data);
-        oss_logger_->init(log_filename);
-
         return true;
     }
 
