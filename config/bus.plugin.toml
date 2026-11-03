@@ -1,4 +1,4 @@
-# Bus runtime configuration. Business data files remain XML.
+# Bus runtime configuration. Kernel business data uses JSON.
 [bus]
 
 [[bus.applications]]

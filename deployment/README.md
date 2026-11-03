@@ -32,7 +32,9 @@ are documented in the [application guide](../docs/guides/applications.md#run-one
 
 Source samples live in `config/` and `resources/`. The application image stages
 them as runtime `conf/` and `resource/`; those runtime names are unchanged. Generate
-and review the required Kernel metadata before deploying a Kernel-based service.
+and review `resource/meta/entity_schema.json` before deploying a Kernel-based service.
+Kernel requires that JSON file, accepts an empty plugin `config`, and does not read
+`kernel.plugin.conf` or XML schema/data resources.
 The retained Photon images and external business plugins require their own
 environment validation.
 

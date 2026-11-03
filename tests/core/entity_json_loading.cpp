@@ -314,3 +314,28 @@ TEST_CASE("Malformed selected Kernel JSON fails startup instead of silently load
     }
     ark::logger::set_instance(nullptr);
 }
+
+TEST_CASE("Missing Kernel JSON rejects manager startup even beside valid legacy XML") {
+    resource_files files;
+    REQUIRE(std::filesystem::remove("resource/meta/entity_schema.json"));
+    ark::logger logger;
+    ark::logger::init(&logger);
+    logger.set_log_func([](spdlog::level::level_enum, const std::string&) {});
+    ark::plugin_manager manager;
+    ark::class_meta_module_impl metadata;
+    metadata.set_plugin_manager(&manager);
+    REQUIRE(manager.add_module(GET_CLASS_NAME(ark::class_meta_module), &metadata));
+    try
+    {
+        static_cast<void>(manager.start(0, {}, {}, {}));
+        FAIL("missing required JSON accepted legacy XML");
+    }
+    catch (const ark::entity_json::error& error)
+    {
+        CHECK(error.source() == "resource/meta/entity_schema.json");
+        CHECK(error.pointer() == "/");
+        CHECK(std::string(error.what()).find("could not open JSON input") != std::string::npos);
+        CHECK(manager.get_startup_failure().starts_with("init:"));
+    }
+    ark::logger::set_instance(nullptr);
+}
