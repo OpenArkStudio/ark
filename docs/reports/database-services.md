@@ -2,217 +2,107 @@
 
 [Acceptance index](../guides/database-validation.md)
 
-Results apply only to the source, binary identities and operations recorded below. The [resource lifecycle contract](../project/lifecycle-closeout.md) separates business completion from process cleanup; older scopes retain their own revisions.
+Results apply to the recorded source, binaries and operations. The [resource lifecycle contract](../project/lifecycle-closeout.md) separates business completion from process cleanup; restart, isolation and other scopes retain their own revisions below.
 
-## Repeated public-plugin workflows
+<a id="repeated-public-plugin-workflows"></a>
+<a id="shutdown-candidate-resource-cleanup"></a>
 
-On **2026-11-03**, a **300-second** local run completed **1,351 cycles / 4,053 invocations**, all with exit `0`. Each cycle runs `ark_database_public_plugin_service_tests` in `redis`, `mysql` and `mysql-transactions` modes against fresh, exclusively owned services.
+## Public database service workflows
 
-| Scope | Recorded result |
+On **2026-11-03**, all **17 modes** passed with one executed build identity. The three positive modes completed **1,351 cycles / 4,053 invocations in 300 seconds**; each of the other **14 modes ran once**. Every native invocation exited `0`.
+
+| Build and environment | Recorded identity |
 | --- | --- |
-| Operations | Redis binary commands/pipelines; MySQL queries, binary prepared inserts, commit/rollback and independent-connection visibility |
-| Resource lifetime | Real plugin DSOs, owner-executor completion, owning results after host destruction and repeated resource stop |
-| Services | Redis 7.4.2 with authenticated TCP; MySQL Community 8.4.13 arm64 with authenticated, verified TLS |
-| Cleanup | Redis database and MySQL schema empty; both servers stopped; private data, keys and credential files removed |
-| Candidate | `c9aa911a4893ffa2681925e8ebf13e703f8f4c16` |
-| Reused build | `3948d881ccf2486231cb401b73888b8a0426f2bb`; the complete source difference contains only HTTP startup code/tests and documentation. Database, core, configuration and build inputs are unchanged |
-| Machine | Apple M4 Pro, 48 GiB RAM, macOS 27.0.1 (26A434), arm64 |
-| Client build | C++20 Debug, Boost 1.92.0, OpenSSL 4.1.0; arknet `a0dfe09cd543e75cfb5996e537ce2fa49f2a758f`, Boost.Asio with SSL enabled |
+| Executed build | `3948d881`; executable and DSO fingerprints were unchanged before/after execution |
+| Source equivalence | Database, core, configuration, dependency and build inputs match `10e385b4`; the complete source difference consists of HTTP startup code/tests and documentation |
+| Machine / client | Mac16,11 · Apple M4 Pro · 14 logical CPUs · 48 GiB · macOS 27.0.1 (26A434), arm64 · Apple Clang 21 · C++20 Debug · Boost 1.92.0 · Boost.Asio with SSL · client OpenSSL 4.1.0 |
+| Services | Fresh exclusive Redis 7.4.2 authenticated TCP, MySQL Community 8.4.13 arm64 with authenticated verified TLS, and Redis 7.4.2 TLS-only with server OpenSSL 3.5.9; IPv4 loopback only |
+| Cleanup | Redis databases and MySQL schemas empty; owned servers stopped/reaped and owned ports closed; private data, keys and credential files removed |
 
-Use the [permanent public-plugin service program](../../tests/database/README.md#real-plugin-dsos-against-real-services) with the three modes above. Internal batches use shell orchestration; raw logs stay local. This bounded correctness run does not establish throughput, long-term stability, persistence or production capacity.
+<a id="real-plugin-dsos-against-real-services"></a>
+<a id="mysql-dso-writes-and-two-connection-commit-visibility"></a>
+<a id="reproduce-the-positive-dso-workflows"></a>
+
+| Native entry point | Modes | Execution and result | Tested boundary |
+| --- | --- | --- | --- |
+| `ark_database_public_plugin_service_tests` | `redis`, `mysql`, `mysql-transactions` | 1,351 cycles, 4,053 invocations; all exit `0` | Actual hidden-symbol plugin DSOs; binary Redis commands/pipelines, MySQL queries/prepared inserts, autocommit, explicit commit/rollback and independent-connection visibility |
+| `ark_database_public_failure_service_tests` | `redis`, `mysql` | Each once; 2/2 exit `0` | Real public-module factories/implementations linked into the host; wrong credentials, server-observed timeouts and explicit recovery; MySQL unrelated-CA rejection. These two modes do not use plugin DSOs |
+| `ark_database_public_plugin_cancellation_tests` | `redis`, `mysql`, `mysql-transaction`, `mysql-statement` | Each once; 4/4 exit `0` | Actual DSOs; independent observation of the exact tagged active request precedes explicit task cancellation |
+| `ark_database_public_plugin_service_tests` | `redis-tls`, `redis-tls-untrusted-ca`, `redis-tls-wrong-host` | Each once; 3/3 exit `0` | Actual Redis DSO; binary TLS operations and certificate-verification controls |
+| `ark_database_public_plugin_cancellation_tests` | `redis-stop`, `mysql-stop` | Each once; 2/2 exit `0` | Actual DSOs; outer-owner `manager.stop()` cancels a pending pipeline/autocommit request |
+| `ark_database_public_plugin_cancellation_tests` | `mysql-transaction-stop`, `mysql-statement-stop` | Each once; 2/2 exit `0` | Actual MySQL DSO; exact active transaction/Execute observation and uncommitted-write visibility precede stop |
+| `ark_database_public_plugin_cancellation_tests` | `redis-tls-stop` | Once; exit `0` | Actual Redis DSO; verified TLS, unrelated-CA preflight and pending-pipeline manager stop |
+
+DSO modes verify owner-thread/shared-executor delivery, once-only completion, owning results after host destruction and idempotent resource stop. The 300-second run is bounded correctness/resource-lifetime evidence, without throughput, long-term stability, persistence or production-capacity conclusions.
 
 <Collapsible>
-<CollapsibleTrigger>Executed build fingerprints</CollapsibleTrigger>
+<CollapsibleTrigger>Source and executed binary fingerprints</CollapsibleTrigger>
 <CollapsibleContent>
 
-| Binary | SHA256 |
+| Source | Revision |
+| --- | --- |
+| Executed build | `3948d881ccf2486231cb401b73888b8a0426f2bb` |
+| Equivalent database/core/configuration/build inputs | `10e385b49dab960a075a0b317b6d2d4d8638959c` |
+| arknet | `a0dfe09cd543e75cfb5996e537ce2fa49f2a758f` |
+| Redis TLS server | `a0a6f23d997b024689ba157916837f493a593a34` |
+
+| Executed binary | SHA256 |
 | --- | --- |
 | `ark_database_public_plugin_service_tests` | `262fff76884d51e987ff0ca80e96f5358436234c791078c2d07c7a9446567f10` |
+| `ark_database_public_plugin_cancellation_tests` | `05a5baef32736b9d223c519c46015c5f1ec6f865be9880d101b938e3c01d4bb9` |
+| `ark_database_public_failure_service_tests` | `62d4faa2c660d6acf5e8b3121d40294b69c3aa82ae398159916f688f209ce1da` |
 | `ark_database_mysql_plugin_d.dylib` | `1c70d7a96dbebb9ff0b0dbee16ef966674f53788d13c1e7c6d6fec4a26ab6a4e` |
 | `ark_database_redis_plugin_d.dylib` | `41031ee20933400f7949d2db1d606e4c5ad324808effaa4be95ec71dbec5e3de` |
 
 </CollapsibleContent>
 </Collapsible>
 
-## Shutdown-candidate resource cleanup
-
-On **2026-11-02**, **17 native invocations passed in four scopes**. The 12 positive/explicit-cancellation/TLS executions, 2 pipeline/autocommit stops, 2 transaction stops and 1 Redis TLS stop retain separate source and binary identities below. Each result is attributed to its recorded build.
-
-### Positive workflows, explicit cancellation and TLS (12 invocations)
-
-The **12 invocations** used fresh, exclusively owned single-node MySQL and Redis servers. Positive business workflows finish while `running`, then the host stops resources. Cancellation cases explicitly cancel an observed task on the owner thread, finish native/observer delivery, then stop the host; they do not establish real-service cancellation initiated by process stop while requests remain pending.
-
-| Identity | Executed configuration |
-| --- | --- |
-| Candidate source | Clean `bc90b68199c7a8d5ccb23e70785454870e160f3e` |
-| Reused database build | `7767bbe0274a1b3e013f114546f567c079d03c00`. `tests/database`, `src/core`, `src/plugins/mysql` and `src/plugins/redis` are unchanged through the candidate; this is source equivalence, not a build at the candidate commit. Binary SHA256 values were identical before/after execution |
-| Machine / system | Mac16,11 · Apple M4 Pro · 14 cores · 48 GB · macOS 27.0.1 (26A434) · arm64 |
-| Client | Apple Clang 21.0.0 · C++20 Debug · frozen Boost 1.92.0 · OpenSSL 4.1.0 · Boost.Asio with SSL enabled |
-| arknet | Configured source `a0dfe09cd543e75cfb5996e537ce2fa49f2a758f` |
-| Servers | MySQL Community 8.4.13 arm64 with authenticated, verified TLS; Redis 7.4.2 with authenticated TCP; Redis TLS source `a0a6f23d997b024689ba157916837f493a593a34`, server OpenSSL 3.5.9 |
-
-<a id="real-plugin-dsos-against-real-services"></a>
-<a id="mysql-dso-writes-and-two-connection-commit-visibility"></a>
-<a id="reproduce-the-positive-dso-workflows"></a>
-
-#### Positive DSO workflows and public failure controls
-
-| Native entry point and modes | Result / observation |
-| --- | --- |
-| `ark_database_public_plugin_service_tests`: `redis`, `mysql`, `mysql-transactions` | 3 passed. Actual hidden-symbol plugin DSOs, owner-thread/shared-executor delivery, once-only completion, owning results after destruction and idempotent stop. MySQL covers binary prepared inserts, autocommit, explicit commit/rollback and independent-connection visibility |
-| `ark_database_public_failure_service_tests`: `redis`, `mysql` | 2 passed through actual public module implementations: wrong credentials, server-observed request timeouts and explicit recovery; MySQL also rejects an unrelated CA |
-
 <a id="real-plugin-request-cancellation"></a>
 <a id="mysql-sent-transaction-operation-cancellation"></a>
 <a id="mysql-prepared-execute-cancellation"></a>
+<a id="manager-stop-initiated-cancellation"></a>
+<a id="manager-stop-transaction-cancellation"></a>
+<a id="redis-tls-manager-stop-cancellation"></a>
 
-#### Server-observed explicit task cancellation
+## Cancellation outcomes
 
-All four modes of `ark_database_public_plugin_cancellation_tests` passed. An independent connection identifies the tagged operation as active before repeated `task_group::cancel(id)` requests; elapsed delay is not the activity barrier. Roots complete once on the owner thread/shared executor, retired IDs reject cancellation, explicit new requests recover, and retained results survive resource shutdown.
+Explicit task cancellation follows independent server observation, uses repeated `task_group::cancel(id)`, rejects retired IDs and verifies explicit new-request recovery. Manager-stop modes instead call target `manager.stop()` on the outer owner frame with its root still pending. A separate observer manager/runtime/pool remains `running` after the target stops, confirms the whole original connection disappears and watches a further 500 ms without tagged replay. Target tasks/module retire, repeated stop succeeds and owning results survive both hosts. Observer queries do not recover the closed target pool.
 
-| Mode | Native outcome and finite server observation |
+| Cancellation modes | Observed operation and native outcome |
 | --- | --- |
-| `redis` | Named pipeline observed in BLPOP after INCR; `client_errc::cancelled`, `command_may_have_run=true`, partial integer reply `1`. The block retires and the counter remains `1` |
-| `mysql` | Tagged UPDATE observed in `User sleep`; `connection_errc::cancelled`, `outcome_unknown=true`, `operation_aborted`. The operation disappears and final counter is `1` |
-| `mysql-transaction` | Exact transaction session observed in the slow query after an uncommitted pre-write; unknown/unconfirmed result, discard requested, no rollback reply. Original session disappears, recovery uses a fresh connection, no replay appears in the bounded quiet window, final counter `0` |
-| `mysql-statement` | Exact transaction session observed in parameterized Execute; same unknown/unconfirmed/discarded outcome, no statement-close or rollback reply. Original session disappears, fresh-connection recovery and bounded no-replay checks pass, final counter `0` |
+| `redis`, `redis-stop`, `redis-tls-stop` | Named pipeline in BLPOP after INCR `1`; native `cancelled`, `command_may_have_run=true` and valid partial replies. Target connection retires; final counter remains `1` |
+| `mysql`, `mysql-stop` | Tagged autocommit UPDATE in `User sleep`; native `cancelled`, `outcome_unknown=true`, `operation_aborted`. Original session retires; final counter `1` |
+| `mysql-transaction`, `mysql-statement` | Exact session in a tagged query or parameterized Execute after uncommitted pre-write; unknown/unconfirmed result, `discard_requested=true`, no statement-close/rollback reply. Original session disappears, fresh-connection recovery and bounded no-replay checks pass; final counter `0` |
+| `mysql-transaction-stop`, `mysql-statement-stop` | Exact tagged query/Execute active, target own-read `1` and observer external-read `0` before stop. Native `cancelled`/`outcome_unknown=true`, `operation_aborted`, transaction `unconfirmed`/discard requested, no statement-close/rollback reply. Observer confirms session retirement, bounded no-replay and final external counter `0`; owning pre-write read remains `1` |
 
-An observed zero does not confirm rollback through the API. These finite observations establish neither durability nor global exactly-once execution. Cancellation, native completion and subsequent idempotent resource stop are covered; process-stop-initiated cancellation of a pending real-service request is not.
+An external zero records the observed write effect, without an API rollback acknowledgement. Finite no-replay windows do not establish crash durability or global exactly-once execution. No transaction is replaced and no write replay or recovery through a stopped target is introduced. An observer DSO handle can keep the library image loaded until both hosts finish.
 
 <a id="real-plugin-redis-tls"></a>
 
-#### Redis TLS
+## Redis TLS observations
 
-All three TLS modes of `ark_database_public_plugin_service_tests` passed against a private password-protected, TLS-only server. Its fresh certificate had only a `127.0.0.1` IP SAN; OpenSSL controls confirmed the trusted chain/IP and `localhost` mismatch.
+The private password-protected server exposed one PID-owned `127.0.0.1` TLS listener and plaintext `port=0`. Its certificate had only an IP SAN; OpenSSL controls verified the trusted chain/IP and `localhost` mismatch.
 
 | Mode | Observed result |
 | --- | --- |
-| `redis-tls` | Binary ECHO and ordered binary/empty ECHO plus PING pipeline succeed; owned inputs/configuration and results survive later operations and host destruction |
-| `redis-tls-untrusted-ca` | Native `client_errc::connection_failed`, certificate-verification transport error, `command_may_have_run=false`, no replies |
-| `redis-tls-wrong-host` | Same verification rejection using the trusted CA and `localhost` against the IP-only certificate |
+| `redis-tls` | Binary ECHO and ordered binary/empty ECHO plus PING pipeline succeed; owning inputs/configuration/results survive later operations and host destruction |
+| `redis-tls-untrusted-ca`, `redis-tls-wrong-host` | Native `connection_failed`, certificate-verification transport error, `command_may_have_run=false`, no replies; PING/ECHO counters unchanged during each control |
+| `redis-tls-stop` | Unrelated-CA PING first fails with the same native verification diagnostics; trusted target/observer pools then verify pending-pipeline manager stop as recorded above |
 
-PING/ECHO counters did not increase during either negative control. That observation does not prove that no RESP command reached the server; received-command counting is separate protocol-peer evidence. Mutual TLS, certificate rotation/revocation and TLS cancellation/recovery were not exercised.
+Unchanged command counters do not prove that no RESP command reached the server; received-command counting is separate protocol-peer evidence. Mutual TLS, rotation/revocation, other TLS cancellation stages and service-fault recovery remain outside this scope.
 
-<Collapsible>
-<CollapsibleTrigger>12-invocation build fingerprints</CollapsibleTrigger>
-<CollapsibleContent>
+Each single-invocation child retained the existing 45-second guard plus 5-second forced-exit grace; no bound was reached. These controls add no production shutdown deadline. Raw receipts/logs and service-runtime fingerprints remain local. Use the existing [positive DSO modes](../../tests/database/README.md#real-plugin-dsos-against-real-services), [failure controls](../../tests/database/README.md#public-real-service-failure-checks), [cancellation runner](../../tests/database/cancellation.md) and [Redis TLS controls](../../tests/database/redis_tls.md). Real-service execution is opt-in; `check-database` compiles these programs without running their service modes.
 
-| Executed binary | SHA256 |
-| --- | --- |
-| `ark_database_public_plugin_service_tests` | `e763e25372866b45461185e51bddf6734b80022e8724335ee3f06b46ec89b531` |
-| `ark_database_public_plugin_cancellation_tests` | `4effcf1c105bb5e66f124281849f2352dfcd96fd746fcac5e141cdf1e610d2da` |
-| `ark_database_public_failure_service_tests` | `eb39463bc477424ca19487a8fd572c8e4909bfa8ea5503f7445973051e3a65ad` |
-| `ark_database_mysql_plugin_d.dylib` | `48e8adc1f1b2e83e31ef496728b6f312f26c3fc5910e0faf368cbcabb4177293` |
-| `ark_database_redis_plugin_d.dylib` | `e6bf0a2b9476d79d5b846643dfb59511418f3e6086866277a5990caa2938c13a` |
-
-</CollapsibleContent>
-</Collapsible>
-
-<a id="manager-stop-initiated-cancellation"></a>
-
-### Manager-stop-initiated cancellation (2 invocations)
-
-On the same machine with the client/arknet versions above, **`redis-stop` and `mysql-stop` both passed** using fresh authenticated Redis TCP and verified-TLS MySQL instances. These modes call target `manager.stop()` on the outer owner frame only after server observation confirms its request active and the target root is still pending. They do not explicitly call `task_group::cancel(id)`.
-
-| Identity | Executed configuration |
-| --- | --- |
-| Tested source | Clean `39e6503683a3dcbca1169de30a488da35f7b51a7`, based on `b97f85fe3a4dd5aaaaa1423b7f8c47b4954f51d6` |
-| Separate native build | New cancellation executable and actual hidden-symbol Redis/MySQL DSOs; database-only C++20 Debug, SSL enabled, applications/Protobuf disabled. The earlier 12-invocation binaries were unchanged; hashes below identify this two-mode build only |
-| Native entry | `ark_database_public_plugin_cancellation_tests redis-stop` and `mysql-stop`; both exited `0` |
-
-The observer owns a separate manager, runtime and pool and remains `running` after the target reaches `stopped`. It tracks the whole original server connection, then a further 500 ms without that connection or tagged request returning. Observer queries are not recovery through the closed target. Target roots complete once on their owner executor, pending task count reaches zero, the target module is removed and repeated stop succeeds. Owning native results remain valid after both hosts are destroyed.
-
-| Mode | Native result and independent observation |
-| --- | --- |
-| `redis-stop` | Named pipeline observed in BLPOP after confirmed INCR `1`; manager stop preserves native `cancelled`, `command_may_have_run=true` and any valid partial reply. The target connection disappears and counter remains `1` through the bounded no-replay check |
-| `mysql-stop` | Tagged autocommit UPDATE observed in `User sleep`; manager stop preserves native `cancelled`, `outcome_unknown=true` and `operation_aborted`. The original session disappears and final counter is `1`; no target-pool recovery or rollback reply is fabricated |
-
-These counter observations do not establish a general cancellation write-effect or rollback guarantee. This build records pipeline/autocommit stop only; transaction/prepared manager-stop results use the separate build below. An observer DSO handle can keep the shared library image loaded until both hosts finish; resource closure does not establish physical image removal.
-
-<Collapsible>
-<CollapsibleTrigger>Two-mode manager-stop build fingerprints</CollapsibleTrigger>
-<CollapsibleContent>
-
-| Executed binary | SHA256 |
-| --- | --- |
-| `ark_database_public_plugin_cancellation_tests` | `2b698a5702600b9a38dd51a023b34c7ab0d1a7527d0c0e0c4c165e49e978647a` |
-| `ark_database_mysql_plugin_d.dylib` | `effac22db654a276cd2ec3cd66baab908d5a4655dbfddf5b64382af5cb0abd41` |
-| `ark_database_redis_plugin_d.dylib` | `96402add5a1a8a423e909f789176d72422b6b5617559e8d903c78f282d0ceafe` |
-
-</CollapsibleContent>
-</Collapsible>
-
-<a id="manager-stop-transaction-cancellation"></a>
-
-### Manager-stop transaction cancellation (2 invocations)
-
-**`mysql-transaction-stop` and `mysql-statement-stop` both passed** on the same host/client/arknet versions above, using a fresh authenticated, verified-TLS MySQL 8.4.13 instance and private InnoDB tables. A separate observer manager/runtime/pool confirms the exact target session's tagged query in `User sleep`, requires `COMMAND='Execute'` for the prepared mode, and reads external counter `0` while the target retains its own uncommitted read `1`. Only then does the outer owner frame call target `manager.stop()` with its root still pending.
-
-| Identity | Executed configuration |
-| --- | --- |
-| Tested source | Clean `95515ad62ef80505b4c050e795b2690dc2434fdf`, based on `91ed5e3d479c69e8d37cc6dd53685a68a8063920` |
-| Separate native build | New cancellation executable and actual hidden-symbol MySQL DSO; database-only C++20 Debug, SSL enabled, applications/Protobuf disabled, parallelism `2`. No earlier service executable or DSO was rebuilt |
-| Native entry / result | `ark_database_public_plugin_cancellation_tests mysql-transaction-stop` and `mysql-statement-stop`; each ran once and exited `0` |
-
-Both target roots complete exactly once on the owner executor. They preserve native `cancelled`, `outcome_unknown=true`, `operation_aborted`, transaction `unconfirmed` and `discard_requested=true`, without statement-close/rollback replies or cleanup/cancellation/lease-return exceptions. Target tasks/module retire and repeated stop succeeds. The observer stays `running` after target stop, waits for the whole original session to disappear and a further 500 ms without that session or tagged replay, then reads final external counter `0` and removes the table. After both hosts are destroyed, the owning pre-write read still contains `1` and the cancelled result retains those uncertain diagnostics.
-
-The external zero records this observed discard effect, not a rollback acknowledgement, crash durability or global exactly-once guarantee. No request recovers through the closed target, no transaction is replaced and no write replay is introduced. These modes cover stop during one sent transaction query or prepared execute; other cancellation stages/races remain separate.
-
-<Collapsible>
-<CollapsibleTrigger>Transaction manager-stop build fingerprints</CollapsibleTrigger>
-<CollapsibleContent>
-
-| Executed binary | SHA256 |
-| --- | --- |
-| `ark_database_public_plugin_cancellation_tests` | `4c97f9e76c883b3fddee00a091256289bc2d89ad02ddd78d5722ba2fc4f1f675` |
-| `ark_database_mysql_plugin_d.dylib` | `8d19d2700b218e68e9df2df3dae9d007c2266d37c8f470a6903e5b080e62cf62` |
-
-</CollapsibleContent>
-</Collapsible>
-
-<a id="redis-tls-manager-stop-cancellation"></a>
-
-### Redis TLS manager-stop cancellation (1 invocation)
-
-**`redis-tls-stop` ran once and passed** against a fresh owned Redis 7.4.2 TLS instance with password authentication and private CA material. Independent setup verified the certificate chain/IP, live plaintext `port=0`, the selected `tls-port` and exactly one PID-owned TLS listener. This is TLS evidence, not an inference from the TCP modes.
-
-| Identity | Executed configuration |
-| --- | --- |
-| Tested source | Clean `779f26fb6f91b18fff1d1c54c05d403eee7eb70b`, based on `a7f3a98fdc275379dbaf433addb14dbad6191089` |
-| Separate native build | New cancellation executable and actual hidden-symbol Redis DSO; database-only C++20 Debug, SSL enabled, applications/Protobuf disabled, parallelism `2`. Earlier 16-invocation artifacts were unchanged |
-| Service / native entry | Redis TLS source `a0a6f23d997b024689ba157916837f493a593a34`, server OpenSSL 3.5.9, client OpenSSL 4.1.0; `ark_database_public_plugin_cancellation_tests redis-tls-stop` exited `0` |
-
-The same invocation first requires an unrelated-CA PING to fail specifically with native `connection_failed`, SSL certificate-verification transport error, `command_may_have_run=false` and no replies. Trusted target and independent observer managers then use verified TLS pools. The server must show the named pipeline blocked in BLPOP after counter `1` before outer-owner target `manager.stop()` with the root pending. The observer survives target stop, confirms whole-session retirement and another 500 ms without replay, reads counter `1` and deletes the keys.
-
-Exactly one owner-executor completion, target task/module retirement and idempotent stop passed. After both hosts are destroyed, owning native `cancelled`/`command_may_have_run=true`, valid partial replies and the CA-verification diagnostic remain valid. No target-pool recovery or write replay is introduced. This scope does not add mutual TLS, hostname-mismatch controls, certificate rotation/revocation or TLS service-fault recovery.
-
-<Collapsible>
-<CollapsibleTrigger>Redis TLS manager-stop build fingerprints</CollapsibleTrigger>
-<CollapsibleContent>
-
-| Executed binary | SHA256 |
-| --- | --- |
-| `ark_database_public_plugin_cancellation_tests` | `de82abcf263f1d4238b47f42f40f38a2e79d020438fc4954175b34ac1405106d` |
-| `ark_database_redis_plugin_d.dylib` | `e3e50a3eebf2f55148ad98eba0baebbad0f7dfff0cc3d3e9a26b737a5af506b7` |
-
-</CollapsibleContent>
-</Collapsible>
-
-### Execution controls and cleanup
-
-Each native child had a 45-second observation bound and a further 5-second owned-child termination bound; no bound was reached. These are test controls, not production shutdown defaults. Services, ports, data, credentials and certificates were private to their respective batches. The schema and Redis databases were empty afterward; owned processes were stopped/reaped, and private data directories, keys and credential configurations were removed. Raw receipts, logs and server-binary fingerprints remain local.
-
-Use the existing [positive DSO modes](../../tests/database/README.md#real-plugin-dsos-against-real-services), [failure controls](../../tests/database/README.md#public-real-service-failure-checks), [cancellation runner](../../tests/database/cancellation.md), [Redis TLS controls](../../tests/database/redis_tls.md), [manager-stop modes](../../tests/database/cancellation.md#manager-stop-cancellation), [transaction stop modes](../../tests/database/cancellation.md#manager-stop-transaction-cancellation) and [TLS stop mode](../../tests/database/cancellation.md#redis-tls-manager-stop-cancellation). Real-service execution remains opt-in; `check-database` compilation does not reproduce it.
 
 ## Other recorded scopes
 
-These operations were not executed against the shutdown candidate. Their results remain scoped to the revisions below, with arknet `a0dfe09cd543e75cfb5996e537ce2fa49f2a758f`.
+These scopes retain the revisions below and are separate from the 2026-11-03 executions, with arknet `a0dfe09cd543e75cfb5996e537ce2fa49f2a758f`.
 
 <a id="public-modules-against-real-services"></a>
 
 | Scope / source | Retained result and limit |
 | --- | --- |
-| Direct public-module positive workflows · 2026-11-02 · `feff48ac49ed11f5166533a9e5e74a02ce4567ef` | Redis/MySQL owning input/results, binary pipeline or query/prepared/transaction results, owner delivery and host-stack unwinding with pending work passed. Same Mac16,11/macOS 27.0.1, Clang 21, C++20 Debug, Boost 1.92.0/OpenSSL 4.1.0 and private Redis 7.4.2/MySQL 8.4.13 environment. These direct-module runs used natural drain and are not candidate DSO or stop-cancellation evidence. [Native instructions](../../tests/database/README.md#public-modules-against-real-services) |
+| Direct public-module positive workflows · 2026-11-02 · `feff48ac49ed11f5166533a9e5e74a02ce4567ef` | Redis/MySQL owning input/results, binary pipeline or query/prepared/transaction results, owner delivery and host-stack unwinding with pending work passed. Same Mac16,11/macOS 27.0.1, Clang 21, C++20 Debug, Boost 1.92.0/OpenSSL 4.1.0 and private Redis 7.4.2/MySQL 8.4.13 environment. These direct-module runs used natural drain and are not DSO or stop-cancellation evidence for the build above. [Native instructions](../../tests/database/README.md#public-modules-against-real-services) |
 | Explicit same-pool restart · 2026-10-29 · ARK base `e77c2d8a1fe59d8519c447376c1f5d9a267935dd` | Interrupted read-only requests retain unknown outcomes; new requests recover after owned Redis/MySQL replacement at the same endpoint without pool reconfiguration. Runner blob `0b31502822ad0e181828b42a50859c2b093aa227`; no write replay, transaction recovery or high-availability claim. [Complete environment and record](../guides/database-restart.md) |
 | MySQL isolation · 2026-10-29 · `093dfcb9a430beedcd86de19eb0d70c8aae9160e` | REPEATABLE READ retains its snapshot; READ COMMITTED sees committed changes on the next read. Opposite-level and invalid-configuration controls passed; no locking-read or SERIALIZABLE claim. [Complete environment and record](../guides/database-isolation.md) |
 
@@ -220,7 +110,7 @@ These operations were not executed against the shutdown candidate. Their results
 <CollapsibleTrigger>Earlier configuration and protocol controls</CollapsibleTrigger>
 <CollapsibleContent>
 
-The 2026-10-29 controls used macOS C++20 Debug, Boost 1.90.0 and OpenSSL 3.6.4; they are not candidate executions.
+The 2026-10-29 controls used macOS C++20 Debug, Boost 1.90.0 and OpenSSL 3.6.4; they are separate from the 2026-11-03 executions.
 
 | Source | Recorded control |
 | --- | --- |

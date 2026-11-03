@@ -150,8 +150,8 @@ bool websocket_client::start_client(
                 {
                     return;
                 }
-                self->client_session_ptr_->add_buffer(s.data(), s.length());
-                parsed = self->client_session_ptr_->parse_buffer_to_msg();
+                parsed = self->client_session_ptr_->add_buffer(s.data(), s.length()) >= 0 &&
+                         self->client_session_ptr_->parse_buffer_to_msg();
             }
             if (!parsed)
             {
