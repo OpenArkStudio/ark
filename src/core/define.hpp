@@ -43,9 +43,6 @@ const static guid_t null_guid = 0;
 const static std::nullptr_t null_point = nullptr;
 const static vector3d null_vector3d = vector3d(0.0F, 0.0F, 0.0F);
 
-// kernel resource filename
-const static std::string config_class_file_path = "meta/config_class.config";
-const static std::string entity_class_file_path = "meta/entity_class.config";
 //const static std::string PROC_CONFIG_FILE_PATH = "conf/proc.xml";
 //const static std::string BUS_RELATION_CONFIG_FILE_PATH = "conf/bus_relation.xml";
 //const static std::string REG_CENTER_CONFIG_FILE_PATH = "conf/reg_center.xml";

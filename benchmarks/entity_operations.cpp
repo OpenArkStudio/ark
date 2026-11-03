@@ -266,8 +266,7 @@ int main(int argc, char* argv[]) {
     ark::logger::init(&log);
     log.set_log_func([](spdlog::level::level_enum, const std::string& text) { std::cout << text << '\n'; });
     ark::plugin_manager manager;
-    if (!manager.start(0, std::string(argv[2]) + "/", "conf/",
-            {{"ark_kernel_plugin", "kernel.plugin.conf"}, {"ark_utility_plugin", ""}}))
+    if (!manager.start(0, std::string(argv[2]) + "/", "conf/", {{"ark_kernel_plugin", ""}, {"ark_utility_plugin", ""}}))
     {
         std::cerr << "Benchmark dependency startup failed: " << manager.get_startup_failure() << std::endl;
         std::_Exit(1);

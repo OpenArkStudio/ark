@@ -39,15 +39,15 @@ required-presence versus ordering semantics, or removal of the runtime cycle.
 
 ### Resource loading
 
-When no JSON schema is selected, the metadata module loads `resource/meta/config_class.config` and `resource/meta/entity_class.config` during `init()`. These files reference individual schema files; configuration schemas may also specify data resources. During `post_init()`, `config_module` loads static records using this metadata.
+Kernel reads `resource/meta/entity_schema.json` relative to the application's working directory. Metadata `init()` validates the complete document, and configuration `post_init()` consumes its retained static-row snapshot. Missing, unreadable or invalid JSON fails startup with the source path and JSON pointer; XML sidecars are never read. Kernel does not read a plugin configuration file: use `config = ""` for `ark_kernel_plugin` in application manifests.
 
-XML loading releases temporary ID nodes on normal return/C++ unwinding; Debug assertions/process exit do not guarantee unwinding. Rejected later rows do not roll back earlier records. Normal `shut()` releases the manager; shared records survive until their last owner releases them. Post-installation startup failures retain the process-exit policy.
+Normal `shut()` releases the configuration manager; shared records survive until their last owner releases them. Post-installation startup failures retain the process-exit policy.
 
 Query configuration after the framework has completed the relevant initialization. Creating a runtime entity requires its class schema, map and map instance to exist. Register class event callbacks before creating entities of that class. See [Create a module](../guides/modules.md) for module integration.
 
 ## JSON Entity schema and business data
 
-If `resource/meta/entity_schema.json` exists, metadata `init()` validates the complete versioned document and owns a static-row snapshot consumed by configuration `post_init()`. Replacing files between phases cannot mix schemas/rows. Invalid selected JSON fails startup with source path/JSON pointer, without XML fallback; absent JSON retains XML paths/readers.
+The required `resource/meta/entity_schema.json` is one versioned document. Metadata `init()` owns the validated static-row snapshot consumed by configuration `post_init()`, so replacing the file between phases cannot mix schemas and rows.
 
 The file defines classes, scalar fields, tables, containers and configuration profiles. Indices are explicit and stable: array order does not assign indices, and JSON loading does not depend on generated `meta_name_index`. Inheritance must be flattened by the authoring/export step. The following example keeps application fields above the legacy BaseEntity indices `1..4`:
 
@@ -124,9 +124,11 @@ Schema/lazy-zero construction, selected static profile and per-field arguments r
 
 Offline tools and Kernel share `<ark/kernel/entity_json.hpp>` and compiled target `ark::kernel_json`. Its plain C++ model exposes `document`, `class_definition`, `field`, `relation`, `config_definition` and typed scalar `value`; `parse()`, `load()`, `validate()` and `serialize()` use one validator. The header exposes no nlohmann types and the target has no Net, Boost or Protobuf dependency. Installed consumers can request component `kernel_json` separately. See [Configuration tools](../guides/tools.md) for authoring/export workflows.
 
-**Build and ABI change:** Kernel application builds now require `nlohmann_json`; the `application` vcpkg feature includes it. `class_meta` retains a plain C++ configuration snapshot, changing its layout. Rebuild Kernel and its C++ consumers together. Existing XML resources do not need to be converted merely to keep running.
+**Breaking configuration/API/ABI change:** Convert legacy `config_class.config`, `entity_class.config` and their XML schema/data resources into `resource/meta/entity_schema.json` before upgrading. Preserve class/member names, numeric indices, scalar types and relation masks; flatten inherited fields and use the JSON profile rules above. The entity-operations example includes the migrated schema. Remove the ignored `kernel.plugin.conf` file and set the Kernel manifest's `config` to `""`.
 
-`check-entity-json` validates typed models, scalar/range errors, exact duplicate-key pointers, masks, references and deterministic export. `check-kernel-initialization` covers XML/JSON loading, profile/argument precedence, independent fields, table columns, container ownership, coherent startup snapshots and selected-JSON failures. `check-kernel-plugin` loads real Kernel/Utility DSOs in separate XML and JSON process runs. These checks establish the exercised native behavior, not arbitrary live reload or production deployment acceptance.
+All Kernel public types and module virtual interfaces remain. XML-only `class_meta::set_res_path()` / `get_res_path()` and their storage, XML implementation loading helpers, and the `config_class_file_path` / `entity_class_file_path` constants are retired. `class_meta` layout changes: rebuild Kernel, plugins and C++ consumers together. Kernel retains its existing `nlohmann_json` dependency and public JSON model; registration and lifecycle order are unchanged.
+
+`check-entity-json` validates typed models, scalar/range errors, exact duplicate-key pointers, masks, references and deterministic export. `check-kernel-initialization` covers required JSON loading, profile/argument precedence, independent fields, table columns, container ownership, coherent startup snapshots and missing/invalid JSON failures. `check-kernel-plugin` loads real Kernel/Utility DSOs for the JSON lifecycle and checks missing/invalid JSON rejection in separate processes, including valid XML sidecars as a no-fallback control. These checks establish the exercised native behavior, not arbitrary live reload or production deployment acceptance.
 
 ## Create and find entities
 
@@ -408,7 +410,7 @@ cmake --build kernel-headers-build --target check-kernel-headers --parallel 2
 
 ## Typed Kernel construction
 
-**Breaking ABI/layout change:** `class_meta_module_impl`, `config_module_impl`, `kernel_module_impl` and `map_module_impl` now inherit `module_base<their_existing_interface>`, while `kernel_plugin` inherits `plugin_base<kernel_plugin>`. All existing public types, constructors, methods and 38 header paths remain available. Rebuild Kernel and consumers together; old implementation/plugin binaries are not compatible with the changed class layout. No new compiler-independent plugin ABI is introduced.
+**Breaking ABI/layout change:** `class_meta_module_impl`, `config_module_impl`, `kernel_module_impl` and `map_module_impl` now inherit `module_base<their_existing_interface>`, while `kernel_plugin` inherits `plugin_base<kernel_plugin>`. All existing public types and 38 header paths remain available; the later JSON-only migration above retires XML-specific methods. Rebuild Kernel and consumers together; old implementation/plugin binaries are not compatible with the changed class layout. No new compiler-independent plugin ABI is introduced.
 
 The plugin uses private owning factories and explicit `DllEntryPlugin`/`DllExitPlugin`. `kernel_factory.hpp` stays inside the plugin source directory and is neither mapped nor installed. Factory return types preserve the original interface RTTI keys:
 

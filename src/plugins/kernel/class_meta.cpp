@@ -35,14 +35,6 @@ const std::string& class_meta::get_name() const {
     return name_;
 }
 
-void class_meta::set_res_path(const std::string& value) {
-    res_path_ = value;
-}
-
-const std::string& class_meta::get_res_path() const {
-    return res_path_;
-}
-
 void class_meta::set_json_config(std::shared_ptr<const entity_json::config_definition> config, std::string pointer) {
     json_config_ = std::move(config);
     json_config_pointer_ = std::move(pointer);
@@ -142,7 +134,7 @@ uint32_t class_meta::get_index(const std::string& name) const {
 }
 
 bool class_meta::is_entity_meta() const {
-    return res_path_.empty();
+    return !json_config_;
 }
 
 bool class_meta::name_index_insert(const std::string& name, const uint32_t index) {

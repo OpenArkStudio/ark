@@ -8,7 +8,7 @@ config = ""
 
 [[plugins]]
 name = "ark_kernel_plugin"
-config = "kernel.plugin.conf"
+config = ""
 
 [[plugins]]
 name = "ark_bus_plugin"

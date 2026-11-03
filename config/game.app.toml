@@ -4,7 +4,7 @@ plugin_config_dir = "conf/"
 
 [[plugins]]
 name = "ark_kernel_plugin"
-config = "kernel.plugin.conf"
+config = ""
 
 [[plugins]]
 name = "ark_utility_plugin"

@@ -4,12 +4,12 @@
 
 启动创建地图 1 和四个 Player 实体，将名称设为 `Xiaoming`，初始化 gender/career/camp/last-map/level 为 1，创建 GUID 为 1111 的物品行和自定义整数 `test=111`。演示按名称／索引访问数据，其中一个玩家的 gender 最终为 11，并增加 count 为 22 的物品行。原有回调演示方法继续保留，启动会注册 bag 回调；停机销毁实体。启动不再执行计时或大循环。
 
-运行前准备同次构建的完整产物及示例元数据：
+运行前准备同次构建的完整产物与必需的 `resource/meta/entity_schema.json`。显式索引保留示例原有 Player／ItemBag 字段和关系；Kernel 不再读取 XML 资源或 `kernel.plugin.conf`：
 
 ```sh
 mkdir -p run/entity_operations/bin run/entity_operations/conf
 cp -R app-build/bin/. run/entity_operations/bin/
-cp config/entity_operations.app.toml config/kernel.plugin.conf run/entity_operations/conf/
+cp config/entity_operations.app.toml run/entity_operations/conf/
 cp -R examples/entity_operations/resource run/entity_operations/
 cd run/entity_operations
 ./bin/app --busid=1.0.1.1 --name=entity_operations --app_conf=conf/entity_operations.app.toml

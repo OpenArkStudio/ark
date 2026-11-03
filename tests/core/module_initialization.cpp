@@ -41,12 +41,12 @@ public:
 
 using ark::test::metadata_files;
 
-void verify_initialization_order(bool leading_separator, bool config_init_first, bool config_post_init_first) {
+void verify_initialization_order(bool config_init_first, bool config_post_init_first) {
     ark::logger test_logger;
     ark::logger::init(&test_logger);
     test_logger.set_log_func([](spdlog::level::level_enum, const std::string&) {});
 
-    metadata_files files(leading_separator);
+    metadata_files files;
     ark::plugin_manager manager;
     ark::class_meta_module_impl metadata;
     ark::config_module_impl config;
@@ -104,30 +104,25 @@ void verify_initialization_order(bool leading_separator, bool config_init_first,
     CHECK(metadata.shut());
 }
 
-void verify_initialization_orders(bool leading_separator) {
+void verify_initialization_orders() {
     SUBCASE("kernel init and kernel post_init first") {
-        verify_initialization_order(leading_separator, false, false);
+        verify_initialization_order(false, false);
     }
     SUBCASE("kernel init and config post_init first") {
-        verify_initialization_order(leading_separator, false, true);
+        verify_initialization_order(false, true);
     }
     SUBCASE("config init and kernel post_init first") {
-        verify_initialization_order(leading_separator, true, false);
+        verify_initialization_order(true, false);
     }
     SUBCASE("config init and config post_init first") {
-        verify_initialization_order(leading_separator, true, true);
+        verify_initialization_order(true, true);
     }
 }
 
 } // namespace
 
 TEST_CASE("kernel and config initialize before schema regardless of consumer order") {
-    SUBCASE("metadata paths relative to the resource directory") {
-        verify_initialization_orders(false);
-    }
-    SUBCASE("metadata paths with a legacy leading separator") {
-        verify_initialization_orders(true);
-    }
+    verify_initialization_orders();
 }
 
 TEST_CASE("Kernel rejects missing declared providers before actual modules initialize") {
@@ -169,7 +164,7 @@ TEST_CASE("Kernel manager startup loads real metadata and configuration with rev
     ark::logger test_logger;
     ark::logger::init(&test_logger);
     test_logger.set_log_func([](spdlog::level::level_enum, const std::string&) {});
-    metadata_files files(false);
+    metadata_files files;
     ark::plugin_manager manager;
     ark::class_meta_module_impl metadata;
     ark::config_module_impl config;
