@@ -158,6 +158,22 @@ cmake --build http-installed-build --parallel 2 --target check-http-installed
 | `check-http-installed` | 仅原生 UNIX；通过 `find_package(ark)` 和已安装 HTTP DSO，检查 `dladdr` 实现路径、一次 HTTP 200、路由捕获销毁、端点关闭及重复停止。进程总期限为 15 秒，超时退出码为 124；3 秒接收与 5 秒清理观察仍分别保留。需要回环网络权限和启用 `ARK_BUILD_PLUGIN_HTTP=ON` 构建的 ABI 兼容安装；Debug／Release 配置及依赖前缀应与生产者一致。本地已验收 macOS Debug；没有 Windows 运行时入口。 |
 | `tests/install/check_install.cmake` 的 `ARK_TEST_HTTP=ON` | 暂存并搬迁安装后加入同一个 HTTP 消费者。设置 `ARK_TEST_CONFIG=Debug` 或 `Release`；`ARK_TEST_HTTP_BINDIR` 默认 `bin`，可指定生产者自定义的相对二进制目录。需要已启用 HTTP 运行时的应用构建；core-only 的 `run_isolated.cmake` 生产者不构建该 DSO。 |
 
+安装并搬迁前缀后，可通过数据库入口检查生产 MySQL、Redis 插件，无需连接数据库：
+
+```sh
+cmake -S tests/consumer/database -B database-installed-build \
+  -DCMAKE_BUILD_TYPE=Debug \
+  '-DCMAKE_PREFIX_PATH=/path/to/relocated-prefix;/path/to/dependencies' \
+  -DARK_TEST_DATABASE_PLUGIN_DIR=/path/to/relocated-prefix/bin
+cmake --build database-installed-build --parallel 2 --target check-database-installed
+```
+
+| 入口 | 覆盖范围与前提 |
+| --- | --- |
+| `check-database-installed` | 通过 `find_package(ark)`、`ark::mysql`／`ark::redis`、公开头和生产 `ark_mysql_plugin`／`ark_redis_plugin` DSO，检查模块查找、未配置连接的初始生命周期、资源停止、模块移除、插件成功卸载及重复停止。CMake 运行器将整个进程限制为 15 秒，协作式清理观察为 5 秒。原生 UNIX 额外用 `dladdr` 核对各实现路径，其他平台排除此探针。本地仅验收 macOS Debug；不代表 Windows／Linux 运行时或操作系统物理移除映像已验收。 |
+| 安装前提 | 启用 `ARK_BUILD_APPLICATIONS`、`ARK_BUILD_PLUGIN_MYSQL` 和 `ARK_BUILD_PLUGIN_REDIS`，构建并安装选定产物，依赖启用 SSL 的 arknet。Debug／Release 配置与 ABI 兼容的依赖前缀应匹配生产者。此检查不配置连接，不执行查询或命令，不替代真实服务与协议测试。 |
+| `tests/install/check_install.cmake` 的 `ARK_TEST_DATABASE=ON` | 安装、前缀搬迁与导出路径审计后加入同一个消费者。设置 `ARK_TEST_CONFIG=Debug` 或 `Release`；`ARK_TEST_DATABASE_BINDIR` 默认 `bin`，支持自定义相对二进制目录。core-only 的 `run_isolated.cmake` 生产者不构建这些运行时插件。原有 `ARK_TEST_MYSQL` 模式仍只检查接口编译。 |
+
 ## 生成归档包
 
 完成构建后，通过安装规则生成标准归档：
