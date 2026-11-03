@@ -64,7 +64,7 @@ ark 使用 C++20。核心与官方插件放在本仓库，业务插件放在应�
 
 配置期按显式清单复制普通文件，仅清理受控映射目录中的陈旧副本；MySQL、Redis、Utility、Net、Bus、HTTP 排除私有装配／工厂。通过 `ark::mysql`、`ark::redis`、`ark::utility`、`ark::net`、`ark::bus`、`ark::http`、`ark::kernel` 保留逻辑路径，运行时插件关闭时仍可用。仅手写 `-I <源码>/include` 不足；使用目标包含目录，编辑共置源码头而非生成副本。
 
-核心头文件只有 `src/core/` 中的一份源码。`ark::core` 将显式公开清单映射到选定构建目录，保留 `<ark/plugin_manager.hpp>` 等包含路径。修改源码头文件，不编辑生成副本。启动程序仍为 `app`／`app_d`，清单格式保持不变。
+核心头文件只有 `src/core/` 中的一份源码。`ark::core` 将显式公开清单映射到选定构建目录，保留 `<ark/plugin_manager.hpp>` 等包含路径。修改源码头文件，不编辑生成副本。启动程序仍为 `app`／`app_d`，应用清单只接受 TOML。
 
 `<ark/buffer.hpp>` 保留原有公开路径，所有权改为仅支持移动；源码／布局发生变化，需要重建受影响的 Core／Net 消费者。迁移、分配钩子兼容性与定向测试见[收包缓冲的所有权](network_CN.md#收包缓冲的所有权)。
 

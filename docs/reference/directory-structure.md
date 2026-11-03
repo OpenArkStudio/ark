@@ -66,7 +66,7 @@ Protobuf headers are placed under the build directory, exposed through `ark::pro
 
 Configure-time explicit inventories copy ordinary files and remove stale mappings only within controlled directories. MySQL, Redis, Utility, Net, Bus and HTTP exclude private assembly/factories. `ark::mysql`, `ark::redis`, `ark::utility`, `ark::net`, `ark::bus`, `ark::http`, `ark::kernel` preserve logical paths even with runtime plugins disabled. Handwritten `-I <source>/include` alone is insufficient; use target include roots and edit co-located source headers, not generated copies.
 
-Core has one source copy under `src/core/`. `ark::core` maps its explicit public headers into the selected build tree, preserving `<ark/plugin_manager.hpp>` and nested include paths. Edit source headers rather than generated copies. The `app`/`app_d` executable and manifest format are unchanged.
+Core has one source copy under `src/core/`. `ark::core` maps its explicit public headers into the selected build tree, preserving `<ark/plugin_manager.hpp>` and nested include paths. Edit source headers rather than generated copies. The `app`/`app_d` executable names are retained; application manifests accept TOML only.
 
 `<ark/buffer.hpp>` retains its public path with move-only ownership; rebuild affected Core/Net consumers for the source/layout change. See [receive-buffer ownership](network.md#receive-buffer-ownership) for migration, allocation-hook compatibility and focused tests.
 

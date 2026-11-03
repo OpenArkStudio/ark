@@ -113,8 +113,8 @@ macOS/Linux 使用 Ctrl+C 停止，Windows 在应用控制台输入 `exit`。Tim
 ## 接入自己的应用
 
 - [创建模块](../guides/modules_CN.md)和[创建插件](../guides/plugins_CN.md)说明如何注册功能。
-- [应用启动器](../guides/applications_CN.md)说明 Bus 标识、插件选择和配置路径。使用 Kernel 数据的应用还需要生成的 `resource/` 文件。
-- [配置工具](../guides/tools_CN.md)提供独立的 Excel 资源导出流程，其 Python 依赖不属于本示例或 C++ 网络测试的运行要求。
+- [应用启动器](../guides/applications_CN.md)说明 Bus 标识、插件选择和配置路径。使用 Kernel 数据的应用需要 `resource/meta/entity_schema.json`。
+- [配置工具](../guides/tools_CN.md)说明原生 CSV／XLSX／JSON 导出器。Timers 不需要导出器或业务资源。
 - [网络回归测试](../networking_CN.md)可独立验证网络行为。选择 Consul 或数据库插件的应用需要另外准备对应服务和配置。
 
 ## 阅读使用新基类的示例装配
