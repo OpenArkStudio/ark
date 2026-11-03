@@ -183,8 +183,36 @@ cmake --build database-installed-build --parallel 2 --target check-database-inst
 | Entry | Scope and prerequisites |
 | --- | --- |
 | `check-database-installed` | Uses `find_package(ark)` with `ark::mysql` / `ark::redis`, public headers and the production `ark_mysql_plugin` / `ark_redis_plugin` DSOs. Checks module lookup, unconfigured initial lifecycle, resource stop, module removal, successful plugin unload and repeated stop. The CMake runner bounds the whole process to 15 seconds; the cooperative cleanup observation is 5 seconds. Native UNIX additionally checks each implementation path with `dladdr`; this probe is excluded elsewhere. Locally validated on macOS Debug only; Windows/Linux runtime acceptance and physical OS image removal are not established. |
-| Installation | Enable `ARK_BUILD_APPLICATIONS`, `ARK_BUILD_PLUGIN_MYSQL` and `ARK_BUILD_PLUGIN_REDIS`, build and install the selected outputs, and use an SSL-enabled arknet dependency. Match the producer's Debug/Release configuration and ABI-compatible dependency prefixes. This check never configures a connection or issues a query/command; it does not replace real-service or protocol tests. |
+| Installation | Enable `ARK_BUILD_RUNTIME_PLUGINS`, `ARK_BUILD_PLUGIN_MYSQL` and `ARK_BUILD_PLUGIN_REDIS`, build and install the selected outputs, and use an SSL-enabled arknet dependency. Applications may remain disabled. Match the producer's Debug/Release configuration and ABI-compatible dependency prefixes. This check never configures a connection or issues a query/command; it does not replace real-service or protocol tests. |
 | `tests/install/check_install.cmake` with `ARK_TEST_DATABASE=ON` | Adds the same consumer after installation, prefix relocation and exported-path auditing. Set `ARK_TEST_CONFIG=Debug` or `Release`; `ARK_TEST_DATABASE_BINDIR` defaults to `bin` and supports a custom relative binary directory. The core-only `run_isolated.cmake` producer does not build these runtime plugins. The existing `ARK_TEST_MYSQL` mode remains an interface compilation check. |
+
+The network bundle has a separate installed consumer. Build a producer with
+`ARK_BUILD_APPLICATIONS=OFF`, `ARK_BUILD_RUNTIME_PLUGINS=ON` and the Kernel, Net,
+Bus and Utility plugin options enabled; install it with the root `cmake --install`
+command above. The prefix may then be moved as a whole before consumer configuration:
+
+```sh
+cmake -S tests/consumer/network -B network-installed-build \
+  -DCMAKE_BUILD_TYPE=Debug \
+  '-DCMAKE_PREFIX_PATH=/path/to/relocated-prefix;/path/to/dependencies' \
+  -DARK_TEST_NETWORK_PLUGIN_DIR=/path/to/relocated-prefix/bin \
+  -DARK_TEST_NETWORK_BUS_CONFIG="$PWD/config/guest_room.bus.toml" \
+  -DARK_TEST_NETWORK_ENTITY_SCHEMA="$PWD/examples/guest_room/resource/meta/entity_schema.json"
+cmake --build network-installed-build --parallel 2 --target check-network-installed
+```
+
+This native UNIX entry uses `find_package(ark)` and public headers, verifies all
+four implementation DSO paths with `dladdr`, and copies the canonical resources
+into a private working directory, replacing only the Bus loopback port. It checks
+Bus selection, Utility GUID generation, Kernel profile/mutation and an owning
+snapshot, one Net TCP request with a Bus reply on the manager thread, then module
+removal, callback/endpoint retirement, accepted-connection/listener closure and
+repeated stop. Match the producer's Debug/Release configuration and dependency
+prefixes. The process guard is 15 seconds; request and cooperative shutdown
+observations are five seconds each, without changing production timeouts. Local
+macOS Debug validation covers the relocated runtime bundle; cross-host deployment,
+other platforms and performance remain separate acceptance work. The existing
+build-tree five-plugin composition and installed HTTP checks cover their own paths.
 
 ## Create an archive
 

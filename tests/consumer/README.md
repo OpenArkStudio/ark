@@ -12,4 +12,11 @@ This is an `add_subdirectory` build-tree consumer, not an installed-package test
 
 Build instructions: [English](../../docs/reference/directory-structure.md) · [简体中文](../../docs/reference/directory-structure_CN.md).
 
+`network/` is an independent installed-package entry using only `find_package(ark)`
+and public API targets. `check-network-installed` loads the matching production
+Net, Bus, Kernel and Utility DSOs from an installed prefix, reads the canonical
+guest-room Bus/JSON resources, and checks one TCP round trip and normal stop/unload.
+Its native UNIX runtime requires explicit plugin/resource paths; see the bilingual
+[installation guide](../../docs/get-started/installation.md#install-and-consume-the-cmake-package).
+
 `etcd_client/` consumes only `ark::etcd_client` with its runtime plugin and Protobuf disabled. It compiles all five retained public headers independently, including implementation and assembly declarations. Run `cmake --build <build-dir> --target check-etcd-client-headers` after configuration. This header consumer does not contact an etcd service. Consul, Kafka, OSS SDK and Physic header mappings are checked by the configure-only `tests/ci/plugin-layout.test.mjs`; that check does not establish native or runtime compatibility for those optional integrations.

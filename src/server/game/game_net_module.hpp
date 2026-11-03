@@ -20,6 +20,8 @@
 
 #pragma once
 
+#include <google/protobuf/message.h>
+
 #include "ark/module.hpp"
 #include "ark/net/net_server_service.hpp"
 
