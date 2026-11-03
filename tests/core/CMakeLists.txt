@@ -15,6 +15,19 @@ add_library(ark_construction_header_checks OBJECT headers/module_base.cpp header
 set_property(TARGET ark_construction_header_checks PROPERTY LINK_LIBRARIES ark::core)
 add_dependencies(ark_core_tests ark_construction_header_checks)
 if(ARK_BUILD_PROTO)
+    # Real manager listener ownership requires Msg/Protobuf. Run it in the
+    # Applications check-core path; network-only builds retain their dependency set.
+    add_executable(ark_net_listener_startup_tests ../network/net_listener_startup.cpp
+        ../../src/plugins/net/net_server_service_impl.cpp
+        ../../src/plugins/net/net_client_service_impl.cpp
+        ../../src/plugins/net/tcp_server.cpp ../../src/plugins/net/rudp_server.cpp
+        ../../src/plugins/net/tcp_client.cpp ../../src/plugins/net/rudp_client.cpp)
+    set_property(TARGET ark_net_listener_startup_tests PROPERTY LINK_LIBRARIES ark::net ark::bus ark::utility)
+    target_include_directories(ark_net_listener_startup_tests PRIVATE "${PROJECT_SOURCE_DIR}/src/plugins")
+    add_custom_target(check-net-listener-startup
+        COMMAND ${CMAKE_COMMAND} "-DPROGRAM=$<TARGET_FILE:ark_net_listener_startup_tests>"
+            -P "${PROJECT_SOURCE_DIR}/tests/network/net_listener_startup.cmake"
+        DEPENDS ark_net_listener_startup_tests USES_TERMINAL VERBATIM)
     add_executable(ark_net_health_timer_tests main.cpp net_health_timer.cpp
         ../../src/plugins/net/net_service_manager_module_impl.cpp
         ../../src/plugins/net/net_client_service_impl.cpp
@@ -71,7 +84,7 @@ add_custom_target(check-core
     DEPENDS ark_core_tests
     USES_TERMINAL)
 if(TARGET check-net-health-timer)
-    add_dependencies(check-core check-net-health-timer check-msg-dependencies)
+    add_dependencies(check-core check-net-health-timer check-msg-dependencies check-net-listener-startup)
 endif()
 
 # Keep singleton shutdown terminal within its own process, including the logger specialization.
