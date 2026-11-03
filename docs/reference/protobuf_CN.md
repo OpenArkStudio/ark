@@ -29,7 +29,7 @@ Protobuf、Abseil 与 utf8_range 应来自同一套兼容安装。手工选择�
 | --- | --- |
 | `check-proto-configuration` | 两个 CMake 分支与真实 protoc：消息／描述符导出、消费者导入、非 Windows 生成路径；不跨平台编译／加载 Windows 二进制 |
 | `check-kernel-plugin` | 宿主创建 Protobuf 对象并真实跨 DSO 转换 |
-| `check-native-loader` | 宿主／插件分目录、依赖仅在插件旁，覆盖绝对／相对路径；Windows 加载验收须原生运行 |
+| `check-native-loader` | 宿主／插件分目录、依赖仅在插件旁，覆盖 ASCII 及含空格的 Unicode 目录中的绝对／相对路径；Windows 宿主将宽参数转换为 UTF-8 传给加载器，Windows 验收须原生运行 |
 
 ## 消息序列化
 
