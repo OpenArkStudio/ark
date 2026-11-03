@@ -1,0 +1,124 @@
+name: Dependency cache seed
+run-name: Dependency cache seed - ${{ github.event_name }} - ${{ github.ref_name }}
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - vcpkg.json
+      - vcpkg-configuration.json
+      - 'ports/**'
+      - .gitattributes
+      - .github/scripts/vcpkg-cache.mjs
+      - .github/scripts/vcpkg-seed-check.mjs
+      - .github/workflows/vcpkg-seed.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-main-windows-applications
+  cancel-in-progress: false
+
+jobs:
+  windows-applications:
+    name: Seed Windows Applications dependencies
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      ARK_COMPILER_LAUNCHER: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - name: Prepare vcpkg binary cache
+        id: vcpkg-cache
+        env:
+          VCPKG_CACHE_REVISION: 0699a19d0c6386247ce50d4dedbb8217d484d536
+          VCPKG_CACHE_FEATURES: 'application;boost;compression-tests;etcd-client;guest-room;config-tool'
+          VCPKG_CACHE_DEFAULT_FEATURES: 'true'
+          VCPKG_CACHE_PROFILE: applications
+        run: node .github/scripts/vcpkg-cache.mjs
+      - name: Restore vcpkg package archives
+        id: vcpkg-restore
+        if: steps.vcpkg-cache.outputs.enabled == 'true'
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.vcpkg-cache.outputs.directory }}
+          key: ${{ steps.vcpkg-cache.outputs.key }}
+          restore-keys: ${{ steps.vcpkg-cache.outputs.restore-key }}
+      - uses: lukka/get-cmake@latest
+      - uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: 0699a19d0c6386247ce50d4dedbb8217d484d536
+          vcpkgJsonGlob: vcpkg.json
+      - name: Configure applications
+        shell: pwsh
+        run: >-
+          cmake -S . -B ci-build -G Ninja
+          "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+          "-DVCPKG_MANIFEST_FEATURES=application;boost;compression-tests;etcd-client;guest-room;config-tool"
+          -DCMAKE_BUILD_TYPE=Debug
+          "-DCMAKE_C_COMPILER_LAUNCHER=$env:ARK_COMPILER_LAUNCHER"
+          "-DCMAKE_CXX_COMPILER_LAUNCHER=$env:ARK_COMPILER_LAUNCHER"
+          -DVCPKG_APPLOCAL_DEPS=OFF
+          -DARK_BUILD_APPLICATIONS=ON
+          -DARK_BUILD_BENCHMARKS=ON
+          -DARK_BUILD_PLUGIN_HTTP=ON
+          -DARK_BUILD_PLUGIN_CONSUL=ON
+          -DARK_BUILD_PLUGIN_ETCD_CLIENT=ON
+          -DARK_BUILD_PROTO=ON
+          -DARK_BUILD_TESTS=ON
+          -DARK_BUILD_CORE_TESTS=ON
+          -DARK_BUILD_COMPRESSION_TESTS=ON
+          -DARK_BUILD_EXAMPLES=ON
+          -DARK_BUILD_GUEST_ROOM_EXAMPLE=ON
+          -DARK_BUILD_CONFIG_TOOL=ON
+          -DARK_BUILD_CONFIG_TOOL_TESTS=ON
+          -DASIO_STANDALONE=OFF
+      - name: Require dependency archive inputs
+        env:
+          VCPKG_ARCHIVE_ENABLED: ${{ steps.vcpkg-cache.outputs.enabled }}
+          VCPKG_ARCHIVE_DIRECTORY: ${{ steps.vcpkg-cache.outputs.directory }}
+          VCPKG_ARCHIVE_KEY: ${{ steps.vcpkg-cache.outputs.key }}
+        run: node .github/scripts/vcpkg-seed-check.mjs
+      - name: Save vcpkg package archives
+        if: ${{ success() && steps.vcpkg-cache.outputs.enabled == 'true' && steps.vcpkg-restore.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.vcpkg-cache.outputs.directory }}
+          key: ${{ steps.vcpkg-cache.outputs.key }}
+      # The save action may report upload errors only as warnings. A separate
+      # exact-key lookup and output check make an unavailable seed fail this job.
+      - name: Look up saved dependency archive
+        id: seed-verify
+        if: steps.vcpkg-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.vcpkg-cache.outputs.directory }}
+          key: ${{ steps.vcpkg-cache.outputs.key }}
+          lookup-only: true
+          fail-on-cache-miss: true
+      - name: Require exact dependency cache availability
+        env:
+          VCPKG_ARCHIVE_HIT: ${{ steps.vcpkg-restore.outputs.cache-hit }}
+          VCPKG_VERIFIED_HIT: ${{ steps.seed-verify.outputs.cache-hit }}
+        run: node .github/scripts/vcpkg-seed-check.mjs --available
+      - name: Report Windows vcpkg ABI fingerprints
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: node .github/scripts/vcpkg-abi-diagnostics.mjs
+      - name: Report dependency cache statistics
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        env:
+          VCPKG_ARCHIVE_DIRECTORY: ${{ steps.vcpkg-cache.outputs.directory }}
+          VCPKG_ARCHIVE_HIT: ${{ steps.vcpkg-restore.outputs.cache-hit }}
+        run: node .github/scripts/cache-stats.mjs
