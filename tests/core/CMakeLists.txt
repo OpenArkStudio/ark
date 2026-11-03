@@ -15,6 +15,15 @@ add_library(ark_construction_header_checks OBJECT headers/module_base.cpp header
 set_property(TARGET ark_construction_header_checks PROPERTY LINK_LIBRARIES ark::core)
 add_dependencies(ark_core_tests ark_construction_header_checks)
 if(ARK_BUILD_PROTO)
+    if(TARGET ark_config AND TARGET ark_kernel_json)
+        add_executable(ark_physic_resource_tests main.cpp physic_resources.cpp
+            ../../src/plugins/physic/physic_resources.cpp)
+        target_link_libraries(ark_physic_resource_tests PRIVATE ark::config ark::kernel_json tomlplusplus::tomlplusplus)
+        target_compile_definitions(ark_physic_resource_tests PRIVATE ARK_TEST_RESOURCE_DIR="${PROJECT_SOURCE_DIR}/resources")
+        add_custom_target(check-physic-resources
+            COMMAND $<TARGET_FILE:ark_physic_resource_tests>
+            DEPENDS ark_physic_resource_tests USES_TERMINAL VERBATIM)
+    endif()
     # Real manager listener ownership requires Msg/Protobuf. Run it in the
     # Applications check-core path; network-only builds retain their dependency set.
     add_executable(ark_net_listener_startup_tests ../network/net_listener_startup.cpp
@@ -83,6 +92,9 @@ add_custom_target(check-core
     COMMAND $<TARGET_FILE:ark_core_tests>
     DEPENDS ark_core_tests
     USES_TERMINAL)
+if(TARGET check-physic-resources)
+    add_dependencies(check-core check-physic-resources)
+endif()
 if(TARGET check-net-health-timer)
     add_dependencies(check-core check-net-health-timer check-msg-dependencies check-net-listener-startup)
 endif()

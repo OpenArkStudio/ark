@@ -1,0 +1,8 @@
+simulate = true
+dispatcher_threads = 2
+frequency_hz = 10
+
+[debugger]
+host = "127.0.0.1"
+port = 5425
+timeout_ms = 3600000
