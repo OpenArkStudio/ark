@@ -24,7 +24,6 @@
 
 #include "ark/bus.hpp"
 #include "ark/net/net.hpp"
-#include "ark/proto.hpp"
 
 namespace ark {
 
