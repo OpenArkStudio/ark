@@ -72,3 +72,20 @@ add_custom_target(check-http-client-startup-cleanup
         -P "${CMAKE_CURRENT_SOURCE_DIR}/http_client_startup_cleanup.cmake"
     DEPENDS ark_http_client_startup_cleanup_tests ark_http_startup_install_fixture USES_TERMINAL VERBATIM)
 add_dependencies(check-network check-http-client-startup-cleanup)
+
+# Keep persistent allocation rejection and retained native ownership isolated.
+add_library(ark_http_server_startup_install_fixture SHARED http_server_startup_install.cpp)
+set_target_properties(ark_http_server_startup_install_fixture PROPERTIES PREFIX "" DEBUG_POSTFIX "_d"
+    CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
+target_link_libraries(ark_http_server_startup_install_fixture PRIVATE ark::config tomlplusplus::tomlplusplus)
+target_include_directories(ark_http_server_startup_install_fixture PRIVATE "${PROJECT_SOURCE_DIR}/src/plugins")
+add_executable(ark_http_server_startup_ownership_tests http_server_startup_ownership.cpp
+    ../../src/plugins/http/http_plugin.cpp)
+target_link_libraries(ark_http_server_startup_ownership_tests PRIVATE ark::config tomlplusplus::tomlplusplus)
+target_include_directories(ark_http_server_startup_ownership_tests PRIVATE "${PROJECT_SOURCE_DIR}/src/plugins")
+add_custom_target(check-http-server-startup-ownership
+    COMMAND ${CMAKE_COMMAND} "-DPROGRAM=$<TARGET_FILE:ark_http_server_startup_ownership_tests>"
+        "-DFIXTURE_DIR=$<TARGET_FILE_DIR:ark_http_server_startup_install_fixture>"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/http_server_startup_ownership.cmake"
+    DEPENDS ark_http_server_startup_ownership_tests ark_http_server_startup_install_fixture USES_TERMINAL VERBATIM)
+add_dependencies(check-network check-http-server-startup-ownership)

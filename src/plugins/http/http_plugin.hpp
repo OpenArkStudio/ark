@@ -35,7 +35,7 @@ public:
 };
 
 namespace detail {
-std::unique_ptr<http_server_module> make_http_server_module();
+std::unique_ptr<http_server_module> make_http_server_module(plugin_manager* manager = nullptr);
 } // namespace detail
 
 } // namespace ark
