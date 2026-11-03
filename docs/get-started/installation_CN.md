@@ -179,8 +179,32 @@ cmake --build database-installed-build --parallel 2 --target check-database-inst
 | 入口 | 覆盖范围与前提 |
 | --- | --- |
 | `check-database-installed` | 通过 `find_package(ark)`、`ark::mysql`／`ark::redis`、公开头和生产 `ark_mysql_plugin`／`ark_redis_plugin` DSO，检查模块查找、未配置连接的初始生命周期、资源停止、模块移除、插件成功卸载及重复停止。CMake 运行器将整个进程限制为 15 秒，协作式清理观察为 5 秒。原生 UNIX 额外用 `dladdr` 核对各实现路径，其他平台排除此探针。本地仅验收 macOS Debug；不代表 Windows／Linux 运行时或操作系统物理移除映像已验收。 |
-| 安装前提 | 启用 `ARK_BUILD_APPLICATIONS`、`ARK_BUILD_PLUGIN_MYSQL` 和 `ARK_BUILD_PLUGIN_REDIS`，构建并安装选定产物，依赖启用 SSL 的 arknet。Debug／Release 配置与 ABI 兼容的依赖前缀应匹配生产者。此检查不配置连接，不执行查询或命令，不替代真实服务与协议测试。 |
+| 安装前提 | 启用 `ARK_BUILD_RUNTIME_PLUGINS`、`ARK_BUILD_PLUGIN_MYSQL` 和 `ARK_BUILD_PLUGIN_REDIS`，构建并安装选定产物，依赖启用 SSL 的 arknet；应用可保持关闭。Debug／Release 配置与 ABI 兼容的依赖前缀应匹配生产者。此检查不配置连接，不执行查询或命令，不替代真实服务与协议测试。 |
 | `tests/install/check_install.cmake` 的 `ARK_TEST_DATABASE=ON` | 安装、前缀搬迁与导出路径审计后加入同一个消费者。设置 `ARK_TEST_CONFIG=Debug` 或 `Release`；`ARK_TEST_DATABASE_BINDIR` 默认 `bin`，支持自定义相对二进制目录。core-only 的 `run_isolated.cmake` 生产者不构建这些运行时插件。原有 `ARK_TEST_MYSQL` 模式仍只检查接口编译。 |
+
+网络插件组合另有独立安装消费者。生产者设置
+`ARK_BUILD_APPLICATIONS=OFF`、`ARK_BUILD_RUNTIME_PLUGINS=ON`，启用 Kernel、Net、
+Bus、Utility 插件选项，再通过上面的根 `cmake --install` 命令安装。可以先整体搬迁
+安装前缀，再配置消费者：
+
+```sh
+cmake -S tests/consumer/network -B network-installed-build \
+  -DCMAKE_BUILD_TYPE=Debug \
+  '-DCMAKE_PREFIX_PATH=/path/to/relocated-prefix;/path/to/dependencies' \
+  -DARK_TEST_NETWORK_PLUGIN_DIR=/path/to/relocated-prefix/bin \
+  -DARK_TEST_NETWORK_BUS_CONFIG="$PWD/config/guest_room.bus.toml" \
+  -DARK_TEST_NETWORK_ENTITY_SCHEMA="$PWD/examples/guest_room/resource/meta/entity_schema.json"
+cmake --build network-installed-build --parallel 2 --target check-network-installed
+```
+
+此原生 UNIX 入口使用 `find_package(ark)` 和公开头，通过 `dladdr` 核对四个实现
+DSO 的路径，把 canonical 资源复制到私有工作目录，仅替换 Bus 回环端口。检查
+Bus 选择、Utility GUID、Kernel 配置／修改及拥有自身数据的快照、一次在管理器线程
+处理的 Net TCP 请求与 Bus 回包，以及模块移除、回调／端点销毁、已接收连接／监听器
+关闭和重复停止。Debug／Release 配置与依赖前缀须匹配生产者。外层进程护栏为
+15 秒，请求和协作清理观察各 5 秒，不修改生产超时。本地 macOS Debug 验收覆盖
+迁移后的运行时组合；跨主机部署、其他平台和性能仍需分别验收。已有 build-tree
+五插件组合及安装 HTTP 检查分别覆盖各自路径。
 
 ## 生成归档包
 
