@@ -162,14 +162,14 @@ Source assets and staged runtimes have separate layouts. `build/` is only an opt
 | Source path | Purpose and runtime destination |
 | --- | --- |
 | `config/` | Configuration samples; copy the selected files into the runtime's `conf/` |
-| `resources/excel/` | Workbooks edited offline |
-| `resources/meta/`, `resources/server/` | Generated metadata and business data; stage under the runtime's `resource/` |
-| `resources/client/`, `resources/mysql/` | Client-output placeholders and database schema resources |
-| `resources/code/` | Generated metadata source before copying into the public headers |
-| `tools/` | Configuration exporter and retained legacy tools; see the tools guide for status |
+| `resources/entity_config/` | Native explicit-index CSV field/profile templates |
+| `resources/excel/` | Preserved source workbooks; adapt their old row layout before native export |
+| `resources/meta/`, `resources/code/`, `resources/client/` | Output placeholders; the native exporter writes a reviewed bundle to a dedicated directory |
+| `resources/mysql/`, `resources/photon/proto/` | Retained SQL schemas and Photon Proto/SQL assets |
+| `tools/` | Native JSON configuration exporter and historical scaffolding; see the tools guide |
 | `deployment/scripts/` | Launch/stop helpers; copy into the runtime or pass its directory explicitly |
 
-Runtime packages still use `bin/`, `conf/` and optional `resource/`; logging configuration writes to the runtime's `binlog/`. Source moves do not change business XML, resource formats or runtime path resolution. See [helper migration](../guides/applications.md#migrate-old-helper-commands).
+Runtime packages still use `bin/`, `conf/` and optional `resource/`; logging configuration writes to the runtime's `binlog/`. Stage the exported `resource/meta/entity_schema.json` for Kernel startup; old `resources/server/` XML exports and the Photon XML generator are removed. See [helper migration](../guides/applications.md#migrate-old-helper-commands).
 
 The historical `bin/`, `frame/` and `dep/` tree is not the current source layout. See [configuration tools](../guides/tools.md) for generation and [application launcher](../guides/applications.md) for process startup. Public protocol headers and compatibility boundaries are documented in [Protobuf messages](protobuf.md).
 
