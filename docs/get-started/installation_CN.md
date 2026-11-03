@@ -136,6 +136,8 @@ cmake --build game-build
 
 使用 `<ark/plugin_manager.hpp>`、`<ark/mysql/mysql_module.hpp>` 等公开引用，不手工添加 ark 的源码或构建目录。源码消费时先调用 `add_subdirectory(path/to/ark ark-build)`，再链接相同 target。公开插件 API target 不负责加载运行时库。
 
+仅生产插件时，设置 `ARK_BUILD_APPLICATIONS=OFF`、`ARK_BUILD_RUNTIME_PLUGINS=ON`，再通过 `ARK_BUILD_PLUGIN_<NAME>` 选择插件；构建和根安装均不包含启动器与七个服务动态库。参见 [MySQL／Redis 构建命令](../reference/build-options_CN.md#原生数据库插件)。AFProto 与选中插件保留原有依赖；仅运行时插件模式仍要求 Boost，MySQL 仍要求 SSL。安装与 CPack 按实际构建的 target 收集产物，公开 API／头文件布局不变。构建或安装动态库不代表数据库服务验收。
+
 仅消费配置读取器时，调用 `find_package(ark CONFIG REQUIRED COMPONENTS config)` 并链接 `ark::config`，不会发现 core 或 arknet。使用 `COMPONENTS config_headers` 并链接 `ark::config_headers`，可仅获得 `<ark/application_manifest.hpp>` 声明；`ARK_BUILD_CONFIG=OFF` 时也可使用。请求不存在的必需组件会使包发现失败。默认发现导入 core、公开插件 target，以及已经构建的配置读取器和协议 target。
 
 移动安装前缀后无需修改包文件；依赖前缀仍须可发现且 ABI 兼容。`cmake --build app-build --target check-install` 会暂存并迁移安装目录，验证独立安装消费者。以下隔离检查在临时副本中构建，删除临时生产者源码与构建目录后，再编译运行迁移后的消费者：
@@ -177,8 +179,32 @@ cmake --build database-installed-build --parallel 2 --target check-database-inst
 | 入口 | 覆盖范围与前提 |
 | --- | --- |
 | `check-database-installed` | 通过 `find_package(ark)`、`ark::mysql`／`ark::redis`、公开头和生产 `ark_mysql_plugin`／`ark_redis_plugin` DSO，检查模块查找、未配置连接的初始生命周期、资源停止、模块移除、插件成功卸载及重复停止。CMake 运行器将整个进程限制为 15 秒，协作式清理观察为 5 秒。原生 UNIX 额外用 `dladdr` 核对各实现路径，其他平台排除此探针。本地仅验收 macOS Debug；不代表 Windows／Linux 运行时或操作系统物理移除映像已验收。 |
-| 安装前提 | 启用 `ARK_BUILD_APPLICATIONS`、`ARK_BUILD_PLUGIN_MYSQL` 和 `ARK_BUILD_PLUGIN_REDIS`，构建并安装选定产物，依赖启用 SSL 的 arknet。Debug／Release 配置与 ABI 兼容的依赖前缀应匹配生产者。此检查不配置连接，不执行查询或命令，不替代真实服务与协议测试。 |
+| 安装前提 | 启用 `ARK_BUILD_RUNTIME_PLUGINS`、`ARK_BUILD_PLUGIN_MYSQL` 和 `ARK_BUILD_PLUGIN_REDIS`，构建并安装选定产物，依赖启用 SSL 的 arknet；应用可保持关闭。Debug／Release 配置与 ABI 兼容的依赖前缀应匹配生产者。此检查不配置连接，不执行查询或命令，不替代真实服务与协议测试。 |
 | `tests/install/check_install.cmake` 的 `ARK_TEST_DATABASE=ON` | 安装、前缀搬迁与导出路径审计后加入同一个消费者。设置 `ARK_TEST_CONFIG=Debug` 或 `Release`；`ARK_TEST_DATABASE_BINDIR` 默认 `bin`，支持自定义相对二进制目录。core-only 的 `run_isolated.cmake` 生产者不构建这些运行时插件。原有 `ARK_TEST_MYSQL` 模式仍只检查接口编译。 |
+
+网络插件组合另有独立安装消费者。生产者设置
+`ARK_BUILD_APPLICATIONS=OFF`、`ARK_BUILD_RUNTIME_PLUGINS=ON`，启用 Kernel、Net、
+Bus、Utility 插件选项，再通过上面的根 `cmake --install` 命令安装。可以先整体搬迁
+安装前缀，再配置消费者：
+
+```sh
+cmake -S tests/consumer/network -B network-installed-build \
+  -DCMAKE_BUILD_TYPE=Debug \
+  '-DCMAKE_PREFIX_PATH=/path/to/relocated-prefix;/path/to/dependencies' \
+  -DARK_TEST_NETWORK_PLUGIN_DIR=/path/to/relocated-prefix/bin \
+  -DARK_TEST_NETWORK_BUS_CONFIG="$PWD/config/guest_room.bus.toml" \
+  -DARK_TEST_NETWORK_ENTITY_SCHEMA="$PWD/examples/guest_room/resource/meta/entity_schema.json"
+cmake --build network-installed-build --parallel 2 --target check-network-installed
+```
+
+此原生 UNIX 入口使用 `find_package(ark)` 和公开头，通过 `dladdr` 核对四个实现
+DSO 的路径，把 canonical 资源复制到私有工作目录，仅替换 Bus 回环端口。检查
+Bus 选择、Utility GUID、Kernel 配置／修改及拥有自身数据的快照、一次在管理器线程
+处理的 Net TCP 请求与 Bus 回包，以及模块移除、回调／端点销毁、已接收连接／监听器
+关闭和重复停止。Debug／Release 配置与依赖前缀须匹配生产者。外层进程护栏为
+15 秒，请求和协作清理观察各 5 秒，不修改生产超时。本地 macOS Debug 验收覆盖
+迁移后的运行时组合；跨主机部署、其他平台和性能仍需分别验收。已有 build-tree
+五插件组合及安装 HTTP 检查分别覆盖各自路径。
 
 ## 生成归档包
 

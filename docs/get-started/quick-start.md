@@ -44,12 +44,15 @@ Copy-Item config/timers.app.toml run/timers/conf/
 
 The required runtime files are:
 
-```text
-run/timers/
-├── bin/       app + ark_utility_plugin + timers_plugin from the same build
-└── conf/
-    └── timers.app.toml
-```
+<FileTree>
+
+- run/timers/
+  - bin/ — app + ark_utility_plugin + timers_plugin from the same build
+    - ...
+  - conf/
+    - timers.app.toml
+
+</FileTree>
 
 The copy includes other build artifacts; `timers.app.toml` selects only the two named libraries. No separate `timers.conf` or `resource/` is required.
 

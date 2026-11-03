@@ -16,44 +16,68 @@ These repositories use different generations of interfaces and build systems. Co
 
 ## Directory layout
 
-```text
-ark/
-├── src/
-│   ├── core/            # Core source and target definitions
-│   ├── config/          # Application manifests and shared file/TOML reading
-│   ├── application/     # Application launcher
-│   ├── plugins/         # Official plugin implementations and CMake files
-│   │   ├── kernel/
-│   │   ├── net/          # Public headers, transports and private creation
-│   │   ├── bus/          # Public module interfaces and private creation
-│   │   ├── utility/
-│   │   ├── http/         # Public routing interface and private creation
-│   │   ├── mysql/
-│   │   └── redis/
-│   ├── proto/
-│   └── server/
-├── examples/            # Example applications and business plugins
-├── tests/               # Core and cross-plugin integration tests
-├── benchmarks/          # Standalone C++ benchmark programs
-├── tools/               # Development and configuration tools
-├── cmake/
-└── docs/                # English/Chinese documentation and Nimbus site
-```
+<FileTree>
+
+- ark/
+  - src/
+    - core/ — Core source and target definitions
+      - ...
+    - config/ — Application manifests and shared file/TOML reading
+      - ...
+    - application/ — Application launcher
+      - ...
+    - plugins/ — Official plugin implementations and CMake files
+      - kernel/
+        - ...
+      - net/ — Public headers, transports and private creation
+        - ...
+      - bus/ — Public module interfaces and private creation
+        - ...
+      - utility/
+        - ...
+      - http/ — Public routing interface and private creation
+        - ...
+      - mysql/
+        - ...
+      - redis/
+        - ...
+    - proto/
+      - ...
+    - server/
+      - ...
+  - examples/ — Example applications and business plugins
+    - ...
+  - tests/ — Core and cross-plugin integration tests
+    - ...
+  - benchmarks/ — Standalone C++ benchmark programs
+    - ...
+  - tools/ — Development and configuration tools
+    - ...
+  - cmake/
+    - ...
+  - docs/ — English/Chinese documentation and Nimbus site
+    - ...
+
+</FileTree>
 
 This shows the main directories. Existing Consul, etcd, Kafka and other official plugins follow the same convention. Lua and Actor integration remains planned; the table above identifies their proposed implementation directories.
 
 MySQL, Redis, Utility, Net, Bus, HTTP and Kernel use a co-located layout; the database example is:
 
-```text
-src/plugins/mysql/
-├── CMakeLists.txt
-├── mysql_module.hpp    # Explicit public API, mapped as ark/mysql/mysql_module.hpp
-├── mysql_module.cpp    # Hidden implementation class and one private factory
-├── mysql_plugin.hpp    # Private plugin type/factory declarations, excluded from public header mapping
-├── mysql_plugin.cpp    # Registration and explicit dynamic-library entry points
-└── detail/             # Private native services, coroutine bridge and transactions
-tests/database/         # Protocol, DSO and explicit real-service checks
-```
+<FileTree>
+
+- src/plugins/mysql/
+  - CMakeLists.txt
+  - mysql_module.hpp — Explicit public API, mapped as ark/mysql/mysql_module.hpp
+  - mysql_module.cpp — Hidden implementation class and one private factory
+  - mysql_plugin.hpp — Private plugin type/factory declarations, excluded from public header mapping
+  - mysql_plugin.cpp — Registration and explicit dynamic-library entry points
+  - detail/ — Private native services, coroutine bridge and transactions
+    - ...
+- tests/database/ — Protocol, DSO and explicit real-service checks
+  - ...
+
+</FileTree>
 
 Usage documentation belongs in `docs/`, and example applications in `examples/`. Define public interfaces around capabilities; keep database client types within implementation code where possible.
 
