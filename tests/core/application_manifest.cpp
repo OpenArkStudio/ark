@@ -4,9 +4,11 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <set>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "../network/doctest.h"
 
@@ -16,105 +18,119 @@ namespace {
 
 struct preset_expectation
 {
-    const char* filename;
+    std::string_view filename;
     ark::application_manifest manifest;
 };
 
 // Explicit TOML schema values for shipped presets; no retired XML parser or
 // fixture participates in the oracle. Kernel has no separate plugin config.
+ark::application_manifest expected_manifest(std::string_view library_dir, std::string_view config_dir,
+    std::initializer_list<std::pair<std::string_view, std::string_view>> plugins) {
+    ark::application_manifest result;
+    result.plugin_library_dir = library_dir;
+    result.plugin_config_dir = config_dir;
+    for (const auto& [name, config] : plugins)
+    {
+        result.plugins.emplace(std::string(name), std::string(config));
+    }
+    return result;
+}
+
 const std::array<preset_expectation, 25> application_presets = {{
-    {"db.app.toml", {"bin/", "conf/",
+    {"db.app.toml", expected_manifest("bin/", "conf/",
                         {{"ark_utility_plugin", ""}, {"ark_consul_plugin", "consul.plugin.toml"},
-                            {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}},
-                        {}}},
-    {"dir.app.toml", {"bin/", "conf/",
+                            {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}})},
+    {"dir.app.toml", expected_manifest("bin/", "conf/",
                          {{"ark_utility_plugin", ""}, {"ark_consul_plugin", "consul.plugin.toml"},
-                             {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}, {"ark_dir_plugin", ""}},
-                         {}}},
+                             {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}, {"ark_dir_plugin", ""}})},
     {"entity_operations.app.toml",
-        {"bin/", "conf/", {{"ark_kernel_plugin", ""}, {"ark_utility_plugin", ""}, {"entity_operations_plugin", ""}},
-            {}}},
+        expected_manifest("bin/", "conf/",
+            {{"ark_kernel_plugin", ""}, {"ark_utility_plugin", ""}, {"entity_operations_plugin", ""}})},
     {"game.app.toml",
-        {"bin/", "conf/",
+        expected_manifest("bin/", "conf/",
             {{"ark_kernel_plugin", ""}, {"ark_utility_plugin", ""}, {"ark_consul_plugin", "consul.plugin.toml"},
-                {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}, {"ark_game_plugin", ""}},
-            {}}},
+                {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}, {"ark_game_plugin", ""}})},
     {"guest_room.app.toml",
-        {"bin/", "conf/",
+        expected_manifest("bin/", "conf/",
             {{"ark_utility_plugin", ""}, {"ark_kernel_plugin", ""}, {"ark_bus_plugin", "guest_room.bus.toml"},
-                {"ark_net_plugin", ""}, {"guest_room_plugin", ""}},
-            {}}},
+                {"ark_net_plugin", ""}, {"guest_room_plugin", ""}})},
     {"http_client_sample.app.toml",
-        {"bin/", "conf/",
+        expected_manifest("bin/", "conf/",
             {{"ark_utility_plugin", ""}, {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""},
-                {"ark_etcd_client_plugin", ""}, {"http_client_sample_plugin", ""}},
-            {}}},
+                {"ark_etcd_client_plugin", ""}, {"http_client_sample_plugin", ""}})},
     {"http_server.app.toml",
-        {"bin/", "conf/",
-            {{"ark_utility_plugin", ""}, {"ark_http_plugin", "http.plugin.toml"}, {"http_server_plugin", ""}}, {}}},
-    {"login.app.toml", {"bin/", "conf/",
-                           {{"ark_utility_plugin", ""}, {"ark_consul_plugin", "consul.plugin.toml"},
-                               {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}, {"ark_login_plugin", ""}},
-                           {}}},
-    {"master.app.toml",
-        {"bin/", "conf/",
+        expected_manifest("bin/", "conf/",
+            {{"ark_utility_plugin", ""}, {"ark_http_plugin", "http.plugin.toml"}, {"http_server_plugin", ""}})},
+    {"login.app.toml",
+        expected_manifest("bin/", "conf/",
             {{"ark_utility_plugin", ""}, {"ark_consul_plugin", "consul.plugin.toml"},
-                {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}, {"ark_master_plugin", ""}},
-            {}}},
+                {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}, {"ark_login_plugin", ""}})},
+    {"master.app.toml",
+        expected_manifest("bin/", "conf/",
+            {{"ark_utility_plugin", ""}, {"ark_consul_plugin", "consul.plugin.toml"},
+                {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}, {"ark_master_plugin", ""}})},
     {"module_lifecycle.app.toml",
-        {"bin/", "conf/", {{"ark_kernel_plugin", ""}, {"ark_utility_plugin", ""}, {"module_lifecycle_plugin", ""}},
-            {}}},
-    {"mysql_sample.app.toml", {"bin/", "conf/", {{"ark_mysql_plugin", ""}, {"mysql_sample_plugin", ""}}, {}}},
-    {"oss.app.toml", {"bin/", "conf/",
+        expected_manifest(
+            "bin/", "conf/", {{"ark_kernel_plugin", ""}, {"ark_utility_plugin", ""}, {"module_lifecycle_plugin", ""}})},
+    {"mysql_sample.app.toml",
+        expected_manifest("bin/", "conf/", {{"ark_mysql_plugin", ""}, {"mysql_sample_plugin", ""}})},
+    {"oss.app.toml", expected_manifest("bin/", "conf/",
                          {{"ark_utility_plugin", ""}, {"ark_consul_plugin", "consul.plugin.toml"},
-                             {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}},
-                         {}}},
-    {"physic.app.toml", {"bin/", "conf/", {{"ark_physic_plugin", ""}}, {}}},
+                             {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}})},
+    {"physic.app.toml", expected_manifest("bin/", "conf/", {{"ark_physic_plugin", ""}})},
     {"physics_scene.app.toml",
-        {"bin/", "conf/", {{"ark_utility_plugin", ""}, {"ark_physic_plugin", ""}, {"physics_scene_plugin", ""}}, {}}},
+        expected_manifest(
+            "bin/", "conf/", {{"ark_utility_plugin", ""}, {"ark_physic_plugin", ""}, {"physics_scene_plugin", ""}})},
     {"proxy.app.toml",
-        {"bin/", "conf/",
+        expected_manifest("bin/", "conf/",
             {{"ark_kernel_plugin", ""}, {"ark_utility_plugin", ""}, {"ark_consul_plugin", "consul.plugin.toml"},
-                {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}, {"ark_proxy_plugin", ""}},
-            {}}},
-    {"realm.example.app.toml", {"bin/", "conf/",
+                {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}, {"ark_proxy_plugin", ""}})},
+    {"realm.example.app.toml", expected_manifest("bin/", "conf/",
                                    {{"ark_utility_plugin", ""}, {"ark_bus_plugin", "bus.plugin.toml"},
-                                       {"ark_net_plugin", ""}, {"RealmExamplePlugin", "realm.example.plugin.conf"}},
-                                   {}}},
+                                       {"ark_net_plugin", ""}, {"RealmExamplePlugin", "realm.example.plugin.toml"}})},
     {"realm.game.app.toml",
-        {"bin/", "conf/",
+        expected_manifest("bin/", "conf/",
             {{"ark_utility_plugin", ""}, {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""},
-                {"AFRealmGamePlugin", "realm.plugin.conf"}, {"ark_kafka_plugin", ""}},
-            {}}},
-    {"realm.master.app.toml", {"bin/", "conf/",
+                {"AFRealmGamePlugin", "realm.plugin.toml"}, {"ark_kafka_plugin", ""}})},
+    {"realm.master.app.toml", expected_manifest("bin/", "conf/",
                                   {{"ark_utility_plugin", ""}, {"ark_bus_plugin", "bus.plugin.toml"},
-                                      {"ark_net_plugin", ""}, {"AFRealmMasterPlugin", "realm.plugin.conf"}},
-                                  {}}},
-    {"redis_sample.app.toml",
-        {"bin/", "conf/", {{"ark_utility_plugin", ""}, {"ark_redis_plugin", ""}, {"redis_sample_plugin", ""}}, {}}},
-    {"remote_log.app.toml", {"bin/", "conf/",
+                                      {"ark_net_plugin", ""}, {"AFRealmMasterPlugin", "realm.plugin.toml"}})},
+    {"redis_sample.app.toml", expected_manifest("bin/", "conf/",
+                                  {{"ark_utility_plugin", ""}, {"ark_redis_plugin", ""}, {"redis_sample_plugin", ""}})},
+    {"remote_log.app.toml", expected_manifest("bin/", "conf/",
                                 {{"ark_utility_plugin", ""}, {"ark_consul_plugin", "consul.plugin.toml"},
-                                    {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}},
-                                {}}},
-    {"router.app.toml", {"bin/", "conf/",
+                                    {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}})},
+    {"router.app.toml", expected_manifest("bin/", "conf/",
                             {{"ark_utility_plugin", ""}, {"ark_consul_plugin", "consul.plugin.toml"},
-                                {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}},
-                            {}}},
+                                {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""}})},
     {"simulate.app.toml",
-        {"bin/", "conf/",
+        expected_manifest("bin/", "conf/",
             {{"ark_physic_plugin", ""}, {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""},
-                {"ark_consul_plugin", "consul.plugin.toml"}, {"ark_utility_plugin", ""}, {"ark_simulate_plugin", ""}},
-            {}}},
+                {"ark_consul_plugin", "consul.plugin.toml"}, {"ark_utility_plugin", ""}, {"ark_simulate_plugin", ""}})},
     {"terraria.game.app.toml",
-        {"bin/", "conf/",
+        expected_manifest("bin/", "conf/",
             {{"ark_utility_plugin", ""}, {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""},
-                {"ark_consul_plugin", "consul.plugin.toml"}, {"TerrariaGame", "terraria.game.plugin.conf"}},
-            {}}},
-    {"timers.app.toml", {"bin/", "conf/", {{"ark_utility_plugin", ""}, {"timers_plugin", ""}}, {}}},
-    {"world.app.toml", {"", "",
+                {"ark_consul_plugin", "consul.plugin.toml"}, {"TerrariaGame", "terraria.game.plugin.toml"}})},
+    {"timers.app.toml", expected_manifest("bin/", "conf/", {{"ark_utility_plugin", ""}, {"timers_plugin", ""}})},
+    {"world.app.toml", expected_manifest("", "",
                            {{"ark_kernel_plugin", ""}, {"ark_utility_plugin", ""}, {"ark_consul_plugin", ""},
-                               {"ark_bus_plugin", ""}, {"ark_net_plugin", ""}, {"ark_world_plugin", ""}},
-                           {}}},
+                               {"ark_bus_plugin", ""}, {"ark_net_plugin", ""}, {"ark_world_plugin", ""}})},
+}};
+
+// Deployment-only applications retain their external plugin names and paths.
+const std::array<preset_expectation, 3> deployment_only_presets = {{
+    {"photon.example.app.toml",
+        expected_manifest("bin/", "conf/",
+            {{"ark_utility_plugin", ""}, {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""},
+                {"ark_consul_plugin", "consul.plugin.toml"}, {"PhotonPlugin", "photon.example.plugin.toml"}})},
+    {"photon.game.app.toml",
+        expected_manifest("bin/", "conf/",
+            {{"ark_utility_plugin", ""}, {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""},
+                {"ark_consul_plugin", "consul.plugin.toml"}, {"AFPhotonGamePlugin", "photon.game.plugin.toml"}})},
+    {"photon.master.app.toml",
+        expected_manifest("bin/", "conf/",
+            {{"ark_utility_plugin", ""}, {"ark_bus_plugin", "bus.plugin.toml"}, {"ark_net_plugin", ""},
+                {"ark_consul_plugin", "consul.plugin.toml"}, {"AFPhotonMasterPlugin", "photon.master.plugin.toml"}})},
 }};
 
 std::string utf8_path(const std::filesystem::path& path) {
@@ -179,6 +195,10 @@ void check_manifest(const ark::application_manifest& actual, const ark::applicat
     DOCTEST_CHECK(actual.plugin_library_dir == expected.plugin_library_dir);
     DOCTEST_CHECK(actual.plugin_config_dir == expected.plugin_config_dir);
     DOCTEST_CHECK(actual.plugins == expected.plugins);
+    // Compare source-preserving traversal on this STL. Lifecycle order comes
+    // from the modules' declared dependencies.
+    DOCTEST_CHECK(
+        std::equal(actual.plugins.begin(), actual.plugins.end(), expected.plugins.begin(), expected.plugins.end()));
 }
 
 } // namespace
@@ -232,6 +252,15 @@ DOCTEST_TEST_CASE("deployment TOML application payloads match their explicit plu
     std::ifstream input(root / "deployment/photon_config.yaml");
     DOCTEST_REQUIRE(input.is_open());
     manifest_files files;
+    const std::set<std::string> expected_application_keys = {"db.app.toml", "dir.app.toml", "game.app.toml",
+        "login.app.toml", "master.app.toml", "oss.app.toml", "photon.example.app.toml", "photon.game.app.toml",
+        "photon.master.app.toml", "physic.app.toml", "proxy.app.toml", "redis_sample.app.toml", "remote_log.app.toml",
+        "router.app.toml", "timers.app.toml", "module_lifecycle.app.toml", "entity_operations.app.toml",
+        "physics_scene.app.toml", "http_server.app.toml", "simulate.app.toml", "world.app.toml"};
+    const std::set<std::string> expected_plugin_keys = {"bus.plugin.toml", "consul.plugin.toml", "http.plugin.toml",
+        "photon.example.plugin.toml", "photon.game.plugin.toml", "photon.master.plugin.toml"};
+    std::set<std::string> application_keys;
+    std::set<std::string> plugin_keys;
     size_t count = 0;
     bool has_data = false;
     bool has_kind = false;
@@ -242,12 +271,27 @@ DOCTEST_TEST_CASE("deployment TOML application payloads match their explicit plu
         has_data = has_data || line == "data:";
         has_kind = has_kind || line == "kind: ConfigMap";
         has_metadata = has_metadata || line == "metadata:";
+        if (line.starts_with("  ") && !line.starts_with("    "))
+        {
+            const auto scalar = line.find(": |");
+            if (scalar != std::string::npos)
+            {
+                const auto key = line.substr(2, scalar - 2);
+                DOCTEST_CAPTURE(key);
+                DOCTEST_CHECK((key.ends_with(".app.toml") || key.ends_with(".plugin.toml")));
+                if (key.ends_with(".plugin.toml"))
+                {
+                    DOCTEST_CHECK(plugin_keys.emplace(key).second);
+                }
+            }
+        }
         if (!line.starts_with("  ") || !line.ends_with(".app.toml: |-"))
         {
             continue;
         }
         const auto name = line.substr(2, line.size() - 2 - 4);
         DOCTEST_CAPTURE(name);
+        DOCTEST_CHECK(application_keys.emplace(name).second);
         std::string payload;
         while (input.peek() == ' ' || input.peek() == '\n')
         {
@@ -260,13 +304,25 @@ DOCTEST_TEST_CASE("deployment TOML application payloads match their explicit plu
             }
             payload += (line.empty() ? "" : line.substr(4)) + "\n";
         }
-        const auto expected = std::find_if(application_presets.begin(), application_presets.end(),
-            [&](const auto& preset) { return name == preset.filename; });
-        DOCTEST_REQUIRE(expected != application_presets.end());
-        check_manifest(ark::load_application_manifest(files.write(payload, name)), expected->manifest);
+        const auto matches = [&](const auto& preset) { return name == preset.filename; };
+        const auto actual = ark::load_application_manifest(files.write(payload, name));
+        const auto expected = std::find_if(application_presets.begin(), application_presets.end(), matches);
+        if (expected != application_presets.end())
+        {
+            check_manifest(actual, expected->manifest);
+        }
+        else
+        {
+            const auto external = std::find_if(deployment_only_presets.begin(), deployment_only_presets.end(), matches);
+            DOCTEST_REQUIRE(external != deployment_only_presets.end());
+            check_manifest(actual, external->manifest);
+        }
         ++count;
     }
     DOCTEST_CHECK(count == 21);
+    DOCTEST_CHECK(application_keys == expected_application_keys);
+    DOCTEST_CHECK(plugin_keys == expected_plugin_keys);
+    DOCTEST_CHECK(plugin_keys.size() == 6);
     DOCTEST_CHECK(has_data);
     DOCTEST_CHECK(has_kind);
     DOCTEST_CHECK(has_metadata);
