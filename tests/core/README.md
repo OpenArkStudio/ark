@@ -75,8 +75,8 @@ Object-vector compile-time checks preserve the public `vector_value_type` aliase
 The random-generator regressions include the public header first and twice. They preserve fixed raw/signed/unsigned sequences, final seeds and draw counts, and check half-open signed ranges at `INT_MIN`/`INT_MAX`, mixed-sign and adjacent endpoints, reversed endpoints and equal endpoints. Equal endpoints return their value without consuming a draw. These cases are part of `ark_core_tests` and `check-core`; a build with `-fsanitize=undefined -fno-sanitize-recover=all` also checks the range arithmetic with UndefinedBehaviorSanitizer. See [random-helper behavior](../../docs/reference/utility.md#core-random-helper).
 
 With `ARK_BUILD_CONFIG=ON` (the default for core tests),
-`check-application-manifest` checks TOML/XML equivalence, defaults, strict fields,
-invalid input, diagnostics and owning results. It is also part of `check-core`.
+`check-application-manifest` checks the 25 shipped TOML preset schemas, deployment payloads, defaults, strict fields,
+invalid input, explicit non-TOML rejection, diagnostics and owning results. It is also part of `check-core`.
 See [application manifests](../../docs/service-manifests.md).
 
 When the application is also built, `check-app-manifest-failures` runs the real
@@ -84,12 +84,12 @@ launcher against missing, malformed and mistyped manifests. It requires normal
 exit code 1 with a manifest diagnostic, including on Windows, and is included in
 `check-core`.
 
-`check-app-startup-failures` uses the real launcher and a test DSO for all four startup phases, each returning false or throwing, with both TOML and XML manifests. It also checks a non-standard exception, a throwing plugin entrypoint, a missing library and a loadable DSO with no `DllEntryPlugin`. Before each controlled module failure or entrypoint exception, the registered test module starts and retains a real owned loopback TCP listener on an ephemeral port. The missing-entry fixture confirms native library initialization occurred before failure. All 24 children must report one exact phase/module-or-plugin diagnostic, preserve available exception details, and exit normally with code 1 without later startup calls, update, normal shutdown or uninstall. Core tests check retained failure context, unchanged exception propagation, first failure across multiple modules and owner-thread access. The listener makes ordinary static cleanup block if failed-start module ownership is retained, so the exit check covers a real active IO pool. These tests establish failure reporting and process termination, not partial-start resource cleanup or same-process recovery.
+`check-app-startup-failures` uses the real launcher and a test DSO for all four startup phases, each returning false or throwing, with TOML manifests. It also checks a non-standard exception, a throwing plugin entrypoint, a missing library and a loadable DSO with no `DllEntryPlugin`. Before each controlled module failure or entrypoint exception, the registered test module starts and retains a real owned loopback TCP listener on an ephemeral port. The missing-entry fixture confirms native library initialization occurred before failure. All 12 startup-failure children must report one exact phase/module-or-plugin diagnostic, preserve available exception details, and exit normally with code 1 without later startup calls, update, normal shutdown or uninstall. Core tests check retained failure context, unchanged exception propagation, first failure across multiple modules and owner-thread access. The listener makes ordinary static cleanup block if failed-start module ownership is retained, so the exit check covers a real active IO pool. These tests establish failure reporting and process termination, not partial-start resource cleanup or same-process recovery.
 
 Four additional `check-app-startup-failures` children use absolute and relative
-Unicode TOML/XML manifest paths, a Unicode working directory and a UTF-8
+Unicode TOML manifest paths, a Unicode working directory and a UTF-8
 application name containing a supplementary character. Long `--flag=value` and
-separate short-option arguments reach the same controlled init failure only after
+separate short-option arguments each cover absolute and relative paths, reaching the same controlled init failure only after
 the DSO verifies the exact application-name bytes and writes a fixed UTF-8 marker
 through `ARK_LOG_INFO`. Synchronous file-only logging uses Unicode output paths
 containing spaces and supplementary characters. Each run gets fresh directories;

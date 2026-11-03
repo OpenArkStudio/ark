@@ -22,7 +22,7 @@ name = "timers_plugin"
 config = ""
 ```
 
-Built-in application manifests use TOML, except the retained external Freebird example. A lowercase `.toml` suffix selects TOML, while the legacy `*.app.conf` entry selects XML. See [Application manifests](../service-manifests.md) for the full schema and validation rules; per-plugin and business-resource formats are unchanged.
+Application manifests require TOML files with the lowercase `.toml` suffix. XML application manifests are no longer supported; convert their contents and update `--app_conf` to the new TOML path. See [Application manifests](../service-manifests.md) for the full schema and validation rules; plugin-specific and business-resource formats are documented by their respective modules.
 
 The loader loads each library and calls its exported plugin entry. `timers_plugin::install()` registers `timers_module`; the utility plugin provides services such as timers. A module resolves those services with `find_module<timer_module>()`, rather than creating another copy of the utility plugin.
 

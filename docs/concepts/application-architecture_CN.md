@@ -22,7 +22,7 @@ name = "timers_plugin"
 config = ""
 ```
 
-仓库中的应用清单采用 TOML（保留的外部 Freebird 示例除外）。小写 `.toml` 后缀选择 TOML，原有 `*.app.conf` 入口使用 XML。完整字段与校验规则见[应用清单](../service-manifests_CN.md)；插件专属配置和业务资源格式保持不变。
+应用清单仅接受后缀为小写 `.toml` 的 TOML 文件，不再支持 XML 应用清单；须改写文件内容，并将 `--app_conf` 更新为新的 TOML 路径。完整字段与校验规则见[应用清单](../service-manifests_CN.md)；插件专属配置和业务资源格式见各自模块的文档。
 
 加载器依次加载库并调用导出的插件入口。`timers_plugin::install()` 注册 `timers_module`，Utility 插件提供定时器等服务。模块通过 `find_module<timer_module>()` 获取这些服务，不需要再创建一份 Utility 插件。
 

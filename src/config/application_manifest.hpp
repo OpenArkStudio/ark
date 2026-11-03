@@ -48,7 +48,7 @@ private:
     std::size_t column_;
 };
 
-// A .toml suffix selects TOML; other paths retain the legacy XML format.
+// Reads a TOML application manifest. Other suffixes throw application_manifest_error.
 application_manifest load_application_manifest(const std::string& path);
 
 } // namespace ark

@@ -8,10 +8,12 @@ endforeach()
 
 file(MAKE_DIRECTORY "${RUNTIME_DIR}")
 file(WRITE "${RUNTIME_DIR}/invalid.toml" "[application\n")
-file(WRITE "${RUNTIME_DIR}/invalid.app.conf" "<xml><plugins></xml>")
+file(WRITE "${RUNTIME_DIR}/unsupported.app.conf" "<xml><plugins/></xml>")
+file(WRITE "${RUNTIME_DIR}/unsupported.conf" "[application]\n")
+file(WRITE "${RUNTIME_DIR}/renamed-xml.toml" "<xml><plugins/></xml>")
 file(WRITE "${RUNTIME_DIR}/wrong-type.toml" "[application]\nplugin_library_dir = 42\n")
 
-foreach(manifest missing.toml invalid.toml invalid.app.conf wrong-type.toml)
+foreach(manifest missing.toml invalid.toml wrong-type.toml unsupported.app.conf unsupported.conf renamed-xml.toml missing.TOML)
     execute_process(
         COMMAND "${PROGRAM}" --busid=1.0.1.1 --name=manifest-error-test
             "--app_conf=${RUNTIME_DIR}/${manifest}"
@@ -26,6 +28,11 @@ foreach(manifest missing.toml invalid.toml invalid.app.conf wrong-type.toml)
     endif()
     if(NOT errors MATCHES "Application manifest loading failed:")
         message(FATAL_ERROR "${manifest}: missing manifest diagnostic\n${errors}")
+    endif()
+    if(manifest MATCHES "^(unsupported[.]|missing[.]TOML)")
+        if(NOT errors MATCHES "path must end in [.]toml; XML manifests are no longer supported")
+            message(FATAL_ERROR "${manifest}: missing explicit TOML-only format diagnostic\n${errors}")
+        endif()
     endif()
     message(STATUS "${manifest}: normal exit 1 with manifest diagnostic")
 endforeach()

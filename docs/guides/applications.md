@@ -1,6 +1,6 @@
 # Application launcher
 
-`app` selects the process identity, reads a TOML or XML manifest and loads plugins. Start with [Timers](../get-started/quick-start.md); use this guide for configuration paths, library names and startup checks.
+`app` selects the process identity, reads a TOML manifest and loads plugins. Start with [Timers](../get-started/quick-start.md); use this guide for configuration paths, library names and startup checks.
 
 ## Command-line arguments
 
@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | `--busid` / `-b` | Yes | Logical process Bus address, such as `1.0.1.1`; this is not a socket bind address |
 | `--name` / `-n` | Yes | Application name, also used in the log filename |
-| `--app_conf` / `-a` | Yes | TOML application manifest with the lowercase `.toml` extension, or a legacy XML `*.app.conf` file |
+| `--app_conf` / `-a` | Yes | TOML application manifest with the required lowercase `.toml` extension |
 | `--help` / `-h` | No | Print the launcher's argument reference |
 
 ```sh
@@ -42,9 +42,9 @@ signatures are unchanged.
 | --- | --- | --- |
 | Application manifest | `--app_conf` | `conf/timers.app.toml` |
 | Logger settings | Optional `[logging]` in the application manifest | Console INFO when omitted |
-| Plugin libraries | TOML `plugin_library_dir` or XML `plugin_lib_dir`, plus the library filename | `bin/timers_plugin.dylib` on macOS Release |
-| Per-plugin settings | TOML `plugin_config_dir` + `config`, or XML `plugin_conf_dir` + `conf` | `conf/my-plugin.conf` when the filename is `my-plugin.conf` |
-| Kernel metadata and configuration | The Kernel's `resource/` directory | `resource/meta/entity_class.config`, `resource/server/item.config` |
+| Plugin libraries | `application.plugin_library_dir`, plus the library filename | `bin/timers_plugin.dylib` on macOS Release |
+| Per-plugin settings | `application.plugin_config_dir` + per-plugin `config` | `conf/my-plugin.conf` when the filename is `my-plugin.conf` |
+| Kernel metadata and configuration | The Kernel's `resource/` directory | See [Data-driven configuration](../concepts/data-driven.md) |
 
 The launcher passes the per-plugin path to the plugin manager; each module decides how to read its own configuration. Kernel resource paths are separate from the application manifest and are needed only by applications that use those Kernel facilities. See [Data-driven configuration](../concepts/data-driven.md) and [Configuration tools](tools.md).
 
@@ -64,7 +64,7 @@ name = "ark_utility_plugin"
 name = "timers_plugin"
 ```
 
-Pass `--app_conf=conf/timers.app.toml` to select it. The application table is required; directory fields are optional strings. Each plugin requires a unique, nonempty `name`; its optional `config` string selects a per-plugin file. See [Application manifests](../service-manifests.md) for validation rules and format boundaries. Bus, HTTP and Consul plugin settings use TOML; see the [Bus reference](../reference/bus.md#configure-processes-and-relationships) for its fields. Logging shares the application manifest; Kernel metadata and exported business data retain their XML formats.
+Pass `--app_conf=conf/timers.app.toml` to select it. The application table is required; directory fields are optional strings. Each plugin requires a unique, nonempty `name`; its optional `config` string selects a per-plugin file. See [Application manifests](../service-manifests.md) for validation rules and format boundaries. Bus, HTTP and Consul plugin settings use TOML; see the [Bus reference](../reference/bus.md#configure-processes-and-relationships) for its fields. Logging shares the application manifest; plugin-specific and business-resource formats are documented by their respective modules.
 
 ### Plugin library names
 
@@ -74,23 +74,26 @@ the loader adds the platform extension and the Debug `_d` suffix automatically.
 Update existing manifests and build commands that use `AFUtilityPlugin`,
 `AFMysqlPlugin` or `Sample1Plugin`; the old library filenames are no longer emitted.
 
-### Existing XML manifests
+### Migrate XML application manifests
 
-The launcher still accepts user-maintained legacy XML manifests, for example:
+**Breaking change:** the launcher and `load_application_manifest()` accept only
+TOML files with a lowercase `.toml` suffix. XML application manifests, including
+`*.app.conf`, are no longer supported. The launcher reports a manifest-format
+error and exits with code `1` before plugin startup. Renaming XML to `.toml` is
+insufficient: its contents must be rewritten as TOML.
 
-```xml
-<xml>
-    <plugins plugin_lib_dir="bin/" plugin_conf_dir="conf/">
-        <plugin name="ark_utility_plugin" conf="" />
-        <plugin name="timers_plugin" conf="" />
-    </plugins>
-</xml>
-```
+| Old XML field | TOML replacement |
+| --- | --- |
+| `plugins/@plugin_lib_dir` | `[application].plugin_library_dir` |
+| `plugins/@plugin_conf_dir` | `[application].plugin_config_dir` |
+| `plugin/@name` | `[[plugins]].name` |
+| `plugin/@conf` | `[[plugins]].config` |
 
-- Keep the outer `xml` element: the launcher looks for its `plugins` child.
-- Keep the trailing separator in directory prefixes such as `bin/` and `conf/`; the current loader concatenates strings.
-- Use the library stem in `name`, without a platform suffix or a `lib` prefix. The loader appends `.dll`, `.so` or `.dylib`; Debug builds also append `_d` before the suffix.
-- An empty `conf` value supplies no per-plugin filename. Timers does not need a separate `timers.conf` file.
+Use the TOML example above and update `--app_conf` / `-a` to the new path. Keep
+trailing separators in directory prefixes; library names and optional per-plugin
+configuration values retain their meaning. Move embedded logger attributes into
+`[logging]`; see [logging settings](../service-manifests.md#embedded-logging).
+The CLI flags and public manifest data types and function signatures are unchanged.
 
 Copy the executable and selected plugin libraries from the same build. Keep Debug and Release artifacts in separate runtime directories. The plugin list is not a dependency-order contract: modules declare required provider keys through the [module API](modules.md#declare-startup-dependencies). The manager validates these after installation and orders all four startup phases by dependency, then uses two reverse cached passes for all `pre_shut()` calls and per-module `shut()`/owned-object destruction, with all libraries closing last. Rebuild the launcher and every plugin together for the lifecycle virtual methods and changed manager layout; older binaries are incompatible.
 
@@ -143,7 +146,7 @@ is relative to the caller's working directory. The helper selects `bin/app`
 (`app.exe` on Windows) for Release or `bin/app_d` (`app_d.exe`) for Debug, reads
 `conf/<name>.app.toml`, and runs in the foreground. The name
 also becomes the application's `--name` value. Use the executable directly for
-legacy XML manifests, a custom manifest path, a different process name or other launcher flags.
+a custom TOML manifest path, a different process name or other launcher flags.
 
 After preparing the [Timers runtime](../get-started/quick-start.md), run from
 the repository root:
@@ -193,9 +196,9 @@ their original `bin/rund.*` commands. Use the current commands above instead.
 | Symptom | Check |
 | --- | --- |
 | Usage text or `Application parameter is invalid` | Supply all three required arguments; check spelling with `--help` |
-| Manifest loading fails | Check the working directory, explicit path and format; a lowercase `.toml` suffix selects TOML, while legacy `*.app.conf` files use XML |
+| Manifest loading fails | Check the working directory, explicit path and format; a lowercase `.toml` suffix is required and XML application manifests must be converted to TOML |
 | Logging validation or initialization fails | Check the manifest diagnostic and `logging.output_path` permissions |
-| `Load shared library[...] failed` | Check TOML `plugin_library_dir` or XML `plugin_lib_dir`, platform suffix, Debug suffix and the library's dependent shared libraries |
+| `Load shared library[...] failed` | Check `application.plugin_library_dir`, platform suffix, Debug suffix and the library's dependent shared libraries |
 | Plugin loads but the expected module is unavailable | Check registration, enabled targets and required plugins; see [Create a plugin](plugins.md) |
 | Built-in server role fails at `init:` | Load Bus and Net; Game also requires Kernel before callback registration. See [role startup errors](../concepts/server-architecture.md#role-startup-errors) for the checked scope |
 | Built-in server role fails at `post_init:` | For Game, check Player metadata and callback-registration diagnostics. Check the listener endpoint and port occupancy; failed registration, listener creation or a missing service reaches launcher exit code `1` |
