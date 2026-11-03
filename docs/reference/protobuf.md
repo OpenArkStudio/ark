@@ -29,7 +29,7 @@ Use Protobuf, Abseil and utf8_range from one compatible installation prefix. In 
 | --- | --- |
 | `check-proto-configuration` | Both CMake branches and real protoc: message/descriptor exports, consumer imports and unchanged non-Windows generation; no cross-platform Windows compile/load |
 | `check-kernel-plugin` | Host-created Protobuf object and real cross-DSO conversion |
-| `check-native-loader` | Separate host/plugin directories, dependency only beside plugin, absolute/relative paths; Windows loader acceptance requires a native run |
+| `check-native-loader` | Separate host/plugin directories, dependency only beside plugin, absolute/relative paths in ASCII and Unicode/space directories; Windows host passes wide arguments as UTF-8 to the loader, and Windows acceptance requires a native run |
 
 ## Message serialization
 
