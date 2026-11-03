@@ -80,7 +80,7 @@ ark 使用 C++20。核心与官方插件放在本仓库，业务插件放在应�
 | `ark::ark` | 多插件应用使用的公共接口聚合目标 |
 
 核心与插件 API 目标负责传递 CMake 编译要求，不负责加载运行时插件。
-设置 `ARK_BUILD_APPLICATIONS=ON` 后，通过 `ARK_BUILD_PLUGIN_<NAME>` 选择要编译的插件动态库。
+设置 `ARK_BUILD_RUNTIME_PLUGINS=ON` 后，通过 `ARK_BUILD_PLUGIN_<NAME>` 选择要编译的插件动态库。
 现有动态库文件名和配置中的插件名称保留；使用新 C++ API 的应用需要重新编译。
 
 ```cmake
@@ -219,7 +219,7 @@ Consul、Etcd Client、Kafka 和 OSS SDK 已归档；未经用户明确重新启
 cmake --build build --target check-consul-construction --parallel 2
 ```
 
-`ARK_BUILD_PLUGIN_CONSUL=ON` 还要求 `ARK_BUILD_APPLICATIONS=ON`，默认保持关闭。插件直接链接生成协议目标 `ark::proto`。开启核心测试后，`check-consul-plugin` 还在独立进程中检查真实 Consul DSO 的导出符号；`check-core` 包含当前条件下可用的 Consul 检查。受控工厂不执行生产 HTTP 客户端或访问 Consul 服务。这些构造检查不代表真实 Consul 互通、协议验收或任意热更新安全。
+`ARK_BUILD_PLUGIN_CONSUL=ON` 还要求 `ARK_BUILD_RUNTIME_PLUGINS=ON`，默认保持关闭。插件直接链接生成协议目标 `ark::proto`。开启核心测试后，`check-consul-plugin` 还在独立进程中检查真实 Consul DSO 的导出符号；`check-core` 包含当前条件下可用的 Consul 检查。受控工厂不执行生产 HTTP 客户端或访问 Consul 服务。这些构造检查不代表真实 Consul 互通、协议验收或任意热更新安全。
 
 ## Etcd Client 类型化构造
 
@@ -227,7 +227,7 @@ cmake --build build --target check-consul-construction --parallel 2
 
 私有 `etcd_client_factory.hpp` 返回 `std::unique_ptr<etcd_client_module>`，不映射、不安装。显式 `DllEntryPlugin`／`DllExitPlugin` 保留原有平台导出和日志初始化。注册沿用原接口 RTTI 键，显式使用 `module_update::disabled`；注销时销毁拥有的模块。HTTP 客户端查找、端点处理、超时参数顺序、租约请求与回调保持不变。原有 `keepalive` 空实现仍未完成，本次构造调整不增加协议或 Registry 能力。
 
-已归档的 Etcd Client 默认 `OFF`，可通过 `ARK_BUILD_PLUGIN_ETCD_CLIENT=ON` 显式选择保留的运行时构建。仅构建该插件时需要现有 `nlohmann_json` 软件包（vcpkg 的 `etcd-client` feature）。开启 `ARK_BUILD_APPLICATIONS=ON`、`ARK_BUILD_PLUGIN_ETCD_CLIENT=ON`、`ARK_BUILD_PROTO=ON` 与 `ARK_BUILD_CORE_TESTS=ON` 后，运行：
+已归档的 Etcd Client 默认 `OFF`，可通过 `ARK_BUILD_PLUGIN_ETCD_CLIENT=ON` 显式选择保留的运行时构建。仅构建该插件时需要现有 `nlohmann_json` 软件包（vcpkg 的 `etcd-client` feature）。开启 `ARK_BUILD_RUNTIME_PLUGINS=ON`、`ARK_BUILD_PLUGIN_ETCD_CLIENT=ON`、`ARK_BUILD_PROTO=ON` 与 `ARK_BUILD_CORE_TESTS=ON` 后，运行：
 
 ```sh
 cmake --build build --target check-etcd-client-plugin --parallel 1
@@ -249,7 +249,7 @@ cmake --build build --target check-etcd-client-plugin --parallel 1
 cmake --build build --target check-oss-sdk-construction --parallel 1
 ```
 
-运行时插件默认保持关闭。开启 `ARK_BUILD_APPLICATIONS=ON`、`ARK_BUILD_PLUGIN_OSSSDK=ON`、`ARK_BUILD_PROTO=ON` 与 `ARK_BUILD_CORE_TESTS=ON` 后，还可构建真实 `ark_oss_sdk_plugin` DSO，并在独立进程中检查入口／出口导出：
+运行时插件默认保持关闭。开启 `ARK_BUILD_RUNTIME_PLUGINS=ON`、`ARK_BUILD_PLUGIN_OSSSDK=ON`、`ARK_BUILD_PROTO=ON` 与 `ARK_BUILD_CORE_TESTS=ON` 后，还可构建真实 `ark_oss_sdk_plugin` DSO，并在独立进程中检查入口／出口导出：
 
 ```sh
 cmake --build build --target check-oss-sdk-plugin --parallel 1
@@ -263,7 +263,7 @@ cmake --build build --target check-oss-sdk-plugin --parallel 1
 
 私有 `kafka_factory.hpp` 返回 `std::unique_ptr<kafka_module>`，不进入公开映射或安装。显式 `DllEntryPlugin`／`DllExitPlugin` 保留平台导出与日志初始化。装配保留接口 RTTI 注册键，并显式选择 `module_update::enabled`，继续定期轮询生产者。注销会销毁所属模块。生产者存储与所有权、生产者创建、投递／事件回调及消息行为均不变。
 
-Kafka 继续作为可选插件，**默认关闭**。原有依赖发现与链接方式不变：启用 `ARK_BUILD_APPLICATIONS=ON`、`ARK_BUILD_PROTO=ON`、`ARK_BUILD_CORE_TESTS=ON`、`ARK_BUILD_PLUGIN_KAFKA=ON`，并准备对应平台的 Kafka 驱动依赖。Unix 平台包括 librdkafka C／C++、OpenSSL、Zstandard、LZ4 和 zlib。完成配置后运行：
+Kafka 继续作为可选插件，**默认关闭**。原有依赖发现与链接方式不变：启用 `ARK_BUILD_RUNTIME_PLUGINS=ON`、`ARK_BUILD_PROTO=ON`、`ARK_BUILD_CORE_TESTS=ON`、`ARK_BUILD_PLUGIN_KAFKA=ON`，并准备对应平台的 Kafka 驱动依赖。Unix 平台包括 librdkafka C／C++、OpenSSL、Zstandard、LZ4 和 zlib。完成配置后运行：
 
 ```sh
 cmake --build build --target check-kafka-plugin --parallel 1
