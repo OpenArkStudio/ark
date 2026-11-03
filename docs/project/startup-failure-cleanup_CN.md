@@ -1,6 +1,6 @@
 # 可选启动失败清理
 
-启动失败默认立即退出 `1`；只有通过 `plugin_manager::prepare_startup_cleanup()` 预登记的独立自有资源，可先执行一次失败清理。预分配登记表支持跨模块最多 16 个独立自有资源，支持无保留回调的 Utility Timer 时间轮、尚未开始回调登记的 Schedule 工作线程和空闲 Net HTTP 客户端运行时；已受理工作与其他共享 IO 仍须单独退役。原有获取点源码基准：[d9618a66](https://github.com/OpenArkStudio/ark/tree/d9618a663fc2069b734007812590c88736d17ed5)。不做同进程重试，不调用正常停服充当回滚，不推断外部业务／事务回滚；Registry 和热更新继续暂停。
+启动失败默认立即退出 `1`；只有通过 `plugin_manager::prepare_startup_cleanup()` 预登记的独立自有资源，可先执行一次失败清理。预分配登记表支持跨模块最多 16 个独立自有资源。下述接入分别说明可退役的无回调／空闲资源，以及必须保留的完整所有者。不做同进程重试，不调用正常停服充当回滚，不推断外部业务／事务回滚；Registry 和热更新继续暂停。
 
 ## 启动失败时已经存在什么
 
@@ -25,7 +25,7 @@
 | [HTTP 客户端构造](https://github.com/OpenArkStudio/ark/blob/d9618a663fc2069b734007812590c88736d17ed5/src/plugins/net/http_client_module_impl.cpp#L244)启动 IO 池 | install 期间、任何 init 之前就可能有工作线程；其析构／正常停机调用同步 runtime stop。 |
 | Net [post_init](https://github.com/OpenArkStudio/ark/blob/d9618a663fc2069b734007812590c88736d17ed5/src/plugins/net/net_service_manager_module_impl.cpp#L111)排队配置客户端并登记健康定时器；[update](https://github.com/OpenArkStudio/ark/blob/d9618a663fc2069b734007812590c88736d17ed5/src/plugins/net/net_client_service_impl.cpp#L248)才启动排队客户端 | 排队不等于连接完成。[create_server](https://github.com/OpenArkStudio/ark/blob/d9618a663fc2069b734007812590c88736d17ed5/src/plugins/net/net_service_manager_module_impl.cpp#L282)可在调用它的启动钩子中获取监听器，须记录真实调用点，不能假定统一阶段。 |
 | HTTP [端点预约](https://github.com/OpenArkStudio/ark/blob/main/src/plugins/http/http_server_module_impl.cpp)先于原生构造／启动 | 完整、独立的 HTTP 所有者在获取原生资源前登记。每次原生尝试和预约跨绑定／启动异常及候选模块析构保持所有权；受保护的 HTTP 所有权边界见下文。 |
-| MySQL [构造／init／configure](https://github.com/OpenArkStudio/ark/blob/d9618a663fc2069b734007812590c88736d17ed5/src/plugins/mysql/mysql_module.cpp#L218) | 构造持有状态，init 绑定所属 runtime；`configure()` 在写入具名连接表**之前**构造原生池，后续插入抛异常时线程可能已启动。固定版 arknet `a0dfe09c` 在池构造中启动 IO。 |
+| [MySQL](https://github.com/OpenArkStudio/ark/blob/10e385b49dab960a075a0b317b6d2d4d8638959c/src/plugins/mysql/mysql_module.cpp#L254)／[Redis](https://github.com/OpenArkStudio/ark/blob/10e385b49dab960a075a0b317b6d2d4d8638959c/src/plugins/redis/redis_module.cpp#L148) 连接构造 | `configure()` 先预留具名连接表槽位，再创建连接。服务的被动记账、bridge 及 MySQL 事务状态均在原生池启动线程前准备；之后发布连接不再分配。未发布构造失败时移除空槽位。这项构造边界没有把数据库池登记为启动失败清理资源。 |
 
 ## 独立资源登记与执行
 
@@ -119,9 +119,13 @@ Net 在 HTTP 客户端构造函数启动自有 IO 池前登记一个 `NetHttpCli
 
 ## 其他 IO 边界
 
-Net 监听器／客户端、原生 HTTP 退役、MySQL／Redis 池及其他 IO 接入前，先证明构造／成员展开不会丢失活跃所有者，也不会在失败清理入口前阻塞。线程创建前就须有独立上下文，回调持有完整状态，不能依赖未完成模块的 `this`。回调代码、接收者、bridge／runtime 和原生所有者须存活到可证明的回收屏障完成。普通模块 update 可能运行部分启动的业务代码，不能作为清理 pump。
+| 资源 | 已有边界 | 不属于自动启动失败退役的范围 |
+| --- | --- | --- |
+| 路由 HTTP 监听器 | [完整所有者](#受保护的-http-监听器所有权)在绑定／启动可能失败前持有每次原生尝试、预约和独立回调状态 | 任一原生端点对象、已暴露 router 或活跃 lease 均返回 `unsafe`；动作不停止 IO、不销毁业务捕获 |
+| MySQL／Redis 连接 | 具名槽位、服务被动记账、bridge 和事务状态先于原生池获取 | 没有数据库启动清理 capsule；普通 `stop()`／`close_and_wait()` 不等于登记表失败动作或 SQL 回滚 |
+| 其他 Net 监听器／客户端 | 服务与传输对象持有普通 IO 状态；[空闲 HTTP 客户端](#空闲-net-http-客户端清理)是单独登记的资源 | 其他监听器／客户端对象图未登记失败动作；原生退役与借用的回调／提供方生命周期仍须专门策略 |
 
-固定版 arknet 的 `io_pool::stop()` 可能等待／join；MySQL 的[回收](https://github.com/OpenArkStudio/ark/blob/d9618a663fc2069b734007812590c88736d17ed5/src/plugins/mysql/detail/mysql_service.hpp#L432)使用 `close_and_wait()`，服务 `stop()` 仅请求关闭／抑制回调。见[固定版原生池](https://github.com/OpenArkStudio/arknet/blob/a0dfe09cd543e75cfb5996e537ce2fa49f2a758f/include/arknet/mysql/pool.hpp#L972)。上述空闲 HTTP 客户端切片只允许回收已无工作的私有池；这些调用本身仍不是通用非阻塞启动失败清理契约。登记前必须有现成或单独评审的「请求／已回收」观察、有界宿主驱动及回调策略；不能用分离线程隐藏阻塞关闭，也不在这里增加 promise 或补偿事务。关闭本地池不证明 SQL／业务回滚，也不改写未知原生结果。
+新增 IO 登记须让回调代码、接收者、bridge／runtime 与完整原生所有者存活到可证明的回收屏障。普通模块 update 可能执行部分启动的业务代码，不能作为清理 pump。无回调 Schedule 路径与空闲 HTTP 客户端可同步等待原生线程退出，均不提供可抢占期限。固定版 arknet 的[池关闭](https://github.com/OpenArkStudio/arknet/blob/a0dfe09cd543e75cfb5996e537ce2fa49f2a758f/include/arknet/mysql/pool.hpp#L972)也可能等待。因此，仍被保留的工作需要明确的完成／取消策略及退役观察，不能用分离线程关闭或推断外部回滚代替。
 
 ## 有限验收
 
