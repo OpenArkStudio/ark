@@ -90,7 +90,7 @@ jobs:
         if: ${{ !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.format_check != 'false') }}
         run: CLANG_FORMAT=clang-format-18 bash scripts/format.sh --check
   network:
-    name: Network - ${{ matrix.os }} - Boost - ${{ matrix.sanitizer }}
+    name: Network - ${{ matrix.os }} - Boost - ${{ matrix.sanitizer == 'address' && 'AddressSanitizer + UndefinedBehaviorSanitizer' || matrix.sanitizer == 'thread' && 'ThreadSanitizer' || matrix.sanitizer }}
     needs: scope
     if: ${{ !cancelled() && !(github.event_name == 'pull_request' && toJSON(github.event.pull_request.draft) == 'true') && (needs.scope.result != 'success' || needs.scope.outputs.network_check != 'false') }}
     runs-on: ${{ matrix.os }}

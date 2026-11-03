@@ -82,7 +82,7 @@ Core has one source copy under `src/core/`. `ark::core` maps its explicit public
 | `ark::ark` | Aggregate public interface target for applications using multiple official plugins |
 
 The core and plugin API targets carry CMake usage requirements. They do not load
-runtime plugins. Shared plugin libraries are built with `ARK_BUILD_APPLICATIONS=ON`
+runtime plugins. Shared plugin libraries are built with `ARK_BUILD_RUNTIME_PLUGINS=ON`
 and selected with `ARK_BUILD_PLUGIN_<NAME>`. Existing shared-library filenames and
 plugin configuration names are retained; applications must be rebuilt for the new C++ API.
 
@@ -237,7 +237,7 @@ With `ARK_BUILD_CORE_TESTS=ON`, `ARK_BUILD_PROTO=ON` and `ARK_BUILD_CONFIG=ON`, 
 cmake --build build --target check-consul-construction --parallel 2
 ```
 
-`ARK_BUILD_PLUGIN_CONSUL=ON` also requires `ARK_BUILD_APPLICATIONS=ON` and remains off by default. It links the generated protocol target `ark::proto` directly. With the core tests enabled, `check-consul-plugin` additionally inspects the actual Consul DSO exports in a separate process; `check-core` includes the applicable Consul checks. The controlled factory does not exercise the production HTTP client or a Consul server. These construction checks do not establish live Consul interoperability, protocol acceptance or arbitrary hot-update safety.
+`ARK_BUILD_PLUGIN_CONSUL=ON` also requires `ARK_BUILD_RUNTIME_PLUGINS=ON` and remains off by default. It links the generated protocol target `ark::proto` directly. With the core tests enabled, `check-consul-plugin` additionally inspects the actual Consul DSO exports in a separate process; `check-core` includes the applicable Consul checks. The controlled factory does not exercise the production HTTP client or a Consul server. These construction checks do not establish live Consul interoperability, protocol acceptance or arbitrary hot-update safety.
 
 ## Typed Etcd Client construction
 
@@ -245,7 +245,7 @@ cmake --build build --target check-consul-construction --parallel 2
 
 The private `etcd_client_factory.hpp` returns `std::unique_ptr<etcd_client_module>` and is excluded from public mappings and installation. Explicit `DllEntryPlugin` / `DllExitPlugin` retain the existing platform exports and logger setup. Registration uses the original interface RTTI key and `module_update::disabled`; unregistration destroys the owned module. HTTP-client lookup, endpoint handling, timeout argument order, lease requests and callbacks are unchanged. The existing `keepalive` stub remains incomplete; this construction change adds no protocol or Registry capability.
 
-Archived Etcd Client defaults to `OFF`; `ARK_BUILD_PLUGIN_ETCD_CLIENT=ON` explicitly selects its retained runtime build. Its existing `nlohmann_json` package is required only when building the plugin (`etcd-client` vcpkg feature). With `ARK_BUILD_APPLICATIONS=ON`, `ARK_BUILD_PLUGIN_ETCD_CLIENT=ON`, `ARK_BUILD_PROTO=ON` and `ARK_BUILD_CORE_TESTS=ON`, run:
+Archived Etcd Client defaults to `OFF`; `ARK_BUILD_PLUGIN_ETCD_CLIENT=ON` explicitly selects its retained runtime build. Its existing `nlohmann_json` package is required only when building the plugin (`etcd-client` vcpkg feature). With `ARK_BUILD_RUNTIME_PLUGINS=ON`, `ARK_BUILD_PLUGIN_ETCD_CLIENT=ON`, `ARK_BUILD_PROTO=ON` and `ARK_BUILD_CORE_TESTS=ON`, run:
 
 ```sh
 cmake --build build --target check-etcd-client-plugin --parallel 1
@@ -267,7 +267,7 @@ With `ARK_BUILD_CORE_TESTS=ON`, `check-oss-sdk-construction` compiles the real f
 cmake --build build --target check-oss-sdk-construction --parallel 1
 ```
 
-The runtime plugin remains off by default. Enable `ARK_BUILD_APPLICATIONS=ON`, `ARK_BUILD_PLUGIN_OSSSDK=ON`, `ARK_BUILD_PROTO=ON` and `ARK_BUILD_CORE_TESTS=ON` to additionally build the actual `ark_oss_sdk_plugin` DSO and inspect its entry/exit exports in a separate process:
+The runtime plugin remains off by default. Enable `ARK_BUILD_RUNTIME_PLUGINS=ON`, `ARK_BUILD_PLUGIN_OSSSDK=ON`, `ARK_BUILD_PROTO=ON` and `ARK_BUILD_CORE_TESTS=ON` to additionally build the actual `ark_oss_sdk_plugin` DSO and inspect its entry/exit exports in a separate process:
 
 ```sh
 cmake --build build --target check-oss-sdk-plugin --parallel 1
@@ -281,7 +281,7 @@ Application builds retain their existing Protobuf, configuration and Boost.Asio 
 
 The private `kafka_factory.hpp` returns `std::unique_ptr<kafka_module>` and is excluded from public mappings and installation. Explicit `DllEntryPlugin` / `DllExitPlugin` retain platform exports and logger setup. Assembly retains the interface RTTI registration key and explicitly selects `module_update::enabled`, preserving periodic producer polling. Unregistration destroys the owned module. Producer storage and ownership, producer creation, delivery/event callbacks and message behavior are unchanged.
 
-Kafka remains optional and **off by default**. Its existing dependency discovery and linking are unchanged: enable `ARK_BUILD_APPLICATIONS=ON`, `ARK_BUILD_PROTO=ON`, `ARK_BUILD_CORE_TESTS=ON` and `ARK_BUILD_PLUGIN_KAFKA=ON`, with the platform's Kafka driver dependencies available. On Unix this includes librdkafka C/C++, OpenSSL, Zstandard, LZ4 and zlib. With that build configured, run:
+Kafka remains optional and **off by default**. Its existing dependency discovery and linking are unchanged: enable `ARK_BUILD_RUNTIME_PLUGINS=ON`, `ARK_BUILD_PROTO=ON`, `ARK_BUILD_CORE_TESTS=ON` and `ARK_BUILD_PLUGIN_KAFKA=ON`, with the platform's Kafka driver dependencies available. On Unix this includes librdkafka C/C++, OpenSSL, Zstandard, LZ4 and zlib. With that build configured, run:
 
 ```sh
 cmake --build build --target check-kafka-plugin --parallel 1

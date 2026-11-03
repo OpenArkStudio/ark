@@ -219,12 +219,16 @@ foreach(plugin_name IN LISTS ark_plugin_names)
     option(ARK_BUILD_PLUGIN_${plugin_option} "Build the ${plugin_name} plugin" ${plugin_default})
 endforeach()
 
-if((ARK_BUILD_APPLICATIONS AND ARK_BUILD_PLUGIN_KERNEL) OR ARK_BUILD_CONFIG_TOOL OR
+if(ARK_BUILD_RUNTIME_PLUGINS AND NOT TARGET ark::config AND (ARK_BUILD_PLUGIN_BUS OR ARK_BUILD_PLUGIN_HTTP))
+    message(FATAL_ERROR "The Bus and HTTP runtime plugins require the configuration reader; enable ARK_BUILD_CONFIG")
+endif()
+
+if((ARK_BUILD_RUNTIME_PLUGINS AND ARK_BUILD_PLUGIN_KERNEL) OR ARK_BUILD_CONFIG_TOOL OR
         (ARK_BUILD_CORE_TESTS AND ARK_BUILD_PROTO))
     include("${CMAKE_CURRENT_SOURCE_DIR}/kernel/entity_json.cmake")
 endif()
 
-if(ARK_BUILD_APPLICATIONS)
+if(ARK_BUILD_RUNTIME_PLUGINS)
     foreach(plugin_name IN LISTS ark_plugin_names)
         string(TOUPPER "${plugin_name}" plugin_option)
         if(ARK_BUILD_PLUGIN_${plugin_option})
