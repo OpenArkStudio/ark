@@ -204,6 +204,10 @@ branch or worktree when the existing checkout contains uncommitted changes.
   verify that every older active candidate has started all of its native jobs.
   A waiting or missing native job is not a start; completion is not required.
   Unadmitted work in another repository does not block an eligible repository.
+- Across the coordinated work, maintain three delivery lines when independent,
+  authorized tasks have ready dependencies. Refill each completed line in the
+  confirmed priority order; do not repeat passed validation or expand unconfirmed
+  scope to fill a slot. This does not authorize scheduled or unattended automation.
 - Continue independent implementation and local validation in parallel. Use drafts
   only when the deployed workflow actually defers draft native jobs; otherwise
   retain a reviewable local branch until admission is available.
