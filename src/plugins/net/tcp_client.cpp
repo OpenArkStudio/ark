@@ -151,8 +151,7 @@ bool tcp_client::start_client(
                 {
                     return;
                 }
-                self->session_->add_buffer(s.data(), s.length());
-                parsed = self->session_->parse_buffer_to_msg();
+                parsed = self->session_->add_buffer(s.data(), s.length()) >= 0 && self->session_->parse_buffer_to_msg();
             }
             if (!parsed)
             {

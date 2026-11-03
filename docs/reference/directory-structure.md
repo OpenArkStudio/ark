@@ -8,23 +8,48 @@ library remains in the independent [arknet repository](https://github.com/OpenAr
 
 Build artifacts belong to each CMake build directory: `cmake -S . -B out/release` produces executables, plugins and archives under `out/release/bin`. Use another directory for Debug or sanitizer builds to keep their artifacts separate. A build with `-B build` continues to use `build/bin`. Deployment copies the selected build's artifacts into the runtime's `bin/` directory.
 
-| Path | Contents |
-| --- | --- |
-| `src/core/` | Core headers, implementation and CMake usage requirements |
-| `src/application/` | Application entry point and shutdown request |
-| `src/config/` | Application manifest declarations, shared compiled file/TOML reader and private diagnostics |
-| `src/proto/` | Protocol schemas and CMake rules for generated Protobuf messages |
-| `src/server/` | Built-in server applications |
-| `src/plugins/<name>/` | All official plugin headers, implementation and assembly |
-| `tests/` | Core, network and private database regressions |
-| `tests/network/` | Network and logging regressions |
-| `tests/consumer/` | An independent project consuming the public plugin interfaces |
-| `examples/` | [Capability examples](../guides/examples.md); hpp/cpp files stay adjacent |
-| `config/` | Application manifest, plugin and logger configuration samples |
-| `resources/` | Business data, workbooks and legacy resources |
-| `tools/` | Offline configuration tools and retained legacy tools |
-| `deployment/scripts/` | Single-application launch and explicit-PID stop helpers |
-| `deployment/` | Container recipes and Kubernetes examples |
+<FileTree>
+
+- src/
+  - core/
+    - ...
+  - application/
+    - ...
+  - config/
+    - ...
+  - proto/
+    - ...
+  - plugins/
+    - ...
+  - server/
+    - ...
+- tests/
+  - core/
+    - ...
+  - network/
+    - ...
+  - database/
+    - ...
+  - consumer/
+    - ...
+- examples/
+  - ...
+- config/
+  - ...
+- resources/
+  - ...
+- tools/
+  - ...
+- deployment/
+  - scripts/
+    - ...
+  - ...
+
+</FileTree>
+
+`src/core/` holds core headers, implementation and CMake requirements; `src/application/` contains the launcher and shutdown entry. `src/config/` keeps manifest declarations, the shared file/TOML reader and private diagnostics; `src/proto/` owns schemas and generated-message build rules. Official plugin headers, implementation and assembly stay together under `src/plugins/`; built-in server roles live under `src/server/`.
+
+`tests/` separates core, network and private database regressions from independent public-interface consumers. [Capability examples](../guides/examples.md) keep hpp/cpp files adjacent. Runtime configuration samples, business resources and offline/legacy tools live under `config/`, `resources/` and `tools/`. `deployment/` contains container/Kubernetes examples; `deployment/scripts/` supplies single-application launch and explicit-PID stop helpers.
 
 Include public headers as `<ark/plugin_manager.hpp>` or `<ark/net/tcp_client.hpp>`.
 Do not add implementation directories to an application's include path. Generated

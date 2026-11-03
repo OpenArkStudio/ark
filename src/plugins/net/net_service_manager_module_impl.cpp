@@ -18,6 +18,7 @@
  *
  */
 
+#include <map>
 #include <set>
 #include <stdexcept>
 #include <utility>
@@ -82,8 +83,17 @@ protected:
     void on_reg_server_call_back(const net_msg* msg, conv_id_t session_id);
 
 private:
-    // bus_id -> net_server_service - support multi-server in the same app
-    using server_service = shared_object_map<bus_id_t, net_server_service_impl>;
+    friend struct net_listener_startup_test_access;
+
+    struct listener
+    {
+        std::shared_ptr<net_server_service_impl> service;
+        bool published{};
+    };
+
+    // Retain complete candidates before start can acquire native IO. Unpublished
+    // owners survive an exception but never enter ordinary dispatch or getters.
+    using server_service = std::map<bus_id_t, listener>;
     server_service server_services_;
 
     server_service intra_services_;
@@ -235,21 +245,19 @@ void net_service_manager_module_impl::health_check(uint64_t timer_id, const guid
 }
 
 bool net_service_manager_module_impl::update() {
-    for (auto iter : server_services_)
+    for (const auto& [bus, entry] : server_services_)
     {
-        auto server_data_ptr = iter.second;
-        if (server_data_ptr != nullptr)
+        if (entry.published)
         {
-            server_data_ptr->update();
+            entry.service->update();
         }
     }
 
-    for (auto iter : intra_services_)
+    for (const auto& [bus, entry] : intra_services_)
     {
-        auto server_data_ptr = iter.second;
-        if (server_data_ptr != nullptr)
+        if (entry.published)
         {
-            server_data_ptr->update();
+            entry.service->update();
         }
     }
 
@@ -272,13 +280,13 @@ bool net_service_manager_module_impl::pre_shut() {
     {
         timer_module_->remove_timer(timer_id);
     }
-    for (const auto& [bus, service] : server_services_)
+    for (const auto& [bus, entry] : server_services_)
     {
-        service->shutdown();
+        entry.service->shutdown();
     }
-    for (const auto& [bus, service] : intra_services_)
+    for (const auto& [bus, entry] : intra_services_)
     {
-        service->shutdown();
+        entry.service->shutdown();
     }
     for (const auto& [type, service] : client_services_)
     {
@@ -306,24 +314,36 @@ bool net_service_manager_module_impl::create_server(
     const proc_config& self_proc = bus_module_->get_self_proc();
     auto func = [this, &self_proc, silent_timeout](
                     const endpoint& ep, shared_ptr<const msg_header> header, server_service& server_service) {
+        const auto bus_id = bus_module_->get_self_bus_id();
+        if (server_service.contains(bus_id))
+        {
+            return false;
+        }
         auto server_ptr = std::make_shared<net_server_service_impl>(get_plugin_manager());
-        bool ret = server_ptr->start(
+        auto server_interface_ptr = static_pointer_cast<net_server_service>(server_ptr);
+        server_interface_ptr->reg_reg_server_call_back(this, &net_service_manager_module_impl::on_reg_server_call_back);
+        const auto [entry, inserted] = server_service.emplace(bus_id, listener{server_ptr});
+        if (!inserted)
+        {
+            return false;
+        }
+        // start itself may throw after its native workers start. Keep the entire
+        // unpublished receiver and transport in this installed module on unwind.
+        const bool ret = server_ptr->start(
             header, self_proc.bus_id, ep, self_proc.thread_num, self_proc.max_connection, silent_timeout);
         if (ret)
         {
-            auto server_interface_ptr = static_pointer_cast<net_server_service>(server_ptr);
-            server_interface_ptr->reg_reg_server_call_back(
-                this, &net_service_manager_module_impl::on_reg_server_call_back);
-            server_service.insert(bus_module_->get_self_bus_id(), server_ptr);
-
+            entry->second.published = true;
             ARK_LOG_INFO("Start net server successful, url = {}", ep.to_string());
             return true;
         }
-        else
-        {
-            ARK_LOG_ERROR("Cannot start server net, url = {}", ep.to_string());
-            return false;
-        }
+        // Preserve the ordinary false-return cleanup that local destruction
+        // performed previously. Erase only after that same shutdown completes;
+        // an exception leaves the unpublished owner retained for failure exit.
+        server_ptr->shutdown();
+        server_service.erase(entry);
+        ARK_LOG_ERROR("Cannot start server net, url = {}", ep.to_string());
+        return false;
     };
 
     if (!self_proc.server_ep.get_ip().empty())
@@ -369,11 +389,13 @@ bool net_service_manager_module_impl::create_server(
 }
 
 std::shared_ptr<net_server_service> net_service_manager_module_impl::get_inter_net_server() {
-    return server_services_.find_value(bus_module_->get_self_bus_id());
+    const auto entry = server_services_.find(bus_module_->get_self_bus_id());
+    return entry != server_services_.end() && entry->second.published ? entry->second.service : nullptr;
 }
 
 std::shared_ptr<net_server_service> net_service_manager_module_impl::get_intra_net_server() {
-    return intra_services_.find_value(bus_module_->get_self_bus_id());
+    const auto entry = intra_services_.find(bus_module_->get_self_bus_id());
+    return entry != intra_services_.end() && entry->second.published ? entry->second.service : nullptr;
 }
 
 bool net_service_manager_module_impl::add_net_connection_bus(bus_id_t target_bus_id, std::shared_ptr<net> net_ptr) {

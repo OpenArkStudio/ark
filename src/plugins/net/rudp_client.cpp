@@ -133,8 +133,7 @@ bool rudp_client::start_client(
             }
             if (session && !session->need_remove())
             {
-                session->add_buffer(s.data(), s.length());
-                if (!session->parse_buffer_to_msg())
+                if (session->add_buffer(s.data(), s.length()) < 0 || !session->parse_buffer_to_msg())
                 {
                     self->client_->stop();
                 }

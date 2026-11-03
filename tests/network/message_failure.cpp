@@ -6,6 +6,23 @@
 
 #include "doctest.h"
 
+namespace {
+
+bool fail_next_receive_array{};
+
+char* allocate_receive_bytes(std::size_t size) {
+    if (fail_next_receive_array)
+    {
+        fail_next_receive_array = false;
+        return nullptr;
+    }
+    return new char[size];
+}
+
+} // namespace
+
+// This executable already isolates allocation overrides from transport tests.
+#define ARK_NEW_ARRAY(element_type, size) allocate_receive_bytes(size)
 #include <ark/net/net_event.hpp>
 #include <ark/net/net_msg.hpp>
 #include <ark/net/net_session.hpp>
@@ -220,4 +237,50 @@ TEST_CASE("Receive parsing rejects failed header, message and body allocations w
         CHECK(live_headers == 1);
     }
     CHECK(live_headers == 0);
+}
+
+TEST_CASE_TEMPLATE("Receive buffer append reports a rejected fragment and retains unread bytes", session_type,
+    ark::tcp_client_session, ark::ws_client_session, ark::rdp_client_session) {
+    auto prototype = std::make_shared<ark::s_msg_header>();
+    ark::s_msg_header header;
+    header.set_message_id(42);
+    header.set_message_length(4);
+    std::string prefix;
+    header.serialize_to_string(prefix);
+    session_type session(prototype, 1, nullptr, prefix.size());
+    REQUIRE(session.add_buffer(prefix) == static_cast<int>(prefix.size()));
+    REQUIRE(session.parse_buffer_to_msg());
+    const auto* unread = session.get_buffer();
+    fail_next_receive_array = true;
+    CHECK(session.add_buffer("body", 4) < 0);
+    CHECK_FALSE(fail_next_receive_array);
+    CHECK(session.get_buffer() == unread);
+    CHECK(session.get_buffer_len() == prefix.size());
+    fail_next_receive_array = true;
+    CHECK(session.add_buffer(std::string("body")) < 0);
+    CHECK_FALSE(fail_next_receive_array);
+    CHECK(session.get_buffer_len() == prefix.size());
+    ark::net_msg* message{};
+    CHECK_FALSE(session.pop_net_msg(message));
+    REQUIRE(session.add_buffer("body", 4) == static_cast<int>(prefix.size() + 4));
+    REQUIRE(session.parse_buffer_to_msg());
+    REQUIRE(session.pop_net_msg(message));
+    CHECK(message->get_msg_id() == 42);
+    CHECK(std::string(message->get_msg_data(), message->get_msg_length()) == "body");
+    ark::net_msg::release(message);
+}
+
+TEST_CASE("Receive buffer append reports null custom construction and growth") {
+    auto prototype = std::make_shared<ark::s_msg_header>();
+    fail_next_receive_array = true;
+    ark::tcp_client_session session(prototype, 1, nullptr, 8);
+    REQUIRE_FALSE(fail_next_receive_array);
+    REQUIRE(session.get_buffer_capacity() == 0);
+    fail_next_receive_array = true;
+    CHECK(session.add_buffer("x", 1) < 0);
+    CHECK_FALSE(fail_next_receive_array);
+    CHECK(session.get_buffer_len() == 0);
+    CHECK(session.get_buffer_capacity() == 0);
+    CHECK(session.add_buffer("x", 1) == 1);
+    CHECK(session.get_buffer_len() == 1);
 }

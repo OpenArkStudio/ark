@@ -200,6 +200,17 @@ add_dependencies(check-database ark_database_redis_sample_check ark_database_pub
     ark_database_public_plugin_restart_tests check-database-samples)
 
 if(ARKNET_ENABLE_SSL)
+    # Compile the installed consumer's native Windows entry in the existing
+    # database matrix without linking/running it or adding production DSOs.
+    add_library(ark_database_installed_consumer_compile OBJECT ../install/consumer/database.cpp)
+    set_property(TARGET ark_database_installed_consumer_compile PROPERTY INCLUDE_DIRECTORIES "")
+    set_property(TARGET ark_database_installed_consumer_compile PROPERTY LINK_LIBRARIES ark::mysql ark::redis)
+    target_compile_definitions(ark_database_installed_consumer_compile PRIVATE
+        ARK_DATABASE_TEST_LIBRARY_SUFFIX="${CMAKE_SHARED_LIBRARY_SUFFIX}")
+    if(UNIX AND NOT WIN32 AND NOT CYGWIN)
+        target_compile_definitions(ark_database_installed_consumer_compile PRIVATE ARK_DATABASE_TEST_DLADDR)
+    endif()
+    add_dependencies(check-database ark_database_installed_consumer_compile)
     target_link_libraries(ark_database_public_failure_service_tests PRIVATE ark::mysql)
     target_link_libraries(ark_database_public_service_tests PRIVATE ark::mysql)
     target_sources(ark_database_public_failure_service_tests PRIVATE
