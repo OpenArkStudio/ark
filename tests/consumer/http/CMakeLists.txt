@@ -1,5 +1,13 @@
 cmake_minimum_required(VERSION 3.21)
 project(ark_http_sdk_consumer LANGUAGES CXX)
+option(ARK_TEST_HTTP_INSTALLED "Run the HTTP consumer against an installed package and runtime plugin" OFF)
+if(ARK_TEST_HTTP_INSTALLED)
+    set(ARK_TEST_MODE http)
+    add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../install/consumer" installed)
+    add_custom_target(check-http-installed DEPENDS check-consumer)
+    return()
+endif()
+
 get_filename_component(ARK_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
 set(ARK_BUILD_APPLICATIONS OFF CACHE BOOL "Build applications" FORCE)
 set(ARK_BUILD_PROTO OFF CACHE BOOL "Build protocol messages" FORCE)
