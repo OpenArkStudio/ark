@@ -64,8 +64,7 @@ add_executable(my_service main.cpp)
 target_link_libraries(my_service PRIVATE ark::core ark::net)
 ```
 
-默认编译 `kernel`、`net`、`bus`、`utility`、`etcd_client` 插件。
-其他现有插件按需启用，并需要对应驱动依赖；目录迁移不代表这些集成已经通过验证。
+默认编译 `kernel`、`net`、`bus`、`utility` 插件。Consul、Etcd Client、Kafka 和 OSS SDK 已归档且默认关闭，保留显式启用选项。其他现有插件按需启用，并需要对应驱动依赖；目录迁移不代表这些集成已经通过验证。
 
 ## 命名与格式
 
@@ -170,6 +169,19 @@ OSS SDK 使用类型化构造，保留全部三个公开头和类型；公开类
 
 设置 `ARK_BUILD_APPLICATIONS=ON` 后，CMake 编译 Game、Login、Proxy、World、Master、Dir、Router 七个服务动态库。Simulate 源码采用相同创建方式，但仍不参与默认构建，并保留未受支持的 PhysX 3／MessagePack 集成配置失败。源码共置不代表该集成已经通过验证。定向创建检查及其边界见[服务器架构](../concepts/server-architecture_CN.md#验证服务端创建方式)。
 
+## 归档集成
+
+Consul、Etcd Client、Kafka 和 OSS SDK 已归档；未经用户明确重新启用，暂停功能开发。源码仍保留在下列目录，公开头、API target、运行时目标名与显式启用方式保留。四个运行时选项均默认 `OFF`；Timers、Module Lifecycle 和 Entity Operations 不需要这四项服务。保留的构造／导出检查用于兼容性检查，不代表外部服务验收；现有 CI 显式选中的兼容性检查仍保持启用。
+
+| 源码目录 | 公开 API／头路径前缀 | 运行时目标 | 显式启用选项 |
+| --- | --- | --- | --- |
+| `src/plugins/consul/` | `ark::consul`／`<ark/consul/...>` | `ark_consul_plugin` | `ARK_BUILD_PLUGIN_CONSUL=ON` |
+| `src/plugins/etcd_client/` | `ark::etcd_client`／`<ark/etcd_client/...>` | `ark_etcd_client_plugin` | `ARK_BUILD_PLUGIN_ETCD_CLIENT=ON` |
+| `src/plugins/kafka/` | `ark::kafka`／`<ark/kafka/...>` | `ark_kafka_plugin` | `ARK_BUILD_PLUGIN_KAFKA=ON` |
+| `src/plugins/osssdk/` | `ark::osssdk`／`<ark/osssdk/...>` | `ark_oss_sdk_plugin` | `ARK_BUILD_PLUGIN_OSSSDK=ON` |
+
+显式构建运行时插件仍需要 applications、Protobuf 及其现有依赖。下列构造说明记录这些归档插件保留的兼容边界。
+
 ## Consul 类型化构造
 
 **ABI／布局不兼容变更：** `consul_module_impl` 现在继承 `module_base<consul_module>`，`consul_plugin` 继承 `plugin_base<consul_plugin>`。Consul 与消费者必须一起重建。原有三个公开头、`<ark/consul/...>` 路径、公开类型与请求方法继续通过 `ark::consul` 提供，接口本身不变。C++ 插件边界不承诺跨编译器的 ABI 兼容性。
@@ -190,7 +202,7 @@ cmake --build build --target check-consul-construction --parallel 2
 
 私有 `etcd_client_factory.hpp` 返回 `std::unique_ptr<etcd_client_module>`，不映射、不安装。显式 `DllEntryPlugin`／`DllExitPlugin` 保留原有平台导出和日志初始化。注册沿用原接口 RTTI 键，显式使用 `module_update::disabled`；注销时销毁拥有的模块。HTTP 客户端查找、端点处理、超时参数顺序、租约请求与回调保持不变。原有 `keepalive` 空实现仍未完成，本次构造调整不增加协议或 Registry 能力。
 
-Etcd Client 保留应用构建默认选中的策略，可通过 `ARK_BUILD_PLUGIN_ETCD_CLIENT=OFF` 关闭。仅构建该插件时需要现有 `nlohmann_json` 软件包（vcpkg 的 `etcd-client` feature）。开启 `ARK_BUILD_APPLICATIONS=ON`、`ARK_BUILD_PLUGIN_ETCD_CLIENT=ON`、`ARK_BUILD_PROTO=ON` 与 `ARK_BUILD_CORE_TESTS=ON` 后，运行：
+已归档的 Etcd Client 默认 `OFF`，可通过 `ARK_BUILD_PLUGIN_ETCD_CLIENT=ON` 显式选择保留的运行时构建。仅构建该插件时需要现有 `nlohmann_json` 软件包（vcpkg 的 `etcd-client` feature）。开启 `ARK_BUILD_APPLICATIONS=ON`、`ARK_BUILD_PLUGIN_ETCD_CLIENT=ON`、`ARK_BUILD_PROTO=ON` 与 `ARK_BUILD_CORE_TESTS=ON` 后，运行：
 
 ```sh
 cmake --build build --target check-etcd-client-plugin --parallel 1

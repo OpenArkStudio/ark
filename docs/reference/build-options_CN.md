@@ -12,6 +12,10 @@
 | `ARK_BUILD_CONFIG_TOOL_TESTS` | 与 `ARK_BUILD_TESTS` 一致 | 导出器启用时构建原生导出与生成 C++ 头文件回归 |
 | `ARK_BUILD_EXAMPLES` | `ON` | 构建选中的示例 |
 | `ARK_BUILD_HTTP_EXAMPLE_TESTS` | 核心测试使用 Boost 且具备 HTTP／Net／Etcd Client API target 时为 `ON`，否则为 `OFF` | 通过独立服务替身编译并运行真实 HTTP 示例动态库；保留显式 `OFF` |
+| `ARK_BUILD_PLUGIN_CONSUL` | `OFF` | 已归档的 Consul 运行时插件，保留显式启用方式 |
+| `ARK_BUILD_PLUGIN_ETCD_CLIENT` | `OFF` | 已归档的 Etcd Client 运行时插件；需 `etcd-client` vcpkg feature |
+| `ARK_BUILD_PLUGIN_KAFKA` | `OFF` | 已归档的 Kafka 运行时插件；需原有驱动依赖 |
+| `ARK_BUILD_PLUGIN_OSSSDK` | `OFF` | 已归档的 OSS SDK 骨架，保留显式启用方式 |
 | `ARK_BUILD_PLUGIN_MYSQL` | `OFF` | 构建原生 MySQL 协程插件，要求 `ARKNET_ENABLE_SSL=ON` |
 | `ARK_BUILD_PLUGIN_REDIS` | `OFF` | 构建原生 Redis 协程插件，TLS 连接池需要开启 SSL |
 | `ARK_BUILD_DATABASE_TESTS` | `OFF` | 构建原生数据库及公开插件回归，要求显式设置 `ARKNET_SOURCE_DIR` |
@@ -26,13 +30,15 @@
 
 升级 arknet 时，使用新的构建目录，或显式修改缓存中的引用。`ARKNET_SOURCE_DIR` 非空时优先使用本地源码，不按固定 commit 获取依赖；具体操作见[升级 arknet](../get-started/installation_CN.md#升级-arknet)。
 
-官方插件选项采用 `ARK_BUILD_PLUGIN_<NAME>`。默认运行时插件为 `kernel`、`net`、`bus`、`utility` 和 `etcd_client`；启用 MySQL 或 Redis 构建选项可使用原生协程插件；本机协议测试与插件加载检查不能替代真实数据库部署验收。参见[项目结构](directory-structure_CN.md)、[协议生成](protobuf_CN.md)与[网络构建](../networking_CN.md)。
+官方插件选项采用 `ARK_BUILD_PLUGIN_<NAME>`。默认运行时插件为 `kernel`、`net`、`bus` 和 `utility`；启用 MySQL 或 Redis 构建选项可使用原生协程插件；本机协议测试与插件加载检查不能替代真实数据库部署验收。参见[项目结构](directory-structure_CN.md)、[协议生成](protobuf_CN.md)与[网络构建](../networking_CN.md)。
 
 开启 `ARK_BUILD_EXAMPLES` 时，[协程任务示例](../guides/tasks_CN.md)可以在关闭应用的情况下独立构建；默认启用的应用插件示例仍要求开启应用构建。HTTP 示例创建测试可以随核心测试单独运行，详见 [HTTP 示例](http_CN.md#旧-http-示例的类型化创建)。
 
 数据库插件的配置与接口见 [MySQL](mysql_CN.md) 和 [Redis](redis_CN.md)。
 
 可选的[配置导出器](../guides/tools_CN.md#构建原生导出器)支持关闭应用、Protobuf、核心测试与运行时配置读取器后单独构建，不配置框架网络或运行时插件。XLSX 使用 OpenXLSX 0.5.1，JSON 校验复用 `ark::kernel_json`。`check-config-tool` 执行原生回归与 CLI 检查。选择 vcpkg feature 只提供软件包，不会启用 CMake 目标。
+
+Consul、Etcd Client、Kafka 和 OSS SDK 已[归档](directory-structure_CN.md#归档集成)，暂停功能开发。默认示例不需要这四项服务；保留源码、公开头、CMake 目标及现有兼容性检查。已有缓存可能保留 Etcd Client 的旧 `ON` 值；使用新构建目录，或显式设置 `-DARK_BUILD_PLUGIN_ETCD_CLIENT=OFF`。
 
 ## 原生数据库插件
 
@@ -52,9 +58,9 @@ cmake --build build --target ark_mysql_plugin ark_redis_plugin
 | Kernel | 保留原有 38 个头，含 `kernel_plugin.hpp` |
 | Consul、Etcd Client、Kafka、OSS SDK、Physic | 保留原有 22 个公开头，含实现／装配头 |
 
-注册键、公开类型可见性与可选策略不变。[Kernel 类型化构造](kernel_CN.md#kernel-类型化构造)、[Consul 类型化构造](directory-structure_CN.md#consul-类型化构造)、[Etcd Client 类型化构造](directory-structure_CN.md#etcd-client-类型化构造)、[OSS SDK 类型化构造](directory-structure_CN.md#oss-sdk-类型化构造)、[Kafka 类型化构造](directory-structure_CN.md#kafka-类型化构造)改变公开类布局，须重建消费者；其私有工厂不映射、不安装。头映射不验证可选驱动集成。
+注册键、公开类型可见性与显式启用方式保留。[Kernel 类型化构造](kernel_CN.md#kernel-类型化构造)、[Consul 类型化构造](directory-structure_CN.md#consul-类型化构造)、[Etcd Client 类型化构造](directory-structure_CN.md#etcd-client-类型化构造)、[OSS SDK 类型化构造](directory-structure_CN.md#oss-sdk-类型化构造)、[Kafka 类型化构造](directory-structure_CN.md#kafka-类型化构造)改变公开类布局，须重建消费者；其私有工厂不映射、不安装。头映射不验证可选驱动集成。
 
-应用 CI 在 Linux、macOS、Windows 显式启用 Consul 与 Etcd Client，`check-core` 包含两者的构造、动态库生命周期与生产库导出检查。这些检查不需要 Consul 或 Etcd 服务，也不代表服务互通验收。Etcd Client 保留现有默认 `ON` 选择，可通过 `ARK_BUILD_PLUGIN_ETCD_CLIENT=OFF` 关闭。构建它需要现有 `nlohmann_json` 软件包（vcpkg 的 `etcd-client` feature）；关闭它不会向核心测试增加该 JSON 依赖。
+应用 CI 在 Linux、macOS、Windows 显式启用 Consul 与 Etcd Client，`check-core` 包含两者的构造、动态库生命周期与生产库导出检查。这些检查不需要 Consul 或 Etcd 服务，也不代表服务互通验收。已归档的 Etcd Client 默认 `OFF`，保留 `ARK_BUILD_PLUGIN_ETCD_CLIENT=ON` 显式启用方式。构建它需要现有 `nlohmann_json` 软件包（vcpkg 的 `etcd-client` feature）；关闭它不会向核心测试增加该 JSON 依赖。
 
 OSS SDK 保持可选且默认关闭（`ARK_BUILD_PLUGIN_OSSSDK=OFF`）。核心测试包含真实工厂／装配与受控 DSO 检查，无需 Protobuf 或运行时插件。选中运行时插件后，`check-oss-sdk-plugin` 还加载真实 DSO 并检查导出；`check-core` 包含当前条件下可用的检查。实现仍为 TODO 骨架，没有对象存储客户端或服务验收。参见 [OSS SDK 构造迁移](directory-structure_CN.md#oss-sdk-类型化构造)。
 

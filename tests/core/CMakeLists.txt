@@ -637,6 +637,19 @@ if(ARK_BUILD_PROTO AND TARGET ark_bus_plugin AND TARGET ark_net_plugin AND TARGE
             DEPENDS ark_static_services_tests ark_bus_plugin ark_net_plugin ark_utility_plugin
             USES_TERMINAL VERBATIM)
         add_dependencies(check-core check-static-services)
+        if(TARGET ark_kernel_plugin AND TARGET ark_http_plugin)
+            add_executable(ark_composed_services_tests ../app/static_services.cpp)
+            target_compile_definitions(ark_composed_services_tests PRIVATE ARK_COMPOSED_PLUGIN_TEST)
+            set_property(TARGET ark_composed_services_tests PROPERTY LINK_LIBRARIES ark::bus ark::kernel ark::http)
+            add_custom_target(check-system-composition
+                COMMAND $<TARGET_FILE:ark_composed_services_tests> "$<TARGET_FILE_DIR:ark_bus_plugin>"
+                    "${CMAKE_CURRENT_BINARY_DIR}/composed services runtime" --composed
+                    "${PROJECT_SOURCE_DIR}/examples/guest_room/resource/meta/entity_schema.json"
+                DEPENDS ark_composed_services_tests ark_bus_plugin ark_net_plugin ark_utility_plugin
+                    ark_kernel_plugin ark_http_plugin
+                USES_TERMINAL VERBATIM)
+            add_dependencies(check-core check-system-composition)
+        endif()
     endif()
 endif()
 

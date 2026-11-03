@@ -140,6 +140,15 @@ branch or worktree when the existing checkout contains uncommitted changes.
   Verify accepted source before claiming the new layout is available. Hot-update
   and Registry design discussions remain paused.
 
+## Archived integrations
+
+- Consul, Etcd Client, Kafka and OSS SDK are archived. Keep their existing source
+  locations, public header paths, CMake targets and explicit opt-in build options.
+  Their runtime plugins default to OFF and default examples require none of their
+  services. Retained construction/export checks are compatibility checks only.
+  Do not resume feature work, driver/protocol integration or modernization of
+  these four plugins unless the user explicitly re-enables that work.
+
 ## Process shutdown ownership
 
 - Applications/operators complete announcements, business-ingress closure, player
@@ -204,6 +213,10 @@ branch or worktree when the existing checkout contains uncommitted changes.
   verify that every older active candidate has started all of its native jobs.
   A waiting or missing native job is not a start; completion is not required.
   Unadmitted work in another repository does not block an eligible repository.
+- Across the coordinated work, maintain three delivery lines when independent,
+  authorized tasks have ready dependencies. Refill each completed line in the
+  confirmed priority order; do not repeat passed validation or expand unconfirmed
+  scope to fill a slot. This does not authorize scheduled or unattended automation.
 - Continue independent implementation and local validation in parallel. Use drafts
   only when the deployed workflow actually defers draft native jobs; otherwise
   retain a reviewable local branch until admission is available.

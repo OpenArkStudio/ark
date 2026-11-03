@@ -29,6 +29,8 @@
 - **Communication:** TCP, WebSocket, HTTP and RUDP through [arknet](https://github.com/OpenArkStudio/arknet), with bus identifiers and message routing.
 - **Tooling:** Protobuf messages and a native [CSV/XLSX-to-Entity JSON exporter](docs/guides/tools.md) with C++/C# field indices; the Python/XML importer remains available for legacy resources.
 
+Consul, Etcd Client, Kafka and OSS SDK are [archived integrations](docs/reference/directory-structure.md#archived-integrations). Their runtime plugins default to off; default examples require none of these services.
+
 ## Get started
 
 Build on Linux, macOS or Windows with **C++20**, **CMake 3.21+**, Ninja and vcpkg. Windows requires **Visual Studio 2022+**.

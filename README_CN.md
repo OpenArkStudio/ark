@@ -29,6 +29,8 @@
 - **进程通信**：通过 [arknet](https://github.com/OpenArkStudio/arknet) 使用 TCP、WebSocket、HTTP 和 RUDP，提供总线标识与消息路由。
 - **开发工具**：Protobuf 消息与原生 [CSV/XLSX 到 Entity JSON 导出器](docs/guides/tools_CN.md)，可生成 C++／C# 字段索引；Python/XML 导入器保留旧资源流程。
 
+Consul、Etcd Client、Kafka 和 OSS SDK 已[归档](docs/reference/directory-structure_CN.md#归档集成)，运行时插件默认关闭；默认示例不需要这四项服务。
+
 ## 开始使用
 
 支持 Linux、macOS 和 Windows，需要 **C++20**、**CMake 3.21+**、Ninja 和 vcpkg。Windows 需要 **Visual Studio 2022+**。

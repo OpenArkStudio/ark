@@ -12,16 +12,15 @@
 | 应用清单读取 | `config`（默认） | `tomlplusplus` → `tomlplusplus::tomlplusplus` |
 | 应用 | `application` | `args` → `taywee::args`、Protobuf、zlib、Zstandard |
 | 压缩回归 | `compression-tests` | zlib、Zstandard、LZ4；`ARK_BUILD_COMPRESSION_TESTS=ON` |
-| etcd 客户端插件 | `etcd-client` | `nlohmann-json` → `nlohmann_json::nlohmann_json` |
+| 已归档的 etcd 客户端插件 | `etcd-client` | `nlohmann-json` → `nlohmann_json::nlohmann_json` |
 | 原生数据库开发 | `database` | OpenSSL |
 
 spdlog 的导入 target 传递外部 fmt 依赖与编译定义。`ark::core` 的使用方会继承这两个包，
 无需手工添加头文件路径或定义。只有启用应用或 etcd 插件时，CMake 才分别查找 args 和 JSON；
 JSON 是 etcd 插件的私有依赖。
 
-应用构建默认启用 etcd 插件，因此使用
-`-DVCPKG_MANIFEST_FEATURES="application;boost;etcd-client"`。不构建 etcd 时，设置
-`-DARK_BUILD_PLUGIN_ETCD_CLIENT=OFF`，并省略 `etcd-client`。
+Consul、Etcd Client、Kafka 和 OSS SDK 已[归档](reference/directory-structure_CN.md#归档集成)，运行时插件默认关闭。应用构建使用
+`-DVCPKG_MANIFEST_FEATURES="application;boost"`；保留通过 `-DARK_BUILD_PLUGIN_ETCD_CLIENT=ON` 和额外 `etcd-client` feature 显式选择归档 Etcd Client 的方式。
 清单 feature 负责选择依赖包，`ARK_BUILD_*` 选项负责选择 CMake 构建目标，两者不会自动互相启用。
 
 只构建不读取 TOML 配置的核心时，可以通过 `-DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON`

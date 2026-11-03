@@ -1,6 +1,6 @@
 # Quick start
 
-Run Timers to check that the application can load plugins and enter the module lifecycle. It uses `ark_utility_plugin` and `timers_plugin`; it does not require Consul, a database service or Excel configuration generation.
+Run Timers to check that the application can load plugins and enter the module lifecycle. It uses `ark_utility_plugin` and `timers_plugin`; it does not require Consul, Etcd, Kafka, OSS, a database service or Excel configuration generation.
 
 <Steps>
 

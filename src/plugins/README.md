@@ -10,13 +10,15 @@ All official plugins co-locate their headers, implementation and assembly under 
 | net | TCP, RUDP, WebSocket and HTTP integration with arknet | On |
 | bus | Process relationships and message routing | On |
 | utility | IDs, timers, scheduling and compression | On |
-| etcd_client | etcd service access | On |
+| etcd_client | Archived: etcd service access | Off |
 | [http](../../docs/reference/http.md) | Routed HTTP server module | Off |
-| consul | Consul service discovery | Off |
-| kafka | Kafka messaging | Off |
-| osssdk | OSS SDK scaffold | Off |
+| consul | Archived: Consul service discovery | Off |
+| kafka | Archived: Kafka messaging | Off |
+| osssdk | Archived: OSS SDK scaffold | Off |
 | physic | Physics services | Off |
 | mysql, redis | Native arknet database pools and public coroutine APIs | Off |
+
+Consul, Etcd Client, Kafka and OSS SDK are archived, with feature development paused. Their source locations, public header paths, API/runtime targets and explicit opt-in options remain available; default examples require none of their services. Feature work resumes only when explicitly re-enabled by the user. See [archived integrations](../../docs/reference/directory-structure.md#archived-integrations).
 
 Use `ARK_BUILD_PLUGIN_<NAME>` to select a plugin. Optional integrations require their own dependencies and verification. [MySQL](../../docs/reference/mysql.md) provides queries, prepared statements and transactions; [Redis](../../docs/reference/redis.md) provides commands and ordered pipelines. Both use named configuration and manager-owned coroutine tasks. See [database plugin activation](../../docs/reference/build-options.md#native-database-plugins) for build and runtime selection. Lua and Actor integrations remain planned work.
 
