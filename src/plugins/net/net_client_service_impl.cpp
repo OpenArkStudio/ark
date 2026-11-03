@@ -21,6 +21,7 @@
 #include "ark/net/net_client_service_impl.hpp"
 #include "ark/net/rudp_client.hpp"
 #include "ark/net/tcp_client.hpp"
+#include "ark/proto.hpp"
 #include "ark/time/date_time.hpp"
 
 namespace ark {

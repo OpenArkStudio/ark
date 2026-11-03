@@ -189,7 +189,7 @@ check. Required CI's archive operations remain optional.
 
 
 Windows ABI diagnostic tests use synthetic records in the format checked against
-local installed Asio, rapidxml and Protobuf metadata. They cover exact-byte package
+local installed Asio, spdlog and Protobuf metadata. They cover exact-byte package
 ABI hashing, fixed field-value fingerprints, CRLF, malformed/duplicate records,
 missing metadata, the fixed installed paths, symbolic links and the 64 KiB limit.
 CLI tests ensure raw values, unknown names, absolute paths and inherited secrets

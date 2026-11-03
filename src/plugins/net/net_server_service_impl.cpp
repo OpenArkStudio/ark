@@ -21,6 +21,7 @@
 #include "ark/net/net_server_service_impl.hpp"
 #include "ark/net/rudp_server.hpp"
 #include "ark/net/tcp_server.hpp"
+#include "ark/proto.hpp"
 
 namespace ark {
 

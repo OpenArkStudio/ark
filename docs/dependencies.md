@@ -8,7 +8,7 @@ source tree or dependency submodule initialization.
 
 | Build scope | vcpkg feature | Package and CMake target |
 | --- | --- | --- |
-| Core | always installed | `spdlog` → `spdlog::spdlog_header_only`; `readerwriterqueue` → `readerwriterqueue::readerwriterqueue`; `rapidxml` headers |
+| Core | always installed | `spdlog` → `spdlog::spdlog_header_only`; `readerwriterqueue` → `readerwriterqueue::readerwriterqueue` |
 | Boost networking | `boost` (default) | `boost-asio`, `boost-beast` |
 | Manifest reader | `config` (default) | `tomlplusplus` → `tomlplusplus::tomlplusplus` |
 | Applications | `application` | `args` → `taywee::args`, Protobuf, zlib, Zstandard |

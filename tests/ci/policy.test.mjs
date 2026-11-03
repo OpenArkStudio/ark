@@ -186,7 +186,7 @@ test('plugin index neighbors, build scripts and mixed code cannot inherit docume
   const paths = ['src/plugins/readme.md', 'src/plugins/README_CN.MD', 'src/plugins/README.md.bak',
     'src/plugins/README_CN.md.js', 'src/plugins/net/README.md', 'src/plugins/detail/README_CN.md',
     'src/README.md', 'src/other/README_CN.md', 'src/plugins/CMakeLists.txt', 'src/plugins/build.cmake',
-    'src/plugins/index.mjs', 'src/plugins/update.sh', 'src/main.cpp', 'include/ark/xml.hpp',
+    'src/plugins/index.mjs', 'src/plugins/update.sh', 'src/main.cpp', 'src/core/logger.hpp',
     '.github/workflows/ci.yml', '.github/scripts/ci-policy.mjs'];
   for (const file of paths) {
     assert.equal(isDocumentationPath(file), false, file);
@@ -464,7 +464,7 @@ test('this CI policy change requires all native jobs and the required gate rejec
 });
 
 test('code, build, dependency, CI and unknown paths cannot skip native regressions', () => {
-  const paths = ['include/ark/xml.hpp', 'CMakeLists.txt', 'cmake/FindZstd.cmake', 'vcpkg.json', '.gitmodules',
+  const paths = ['src/core/logger.hpp', 'CMakeLists.txt', 'cmake/FindZstd.cmake', 'vcpkg.json', '.gitmodules',
     '.github/workflows/ci.yml', '.github/scripts/ci-policy.mjs', 'tests/core/templates.cpp', 'scripts/format.sh',
     'LICENSE', 'README_CN.md.bak', 'docs/example.cpp', 'docs/example.h', 'docs/message.proto', 'docs/CMakeLists.txt',
     'docs/build.cmake', 'docs/CMakePresets.json', 'docs/CMakeUserPresets.json', 'docs/CMakeCache.txt',

@@ -75,7 +75,7 @@ Windows Applications 基线。仅在 main 推送修改 `vcpkg.json`、`vcpkg-con
 
 ### Windows ABI 诊断
 
-依赖配置及原有的归档保存步骤之后，Windows Applications 为 Asio、rapidxml 和 Protobuf
+依赖配置及原有的归档保存步骤之后，Windows Applications 为 Asio、spdlog 和 Protobuf
 记录有界的 JSON 诊断。脚本只读取
 `ci-build/vcpkg_installed/x64-windows/share/<port>/vcpkg_abi_info.txt`，
 不搜索目录，也不调用构建工具。符号链接、非普通文件、格式错误、triplet 不符或超过 64 KiB 的文件均被拒绝。

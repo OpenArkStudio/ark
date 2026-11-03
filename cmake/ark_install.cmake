@@ -54,12 +54,11 @@ write_basic_package_version_file("${CMAKE_CURRENT_BINARY_DIR}/arkConfigVersion.c
 install(EXPORT arkTargets NAMESPACE ark:: DESTINATION "${ark_package_dir}")
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/arkConfig.cmake"
     "${CMAKE_CURRENT_BINARY_DIR}/arkConfigVersion.cmake"
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindRapidXML.cmake"
     DESTINATION "${ark_package_dir}")
 install(FILES LICENSE README.md README_CN.md DESTINATION "${CMAKE_INSTALL_DATADIR}/ark")
 # These are samples, not a deployment populated with business data or credentials.
 install(DIRECTORY config/ DESTINATION "${CMAKE_INSTALL_DATADIR}/ark/config"
-    FILES_MATCHING PATTERN "*.toml" PATTERN "*.conf" PATTERN "*.xml")
+    FILES_MATCHING PATTERN "*.toml")
 
 add_custom_target(check-install
     COMMAND "${CMAKE_COMMAND}"
