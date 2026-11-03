@@ -171,8 +171,7 @@ bool websocket_server::start_server(std::shared_ptr<const msg_header> head, bus_
                     return;
                 }
 
-                session->add_buffer(s.data(), s.length());
-                parsed = session->parse_buffer_to_msg();
+                parsed = session->add_buffer(s.data(), s.length()) >= 0 && session->parse_buffer_to_msg();
             }
             if (!parsed)
             {

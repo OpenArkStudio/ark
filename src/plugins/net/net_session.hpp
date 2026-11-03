@@ -20,7 +20,9 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
+#include <limits>
 #include <memory>
 
 #include <arknet/http/http_session.hpp>
@@ -84,13 +86,16 @@ public:
     }
 
     int add_buffer(const char* data, size_t len) {
-        buffer_.write(data, len);
-        return (int)buffer_.get_length();
+        if (!buffer_.write(data, len))
+        {
+            return -1;
+        }
+        const auto length = std::min(buffer_.get_length(), static_cast<size_t>(std::numeric_limits<int>::max()));
+        return static_cast<int>(length);
     }
 
     int add_buffer(std::string const& data) {
-        buffer_.write(data.data(), data.length());
-        return (int)buffer_.get_length();
+        return add_buffer(data.data(), data.length());
     }
 
     size_t remove_buffer(size_t len) {
