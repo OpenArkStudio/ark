@@ -95,16 +95,16 @@ Existing CMake caches retain earlier values, including Etcd Client's former `ON`
 
 The repository's `ARKNET_REVISION` default selects a fixed arknet commit when CMake fetches the library. Updating ark's source does not replace an `ARKNET_REVISION` value already saved in an existing `CMakeCache.txt`.
 
-Use a new build directory and repeat the configure command above to take the repository default. To retain an existing build directory, replace `RELEASE_COMMIT` with the full 40-character commit of the selected [arknet release](https://github.com/OpenArkStudio/arknet/releases), then explicitly update the cached value:
+Use a new build directory and repeat the configure command above to take the repository default. To retain an existing build directory, clear only the cached revision so CMake takes the default from the updated ark source:
 
 ```sh
-cmake -S . -B app-build -DARKNET_REVISION=RELEASE_COMMIT
+cmake -U ARKNET_REVISION -S . -B app-build
 cmake --build app-build --parallel 2
 ```
 
-The existing build directory retains its other configured options. Confirm `ARKNET_REVISION` in `app-build/CMakeCache.txt`; multi-configuration generators still require `--config Release` when building.
+The existing build directory retains its other configured options. Confirm `ARKNET_REVISION` in `app-build/CMakeCache.txt`; multi-configuration generators still require `--config Release` when building. To choose another revision explicitly, set `ARKNET_REVISION` to its full 40-character commit SHA. The [dependency reference](../dependencies.md) identifies the repository pin and whether it belongs to a published release.
 
-A nonempty `ARKNET_SOURCE_DIR` uses that local checkout instead of fetching `ARKNET_REVISION`. Update the checkout explicitly for development. To return to the pinned fetch, configure with `-DARKNET_SOURCE_DIR=` and the desired `-DARKNET_REVISION=RELEASE_COMMIT`. These remain optional CMake overrides; the CI policy compares the repository defaults, not a developer's cache or local checkout.
+A nonempty `ARKNET_SOURCE_DIR` uses that local checkout instead of fetching `ARKNET_REVISION`. Update the checkout explicitly for development. To return to the repository's pinned fetch, configure with `-DARKNET_SOURCE_DIR=` and `-U ARKNET_REVISION`. These remain optional CMake overrides; the CI policy compares the repository defaults, not a developer's cache or local checkout.
 
 ## Install and consume the CMake package
 
@@ -124,6 +124,8 @@ arknet remains an independent dependency: install a compatible arknet 0.2.3 or l
 Configuration uses TOML; Entity definitions and business resources use JSON. The XML wrapper `<ark/xml.hpp>` and RapidXML dependency are retired. When migrating, rebuild applications and plugins together and install into a clean prefix: installing over an older package does not remove its obsolete headers.
 
 To build against an already installed arknet instead of fetching/building its source, configure with `-DARK_USE_INSTALLED_ARKNET=ON`; this takes precedence over `ARKNET_SOURCE_DIR` and `ARKNET_REVISION`. Existing source builds remain supported.
+
+The package version check does not identify an exact source commit. To retain the fixes in ark's source pin, install arknet from that same commit into a clean prefix and select it through `CMAKE_PREFIX_PATH`. A package from an older release can satisfy the 0.2.3 version check without containing later fixes; confirm its source revision separately and rebuild consumers.
 
 An independent application's `CMakeLists.txt` uses the same aliases as source consumption:
 

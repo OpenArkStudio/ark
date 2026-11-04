@@ -75,7 +75,7 @@ option(ARK_BUILD_DATABASE_TESTS "Build private native database integration devel
 option(ARK_BUILD_BENCHMARKS "Build standalone benchmark programs" OFF)
 option(ARK_BUILD_DATABASE_BENCHMARKS "Build private native database callback/coroutine benchmark" OFF)
 set(ARKNET_SOURCE_DIR "" CACHE PATH "Use a local arknet checkout for development")
-set(ARKNET_REVISION "a0dfe09cd543e75cfb5996e537ce2fa49f2a758f" CACHE STRING "Pinned arknet revision")
+set(ARKNET_REVISION "d8ff34162cd1b490683f579ef23431068d8b7d8b" CACHE STRING "Pinned arknet revision")
 if((ARK_BUILD_DATABASE_TESTS OR ARK_BUILD_DATABASE_BENCHMARKS) AND NOT ARKNET_SOURCE_DIR)
     message(FATAL_ERROR "Database development targets require an explicit ARKNET_SOURCE_DIR with native database clients")
 endif()

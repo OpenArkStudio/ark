@@ -348,7 +348,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: OpenArkStudio/arknet
-          ref: a0dfe09cd543e75cfb5996e537ce2fa49f2a758f
+          ref: d8ff34162cd1b490683f579ef23431068d8b7d8b
           path: ci-arknet
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
