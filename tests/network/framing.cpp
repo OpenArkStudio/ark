@@ -209,3 +209,89 @@ TEST_CASE("A decoded wire header cannot raise the configured receive limit") {
     ark::net_msg* message = nullptr;
     CHECK_FALSE(session.pop_net_msg(message));
 }
+
+TEST_CASE_TEMPLATE("Native framing retains every truncated header until its binary body is complete", header_type,
+    ark::s_msg_header, ark::ss_msg_header) {
+    const std::string payload("a\0b", 3);
+    header_type header;
+    header.set_message_id(42);
+    header.set_message_length(static_cast<std::uint32_t>(payload.size()));
+    std::string bytes;
+    header.serialize_to_string(bytes);
+    const auto header_size = bytes.size();
+    bytes += payload;
+    for (std::size_t split = 0; split < header_size; ++split)
+    {
+        INFO("split=", split, ", header_size=", header_size);
+        ark::tcp_client_session session(std::make_shared<header_type>(), 1, nullptr, 1);
+        REQUIRE(session.add_buffer(bytes.data(), split) >= 0);
+        REQUIRE(session.parse_buffer_to_msg());
+        CHECK(session.get_buffer_len() == split);
+        ark::net_msg* message{};
+        CHECK_FALSE(session.pop_net_msg(message));
+        REQUIRE(session.add_buffer(bytes.data() + split, bytes.size() - split - 1) >= 0);
+        REQUIRE(session.parse_buffer_to_msg());
+        CHECK(session.get_buffer_len() == bytes.size() - 1);
+        CHECK_FALSE(session.pop_net_msg(message));
+        REQUIRE(session.add_buffer(bytes.data() + bytes.size() - 1, 1) >= 0);
+        REQUIRE(session.parse_buffer_to_msg());
+        REQUIRE(session.pop_net_msg(message));
+        CHECK(message->get_msg_id() == 42);
+        CHECK(std::string(message->get_msg_data(), message->get_msg_length()) == payload);
+        ark::net_msg::release(message);
+        CHECK_FALSE(session.pop_net_msg(message));
+        CHECK(session.get_buffer_len() == 0);
+    }
+}
+
+TEST_CASE_TEMPLATE("Native framing rejects high-bit and maximum wire body lengths before waiting for a body",
+    header_type, ark::s_msg_header, ark::ss_msg_header) {
+    for (const std::uint32_t length : {std::uint32_t{ark::ark_msg_max_length + 1}, std::uint32_t{0x7fffffff},
+             std::uint32_t{0x80000000}, std::numeric_limits<std::uint32_t>::max()})
+    {
+        INFO("length=", length);
+        header_type header;
+        header.set_message_length(length);
+        std::string bytes;
+        header.serialize_to_string(bytes);
+        ark::tcp_client_session session(std::make_shared<header_type>(), 1, nullptr, 1);
+        REQUIRE(session.add_buffer(bytes) >= 0);
+        CHECK_FALSE(session.parse_buffer_to_msg());
+        CHECK(session.get_buffer_len() == bytes.size());
+        CHECK_FALSE(session.need_remove());
+        ark::net_msg* message{};
+        CHECK_FALSE(session.pop_net_msg(message));
+    }
+}
+
+TEST_CASE_TEMPLATE("Native framing preserves maximum binary and empty bodies in a coalesced batch", header_type,
+    ark::s_msg_header, ark::ss_msg_header) {
+    std::string payload(ark::ark_msg_max_length, '\0');
+    for (std::size_t index = 0; index < payload.size(); ++index)
+    {
+        payload[index] = static_cast<char>(index % 256);
+    }
+    header_type header;
+    header.set_message_id(42);
+    header.set_message_length(static_cast<std::uint32_t>(payload.size()));
+    std::string bytes;
+    header.serialize_to_string(bytes);
+    bytes += payload;
+    header.set_message_id(43);
+    header.set_message_length(0);
+    header.serialize_to_string(bytes);
+    ark::tcp_client_session session(std::make_shared<header_type>(), 1, nullptr, 1);
+    REQUIRE(session.add_buffer(bytes) >= 0);
+    REQUIRE(session.parse_buffer_to_msg());
+    ark::net_msg* message{};
+    REQUIRE(session.pop_net_msg(message));
+    CHECK(message->get_msg_id() == 42);
+    CHECK(std::string(message->get_msg_data(), message->get_msg_length()) == payload);
+    ark::net_msg::release(message);
+    REQUIRE(session.pop_net_msg(message));
+    CHECK(message->get_msg_id() == 43);
+    CHECK(message->get_msg_length() == 0);
+    ark::net_msg::release(message);
+    CHECK_FALSE(session.pop_net_msg(message));
+    CHECK(session.get_buffer_len() == 0);
+}
