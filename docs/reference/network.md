@@ -109,6 +109,13 @@ WebSocket and RUDP sends and broadcasts check the supplied header's limit and
 guard total-size arithmetic. Receive-buffer initial capacity remains independent
 of this message limit.
 
+Native CS/SS body lengths are unsigned 32-bit fields. High-bit and maximum
+wire values exceed the default limit and are rejected from the header alone,
+before waiting for or allocating a body. An incomplete header or accepted body
+remains buffered without queuing a partial message. Complete coalesced frames,
+including zero-length bodies, are queued in wire order. The socket-free
+`check-net-message` regressions cover both native headers at these boundaries.
+
 **Upgrade:** the additional virtual method changes the `msg_header` vtable ABI.
 Rebuild Net, protocol-header implementations and every consumer/plugin together;
 do not mix old and new binaries. Native CS/SS wire layouts and their 4096-byte
