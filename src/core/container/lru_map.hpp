@@ -34,6 +34,26 @@ public:
         capacity_ = capacity > 0 ? capacity : 1024;
     }
 
+    lru_map(const lru_map& other)
+        : kv_(other.kv_)
+        , ki_(other.ki_)
+        , kl_(other.kl_)
+        , capacity_(other.capacity_) {
+        for (auto it = kl_.begin(); it != kl_.end(); ++it)
+        {
+            ki_.find(*it)->second = it;
+        }
+    }
+
+    lru_map& operator=(const lru_map& other) {
+        if (this != &other)
+        {
+            lru_map candidate(other);
+            swap(candidate);
+        }
+        return *this;
+    }
+
     ~lru_map() = default;
 
     bool empty() const {
@@ -71,15 +91,40 @@ public:
             return;
         }
 
-        kl_.push_front(key);
-        ki_[key] = kl_.begin();
-
-        if (kv_.size() > capacity_)
+        try
         {
-            key_type k = kl_.back();
-            kl_.pop_back();
-            kv_.erase(k);
-            ki_.erase(k);
+            kl_.push_front(key);
+            try
+            {
+                const auto index = ki_.emplace(key, kl_.begin()).first;
+                try
+                {
+                    if (kv_.size() > capacity_)
+                    {
+                        // Resolve both lookups before removing any existing entry.
+                        const auto oldest_value = kv_.find(kl_.back());
+                        const auto oldest_index = ki_.find(kl_.back());
+                        kl_.pop_back();
+                        kv_.erase(oldest_value);
+                        ki_.erase(oldest_index);
+                    }
+                }
+                catch (...)
+                {
+                    ki_.erase(index);
+                    throw;
+                }
+            }
+            catch (...)
+            {
+                kl_.pop_front();
+                throw;
+            }
+        }
+        catch (...)
+        {
+            kv_.erase(r.first);
+            throw;
         }
     }
 

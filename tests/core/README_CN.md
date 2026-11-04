@@ -203,3 +203,7 @@ XXTEA 用例覆盖精确长度分配的短密钥、16 字节与内嵌零字节�
 `check-startup-cleanup` 验证一个预登记 owning capsule、私有时间轮、四阶段失败、一次性清理与持续分配故障紧急退出；六种隔离分配故障区分调用前失败与启动内部失败，另设异常终止对照用例检查诊断与失败退出。额外验证单对象及数组的 `new` 和 `new (std::nothrow)` 分配与释放匹配，并覆盖构造异常、持续分配失败返回空指针。启用应用时，还运行真实 launcher／独立测试 DSO 的 14 个场景。它不接入共享 Utility 或 IO，也不证明业务回滚；见[启动失败清理](../../docs/project/startup-failure-cleanup_CN.md)。
 
 `check-scalar-stream-allocation` 独立运行全局分配失败注入，逐个遍历标量发布端构造、基线复制、更新、首次／替换基线接收和增量接收中的分配。失败保留已提交状态与旧拥有值，重试仅推进一次修订；用例包含长／二进制字符串及全部标量类型，已纳入 `check-entity-stream`。
+
+`check-lru-map` 纳入 `check-core`，覆盖独立复制链接、重复插入、交换后的容量／
+访问顺序、键复制异常，以及插入和复制赋值各分配点的隔离失败。失败操作保留原有
+条目、淘汰顺序和值的拥有关系。见 [LRU 缓存契约](../../docs/project/code-style_CN.md#lru-缓存复制与插入)。

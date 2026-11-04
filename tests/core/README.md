@@ -264,3 +264,9 @@ for the public-layout rebuild requirement and service-validation limits.
 `check-startup-cleanup` verifies one prepared owning capsule, a private wheel, four-stage failure, one-shot cleanup and emergency exit under persistent allocation failure. Six isolated allocation-failure cases distinguish failures before call entry from failures inside startup; a separate termination control checks the diagnostic and failure exit. Scalar/array throwing and nothrow allocation probes also verify matching deallocation, constructor-failure cleanup and persistent null results. Application builds also run 14 actual-launcher/separate-DSO cases. Shared Utility/IO and business rollback remain outside this scope; see [startup-failure cleanup](../../docs/project/startup-failure-cleanup.md).
 
 `check-scalar-stream-allocation` isolates global allocation failure from ordinary tests and visits every allocation in scalar publisher construction, baseline copying, updates, first/replacement baseline reception and delta reception. Each failure preserves the committed state and retained values; retry advances exactly one revision. It is included in `check-entity-stream` and exercises long/binary strings plus all scalar alternatives.
+
+`check-lru-map`, included in `check-core`, covers independent copy links, duplicate
+insertion, capacity/recency behavior after swap, key-copy exceptions and isolated
+allocation failures at every insertion and copy-assignment allocation. Failed
+operations preserve existing entries, eviction order and retained value owners.
+See [LRU cache contracts](../../docs/project/code-style.md#lru-cache-copying-and-insertion).
