@@ -208,6 +208,18 @@ add_custom_target(check-buffer
     USES_TERMINAL VERBATIM)
 add_dependencies(check-core check-buffer)
 
+# Allocation injection must not affect other Core runners.
+add_executable(ark_lru_map_tests main.cpp lru_maps.cpp)
+set_property(TARGET ark_lru_map_tests PROPERTY LINK_LIBRARIES ark::core)
+add_executable(ark_lru_map_failure_tests main.cpp lru_map_failure.cpp)
+set_property(TARGET ark_lru_map_failure_tests PROPERTY LINK_LIBRARIES ark::core)
+add_custom_target(check-lru-map
+    COMMAND $<TARGET_FILE:ark_lru_map_tests>
+    COMMAND $<TARGET_FILE:ark_lru_map_failure_tests>
+    DEPENDS ark_lru_map_tests ark_lru_map_failure_tests
+    USES_TERMINAL VERBATIM)
+add_dependencies(check-core check-lru-map)
+
 # Isolate timer allocation hooks and Release-mode assertion fallback checks.
 add_executable(ark_timer_tests main.cpp timers.cpp)
 set_property(TARGET ark_timer_tests PROPERTY LINK_LIBRARIES ark::core)

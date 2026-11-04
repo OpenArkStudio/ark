@@ -202,6 +202,30 @@ keys that reject copying, exact raw-pointer destruction and shared/borrowed valu
 
 Check `it != values.end()` before incrementing or calling `get_key()` / `get_data()`. Empty ranges have `begin() == end()`; do not dereference or increment end. Advancing one iterator does not change a saved prior position, but removing its node, clearing or destroying its container ends that borrowed lifetime. The custom iterator and const-iteration APIs are otherwise unchanged. Core header checks instantiate scalar and pointer mappings; `check-core` covers saved postfix values, storage mutation, empty/end comparisons and the existing `array_map` lookup path.
 
+## LRU cache copying and insertion
+
+`<ark/container/lru_map.hpp>` stores values, recency keys and internal links as one
+cache. Copies retain capacity and recency order, rebuild links into their own key
+list, and remain usable after the source changes or is destroyed. Mapped values
+retain their normal copy semantics, including shared ownership for `shared_ptr`.
+Copying prepares empty container bookkeeping before rebuilding entries and links
+from the oldest entry to the newest. Copy assignment prepares the replacement
+before releasing existing entries; exceptions that propagate from allocation or
+key/value copying leave both caches intact. This does not guarantee recovery from
+allocation inside a standard-library `noexcept` path: MSVC Debug, for example,
+allocates a hash-table iterator proxy in such a constructor.
+
+Insertion of an existing key retains its original value and recency. Insertion
+failure from allocation or key/value copying propagates the exception and removes
+the incomplete entry; existing values and eviction order remain intact. `find()`
+still promotes a found entry and successful insertion evicts the least recently
+used entry when full. Public signatures and class fields are unchanged; rebuild
+header consumers to use the fix. `check-lru-map`, also included in `check-core`,
+covers independent copies, eviction, key-copy exceptions and isolated allocation
+failures. Insertion injects failure at every allocation. Copying injects at every
+content allocation starting with the first source lookup, after empty container
+bookkeeping is ready; it does not inject into MSVC's `noexcept` proxy construction.
+
 ## POD array storage and failure contract
 
 `<ark/array_pod.hpp>` retains its `void` mutation APIs and inline/heap storage layout. Use it for trivial scalar or pointer elements with a positive inline capacity; it does not manage nontrivial element lifetimes. `push_back`, fill `resize` and `insert` snapshot an element argument before growing or shifting storage, so an argument such as `values[0]` keeps its original value. Growth can still invalidate borrowed element pointers and references.
