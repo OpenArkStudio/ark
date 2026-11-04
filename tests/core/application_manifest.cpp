@@ -508,6 +508,42 @@ DOCTEST_TEST_CASE("TOML supports UTF8 values and native Unicode filenames and re
     check_error(files.write(invalid));
 }
 
+DOCTEST_TEST_CASE("raw NUL diagnostics count UTF8 code points and ignore the leading BOM") {
+    manifest_files files;
+
+    struct example
+    {
+        std::string_view prefix;
+        std::size_t line;
+        std::size_t column;
+    };
+
+    const std::array<example, 6> examples = {{{"# ascii ", 1, 9}, {"\xef\xbb\xbf# ascii ", 1, 9}, {"# 配置😀 ", 1, 7},
+        {"\xef\xbb\xbf# 配置😀 ", 1, 7}, {"[application]\nplugin_config_dir = '配置😀' ", 2, 27},
+        {"[application]\r\nplugin_config_dir = '配置😀' ", 2, 27}}};
+    for (const auto& entry : examples)
+    {
+        DOCTEST_CAPTURE(entry.prefix);
+        auto contents = std::string(entry.prefix);
+        contents += '\0';
+        contents += "SECRET_SENTINEL";
+        const auto path = files.write(contents);
+        try
+        {
+            static_cast<void>(ark::load_application_manifest(path));
+            DOCTEST_FAIL("raw NUL accepted");
+        }
+        catch (const ark::application_manifest_error& error)
+        {
+            DOCTEST_CHECK(error.path() == path);
+            DOCTEST_CHECK(error.line() == entry.line);
+            DOCTEST_CHECK(error.column() == entry.column);
+            DOCTEST_CHECK(std::string(error.what()).find("manifest contains NUL") != std::string::npos);
+            DOCTEST_CHECK(std::string(error.what()).find("SECRET_SENTINEL") == std::string::npos);
+        }
+    }
+}
+
 DOCTEST_TEST_CASE("Missing files and unreadable directory inputs fail without partial results") {
     manifest_files files;
     check_error(files.path("missing.toml"), false);
