@@ -44,14 +44,17 @@ std::string error_message(const std::string& path, const std::string& reason, st
     const std::string& path, const std::string& reason, std::string_view contents, std::size_t offset) {
     std::size_t line = 1;
     std::size_t column = 1;
-    for (std::size_t index = 0; index < offset && index < contents.size(); ++index)
+    // Match the TOML parser's source positions: columns count code points,
+    // and the optional UTF-8 BOM is not part of the first line.
+    const std::size_t begin = contents.starts_with("\xef\xbb\xbf") ? 3 : 0;
+    for (std::size_t index = begin; index < offset && index < contents.size(); ++index)
     {
         if (contents[index] == '\n')
         {
             ++line;
             column = 1;
         }
-        else
+        else if ((static_cast<unsigned char>(contents[index]) & 0xc0u) != 0x80u)
         {
             ++column;
         }

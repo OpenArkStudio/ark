@@ -30,6 +30,8 @@ name = "timers_plugin"
 
 Unknown fields, incorrect types, duplicate or empty plugin names, invalid TOML/UTF-8 and embedded NUL characters are rejected before plugin startup. Diagnostics contain the path and available line/column, without printing configuration values.
 
+Source positions use one-based lines and Unicode code point columns, including raw NUL diagnostics after UTF-8 text. A leading UTF-8 BOM does not advance the column. File/path errors without a source position return zero from `application_manifest_error::line()` and `column()`.
+
 Directory strings are preserved exactly. Relative paths use the process working directory. The manager appends filenames by string concatenation, so directory prefixes normally need a trailing `/` or platform-appropriate separator. The loader does not add separators or require configuration files for empty `config` values.
 
 The order of `[[plugins]]` entries does **not** define module initialization order: the manager still consumes an unordered map. This format introduces no dependency ordering or live reload mechanism.

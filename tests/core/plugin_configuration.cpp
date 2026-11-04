@@ -120,3 +120,31 @@ TEST_CASE("Shared plugin reader rejects malformed encoding NUL paths and directo
         ark::plugin_config_detail::load_http(std::filesystem::temp_directory_path().string()), std::runtime_error);
     CHECK_THROWS_AS(ark::plugin_config_detail::load_consul(std::string("missing\0.toml", 13)), std::runtime_error);
 }
+
+TEST_CASE("Shared plugin raw NUL diagnostics use UTF8 source columns") {
+    configuration_file file;
+    std::string contents = "\xef\xbb\xbf# 配置😀 ";
+    contents += '\0';
+    contents += "SECRET_SENTINEL";
+    const auto path = file.write(contents);
+    for (const auto http : {true, false})
+    {
+        try
+        {
+            if (http)
+            {
+                static_cast<void>(ark::plugin_config_detail::load_http(path));
+            }
+            else
+            {
+                static_cast<void>(ark::plugin_config_detail::load_consul(path));
+            }
+            FAIL("raw NUL accepted");
+        }
+        catch (const std::runtime_error& error)
+        {
+            const auto message = std::string(error.what());
+            CHECK(message == path + ":1:7: configuration contains NUL");
+        }
+    }
+}
