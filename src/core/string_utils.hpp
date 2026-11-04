@@ -84,8 +84,9 @@ public:
     static inline void split(std::vector<std::string>& v, const char* s, char c, uint32_t max_split = 0) {
         const char* p;
         const char* from = s;
+        const char* end = s + strlen(s);
 
-        while ((p = strchr(from, c)))
+        while ((p = static_cast<const char*>(memchr(from, c, end - from))))
         {
             v.emplace_back(std::string_view(from, p - from));
             from = p + 1;
@@ -95,7 +96,7 @@ public:
             }
         }
 
-        if (from < s + strlen(s))
+        if (from < end)
         {
             v.emplace_back(std::string_view(from));
         }
@@ -252,13 +253,13 @@ public:
         }
         else if (d == 'r' || d == 'R')
         {
-            const char* e = s + strlen(s) - 1;
-            while (e >= s && bs[static_cast<uint8_t>(*e)])
+            const char* e = s + strlen(s);
+            while (e > s && bs[static_cast<uint8_t>(e[-1])])
             {
                 --e;
             }
 
-            return std::string(s, e + 1 - s);
+            return std::string(s, e - s);
         }
         else
         {
@@ -267,13 +268,13 @@ public:
                 ++s;
             }
 
-            const char* e = s + strlen(s) - 1;
-            while (e >= s && bs[static_cast<uint8_t>(*e)])
+            const char* e = s + strlen(s);
+            while (e > s && bs[static_cast<uint8_t>(e[-1])])
             {
                 --e;
             }
 
-            return std::string(s, e + 1 - s);
+            return std::string(s, e - s);
         }
     }
 
@@ -294,12 +295,12 @@ public:
         }
         else if (d == 'r' || d == 'R')
         {
-            const char* e = s + strlen(s) - 1;
-            while (e >= s && *e == c)
+            const char* e = s + strlen(s);
+            while (e > s && e[-1] == c)
             {
                 --e;
             }
-            return std::string(s, e + 1 - s);
+            return std::string(s, e - s);
         }
         else
         {
@@ -307,12 +308,12 @@ public:
             {
                 ++s;
             }
-            const char* e = s + strlen(s) - 1;
-            while (e >= s && *e == c)
+            const char* e = s + strlen(s);
+            while (e > s && e[-1] == c)
             {
                 --e;
             }
-            return std::string(s, e + 1 - s);
+            return std::string(s, e - s);
         }
     }
 

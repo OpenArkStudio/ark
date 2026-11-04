@@ -26,6 +26,8 @@ Both are included in `check-core`. The first covers later startup-phase failure,
 
 String-pattern regressions exercise empty delimiters and replacement patterns with unlimited and explicit limits, empty input, existing output elements and embedded nulls. They also preserve nonempty delimiter, suffix, replacement-count and deletion behavior. Run `ark_core_tests --test-case="*String utilit*"` to select them. See [string-pattern semantics](../../docs/reference/utility.md#core-string-patterns).
 
+The same selection covers null character delimiters on exact-size C-string arrays, full-length binary `std::string` splits, and empty/whole-input stripping in both directions with byte and byte-set delimiters, including high bytes. AddressSanitizer and UndefinedBehaviorSanitizer builds exercise the C-string input bounds.
+
 The public header checks include `<ark/error_code.hpp>` as the first include and
 include it twice. Compile-time checks preserve its unsigned 32-bit underlying type
 and every declared error value.
