@@ -10,6 +10,7 @@
 namespace {
 
 bool fail_next_array{};
+unsigned skip_arrays_before_failure{};
 
 } // namespace
 
@@ -17,8 +18,15 @@ bool fail_next_array{};
 void* operator new[](std::size_t size) {
     if (fail_next_array)
     {
-        fail_next_array = false;
-        throw std::bad_alloc{};
+        if (skip_arrays_before_failure > 0)
+        {
+            --skip_arrays_before_failure;
+        }
+        else
+        {
+            fail_next_array = false;
+            throw std::bad_alloc{};
+        }
     }
     if (auto* result = std::malloc(size ? size : 1))
     {
@@ -65,4 +73,27 @@ TEST_CASE("Buffer default growth allocation propagates bad_alloc and retains unr
     CHECK(std::string(value.get_data(), value.get_length()) == "bc");
     REQUIRE(value.write("defg", 4));
     CHECK(std::string(value.get_data(), value.get_length()) == "bcdefg");
+}
+
+TEST_CASE("Buffer self append retains state when snapshot or subsequent growth allocation throws") {
+    for (unsigned skipped = 0; skipped < 2; ++skipped)
+    {
+        ark::buffer value(4);
+        REQUIRE(value.write("abcd", 4));
+        const auto* unread = value.get_data();
+        skip_arrays_before_failure = skipped;
+        fail_next_array = true;
+        bool caught{};
+        try
+        { value.write(unread, 4); }
+        catch (const std::bad_alloc&)
+        { caught = true; }
+        CHECK_FALSE(fail_next_array);
+        CHECK(caught);
+        CHECK(value.get_data() == unread);
+        CHECK(value.get_capacity() == 4);
+        CHECK(std::string(value.get_data(), value.get_length()) == "abcd");
+        REQUIRE(value.write(value.get_data(), 4));
+        CHECK(std::string(value.get_data(), value.get_length()) == "abcdabcd");
+    }
 }

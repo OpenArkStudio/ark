@@ -175,6 +175,23 @@ unqualified type through `const T&`, while explicitly checking a const-qualified
 trait remains false. Constant types and values, including UID bit allocation and
 network timeouts, remain unchanged.
 
+## Object-map cleanup and borrowed values
+
+`object_map` and `object_hashmap` own their raw-pointer entries. Successful
+insertion transfers ownership; duplicate or throwing insertion leaves ownership
+with the caller. Each nonnull pointer needs one owning entry. The shared variants retain
+`shared_ptr` ownership, and removing an entry does not destroy an externally owned
+value. Other mapped types retain their normal destruction semantics;
+`std::reference_wrapper<T>` remains borrowed.
+
+`clear()` and destruction visit entries by reference, without copying keys or
+mapped values. Cleanup therefore cannot fail from a key-copy allocation or leave
+an already deleted pointer behind after a partial copied traversal. Public
+signatures and class fields are unchanged; rebuild header consumers for this fix.
+`array_map` and pointer-valued `lru_map` retain their borrowed-pointee semantics.
+`check-object-map-cleanup`, included in `check-core`, checks ordered/hash maps,
+keys that reject copying, exact raw-pointer destruction and shared/borrowed values.
+
 ## POD string iterator contract
 
 `<ark/string_pod.hpp>` is supplied by `ark::core`. `pod_string_iterator::operator++(int)` returns the prior iterator **by value**; prefix `++it` still returns the advanced iterator by reference. Store the old position with `auto previous = it++;`, rather than binding a non-const lvalue reference. A saved iterator borrows its node; it does not copy the mapped value.
@@ -216,6 +233,22 @@ bookkeeping is ready; it does not inject into MSVC's `noexcept` proxy constructi
 Impossible element/byte capacities throw `std::length_error` before allocation; a null allocation result throws `std::bad_alloc`. Allocator exceptions propagate. Failed array growth or copy assignment preserves the existing storage, size and values, and failed copy construction leaves the source unchanged. Callers that handle allocation failure must catch exceptions rather than expect a status return; rebuild affected header consumers and plugins to use the checks. Public signatures and class fields are unchanged.
 
 `array_map<std::string, T>` keeps borrowed `T*` values and never deletes pointees. `add_element` appends the pointer before inserting its name and rolls back the append if index allocation throws. Existing entries, lookup results and count remain consistent; spare pointer capacity or index bucket capacity may have grown. The default `pod_string_allocator` also converts null allocation results to `std::bad_alloc` so index failures can propagate. This insertion guarantee does not extend to custom string allocators or all other `pod_string` operations. Duplicate-name behavior is unchanged. Permanent Core tests cover scalar/pointer aliases, arithmetic limits, null/throwing allocators, copying and pointer/index failure recovery through `check-core`.
+
+## Receive buffer ownership and self writes
+
+`<ark/buffer.hpp>` is move-only. Moves transfer unread bytes and capacity; the
+source becomes empty and can be written again. `get_data()` borrows storage that
+can move on the next write. `remove_data()` consumes only a valid unread count.
+
+`write(data, len)` also accepts readable bytes in its own allocation, including
+overlapping ranges. Before compaction or growth it snapshots an internal source
+with the existing allocation hooks. A range that starts inside the allocation
+and extends beyond it returns `false`, as does nonempty null input. Empty writes
+succeed. Null allocation returns `false`; allocation exceptions propagate. Failed
+snapshot or growth allocation preserves bytes, positions and capacity. External
+input must remain readable for the entire call. Public signatures, class fields
+and growth-capacity selection are unchanged; rebuild header consumers to use the
+fix. `check-buffer` covers self writes and default/custom allocation failures.
 
 ## Standard utility migration
 

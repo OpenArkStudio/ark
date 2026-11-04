@@ -16,6 +16,10 @@ Run `core-build/tests/core/ark_core_tests --help` for doctest filters. `check-ne
 also runs these tests when `ARK_BUILD_CORE_TESTS=ON`, including in the existing CI
 matrix. No database service is required.
 
+`check-buffer` covers move ownership, unread-byte compaction, self writes through
+overlapping or relocated storage, bounds, and failure recovery with default and
+custom allocation hooks. See [receive-buffer contracts](../../docs/project/code-style.md#receive-buffer-ownership-and-self-writes).
+
 Scheduler startup ownership and constructor/queue allocation failures have permanent C++ entries:
 
 ```sh
@@ -25,6 +29,8 @@ cmake --build core-build --target check-scheduler-startup-cleanup check-schedule
 Both are included in `check-core`. The first covers later startup-phase failure, retained callbacks and an allocation-failure child. The standalone construction program bounds its own subprocesses and rejects worker leaks, termination and lost callback owners; it needs no database or scripting runtime.
 
 String-pattern regressions exercise empty delimiters and replacement patterns with unlimited and explicit limits, empty input, existing output elements and embedded nulls. They also preserve nonempty delimiter, suffix, replacement-count and deletion behavior. Run `ark_core_tests --test-case="*String utilit*"` to select them. See [string-pattern semantics](../../docs/reference/utility.md#core-string-patterns).
+
+The same selection covers null character delimiters on exact-size C-string arrays, full-length binary `std::string` splits, and empty/whole-input stripping in both directions with byte and byte-set delimiters, including high bytes. AddressSanitizer and UndefinedBehaviorSanitizer builds exercise the C-string input bounds.
 
 The public header checks include `<ark/error_code.hpp>` as the first include and
 include it twice. Compile-time checks preserve its unsigned 32-bit underlying type
@@ -69,6 +75,11 @@ cross-DSO conversion, so the test continues to cover the public DLL boundary.
 The C++20 language regressions check the exact six built-in integer classifications, qualifier and reference handling, constant values, exception contracts and fixed UID allocation outputs. The standalone array-map header check also rejects reintroduced legacy language macros.
 
 UID regressions also check compile-time allocation, invalid/extreme widths, field overflow and the three 63/0/0 width permutations. `ark_core_tests --test-case="UID*"` selects them. Invalid layouts throw `std::invalid_argument`; invalid field values throw `std::out_of_range`, independently of assertion settings. See [UID bit allocation](../../docs/reference/utility.md#core-uid-bit-allocation).
+
+`check-object-map-cleanup`, included in `check-core`, rejects key copying during
+ordered/hash-map cleanup. It covers raw owning entries, retained shared owners,
+borrowed reference values, explicit clear, repeated clear and destruction.
+See [object-map ownership](../../docs/project/code-style.md#object-map-cleanup-and-borrowed-values).
 
 Object-vector compile-time checks preserve the public `vector_value_type` aliases for raw and shared pointers, including const and incomplete element types. Xoshiro regressions preserve fixed scalar-seed and jump sequences for all four variants, plus long-jump sequences for the two 256-bit variants.
 

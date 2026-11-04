@@ -142,7 +142,7 @@ public:
 
     // will delete allocated memory
     void clear() {
-        for (auto iter : nodes_)
+        for (auto& iter : nodes_)
         {
             delete_value(iter.second);
         }

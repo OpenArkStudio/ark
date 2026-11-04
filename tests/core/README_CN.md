@@ -15,6 +15,9 @@ cmake --build core-build --target check-core
 启用 `ARK_BUILD_CORE_TESTS=ON` 时，`check-network` 也会运行这些用例，现有 CI
 矩阵会执行该入口。测试不需要数据库服务。
 
+`check-buffer` 覆盖移动所有权、未读字节压缩、重叠或移动存储上的自写入、边界，
+以及默认／自定义分配钩子下的失败恢复。见[接收缓冲区契约](../../docs/project/code-style_CN.md#接收缓冲区所有权与自写入)。
+
 调度器启动所有权、构造和入队分配失败使用仓库内的 C++ 测试入口：
 
 ```sh
@@ -25,9 +28,15 @@ cmake --build core-build --target check-scheduler-startup-cleanup check-schedule
 
 字符串匹配回归覆盖空分隔符、空替换模式、有限与无限次数、空输入、已有输出元素和内嵌空字符，并保留非空分隔符、剩余后缀、替换次数与删除语义。执行 `ark_core_tests --test-case="*String utilit*"` 可单独运行。参见[字符串匹配规则](../../docs/reference/utility_CN.md#core-字符串匹配)。
 
+同一筛选还覆盖精确长度 C 字符串数组的空字符分隔符、完整长度二进制 `std::string` 拆分，以及两种方向下空输入／全量裁剪的单字节和字节集合处理（含高位字节）。AddressSanitizer 与 UndefinedBehaviorSanitizer 构建检查 C 字符串输入边界。
+
 C++20 语言回归验证六种精确整数类型分类、限定符与引用处理、常量值、异常契约和固定 UID 位分配结果。独立 array-map 头文件检查还会拒绝重新引入旧语言兼容宏。
 
 UID 回归另行验证编译期分配、非法及极端位宽、字段溢出和 63/0/0 的三种位宽排列。执行 `ark_core_tests --test-case="UID*"` 可单独运行。非法布局抛出 `std::invalid_argument`，非法字段值抛出 `std::out_of_range`，不受断言开关影响。参见 [UID 位分配](../../docs/reference/utility_CN.md#core-uid-位分配)。
+
+`check-object-map-cleanup` 纳入 `check-core`，拒绝有序／哈希映射清理时复制键，
+覆盖裸指针拥有者、保留的共享拥有者、借用引用值、显式清空、重复清空及析构。
+见[对象映射所有权](../../docs/project/code-style_CN.md#对象映射清理与借用值)。
 
 对象向量的编译期检查保留公开 `vector_value_type` 的原始指针与共享指针类型别名，覆盖 const 元素和不完整元素类型。Xoshiro 回归保留四种变体的固定标量种子序列与跳跃序列，并覆盖两种 256 位变体的长跳跃序列。
 
