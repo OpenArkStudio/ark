@@ -29,6 +29,10 @@ C++20 语言回归验证六种精确整数类型分类、限定符与引用处�
 
 UID 回归另行验证编译期分配、非法及极端位宽、字段溢出和 63/0/0 的三种位宽排列。执行 `ark_core_tests --test-case="UID*"` 可单独运行。非法布局抛出 `std::invalid_argument`，非法字段值抛出 `std::out_of_range`，不受断言开关影响。参见 [UID 位分配](../../docs/reference/utility_CN.md#core-uid-位分配)。
 
+`check-object-map-cleanup` 纳入 `check-core`，拒绝有序／哈希映射清理时复制键，
+覆盖裸指针拥有者、保留的共享拥有者、借用引用值、显式清空、重复清空及析构。
+见[对象映射所有权](../../docs/project/code-style_CN.md#对象映射清理与借用值)。
+
 对象向量的编译期检查保留公开 `vector_value_type` 的原始指针与共享指针类型别名，覆盖 const 元素和不完整元素类型。Xoshiro 回归保留四种变体的固定标量种子序列与跳跃序列，并覆盖两种 256 位变体的长跳跃序列。
 
 随机数回归将公开头文件放在首个包含位置，并重复包含两次。测试保留固定的原始、有符号及无符号随机序列、最终种子和生成次数，并验证 `INT_MIN`／`INT_MAX` 极值、异号、相邻、逆序及相等端点的有符号半开区间。端点相同时直接返回该值，不消耗随机数。这些用例属于 `ark_core_tests` 和 `check-core`；使用 `-fsanitize=undefined -fno-sanitize-recover=all` 构建时，还会通过 UndefinedBehaviorSanitizer 检查范围运算。参见[随机数工具行为](../../docs/reference/utility_CN.md#core-随机数工具)。

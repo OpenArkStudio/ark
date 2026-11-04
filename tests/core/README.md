@@ -70,6 +70,11 @@ The C++20 language regressions check the exact six built-in integer classificati
 
 UID regressions also check compile-time allocation, invalid/extreme widths, field overflow and the three 63/0/0 width permutations. `ark_core_tests --test-case="UID*"` selects them. Invalid layouts throw `std::invalid_argument`; invalid field values throw `std::out_of_range`, independently of assertion settings. See [UID bit allocation](../../docs/reference/utility.md#core-uid-bit-allocation).
 
+`check-object-map-cleanup`, included in `check-core`, rejects key copying during
+ordered/hash-map cleanup. It covers raw owning entries, retained shared owners,
+borrowed reference values, explicit clear, repeated clear and destruction.
+See [object-map ownership](../../docs/project/code-style.md#object-map-cleanup-and-borrowed-values).
+
 Object-vector compile-time checks preserve the public `vector_value_type` aliases for raw and shared pointers, including const and incomplete element types. Xoshiro regressions preserve fixed scalar-seed and jump sequences for all four variants, plus long-jump sequences for the two 256-bit variants.
 
 The random-generator regressions include the public header first and twice. They preserve fixed raw/signed/unsigned sequences, final seeds and draw counts, and check half-open signed ranges at `INT_MIN`/`INT_MAX`, mixed-sign and adjacent endpoints, reversed endpoints and equal endpoints. Equal endpoints return their value without consuming a draw. These cases are part of `ark_core_tests` and `check-core`; a build with `-fsanitize=undefined -fno-sanitize-recover=all` also checks the range arithmetic with UndefinedBehaviorSanitizer. See [random-helper behavior](../../docs/reference/utility.md#core-random-helper).

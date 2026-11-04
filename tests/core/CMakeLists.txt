@@ -185,6 +185,14 @@ add_custom_target(check-logging
     USES_TERMINAL)
 add_dependencies(check-core check-logging)
 
+add_executable(ark_object_map_cleanup_tests main.cpp object_map_cleanup.cpp)
+set_property(TARGET ark_object_map_cleanup_tests PROPERTY LINK_LIBRARIES ark::core)
+add_custom_target(check-object-map-cleanup
+    COMMAND $<TARGET_FILE:ark_object_map_cleanup_tests>
+    DEPENDS ark_object_map_cleanup_tests
+    USES_TERMINAL VERBATIM)
+add_dependencies(check-core check-object-map-cleanup)
+
 # Separate binaries keep custom allocation hooks and new[] replacement isolated.
 add_executable(ark_buffer_tests main.cpp buffers.cpp)
 set_property(TARGET ark_buffer_tests PROPERTY LINK_LIBRARIES ark::core)
