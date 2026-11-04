@@ -193,6 +193,22 @@ Impossible element/byte capacities throw `std::length_error` before allocation; 
 
 `array_map<std::string, T>` keeps borrowed `T*` values and never deletes pointees. `add_element` appends the pointer before inserting its name and rolls back the append if index allocation throws. Existing entries, lookup results and count remain consistent; spare pointer capacity or index bucket capacity may have grown. The default `pod_string_allocator` also converts null allocation results to `std::bad_alloc` so index failures can propagate. This insertion guarantee does not extend to custom string allocators or all other `pod_string` operations. Duplicate-name behavior is unchanged. Permanent Core tests cover scalar/pointer aliases, arithmetic limits, null/throwing allocators, copying and pointer/index failure recovery through `check-core`.
 
+## Receive buffer ownership and self writes
+
+`<ark/buffer.hpp>` is move-only. Moves transfer unread bytes and capacity; the
+source becomes empty and can be written again. `get_data()` borrows storage that
+can move on the next write. `remove_data()` consumes only a valid unread count.
+
+`write(data, len)` also accepts readable bytes in its own allocation, including
+overlapping ranges. Before compaction or growth it snapshots an internal source
+with the existing allocation hooks. A range that starts inside the allocation
+and extends beyond it returns `false`, as does nonempty null input. Empty writes
+succeed. Null allocation returns `false`; allocation exceptions propagate. Failed
+snapshot or growth allocation preserves bytes, positions and capacity. External
+input must remain readable for the entire call. Public signatures, class fields
+and growth-capacity selection are unchanged; rebuild header consumers to use the
+fix. `check-buffer` covers self writes and default/custom allocation failures.
+
 ## Standard utility migration
 
 **Breaking source change:** `ARK_TO_STRING`, `ARRAY_LENTGH`, `ARK_SRATIC_ASSERT`,

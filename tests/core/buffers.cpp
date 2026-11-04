@@ -175,3 +175,44 @@ TEST_CASE("Buffer rejects invalid consumption and overflowing growth without mut
     REQUIRE(value.write("de", 2));
     CHECK(contents(value) == "bcde");
 }
+
+TEST_CASE("Buffer self append snapshots unread slices before compaction and growth") {
+    SUBCASE("compaction changes the original source bytes") {
+        ark::buffer value(8);
+        REQUIRE(value.write("abcdef", 6));
+        value.remove_data(2);
+        REQUIRE(value.write(value.get_data() + 1, 3));
+        CHECK(value.get_capacity() == 8);
+        CHECK(contents(value) == "cdefdef");
+    }
+    SUBCASE("growth releases the original source allocation") {
+        ark::buffer value(4);
+        REQUIRE(value.write("abcd", 4));
+        REQUIRE(value.write(value.get_data(), value.get_length()));
+        CHECK(value.get_capacity() == 8);
+        CHECK(contents(value) == "abcdabcd");
+    }
+    SUBCASE("binary data and consumed storage remain readable sources") {
+        ark::buffer value(8);
+        const char bytes[] = {'a', '\0', 'c', 'd', 'e', 'f'};
+        REQUIRE(value.write(bytes, sizeof(bytes)));
+        const auto* consumed = value.get_data();
+        value.remove_data(3);
+        REQUIRE(value.write(consumed, 3));
+        CHECK(contents(value) == std::string("defa\0c", 6));
+    }
+}
+
+TEST_CASE("Buffer self write permits overlapping storage and rejects an oversized internal range") {
+    ark::buffer value(8);
+    REQUIRE(value.write("abcdefgh", 8));
+    auto* allocation = value.get_data();
+    value.remove_data(8);
+    REQUIRE(value.write("xy", 2));
+    REQUIRE(value.write(allocation + 1, 5));
+    CHECK(contents(value) == "xyycdef");
+    const auto* unread = value.get_data();
+    CHECK_FALSE(value.write(value.get_data() + 2, 7));
+    CHECK(value.get_data() == unread);
+    CHECK(contents(value) == "xyycdef");
+}

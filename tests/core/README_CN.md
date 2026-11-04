@@ -15,6 +15,9 @@ cmake --build core-build --target check-core
 启用 `ARK_BUILD_CORE_TESTS=ON` 时，`check-network` 也会运行这些用例，现有 CI
 矩阵会执行该入口。测试不需要数据库服务。
 
+`check-buffer` 覆盖移动所有权、未读字节压缩、重叠或移动存储上的自写入、边界，
+以及默认／自定义分配钩子下的失败恢复。见[接收缓冲区契约](../../docs/project/code-style_CN.md#接收缓冲区所有权与自写入)。
+
 调度器启动所有权、构造和入队分配失败使用仓库内的 C++ 测试入口：
 
 ```sh

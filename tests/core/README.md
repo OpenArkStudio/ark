@@ -16,6 +16,10 @@ Run `core-build/tests/core/ark_core_tests --help` for doctest filters. `check-ne
 also runs these tests when `ARK_BUILD_CORE_TESTS=ON`, including in the existing CI
 matrix. No database service is required.
 
+`check-buffer` covers move ownership, unread-byte compaction, self writes through
+overlapping or relocated storage, bounds, and failure recovery with default and
+custom allocation hooks. See [receive-buffer contracts](../../docs/project/code-style.md#receive-buffer-ownership-and-self-writes).
+
 Scheduler startup ownership and constructor/queue allocation failures have permanent C++ entries:
 
 ```sh

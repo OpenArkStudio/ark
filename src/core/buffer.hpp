@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -91,6 +92,27 @@ public:
         {
             return false;
         }
+        owned_data snapshot;
+        const std::less<const char*> before;
+        if (data_ && !before(data, data_.get()) && before(data, data_.get() + data_size_))
+        {
+            const auto offset = static_cast<size_t>(data - data_.get());
+            if (len > data_size_ - offset)
+            {
+                return false;
+            }
+            if (get_write_valid_count() < len)
+            {
+                // Compaction can overwrite the source; growth releases its allocation.
+                snapshot.reset(allocate_data(len));
+                if (!snapshot)
+                {
+                    return false;
+                }
+                std::memcpy(snapshot.get(), data, len);
+                data = snapshot.get();
+            }
+        }
         if (get_write_valid_count() < len) [[unlikely]]
         {
             if (!prepare_write(len))
@@ -98,7 +120,7 @@ public:
                 return false;
             }
         }
-        std::memcpy(get_write_ptr(), data, len);
+        std::memmove(get_write_ptr(), data, len);
         add_write_pos(len);
         return true;
     }
