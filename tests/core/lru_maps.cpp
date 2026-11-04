@@ -127,6 +127,59 @@ TEST_CASE("LRU failed insertion preserves recency and can be followed by lookup 
     CHECK(saw_success);
 }
 
+TEST_CASE("LRU key copy failure during assignment retains both caches and their eviction order") {
+    bool saw_failure{};
+    bool saw_success{};
+    for (int limit = 0; limit < 12; ++limit)
+    {
+        const auto source_owner = std::make_shared<int>(10);
+        ark::lru_map<checked_key, std::shared_ptr<int>> source(2);
+        source.insert(checked_key{1}, source_owner);
+        source.insert(checked_key{2}, std::make_shared<int>(20));
+        REQUIRE(source.find(checked_key{1}) != source.end());
+        const auto destination_owner = std::make_shared<int>(90);
+        ark::lru_map<checked_key, std::shared_ptr<int>> destination(1);
+        destination.insert(checked_key{9}, destination_owner);
+        bool caught{};
+        checked_key::copies_before_failure = limit;
+        try
+        { destination = source; }
+        catch (const std::runtime_error&)
+        { caught = true; }
+        checked_key::copies_before_failure = -1;
+        REQUIRE(source.size() == 2);
+        if (caught)
+        {
+            saw_failure = true;
+            REQUIRE(destination.size() == 1);
+            REQUIRE(destination.find(checked_key{9}) != destination.end());
+            CHECK(destination.find(checked_key{9})->second == destination_owner);
+            CHECK(destination_owner.use_count() == 2);
+            CHECK(source_owner.use_count() == 2);
+            destination.insert(checked_key{8}, std::make_shared<int>(80));
+            CHECK(destination.find(checked_key{9}) == destination.end());
+            CHECK(destination.size() == 1);
+            source.insert(checked_key{3}, std::make_shared<int>(30));
+            CHECK(source.find(checked_key{2}) == source.end());
+            REQUIRE(source.find(checked_key{1}) != source.end());
+        }
+        else
+        {
+            saw_success = true;
+            CHECK(destination_owner.use_count() == 1);
+            CHECK(source_owner.use_count() == 3);
+            source.clear();
+            destination.insert(checked_key{3}, std::make_shared<int>(30));
+            CHECK(destination.size() == 2);
+            CHECK(destination.find(checked_key{2}) == destination.end());
+            REQUIRE(destination.find(checked_key{1}) != destination.end());
+            break;
+        }
+    }
+    CHECK(saw_failure);
+    CHECK(saw_success);
+}
+
 TEST_CASE("LRU duplicate insertion retains the stored value and recency") {
     ark::lru_map<int, std::shared_ptr<int>> values(2);
     const auto first = std::make_shared<int>(10);

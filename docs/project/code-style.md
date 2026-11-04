@@ -191,7 +191,12 @@ Check `it != values.end()` before incrementing or calling `get_key()` / `get_dat
 cache. Copies retain capacity and recency order, rebuild links into their own key
 list, and remain usable after the source changes or is destroyed. Mapped values
 retain their normal copy semantics, including shared ownership for `shared_ptr`.
-Copy assignment prepares the replacement before releasing existing entries.
+Copying prepares empty container bookkeeping before rebuilding entries and links
+from the oldest entry to the newest. Copy assignment prepares the replacement
+before releasing existing entries; exceptions that propagate from allocation or
+key/value copying leave both caches intact. This does not guarantee recovery from
+allocation inside a standard-library `noexcept` path: MSVC Debug, for example,
+allocates a hash-table iterator proxy in such a constructor.
 
 Insertion of an existing key retains its original value and recency. Insertion
 failure from allocation or key/value copying propagates the exception and removes
@@ -199,7 +204,10 @@ the incomplete entry; existing values and eviction order remain intact. `find()`
 still promotes a found entry and successful insertion evicts the least recently
 used entry when full. Public signatures and class fields are unchanged; rebuild
 header consumers to use the fix. `check-lru-map`, also included in `check-core`,
-covers independent copies, eviction and isolated allocation failures.
+covers independent copies, eviction, key-copy exceptions and isolated allocation
+failures. Insertion injects failure at every allocation. Copying injects at every
+content allocation starting with the first source lookup, after empty container
+bookkeeping is ready; it does not inject into MSVC's `noexcept` proxy construction.
 
 ## POD array storage and failure contract
 

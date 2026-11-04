@@ -35,13 +35,12 @@ public:
     }
 
     lru_map(const lru_map& other)
-        : kv_(other.kv_)
-        , ki_(other.ki_)
-        , kl_(other.kl_)
-        , capacity_(other.capacity_) {
-        for (auto it = kl_.begin(); it != kl_.end(); ++it)
+        : lru_map(other.capacity_) {
+        // Prepare all container bookkeeping before copying entries. Rebuild each
+        // link in its final list instead of temporarily borrowing source links.
+        for (auto it = other.kl_.rbegin(); it != other.kl_.rend(); ++it)
         {
-            ki_.find(*it)->second = it;
+            insert(*it, other.kv_.at(*it));
         }
     }
 
