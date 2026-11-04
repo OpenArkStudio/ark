@@ -105,6 +105,20 @@ TEST_CASE("Explicit inheritance flattens with stable indices and detects cycles 
         "conflict.csv")));
 }
 
+TEST_CASE("Profile rows distinguish a missing trailing string cell from an explicit empty value") {
+    using namespace ark::entity_export;
+    auto document =
+        read_fields(parse_csv("class,index,name,type\nProfile,99,id,uint32\nProfile,100,label,string\n", "fields.csv"));
+    CHECK_THROWS_WITH(add_config(document, "Profile", parse_csv("id,label\n1\n", "short.csv")),
+        "short.csv: row 2, field label: missing data cell");
+    CHECK(document.configs.empty());
+    add_config(document, "Profile", parse_csv("id,label\n1,\n2,\"\"\n", "empty.csv"));
+    const auto loaded = ark::entity_json::parse(ark::entity_json::serialize(document));
+    REQUIRE(loaded.configs[0].rows.size() == 2);
+    CHECK(std::get<std::string>(loaded.configs[0].rows[0].at("label")).empty());
+    CHECK(std::get<std::string>(loaded.configs[0].rows[1].at("label")).empty());
+}
+
 TEST_CASE("Real XLSX worksheets export through the same schema and typed-row validation") {
     using namespace ark::entity_export;
     temporary_directory temp;
