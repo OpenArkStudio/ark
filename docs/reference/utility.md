@@ -107,6 +107,10 @@ Public headers now have their single source in `src/plugins/utility/`. CMake cop
 
 Nonempty patterns retain their existing behavior: split appends to the output vector, preserves leading/interior empty elements, drops a trailing empty element and leaves the remaining suffix once the split limit is reached. The limit is compared with the total output size, so use an empty output vector to count only newly produced elements. Replacement applies nonoverlapping matches from left to right; limit `0` means unlimited. C-string arguments must be valid, null-terminated strings; string-delimiter overloads retain C-string matching semantics. This change does not add general binary substring matching.
 
+Character-delimiter splits search only the input content. A `'\0'` delimiter leaves a nonempty C string as one appended element and appends nothing for an empty C string; the terminator is excluded. The `std::string` character-delimiter overload searches the full stored length, so embedded null bytes remain valid delimiters and the usual split-limit and trailing-empty rules apply.
+
+`string_utils::strip()` removes a specified byte or byte set from both ends by default. Direction `'l'`/`'L'` selects the left side and `'r'`/`'R'` the right. Empty input and input consisting entirely of stripped bytes produce an empty string, including with right-only stripping. Bytes above `0x7f` are valid members of a strip set. C-string overloads exclude the terminating null byte; `std::string` overloads use their stored length.
+
 
 ## Core UID bit allocation
 
