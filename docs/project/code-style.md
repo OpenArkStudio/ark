@@ -175,6 +175,23 @@ unqualified type through `const T&`, while explicitly checking a const-qualified
 trait remains false. Constant types and values, including UID bit allocation and
 network timeouts, remain unchanged.
 
+## Object-map cleanup and borrowed values
+
+`object_map` and `object_hashmap` own their raw-pointer entries. Successful
+insertion transfers ownership; duplicate or throwing insertion leaves ownership
+with the caller. Each nonnull pointer needs one owning entry. The shared variants retain
+`shared_ptr` ownership, and removing an entry does not destroy an externally owned
+value. Other mapped types retain their normal destruction semantics;
+`std::reference_wrapper<T>` remains borrowed.
+
+`clear()` and destruction visit entries by reference, without copying keys or
+mapped values. Cleanup therefore cannot fail from a key-copy allocation or leave
+an already deleted pointer behind after a partial copied traversal. Public
+signatures and class fields are unchanged; rebuild header consumers for this fix.
+`array_map` and pointer-valued `lru_map` retain their borrowed-pointee semantics.
+`check-object-map-cleanup`, included in `check-core`, checks ordered/hash maps,
+keys that reject copying, exact raw-pointer destruction and shared/borrowed values.
+
 ## POD string iterator contract
 
 `<ark/string_pod.hpp>` is supplied by `ark::core`. `pod_string_iterator::operator++(int)` returns the prior iterator **by value**; prefix `++it` still returns the advanced iterator by reference. Store the old position with `auto previous = it++;`, rather than binding a non-const lvalue reference. A saved iterator borrows its node; it does not copy the mapped value.
