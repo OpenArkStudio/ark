@@ -149,3 +149,30 @@ TEST_CASE("Buffer throwing custom growth allocation preserves state and matching
     }
     CHECK(releases == initial_releases + 1);
 }
+
+TEST_CASE("Buffer self append snapshot uses matching hooks and retains state on allocation failure") {
+    const auto initial_allocations = allocations;
+    const auto initial_releases = releases;
+    {
+        ark::buffer value(4);
+        REQUIRE(value.write("abcd", 4));
+        const auto* unread = value.get_data();
+        return_null = true;
+        CHECK_FALSE(value.write(unread, 4));
+        CHECK(value.get_data() == unread);
+        CHECK(value.get_capacity() == 4);
+        CHECK(std::string(value.get_data(), value.get_length()) == "abcd");
+        throw_allocation = true;
+        CHECK_THROWS_AS(value.write(unread, 4), std::bad_alloc);
+        CHECK(value.get_data() == unread);
+        CHECK(value.get_capacity() == 4);
+        CHECK(std::string(value.get_data(), value.get_length()) == "abcd");
+        CHECK(allocations == initial_allocations + 1);
+        CHECK(releases == initial_releases);
+        REQUIRE(value.write(unread, 4));
+        CHECK(std::string(value.get_data(), value.get_length()) == "abcdabcd");
+        CHECK(allocations == initial_allocations + 3);
+        CHECK(releases == initial_releases + 2);
+    }
+    CHECK(releases == initial_releases + 3);
+}
