@@ -63,7 +63,10 @@ ark::task<> run() {
 ```cpp
 ark::task<> update_player() {
     auto begun = co_await database_->begin("primary", {std::chrono::seconds(5), std::chrono::seconds(1)});
-    if (!begun) { co_return; }
+    if (!begun || begun.transaction == 0 ||
+        begun.transaction_status.outcome != ark::mysql_transaction_outcome::active) {
+        co_return;
+    }
     const auto id = begun.transaction;
     std::vector<arknet::mysql::field_value> values{std::int64_t{42}};
     auto changed = co_await database_->execute(id, "UPDATE players SET score=?", std::move(values));
@@ -78,6 +81,8 @@ ark::task<> update_player() {
 ```
 
 事务各步骤持有同一原生租约；递增标识只对签发模块实例有效，不拥有插件实现对象。同一事务仅允许一个操作，未知／过期标识或重叠步骤抛异常。原超时覆盖取连接、BEGIN、各步骤与提交，不续期；未使用事务到期回滚，`cleanup_timeout` 单独限制回滚。清理失败或不确定则丢弃连接，不自动重试或跨连接重放。
+
+将 `mysql_reply` 或 `mysql_transaction_reply` 转为 `bool` 仅检查业务是否成功。BEGIN 成功后，事务仍可能在所属线程交付结果前到期并回滚，此时不返回事务标识；提交后续步骤前须同时检查 `transaction` 和 `transaction_status.outcome`。
 
 `mysql_reply` 保留拥有型 `arknet::mysql::query_result` 及独立的预处理语句关闭诊断。`mysql_transaction_reply` 还保留回滚结果、启动异常和事务最终状态。执行成功并不代表清理或提交成功。数据库及传输错误返回原生结果，本地 C++ 异常和协程桥限额异常向调用方传播。取消请求会转交原生操作；语句可能已经执行时保留 `outcome_unknown`。
 

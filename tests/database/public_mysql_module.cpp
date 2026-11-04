@@ -8,6 +8,7 @@
 #include <thread>
 #include <vector>
 
+#include "mysql/detail/mysql_transaction.hpp"
 #include "mysql/mysql_plugin.hpp"
 #include "mysql_test_peer.hpp"
 
@@ -18,6 +19,16 @@ using namespace mysql_test;
 struct observed_commands
 {
     std::atomic<unsigned> queries{}, prepares{}, executes{}, closes{}, commits{}, rollbacks{};
+    std::atomic<bool> allow_rollback{true};
+};
+
+struct rollback_guard
+{
+    observed_commands& seen;
+
+    ~rollback_guard() {
+        seen.allow_rollback = true;
+    }
 };
 
 asio::awaitable<void> serve(mysql_peer& server, observed_commands& seen, bool tls = false) {
@@ -69,6 +80,12 @@ asio::awaitable<void> serve(mysql_peer& server, observed_commands& seen, bool tl
                 else if (sql.starts_with("ROLLBACK"))
                 {
                     ++seen.rollbacks;
+                    asio::steady_timer pause(co_await asio::this_coro::executor);
+                    while (!seen.allow_rollback)
+                    {
+                        pause.expires_after(1ms);
+                        co_await pause.async_wait(asio::use_awaitable);
+                    }
                     active = false;
                     co_await server.send(ok_packet);
                 }
@@ -183,22 +200,22 @@ ark::task<> query_and_execute(ark::mysql_module& database, std::vector<ark::mysq
     replies.push_back(co_await database.execute("primary", "SELECT ?", std::move(parameters)));
 }
 
-ark::task<> transact(ark::mysql_module& database, bool commit, bool abandon, ark::mysql_transaction_id& id) {
-    const auto begun = co_await database.begin("primary", {abandon ? 40ms : 2s, 1s});
+ark::task<> transact(ark::mysql_module& database, bool commit, ark::mysql_transaction_id& id) {
+    const auto begun = co_await database.begin("primary", {2s, 1s});
     REQUIRE(begun);
     id = begun.transaction;
     REQUIRE(id != 0);
     REQUIRE(begun.transaction_status.outcome == ark::mysql_transaction_outcome::active);
-    if (abandon)
-    {
-        co_return;
-    }
     const auto query = co_await database.query(id, "UPDATE records SET value=42");
     REQUIRE(query);
     auto result = commit ? co_await database.commit(id) : co_await database.rollback(id);
     REQUIRE(result);
     CHECK(result.transaction_status.outcome ==
           (commit ? ark::mysql_transaction_outcome::committed : ark::mysql_transaction_outcome::rolled_back));
+}
+
+ark::task<> abandon_transaction(ark::mysql_module& database, std::optional<ark::mysql_transaction_reply>& reply) {
+    reply.emplace(co_await database.begin("primary", {40ms, 1s}));
 }
 
 struct queued_query_report
@@ -267,8 +284,8 @@ TEST_CASE("Public MySQL coroutines own native query results and prepared cleanup
     }
 }
 
-TEST_CASE("Public MySQL transactions retain a lease across steps and drain idle rollback") {
-    for (unsigned scenario = 0; scenario != 3; ++scenario)
+TEST_CASE("Public MySQL transactions retain a lease across query and terminal steps") {
+    for (const bool commit : {false, true})
     {
         observed_commands seen;
         mysql_peer peer([&seen](mysql_peer& server) { return serve(server, seen); });
@@ -277,19 +294,169 @@ TEST_CASE("Public MySQL transactions retain a lease across steps and drain idle 
         ark::mysql_transaction_id id{};
         std::exception_ptr failure;
         auto& tasks = owner.manager.create_task_group(owner.database);
-        REQUIRE(tasks.start(
-            transact(owner.database, scenario == 0, scenario == 2, id), [&](auto error) { failure = error; }));
+        REQUIRE(tasks.start(transact(owner.database, commit, id), [&](auto error) { failure = error; }));
         owner.drain();
         CHECK_FALSE(failure);
-        if (scenario == 2)
-        {
-            CHECK_FALSE(owner.manager.stop(0));
-            CHECK(owner.manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopping);
-        }
         owner.stop();
         peer.finish();
-        CHECK(seen.commits == (scenario == 0 ? 1u : 0u));
-        CHECK(seen.rollbacks == (scenario == 0 ? 0u : 1u));
+        CHECK(seen.commits == (commit ? 1u : 0u));
+        CHECK(seen.rollbacks == (commit ? 0u : 1u));
+    }
+}
+
+TEST_CASE("Public MySQL abandoned transactions drain deadline rollback before shutdown") {
+    for (const bool hold_rollback : {false, true})
+    {
+        CAPTURE(hold_rollback);
+        observed_commands seen;
+        seen.allow_rollback = !hold_rollback;
+        mysql_peer peer([&seen](mysql_peer& server) { return serve(server, seen); });
+        module_owner owner;
+        owner.configure(peer);
+        std::optional<ark::mysql_transaction_reply> begun;
+        std::exception_ptr failure;
+
+        struct drain_guard
+        {
+            observed_commands& seen;
+            module_owner& owner;
+
+            ~drain_guard() {
+                seen.allow_rollback = true;
+                owner.stop();
+            }
+        } guard{seen, owner};
+
+        auto& tasks = owner.manager.create_task_group(owner.database);
+        REQUIRE(tasks.start(abandon_transaction(owner.database, begun), [&](auto error) { failure = error; }));
+        const auto deadline = std::chrono::steady_clock::now() + 5s;
+        while (!seen.rollbacks && std::chrono::steady_clock::now() < deadline)
+        {
+            REQUIRE(owner.manager.update(0));
+            std::this_thread::sleep_for(1ms);
+        }
+        REQUIRE(seen.rollbacks == 1);
+        if (hold_rollback)
+        {
+            // The peer has received ROLLBACK but cannot complete it yet.
+            CHECK_FALSE(owner.manager.stop(0));
+            CHECK(owner.manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopping);
+            seen.allow_rollback = true;
+        }
+        owner.drain();
+        REQUIRE_FALSE(failure);
+        REQUIRE(begun);
+        REQUIRE(*begun);
+        if (begun->transaction)
+        {
+            CHECK(begun->transaction_status.outcome == ark::mysql_transaction_outcome::active);
+        }
+        else
+        {
+            CHECK(begun->transaction_status.outcome == ark::mysql_transaction_outcome::rolled_back);
+            REQUIRE(begun->rollback);
+            CHECK(*begun->rollback);
+        }
+        // Cleanup may already be complete, so the first stop can return true.
+        owner.stop();
+        peer.finish();
+        CHECK(seen.commits == 0);
+        CHECK(seen.rollbacks == 1);
+    }
+}
+
+TEST_CASE("MySQL owner delivery preserves successful BEGIN results across transaction expiry") {
+    using namespace ark::detail;
+    for (const bool expire_before_delivery : {false, true})
+    {
+        CAPTURE(expire_before_delivery);
+        observed_commands seen;
+        seen.allow_rollback = false;
+        mysql_peer peer([&seen](mysql_peer& server) { return serve(server, seen); });
+        rollback_guard guard{seen};
+        arknet::mysql::pool_options options;
+        options.connection = options_for(peer);
+        options.max_connections = 1;
+        auto pool = std::make_shared<arknet::mysql::pool>(std::move(options));
+        auto owner = std::make_shared<mysql_transaction_owner>(
+            pool, mysql_transaction_limits{1, 1024}, arknet::mysql::query_options{});
+        std::optional<mysql_transaction_reply> reply;
+        unsigned calls{};
+        REQUIRE(owner->begin({2s, 1s}, [&](auto value) {
+            ++calls;
+            reply.emplace(std::move(value));
+        }) != 0);
+        const auto state = owner->states.front();
+        REQUIRE(state);
+        const auto wait_until = [](auto ready) {
+            const auto deadline = std::chrono::steady_clock::now() + 5s;
+            while (!ready())
+            {
+                REQUIRE(std::chrono::steady_clock::now() < deadline);
+                std::this_thread::sleep_for(1ms);
+            }
+        };
+        wait_until([&] {
+            owner->update(1);
+            return state->phase == mysql_transaction_phase::beginning;
+        });
+        // Wait for the native success without advancing its owner. This makes
+        // expiry-before-delivery independent of OS scheduling and handshake time.
+        wait_until([&] {
+            std::lock_guard lock(state->event_mutex);
+            return state->completed.has_value();
+        });
+        {
+            std::lock_guard lock(state->event_mutex);
+            const auto* begun = std::get_if<arknet::mysql::query_result>(&*state->completed);
+            REQUIRE(begun);
+            REQUIRE(*begun);
+            REQUIRE((begun->status_flags & 1u) != 0);
+        }
+        if (!expire_before_delivery)
+        {
+            state->deadline = std::chrono::steady_clock::time_point::max();
+            REQUIRE(owner->update(1) == 1);
+            REQUIRE(reply);
+            REQUIRE(*reply);
+            REQUIRE(reply->transaction);
+            REQUIRE(reply->transaction_status.outcome == mysql_transaction_outcome::active);
+        }
+        owner->stop_accepting();
+        CHECK_FALSE(owner->logically_drained());
+        state->deadline = std::chrono::steady_clock::now() - 1ms;
+        CHECK(owner->update(1) == 0);
+        wait_until([&] { return seen.rollbacks == 1; });
+        CHECK(state->phase == mysql_transaction_phase::cleanup);
+        CHECK_FALSE(owner->logically_drained());
+        CHECK(calls == (expire_before_delivery ? 0u : 1u));
+        seen.allow_rollback = true;
+        wait_until([&] {
+            owner->update(1);
+            return owner->logically_drained();
+        });
+        REQUIRE(reply);
+        REQUIRE(*reply);
+        CHECK(calls == 1);
+        if (expire_before_delivery)
+        {
+            // bool reports the business result, not a live transaction token.
+            CHECK_FALSE(reply->transaction);
+            CHECK(reply->transaction_status.outcome == mysql_transaction_outcome::rolled_back);
+            REQUIRE(reply->rollback);
+            CHECK(*reply->rollback);
+        }
+        else
+        {
+            CHECK(reply->transaction->snapshot().outcome == mysql_transaction_outcome::rolled_back);
+        }
+        CHECK_FALSE(state->status.discard_requested);
+        CHECK(state->status.rollback_code == arknet::mysql::connection_errc::none);
+        CHECK(seen.commits == 0);
+        CHECK(seen.rollbacks == 1);
+        owner->close();
+        REQUIRE(pool->close_and_wait());
+        peer.finish();
     }
 }
 

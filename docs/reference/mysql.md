@@ -63,7 +63,10 @@ See [build/runtime activation](build-options.md#native-database-plugins) and [ma
 ```cpp
 ark::task<> update_player() {
     auto begun = co_await database_->begin("primary", {std::chrono::seconds(5), std::chrono::seconds(1)});
-    if (!begun) { co_return; }
+    if (!begun || begun.transaction == 0 ||
+        begun.transaction_status.outcome != ark::mysql_transaction_outcome::active) {
+        co_return;
+    }
     const auto id = begun.transaction;
     std::vector<arknet::mysql::field_value> values{std::int64_t{42}};
     auto changed = co_await database_->execute(id, "UPDATE players SET score=?", std::move(values));
@@ -78,6 +81,8 @@ ark::task<> update_player() {
 ```
 
 Transactions hold one native lease. Monotonic IDs belong only to the issuing module instance, owning no implementation object. One operation per transaction; unknown/expired IDs or overlapping steps throw. The original timeout covers acquire, BEGIN, steps and commit without renewal. Unused transactions roll back at deadline; `cleanup_timeout` separately bounds rollback. Failed/uncertain cleanup discards the connection; no automatic retry or cross-connection replay.
+
+Converting `mysql_reply` or `mysql_transaction_reply` to `bool` checks business success. A successful BEGIN can expire and roll back before owner delivery, returning no transaction ID; check both `transaction` and `transaction_status.outcome` before submitting a step.
 
 `mysql_reply` retains the owning `arknet::mysql::query_result` and separate statement-close diagnostics. `mysql_transaction_reply` additionally retains rollback results, initiation failures and the final transaction status. Successful execution alone does not prove cleanup or commit succeeded. Native database/transport failures are returned; local C++ and bridge admission failures propagate as exceptions. Cancellation requests reach the native request and preserve `outcome_unknown` for a potentially executed statement.
 
