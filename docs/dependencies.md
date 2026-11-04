@@ -36,7 +36,9 @@ The manifest reader first uses an installed toml++ 3.4+ package. For builds with
 that package, its existing fallback remains pinned to commit
 `30172438cee64926dc41fdd9c11fb3ba5b2ba9de`. The fallback is used only when the package
 was not found; a vcpkg configuration build does not install a second copy.
-arknet uses [0.2.3](https://github.com/OpenArkStudio/arknet/releases/tag/v0.2.3), pinned to its immutable release commit in the root CMake file and the database CI checkout. This version fixes RUDP send-queue state after allocation failure without changing public APIs; rebuild consumers to use the fix. Installed-package consumption requires a compatible arknet 0.2.3 or later.
+The root CMake file and database CI checkout pin arknet to immutable [source commit `d8ff34162cd1b490683f579ef23431068d8b7d8b`](https://github.com/OpenArkStudio/arknet/commit/d8ff34162cd1b490683f579ef23431068d8b7d8b). This source includes FEC cleanup of an affected incomplete recovery group when shard staging throws, while application delivery callback exceptions preserve accepted state. Redis rejects invalid fractional double replies and nested push frames. Rebuild consumers to take these fixes.
+
+These source fixes follow the published [0.2.3 release](https://github.com/OpenArkStudio/arknet/releases/tag/v0.2.3); the package version remains 0.2.3. Installed-package consumption accepts a compatible arknet 0.2.3 or later, but the version alone does not identify these fixes. Build and install the same pinned source to retain them; see [package consumption](get-started/installation.md#install-and-consume-the-cmake-package).
 
 For local development, supply `ARKNET_SOURCE_DIR`. Existing build directories retain their cached `ARKNET_REVISION`; follow the [installation instructions](get-started/installation.md#upgrade-arknet) to update it explicitly, or use a fresh build directory. Existing performance and database reports continue to describe their stated tested revisions.
 

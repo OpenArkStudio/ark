@@ -93,16 +93,16 @@ Consul、Etcd Client、Kafka 和 OSS SDK 已[归档](../reference/directory-stru
 
 由 CMake 获取网络库时，仓库中的 `ARKNET_REVISION` 默认值指定一个固定的 arknet commit。更新 ark 源码不会替换已有 `CMakeCache.txt` 中保存的 `ARKNET_REVISION`。
 
-使用新的构建目录并重新执行上面的配置命令，即可采用仓库默认值。需要保留现有构建目录时，先将 `RELEASE_COMMIT` 替换为选定 [arknet release](https://github.com/OpenArkStudio/arknet/releases) 的完整 40 位 commit SHA，再显式更新缓存：
+使用新的构建目录并重新执行上面的配置命令，即可采用仓库默认值。需要保留现有构建目录时，只清除缓存中的版本引用，让 CMake 采用更新后 ark 源码的默认值：
 
 ```sh
-cmake -S . -B app-build -DARKNET_REVISION=RELEASE_COMMIT
+cmake -U ARKNET_REVISION -S . -B app-build
 cmake --build app-build --parallel 2
 ```
 
-已有构建目录会保留其他配置选项。核对 `app-build/CMakeCache.txt` 中的 `ARKNET_REVISION`；使用多配置生成器时，构建仍需添加 `--config Release`。
+已有构建目录会保留其他配置选项。核对 `app-build/CMakeCache.txt` 中的 `ARKNET_REVISION`；使用多配置生成器时，构建仍需添加 `--config Release`。需要显式选择其他版本时，将 `ARKNET_REVISION` 设为对应的完整 40 位 commit SHA。[依赖管理](../dependencies_CN.md)列出仓库固定提交及其是否属于已发布版本。
 
-`ARKNET_SOURCE_DIR` 非空时，CMake 直接使用该本地源码，不会按 `ARKNET_REVISION` 获取版本。开发时需显式更新这个源码目录。需要恢复按固定 commit 获取依赖时，配置 `-DARKNET_SOURCE_DIR=` 并设置所需的 `-DARKNET_REVISION=RELEASE_COMMIT`。这些 CMake 覆盖项仍可使用；CI 策略只核对仓库默认引用，不检查开发者的缓存或本地源码。
+`ARKNET_SOURCE_DIR` 非空时，CMake 直接使用该本地源码，不会按 `ARKNET_REVISION` 获取版本。开发时需显式更新这个源码目录。需要恢复按仓库固定 commit 获取依赖时，配置 `-DARKNET_SOURCE_DIR=` 和 `-U ARKNET_REVISION`。这些 CMake 覆盖项仍可使用；CI 策略只核对仓库默认引用，不检查开发者的缓存或本地源码。
 
 ## 安装并消费 CMake 包
 
@@ -122,6 +122,8 @@ arknet 仍是独立依赖：通过其自身构建单独安装兼容的 0.2.3 或
 运行配置使用 TOML，Entity 定义与业务资源使用 JSON。`<ark/xml.hpp>` 包装器及 RapidXML 依赖已退役。迁移时须一起重建应用和插件，并安装到干净前缀；覆盖安装不会自动删除旧包遗留的头文件。
 
 如需使用已经安装的 arknet，配置时添加 `-DARK_USE_INSTALLED_ARKNET=ON`。该选项优先于 `ARKNET_SOURCE_DIR` 与 `ARKNET_REVISION`；原有源码构建方式继续受支持。
+
+包版本检查不能识别确切源码提交。要保留 ark 固定源码中的修复，请从同一提交构建 arknet，安装到干净前缀，并通过 `CMAKE_PREFIX_PATH` 选择该前缀。旧 release 的包可能满足 0.2.3 版本检查，却不包含后续修复；应单独确认其源码版本并重新构建使用方。
 
 独立应用的 `CMakeLists.txt` 使用与源码消费相同的别名：
 

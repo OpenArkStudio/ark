@@ -31,7 +31,9 @@ Consul、Etcd Client、Kafka 和 OSS SDK 已[归档](reference/directory-structu
 清单读取器优先使用已安装的 toml++ 3.4+ 包。未安装该包时，保留原有固定提交
 `30172438cee64926dc41fdd9c11fb3ba5b2ba9de` 的获取路径；仅在找不到包时使用该路径，
 正常的 vcpkg 配置构建不会安装第二份 toml++。
-arknet 使用 [0.2.3](https://github.com/OpenArkStudio/arknet/releases/tag/v0.2.3)，由根 CMake 文件固定到该版本的不可变提交，数据库 CI 使用同一提交。该版本修复 RUDP 发送队列在内存分配失败时的状态处理，不要求修改公开 API；使用方需要重新构建。安装包消费要求兼容的 arknet 0.2.3 或更新版本。
+根 CMake 文件与数据库 CI 将 arknet 固定到不可变[源码提交 `d8ff34162cd1b490683f579ef23431068d8b7d8b`](https://github.com/OpenArkStudio/arknet/commit/d8ff34162cd1b490683f579ef23431068d8b7d8b)。该源码在 FEC 分片暂存抛出异常时释放受影响的未完成恢复组；应用交付回调抛出异常时保留已接受状态。Redis 拒绝非法小数 double 回复与嵌套 push 帧。使用方需要重新构建才能采用这些修复。
+
+这些源码修复位于已发布的 [0.2.3 release](https://github.com/OpenArkStudio/arknet/releases/tag/v0.2.3) 之后，包版本仍为 0.2.3。安装包消费接受兼容的 arknet 0.2.3 或更新版本，但版本号本身不能识别这些修复。需要保留修复时，应从同一固定源码构建并安装；参见[安装包消费](get-started/installation_CN.md#安装并消费-cmake-包)。
 
 本地开发可以通过 `ARKNET_SOURCE_DIR` 提供源码。已有构建目录会保留缓存中的 `ARKNET_REVISION`，升级时请按[安装说明](get-started/installation_CN.md#升级-arknet)显式更新缓存，或使用新的构建目录。既有性能与数据库报告仍对应各自列出的测试版本。
 
