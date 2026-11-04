@@ -397,7 +397,14 @@ void add_config(entity_json::document& output, const std::string& class_name, co
         for (const auto& field : definition->fields)
         {
             try
-            { values.emplace(field.name, value(header.get(row, field.name), field.type)); }
+            {
+                const auto column = header.indices.at(field.name);
+                if (column >= row.size())
+                {
+                    throw std::runtime_error("missing data cell");
+                }
+                values.emplace(field.name, value(row[column], field.type));
+            }
             catch (const std::exception& error)
             {
                 throw std::runtime_error(

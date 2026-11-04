@@ -71,7 +71,7 @@ The first four headers are required. A `class` declaration leaves `index` and `n
 
 Scalars support `bool`, `int32`, `uint32`, `int64`, `uint64`, `float`, `double`, `string`, `guid`; authoring aliases `int`/`object` mean `int32`/`guid`. Vector and wide-string primitives are rejected. Kernel base fields occupy indices 1..4; the example uses profile `id` at 99 and business fields at 100..108. Preserve indices when rearranging rows.
 
-Profile headers must list every scalar field exactly once; each row supplies complete typed values and a positive, globally unique `uint32` `id`. Missing columns, invalid types/ranges, duplicate IDs and unknown classes fail. Blank numeric cells do not supply defaults; an empty string is valid for strings. Profiles initialize scalars, not table/container row defaults.
+Profile headers must list every scalar field exactly once; each row supplies complete typed values and a positive, globally unique `uint32` `id`. Missing columns or row cells, invalid types/ranges, duplicate IDs and unknown classes fail. Blank numeric cells do not supply defaults; an empty string is valid for strings. CSV must include trailing empty cells: with headers `id,label`, use `1,` or `1,""` for an empty label; `1` is incomplete and fails. Profiles initialize scalars, not table/container row defaults.
 
 XLSX formulas are rejected even when cached results exist. Export calculated values or CSV instead. Integer values outside `[-9007199254740991, 9007199254740991]` must use XLSX **text** cells, especially `uint64` values such as `18446744073709551615`; spreadsheet numeric cells can already have lost precision. Strings and GUIDs also require text cells. CSV preserves decimal integer text, but cannot recover an already rounded spreadsheet value.
 
