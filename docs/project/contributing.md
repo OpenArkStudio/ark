@@ -53,7 +53,7 @@ Diagnostics report available vcpkg ABI metadata after configuration, including f
 | Other source-PR profiles | May keep a bounded weekly snapshot within their own PR ref |
 | Queue snapshots | Restore only; no duplicate uploads per candidate |
 
-The **Compiler cache seed** workflow builds accepted Linux/macOS application inputs on `main`, without repeating the regression matrix. Superseded push inputs may skip this cache-only work; active acceptance runs are preserved. Linux application cache capacity is 1 GiB, macOS 512 MiB. Capacity is configurable from 64 to 1024 MiB; it is a local job budget, not a repository storage limit. This change does not increase paid cache storage or remove existing remote caches.
+The **Compiler cache seed** workflow builds accepted Linux/macOS application inputs on `main`, without repeating the regression matrix. It also publishes matching dependency archives so later Unix configurations can reuse them. Superseded push inputs may skip this cache-only work; active acceptance runs are preserved. Linux application cache capacity is 1 GiB, macOS 512 MiB. Capacity is configurable from 64 to 1024 MiB; it is a local job budget, not a repository storage limit. This change does not increase paid cache storage or remove existing remote caches.
 
 An exact weekly hit may reuse an earlier accepted snapshot without rebuilding it. Ordinary CI still compiles and validates its actual revision; new inputs can miss until the next snapshot. An archive hit is distinct from an object hit. [GitHub's cache access rules](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching) still apply.
 

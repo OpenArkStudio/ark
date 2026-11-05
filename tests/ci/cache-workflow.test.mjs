@@ -7,6 +7,19 @@ import { selectScope } from '../../.github/scripts/ci-policy.mjs';
 
 const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 const compilerSeed = readFileSync(new URL('../../.github/workflows/compiler-cache-seed.yml', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+
+test('trusted Unix application warmup publishes dependencies after configure and before source compilation', () => {
+  const steps = jobSteps('applications', compilerSeed);
+  const configure = onlyStep(steps, step => step.includes('name: Configure applications\n'), 'seed configure');
+  const save = onlyStep(steps, step => step.includes('name: Save application dependency archives\n'), 'dependency seed');
+  const compile = onlyStep(steps, step => step.includes('name: Compile accepted main inputs\n'), 'seed build');
+  assert.ok(configure.index < save.index && save.index < compile.index);
+  assert.match(save.step, /success\(\).*current\.outputs\.build == 'true'.*vcpkg-cache\.outputs\.enabled == 'true'/);
+  assert.match(save.step, /steps\.vcpkg-restore\.outputs\.cache-hit != 'true'/);
+  assert.match(save.step, /continue-on-error: true/);
+  assert.match(save.step, /path: \$\{\{ steps\.vcpkg-cache\.outputs\.directory \}\}/);
+  assert.match(save.step, /key: \$\{\{ steps\.vcpkg-cache\.outputs\.key \}\}/);
+});
 const profiles = [
   ['network', 'Configure network regressions', 'ci-build', ['check-network']],
   ['applications', 'Configure applications', 'ci-build', ['check-core', 'check-entity-benchmark-smoke']],

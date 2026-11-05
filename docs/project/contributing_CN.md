@@ -53,7 +53,7 @@ vcpkg 包归档与项目编译对象分开缓存。依赖 key 保留系统／架
 | 其他源 PR profile | 可在自身 PR 引用中保留一份每周快照 |
 | 队列快照 | 只恢复，不按候选重复上传 |
 
-**Compiler cache seed** 工作流编译 `main` 上已接受的 Linux／macOS 应用输入，不重复回归矩阵。已被新 main 替代的推送可跳过这项缓存工作；活动验收继续保留。Linux 应用缓存为 1 GiB，macOS 为 512 MiB，可配置范围为 64–1024 MiB。这是单任务本地预算，不是仓库总额度；不增加付费缓存空间、不删除现有远端缓存。
+**Compiler cache seed** 工作流编译 `main` 上已接受的 Linux／macOS 应用输入，不重复回归矩阵。同时保存匹配的依赖包归档，供后续 Unix 配置复用。已被新 main 替代的推送可跳过这项缓存工作；活动验收继续保留。Linux 应用缓存为 1 GiB，macOS 为 512 MiB，可配置范围为 64–1024 MiB。这是单任务本地预算，不是仓库总额度；不增加付费缓存空间、不删除现有远端缓存。
 
 精确命中每周快照时，可以使用此前已接受版本的对象而不重新生成快照。普通 CI 仍编译并验证实际版本；新增输入可能未命中，直到下一份快照。归档命中不等于目标文件命中。[GitHub 缓存访问规则](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching)仍生效。
 

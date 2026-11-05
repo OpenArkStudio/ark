@@ -135,6 +135,13 @@ jobs:
       - name: Configure applications
         if: steps.current.outputs.build == 'true'
         run: node .github/scripts/ci-applications.mjs configure
+      - name: Save application dependency archives
+        if: ${{ success() && steps.current.outputs.build == 'true' && steps.vcpkg-cache.outputs.enabled == 'true' && steps.vcpkg-restore.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.vcpkg-cache.outputs.directory }}
+          key: ${{ steps.vcpkg-cache.outputs.key }}
       - name: Prepare controlled cold-cache measurement
         if: steps.current.outputs.build == 'true' && inputs.verify_reuse == true
         shell: pwsh
@@ -157,6 +164,7 @@ jobs:
         env:
           COMPILER_ARCHIVE_HIT: ${{ steps.compiler-restore.outputs.cache-hit }}
           VCPKG_ARCHIVE_HIT: ${{ steps.vcpkg-restore.outputs.cache-hit }}
+          VCPKG_ARCHIVE_DIRECTORY: ${{ steps.vcpkg-cache.outputs.directory }}
           ARK_CACHE_SAMPLE: ${{ inputs.verify_reuse == true && 'controlled-cold' || 'seed-or-restored-snapshot' }}
           ARK_CACHE_BUILD_EXECUTED: ${{ (steps.compiler-restore.outputs.cache-hit != 'true' || inputs.verify_reuse == true) && 'true' || 'false' }}
           ARK_CACHE_ARCHIVE_KEY: ${{ steps.compiler-cache.outputs.archive_key }}
@@ -167,6 +175,8 @@ jobs:
         env:
           COMPILER_ARCHIVE_HIT: ${{ steps.compiler-restore.outputs.cache-hit }}
           ARK_CACHE_SAMPLE: controlled-warm
+          VCPKG_ARCHIVE_HIT: ${{ steps.vcpkg-restore.outputs.cache-hit }}
+          VCPKG_ARCHIVE_DIRECTORY: ${{ steps.vcpkg-cache.outputs.directory }}
           ARK_CACHE_BUILD_EXECUTED: 'true'
           ARK_CACHE_ARCHIVE_KEY: ${{ steps.compiler-cache.outputs.archive_key }}
         run: |
