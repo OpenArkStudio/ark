@@ -5,6 +5,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { applicationCommands } from '../../.github/scripts/ci-applications.mjs';
 const read = path => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 
 test('HTTP example regressions build the real DSO sources without enabling application examples', () => {
@@ -62,8 +63,12 @@ test('existing Applications CI reaches HTTP example regressions through core Boo
     .find(block => block.startsWith('  applications:\n'));
   assert.ok(applications);
   const configure = applications.match(/      - name: Configure applications[\s\S]*?(?=\n      - )/)?.[0];
-  assert.match(configure ?? '', /-DARK_BUILD_CORE_TESTS=ON/);
-  assert.match(configure ?? '', /-DASIO_STANDALONE=OFF/);
-  assert.doesNotMatch(configure ?? '', /-DARK_BUILD_HTTP_EXAMPLE_TESTS=OFF/);
-  assert.match(applications, /run: cmake --build ci-build --target check-core/);
+  assert.match(configure ?? '', /run: node \.github\/scripts\/ci-applications\.mjs configure$/m);
+  const env = { GITHUB_EVENT_NAME: 'merge_group', VCPKG_ROOT: '/vcpkg' };
+  const [args] = applicationCommands('configure', env);
+  assert.ok(args.includes('-DARK_BUILD_CORE_TESTS=ON'));
+  assert.ok(args.includes('-DASIO_STANDALONE=OFF'));
+  assert.ok(!args.includes('-DARK_BUILD_HTTP_EXAMPLE_TESTS=OFF'));
+  assert.match(applications, /run: node \.github\/scripts\/ci-applications\.mjs check\n/);
+  assert.ok(applicationCommands('check', env).some(command => command[3] === 'check-core'));
 });

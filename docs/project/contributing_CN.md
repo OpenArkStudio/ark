@@ -17,114 +17,50 @@ npm run check --prefix docs/site
 
 ## CI 文档范围
 
-根目录的精确文件 `AGENTS.md` 归为文档。改动范围已知且非空、仅包含已识别的文档，
-并且 Nimbus 文档站可用时，源分支 PR 与合并候选均要求文档检查和 `CI - required`，
-原生任务明确跳过。Nimbus 检查文档站；只有根 README 变化时才检查其链接。
+| 改动 | 源分支 PR | 合并队列／手动验收 |
+| --- | --- | --- |
+| 已识别的纯文档 | Nimbus 与相关 README 链接检查 | 同样的文档检查 |
+| 已登记的应用输入 | 相关检查目标及 CMake 依赖 | 完整跨平台矩阵与应用构建 |
+| 公开接口、构建、依赖、CI 或未知输入 | 完整应用检查；范围不确定时保留所有模块 | 完整跨平台矩阵 |
 
-嵌套的未知 `AGENTS.md` 路径、名称相近的代码、混合源码变更、范围不可用或文档站不可用时，
-仍保留原生检查。手动运行保留完整原生矩阵。CI 策略本身的变更仍须完成原生验收，
-这项文档例外不会改变该要求。
+所有 PR 均要求 `CI - required`。范围分类缺失或失败时回退完整检查。按目标构建不减少队列／手动验收、归档集成的构造检查、运行时检测或测试超时约束。草稿预览不代表通过验收。
 
-Applications 任务的依赖准备、编译与回归共用 60 分钟总预算。Windows 未命中缓存时，
-仅依赖配置就可能耗时约 26 分钟。各测试自身的限时和全部必需检查保持不变；
-取消的任务不算通过，需要重新完成一个成功的合并候选检查。
+## CI 构建资源
+
+根据实际 CPU 和内存选择编译并行度，最多四路。7–8 GiB 执行机保持两路编译、一路链接；16 GiB 使用四路编译、一路链接；至少 19 GiB 才允许两路链接。这是调度估算，不保证单个编译单元的内存峰值。
+
+Ninja 分别限制编译与链接任务。`ARK_BUILD_JOBS_OVERRIDE`、`ARK_LINK_JOBS_OVERRIDE` 只能降低计算出的上限。资源信息缺失时采用保守值。
 
 ## CI 依赖包归档缓存
 
-CI 使用 `actions/cache` 恢复执行机临时目录中的 vcpkg 包归档。
-带版本号的 v2 key 由兼容前缀和精确执行机镜像后缀组成。
-前缀包含执行机操作系统与架构、`ImageOS`、固定的 vcpkg 版本、manifest 和配置文件内容
-（含 baseline）、本地 port overlay、选中和默认 feature、构建 profile、编译器环境参数，
-以及 target/host triplet 覆盖项。只有 `ImageVersion` 移到后缀。
-在 Actions 搜索的每个引用内，先查找精确 key，再使用这一个前缀，不提供仅按操作系统或跨 profile 的回退。
-两个镜像字段仍为必填项。
+vcpkg 包归档与项目编译对象分开缓存。依赖 key 保留系统／架构、manifest 与 overlay、feature、profile 和编译器环境。跨镜像小版本恢复后，仍由 vcpkg 的真实 ABI hash 决定能否使用包，不关闭编译器跟踪。
 
-恢复归档只为 vcpkg 的 `files` provider 提供候选包，不直接恢复依赖安装目录。
-vcpkg 为每个请求的包计算完整 ABI hash，其中保留编译器跟踪；只有 hash 匹配时才取用归档，
-不匹配的包仍从源码构建。工作流不会关闭编译器跟踪、覆盖 ABI hash 或重命名包归档。
-具体规则见 [vcpkg ABI 不匹配说明](https://learn.microsoft.com/en-us/vcpkg/users/binarycaching-troubleshooting#cause-3-differences-between-local-and-remote-build-environments)。
-因此，滚动更新的镜像可以共享归档缓存，但恢复成功不代表其中每个包都兼容。
-
-配置成功后，未命中或通过前缀恢复的运行只按精确 key 保存一次，不另外按兼容前缀保存第二份。
-各镜像的快照仍可能包含重复归档并占用缓存空间。v1 key 无法通过这个前缀安全查找，因此不参与回退；
-可访问的运行尚未保存相同依赖配置的 v2 缓存时，v2 仍需冷构建。
-Actions 缓存的分支／引用可见性规则继续生效，详见 [Actions 缓存规则](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#cache-key-matching)。
-本次改动不能让另一个合并队列引用的缓存变得可读。
-相互无法读取缓存的队列运行需要默认分支中兼容的 v2 归档作为初始来源。
-
-`Dependency cache seed`（`.github/workflows/vcpkg-seed.yml`）为 `main` 建立
-Windows Applications 基线。仅在 main 推送修改 `vcpkg.json`、`vcpkg-configuration.json`、
-`ports/**`、`.gitattributes`、缓存 key 脚本或种子工作流自身时自动执行；首次部署也会触发。
-遇到新执行机镜像或基线缺失时，可显式运行 `gh workflow run vcpkg-seed.yml --ref main`；
-其他引用上的手动运行会跳过任务，不设置定时执行。
-策略测试要求种子与必需 Applications 任务的缓存身份、工具版本和完整 Windows 配置一致，
-因此这些输入变化时必须同步两个工作流。
-
-种子只执行 CMake 配置和依赖安装，随后将归档保存到 main 的缓存作用域；
-不构建 ark 目标、不重复原生回归矩阵、不启用 Windows 编译缓存，也不替代必需 CI。
-配置失败、files provider／key 不可用、包归档为空，或应执行的保存未产生可验证的精确缓存条目时，
-种子任务均明确失败。已命中精确 key 时跳过保存；保存后只查询精确条目的元数据并显式检查命中，
-避免上传失败仅报告 warning 却使任务成功。恢复与诊断仍尽力执行，必需 CI 中的缓存继续可选。
-种子成功只确认当前归档可用；还须确认后续候选恢复归档并由 vcpkg 复用匹配包，
-才能声明热构建或耗时改善。镜像／ABI 变化和缓存驱逐仍可能导致冷构建。
-
-必需 CI 中，身份信息缺失、依赖布局或归档路径不受支持时，继续关闭持久缓存并导出 `VCPKG_BINARY_SOURCES=clear`。
-缓存服务失败不影响正常的源码配置、编译和回归检查。依赖缓存仅覆盖包归档，不包含依赖安装目录。项目目标文件缓存单独配置，见下文。
-本地 Node 测试验证查找边界、输出与工作流连接；托管环境中的缓存复用和耗时变化仍需独立 CI 证据。
-
+现有 **Dependency cache seed** 工作流在受信任的 `main` 准备 Windows 应用依赖，只配置依赖，不编译 ark 或重复原生回归。种子必须通过精确缓存查找验证。必需 CI 中缓存始终可选，缓存故障时正常编译。
 
 ### Windows ABI 诊断
 
-依赖配置及原有的归档保存步骤之后，Windows Applications 为 Asio、spdlog 和 Protobuf
-记录有界的 JSON 诊断。脚本只读取
-`ci-build/vcpkg_installed/x64-windows/share/<port>/vcpkg_abi_info.txt`，
-不搜索目录，也不调用构建工具。符号链接、非普通文件、格式错误、triplet 不符或超过 64 KiB 的文件均被拒绝。
-元数据缺失或被拒绝时明确报告 `unavailable`；可选字段缺失时同样报告 `unavailable`，不将缺失视为相等。
-
-`packageAbi` 是 ABI 元数据原始字节的 SHA256。字段值仅以 SHA256 指纹输出，字段名固定为：
-`triplet`、`triplet_abi`、`features`、`cmake`、`powershell`、`compiler_hash`、`portfile.cmake`、
-`ports.cmake`、`vcpkg.json`、`post_build_checks`、`sbom_info`、`vcpkg-cmake`、
-`vcpkg-cmake-config`、`abseil` 和 `utf8-range`。
-未知字段名和所有原始值均不输出，不记录完整环境、绝对路径或凭据，也不上传元数据文件或 artifact。
-独立的 `compiler_hash` 字段可能不存在；诊断不会根据编译器版本字符串推断其值，也不拆解不透明的 `triplet_abi` 值。
-
-此前步骤失败后，诊断仍会执行，任务取消时除外。状态只表示元数据是否可用，不能让配置、编译或测试的失败变为成功。
-诊断错误也不会成为新增的原生验收条件。缓存 key/provider、编译器跟踪和构建设置均保持不变。
-对比不同运行的指纹可以缩小 ABI 差异范围；已输出字段相同不能证明未输出的输入相同。
-诊断不判定缓存命中，也不构成性能测量。
-
+诊断输出配置阶段可用的 vcpkg ABI 元数据，包括配置失败的情况。不推断缺失 hash、不改变依赖选择，也不让失败构建变为成功。
 
 ## CI 编译目标文件缓存
 
-Linux 和 macOS 原生任务可选使用 `Mozilla-Actions/sccache-action@v0.0.11`，
-固定 sccache 版本为 `v0.16.0`。准备步骤先验证可执行文件的精确版本，再导出 C 和 C++ 的
-CMake 编译器 launcher。编译器仍由 CMake 选择；平台、依赖 profile、sanitizer 参数、构建目标、
-并行度、回归检查和超时设置保持不变。Windows Debug 任务直接编译；保留现有 `/Zi` 共享 PDB
-配置，不为获得缓存命中而修改参数。
+| 配置 | 行为 |
+| --- | --- |
+| Linux／macOS | 固定 sccache 0.16.0；实际编译器仍由 CMake 选择 |
+| Windows Debug | 直接编译，保留原有 `/Zi` 配置 |
+| 兼容性 | 保留依赖／profile 族；sccache 校验实际编译器、参数、源码和头文件 |
+| 快照 | 每个兼容族、信任范围与 ISO 周保留一份不可变快照 |
+| 应用快照 | 只由受信任的 `main` 写入，PR 和队列恢复使用 |
+| 其他源 PR profile | 可在自身 PR 引用中保留一份每周快照 |
+| 队列快照 | 只恢复，不按候选重复上传 |
 
-编译归档使用独立命名空间，与 vcpkg 包归档分开。兼容前缀采用现有依赖 key 的完整身份信息，
-包括精确镜像版本、manifest/overlay 指纹、编译器环境，以及模块、sanitizer 和依赖 profile。
-源码 commit 只作为不可变快照的后缀。兼容前缀和 `SCCACHE_C_CUSTOM_CACHE_BUSTER` 不包含运行 ID
-或源码 commit，因此相同身份的后续 commit 可以恢复目标文件。编译缓存不跨镜像或 profile 回退。
-sccache 仍逐次验证编译器身份、编译参数及源码和头文件输入；恢复归档不代表目标文件命中，
-也不会绕过编译输入校验。
+**Compiler cache seed** 工作流编译 `main` 上已接受的 Linux／macOS 应用输入，不重复回归矩阵。同时保存匹配的依赖包归档，供后续 Unix 配置复用。已被新 main 替代的推送可跳过这项缓存工作；活动验收继续保留。Linux 应用缓存为 1 GiB，macOS 为 512 MiB，可配置范围为 64–1024 MiB。这是单任务本地预算，不是仓库总额度；不增加付费缓存空间、不删除现有远端缓存。
 
-每个任务在执行机临时目录中设置 `SCCACHE_CACHE_SIZE=512M`。完整矩阵有九个可用的 Linux/macOS
-任务，每个源码快照对应九份这样的本地缓存预算；Windows 不增加编译缓存。
-Actions 保存不可变快照，不同 commit 和引用的快照可能重复占用空间，因此这不是仓库总存储上限。
-压缩、元数据、依赖包归档和缓存服务保留策略需要单独计算。Actions 的分支／引用可见性规则仍然适用；
-key 相同不能让不同合并队列引用相互读取缓存。
+精确命中每周快照时，可以使用此前已接受版本的对象而不重新生成快照。普通 CI 仍编译并验证实际版本；新增输入可能未命中，直到下一份快照。归档命中不等于目标文件命中。[GitHub 缓存访问规则](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching)仍生效。
 
-安装、版本验证、缓存恢复或服务启动失败时，launcher 为空并正常编译。
-缓存服务 I/O 失败通过 `SCCACHE_IGNORE_SERVER_IO_ERROR=1` 回退。
-编译或测试失败仍使任务失败；工作流不会在编译器报错后移除 launcher 自动重试。
-launcher 成功启动且精确 key 未命中时，未取消的任务会保存新的编译快照，包括编译或回归失败的任务。
-尽力生成的任务摘要报告依赖归档状态、编译归档精确命中状态，以及 sccache 统计。
-前缀恢复与目标文件命中是两类不同证据。
+## 验证 CI 改动
 
-运行 `node --test tests/ci/*.test.mjs` 验证缓存身份、回退行为和工作流契约。
-永久保留的 CMake/Ninja fixture 使用含空格路径的 launcher 编译 C 和 C++，并验证启用和关闭
-launcher 时，故意引入的编译错误均会传播。fixture 使用透明转发脚本，不使用 sccache，
-不能证明托管环境命中。托管验收需要对比冷任务与随后身份相同的任务，记录源码版本、归档查找结果、
-sccache 命中／未命中，以及准备、配置、构建和测试耗时，并保留全部必要回归。
-这些证据齐备之前不宣称构建提速。Linux/macOS 原生 CI 仍需分别验收；Windows 继续直接编译。
+    node --test tests/ci/*.test.mjs
+
+测试覆盖范围回退、工作流边界、编译错误传播，以及真实 CMake／Ninja 的依赖和资源控制。原生验收与托管环境验收单独完成。
+
+测量复用时，在 `main` 手动运行 **Compiler cache seed**，设置 `verify_reuse=true`。工作流仅清空该任务的本地编译对象，记录受控冷构建，再清理项目输出，以相同源码和设置记录热构建；远端缓存不变。摘要标注源码、归档查找、是否执行构建、样本类型和目标文件统计。比较依赖准备、编译与回归耗时后，才能声明提速。

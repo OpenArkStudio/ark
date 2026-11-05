@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync, statSync } from 'node:fs';
 import { posix, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { applicationTargetsForPath, selectApplicationBuildPlan } from './application-build-plan.mjs';
 
 const shaPattern = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
 const cppPath = /\.(?:c|cc|cpp|cxx|c\+\+|h|hh|hpp|hxx|inl|ipp|tpp|proto)$/i;
@@ -79,6 +80,7 @@ const nativeJobs = ['network', 'applications', 'database'];
 function modulesForPath(file) {
   if (isDocumentationPath(file)) return [];
   if (!isRepositoryPath(file)) return nativeJobs;
+  if (applicationTargetsForPath(file)) return ['applications'];
   if (!cppPath.test(file) && !file.endsWith('/CMakeLists.txt')) return nativeJobs;
   if (/^(?:tests\/network\/|benchmarks\/network_buffers\.cpp$)/.test(file)) return ['network'];
   if (/^(?:tests\/database\/|benchmarks\/database\.cpp$)/.test(file)) return ['database'];
@@ -114,7 +116,7 @@ export function selectScope({ eventName, files, site, enumerationFailed = false 
   if (native && (!narrow || unknown)) {
     for (const job of nativeJobs) selected.add(job);
   }
-  return {
+  const decision = {
     event_name: eventName,
     validation_stage: !native ? 'documentation' : narrow ? 'modules' : 'full',
     native_check: native,
@@ -131,6 +133,8 @@ export function selectScope({ eventName, files, site, enumerationFailed = false 
         !site.available ? 'site-unavailable' : eventName === 'merge_group' ? 'code-build-or-unknown-path' :
           unknown ? 'unknown-path' : 'module-paths',
   };
+  const applicationFiles = known ? paths.filter(file => modulesForPath(file).includes('applications')) : undefined;
+  return { ...decision, app_plan_json: JSON.stringify(selectApplicationBuildPlan({ eventName, files: applicationFiles, scope: decision })) };
 }
 
 export function admissionState(eventName, event) {

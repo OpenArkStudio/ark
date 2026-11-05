@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import { selectScope, validateGate } from '../../.github/scripts/ci-policy.mjs';
+import { applicationCommands } from '../../.github/scripts/ci-applications.mjs';
 
 const site = { present: true, available: true };
 const jobs = ['network', 'applications', 'database'];
@@ -249,7 +250,13 @@ test('workflow source jobs reuse Linux Boost and full acceptance retains exactly
   assert.match(jobBlock('network'), /-fsanitize=thread -fno-omit-frame-pointer/);
   assert.match(jobBlock('network'), /TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1/);
   assert.match(jobBlock('network'), /run: cmake --build ci-build --target check-network/);
-  assert.match(jobBlock('applications'), /run: cmake --build ci-build --target check-core/);
+  assert.match(jobBlock('applications'), /run: node \.github\/scripts\/ci-applications\.mjs build\n/);
+  assert.match(jobBlock('applications'), /run: node \.github\/scripts\/ci-applications\.mjs check\n/);
+  for (const eventName of ['merge_group', 'workflow_dispatch']) {
+    const env = { GITHUB_EVENT_NAME: eventName, ARK_BUILD_JOBS: '4' };
+    assert.deepEqual(applicationCommands('build', env), [['--build', 'ci-build', '--parallel', '4']]);
+    assert.deepEqual(applicationCommands('check', env).map(command => command[3]), ['check-core', 'check-entity-benchmark-smoke']);
+  }
   assert.match(jobBlock('database'), /run: cmake --build ci-database --target check-database\n/);
   assert.match(jobBlock('database'), /run: cmake --build ci-database --target check-database-benchmark/);
 });
@@ -272,8 +279,11 @@ test('Applications CI reaches the actual HTTP DSO lifecycle through check-core',
   const applications = jobBlock('applications');
   const configure = applications.match(/      - name: Configure applications[\s\S]*?(?=\n      - )/)?.[0];
   assert.ok(configure, 'Applications must configure the native runtime');
-  assert.match(configure, /(?:^|\s)-DARK_BUILD_PLUGIN_HTTP=ON(?:\s|$)/);
-  assert.match(applications, /run: cmake --build ci-build --target check-core(?:\s|$)/);
+  assert.match(configure, /run: node \.github\/scripts\/ci-applications\.mjs configure$/m);
+  const env = { GITHUB_EVENT_NAME: 'merge_group', VCPKG_ROOT: '/vcpkg' };
+  assert.ok(applicationCommands('configure', env)[0].includes('-DARK_BUILD_PLUGIN_HTTP=ON'));
+  assert.match(applications, /run: node \.github\/scripts\/ci-applications\.mjs check\n/);
+  assert.ok(applicationCommands('check', env).some(command => command[3] === 'check-core'));
   const core = readFileSync(new URL('../core/CMakeLists.txt', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
   const http = core.match(/if\(TARGET ark_http_plugin\)\n([\s\S]*?)\nendif\(\)/)?.[1];
   assert.ok(http, 'the optional HTTP target must expose its real-DSO check');

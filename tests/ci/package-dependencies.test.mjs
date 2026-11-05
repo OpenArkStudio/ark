@@ -2,10 +2,30 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
+import { applicationCommands } from '../../.github/scripts/ci-applications.mjs';
 
 const read = path => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 const manifest = JSON.parse(read('vcpkg.json'));
 const dependencies = values => values.map(value => typeof value === 'string' ? value : value.name);
+const fullApplicationEnv = { GITHUB_EVENT_NAME: 'merge_group', VCPKG_ROOT: '/vcpkg', ARK_BUILD_JOBS: '4' };
+const applicationConfigureArgs = () => applicationCommands('configure', fullApplicationEnv)[0];
+
+function applicationWorkflow(workflow) {
+  const applications = workflow.replaceAll('\r\n', '\n').split(/(?=^  [a-z][a-z0-9_-]*:$)/m)
+    .find(block => block.startsWith('  applications:\n'));
+  assert.ok(applications, 'Applications CI must remain configured');
+  const steps = applications.split(/(?=^      - )/m).slice(1);
+  const positions = ['configure', 'build', 'check'].map(action => {
+    const matches = steps.map((step, index) => ({ step, index }))
+      .filter(({ step }) => step.includes(`run: node .github/scripts/ci-applications.mjs ${action}\n`));
+    assert.equal(matches.length, 1, `Applications must invoke one ${action} phase`);
+    assert.doesNotMatch(matches[0].step, /^        (?:continue-on-error|if):/m);
+    return matches[0].index;
+  });
+  assert.ok(positions[0] < positions[1] && positions[1] < positions[2], 'configure, build and checks retain their required order');
+  assert.ok(applicationCommands('check', fullApplicationEnv).some(command => command[3] === 'check-core'));
+  return applications;
+}
 
 test('core packages are shared while application, configuration and JSON dependencies retain separate features', () => {
   const core = dependencies(manifest.dependencies);
@@ -35,10 +55,12 @@ test('the public core target propagates package usage requirements without a bun
   assert.doesNotMatch(read('src/plugins/net/net_service_manager_module_impl.cpp'), /json\.hpp/);
 });
 
-function applicationFeatures(workflow) {
-  const applications = workflow.split(/(?=^  [a-z][a-z0-9_-]*:$)/m).find(block => block.startsWith('  applications:\n'));
+function applicationFeatures(workflow, args = applicationConfigureArgs()) {
+  const applications = applicationWorkflow(workflow);
   const cache = applications.match(/VCPKG_CACHE_FEATURES: '([^']+)'/)[1].split(';').sort();
-  const configure = applications.match(/-DVCPKG_MANIFEST_FEATURES=([^"\s]+)/)[1].split(';').sort();
+  const features = args.filter(arg => arg.startsWith('-DVCPKG_MANIFEST_FEATURES='));
+  assert.equal(features.length, 1, 'the runner must select one complete feature set');
+  const configure = features[0].slice('-DVCPKG_MANIFEST_FEATURES='.length).split(';').sort();
   assert.deepEqual(configure, cache, 'cache metadata must describe the actual package features');
   assert.ok(configure.includes('etcd-client'), 'default etcd plugin requires its package feature');
   assert.ok(configure.includes('guest-room'), 'guest-room example requires its package feature');
@@ -50,37 +72,46 @@ test('CI caches exactly the configured application and offline-tool package feat
   applicationFeatures(workflow);
   assert.throws(() => applicationFeatures(workflow.replace('VCPKG_CACHE_FEATURES: \'application;boost;compression-tests;etcd-client;guest-room;config-tool\'',
     'VCPKG_CACHE_FEATURES: \'application;boost\'')), /cache metadata/);
-  assert.throws(() => applicationFeatures(workflow.replaceAll('application;boost;compression-tests;etcd-client;guest-room;config-tool', 'application;boost')), /requires its package feature/);
-  assert.throws(() => applicationFeatures(workflow.replaceAll(';guest-room', '')), /guest-room example requires its package feature/);
-  assert.throws(() => applicationFeatures(workflow.replaceAll(';config-tool', '')), /native exporter requires its package feature/);
+  const reduced = applicationConfigureArgs().map(arg => arg.replace('application;boost;compression-tests;etcd-client;guest-room;config-tool', 'application;boost'));
+  assert.throws(() => applicationFeatures(workflow.replaceAll('application;boost;compression-tests;etcd-client;guest-room;config-tool', 'application;boost'), reduced),
+    /requires its package feature/);
+  for (const [feature, message] of [['guest-room', /guest-room example requires its package feature/],
+    ['config-tool', /native exporter requires its package feature/]]) {
+    const args = applicationConfigureArgs().map(arg => arg.replace(`;${feature}`, ''));
+    assert.throws(() => applicationFeatures(workflow.replaceAll(`;${feature}`, ''), args), message);
+  }
   assert.doesNotMatch(workflow, /git submodule|Initialize pinned dependencies/);
   assert.equal(existsSync(new URL('../../.gitmodules', import.meta.url)), false);
 });
 
 test('Applications builds and executes the native configuration tool within existing jobs', () => {
-  const application = read('.github/workflows/ci.yml').split('  applications:\n')[1].split('\n  database:')[0];
-  assert.match(application, /-DARK_BUILD_CONFIG_TOOL=ON/);
-  assert.match(application, /-DARK_BUILD_CONFIG_TOOL_TESTS=ON/);
+  applicationWorkflow(read('.github/workflows/ci.yml'));
+  const args = applicationConfigureArgs();
+  assert.ok(args.includes('-DARK_BUILD_CONFIG_TOOL=ON'));
+  assert.ok(args.includes('-DARK_BUILD_CONFIG_TOOL_TESTS=ON'));
   const tools = read('tools/entity_config/CMakeLists.txt');
   assert.match(tools, /if\(TARGET check-core\)\s+add_dependencies\(check-core check-config-tool\)/);
   assert.match(tools, /find_package\(OpenXLSX 0\.5\.1 CONFIG REQUIRED\)/);
   assert.doesNotMatch(tools, /python|ruby|add_test\(/i);
 });
 
-function guestRoomApplications(workflow) {
-  const applications = workflow.split('  applications:\n')[1].split('\n  database:')[0];
-  assert.match(applications, /^          -DARK_BUILD_GUEST_ROOM_EXAMPLE=ON$/m,
+function guestRoomApplications(workflow, args = applicationConfigureArgs()) {
+  applicationWorkflow(workflow);
+  assert.ok(args.includes('-DARK_BUILD_GUEST_ROOM_EXAMPLE=ON'),
     'the shared Applications configure must enable guest-room on every selected platform');
-  const build = applications.indexOf('run: cmake --build ci-build --parallel 2');
-  const check = applications.indexOf('run: cmake --build ci-build --target check-core');
-  assert.ok(build >= 0 && check > build, 'build all runtime plugins before running check-core');
+  for (const runner of ['Linux', 'macOS', 'Windows']) {
+    assert.ok(applicationCommands('configure', { ...fullApplicationEnv, RUNNER_OS: runner })[0]
+      .includes('-DARK_BUILD_GUEST_ROOM_EXAMPLE=ON'), `${runner} must enable guest-room`);
+  }
+  assert.deepEqual(applicationCommands('build', fullApplicationEnv), [['--build', 'ci-build', '--parallel', '4']],
+    'full acceptance must build all runtime plugins before running check-core');
 }
 
 test('Applications builds guest-room on every platform and runs platform-appropriate checks through check-core', () => {
   const workflow = read('.github/workflows/ci.yml');
   guestRoomApplications(workflow);
-  assert.throws(() => guestRoomApplications(workflow.replace('-DARK_BUILD_GUEST_ROOM_EXAMPLE=ON',
-    '-DARK_BUILD_GUEST_ROOM_EXAMPLE=OFF')), /must enable guest-room/);
+  assert.throws(() => guestRoomApplications(workflow, applicationConfigureArgs().map(arg =>
+    arg.replace('-DARK_BUILD_GUEST_ROOM_EXAMPLE=ON', '-DARK_BUILD_GUEST_ROOM_EXAMPLE=OFF'))), /must enable guest-room/);
   const examples = read('examples/CMakeLists.txt');
   assert.match(examples, /option\(ARK_BUILD_GUEST_ROOM_EXAMPLE[^\n]* OFF\)/);
   assert.match(examples, /if\(ARK_BUILD_GUEST_ROOM_EXAMPLE\)\s+add_subdirectory\(guest_room\)/);
@@ -107,10 +138,10 @@ test('compression checks are opt-in and Applications CI runs all three codecs th
   const checks = read('tests/compression/CMakeLists.txt');
   for (const dependency of ['ZLIB', 'Zstd', 'LZ4']) assert.match(checks, new RegExp(`find_package\\(${dependency} REQUIRED\\)`));
   assert.match(checks, /add_custom_target\(check-compression\s+COMMAND \$<TARGET_FILE:ark_compression_tests>/);
-  const applications = read('.github/workflows/ci.yml').split('  applications:\n')[1].split('\n  database:')[0];
-  assert.match(applications, /-DVCPKG_MANIFEST_FEATURES=[^\n]*compression-tests/);
-  assert.match(applications, /-DARK_BUILD_COMPRESSION_TESTS=ON/);
-  assert.match(applications, /run: cmake --build ci-build --target check-core/);
+  applicationWorkflow(read('.github/workflows/ci.yml'));
+  const args = applicationConfigureArgs();
+  assert.ok(args.some(arg => arg.startsWith('-DVCPKG_MANIFEST_FEATURES=') && arg.split('=')[1].split(';').includes('compression-tests')));
+  assert.ok(args.includes('-DARK_BUILD_COMPRESSION_TESTS=ON'));
 });
 
 test('unsupported PhysX and simulate integrations fail explicitly instead of searching absent bundled SDKs', () => {
@@ -123,9 +154,8 @@ test('unsupported PhysX and simulate integrations fail explicitly instead of sea
 });
 
 test('Applications CI enables Consul construction and production export checks without a service', () => {
-  const applications = read('.github/workflows/ci.yml').split('  applications:\n')[1].split('\n  database:')[0];
-  assert.match(applications, /-DARK_BUILD_PLUGIN_CONSUL=ON/);
-  assert.match(applications, /run: cmake --build ci-build --target check-core/);
+  applicationWorkflow(read('.github/workflows/ci.yml'));
+  assert.ok(applicationConfigureArgs().includes('-DARK_BUILD_PLUGIN_CONSUL=ON'));
   const checks = read('tests/consul/CMakeLists.txt');
   assert.match(checks, /if\(TARGET ark_consul_plugin\)/);
   assert.match(checks, /add_dependencies\(check-core check-consul-plugin\)/);
@@ -133,9 +163,8 @@ test('Applications CI enables Consul construction and production export checks w
 });
 
 test('Applications CI explicitly enables Etcd Client ownership and production DSO checks', () => {
-  const applications = read('.github/workflows/ci.yml').split('  applications:\n')[1].split('\n  database:')[0];
-  assert.match(applications, /-DARK_BUILD_PLUGIN_ETCD_CLIENT=ON/);
-  assert.match(applications, /run: cmake --build ci-build --target check-core/);
+  applicationWorkflow(read('.github/workflows/ci.yml'));
+  assert.ok(applicationConfigureArgs().includes('-DARK_BUILD_PLUGIN_ETCD_CLIENT=ON'));
   const core = read('tests/core/CMakeLists.txt');
   assert.match(core, /if\(TARGET ark_etcd_client_plugin\)[\s\S]*add_subdirectory\(\.\.\/etcd_client/);
   const checks = read('tests/etcd_client/CMakeLists.txt');
