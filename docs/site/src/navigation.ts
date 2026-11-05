@@ -157,6 +157,11 @@ const tree: Entry[] = [
         "Kernel 插件"
       ],
       [
+        "reference/entity-protocol",
+        "Entity protocol",
+        "Entity 协议"
+      ],
+      [
         "reference/network",
         "Network plugin",
         "Net 插件"

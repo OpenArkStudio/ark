@@ -36,6 +36,7 @@ set(kernel_headers
     entity_nested_snapshot.hpp
     entity_stream.hpp
     nested_stream.hpp
+    nested_wire.hpp
     event_manager.hpp
     event_manager_impl.hpp
     kernel_module.hpp
@@ -58,7 +59,7 @@ set(kernel_headers
 )
 if(NOT ARK_BUILD_PROTO)
     # These existing headers require ark/proto.hpp; value/template headers do not.
-    list(REMOVE_ITEM kernel_headers kernel_module.hpp kernel_module_impl.hpp map_module_impl.hpp)
+    list(REMOVE_ITEM kernel_headers kernel_module.hpp kernel_module_impl.hpp map_module_impl.hpp nested_wire.hpp)
 endif()
 set(header_checks)
 foreach(header IN LISTS kernel_headers)
