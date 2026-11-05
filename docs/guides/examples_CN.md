@@ -7,7 +7,7 @@
 | `examples/timers`／`timers` | `timers_plugin` | Utility 定时器与模块生命周期；启用，参与 update |
 | `examples/module_lifecycle`／`module_lifecycle` | `module_lifecycle_plugin` | 生命周期与少量 data-list 演示；启用，无 update 覆写。回调演示代码仍被注释 |
 | `examples/entity_operations`／`entity_operations` | `entity_operations_plugin` | Kernel 实体、数据和表操作；启用，无 update 覆写。启动仅做有界功能演示；[旧计时负载](../../benchmarks/ENTITY_OPERATIONS_CN.md)只能通过显式基准命令运行 |
-| `examples/guest_room`／`guest_room` | `guest_room_plugin` | 可选二维访客大厅，使用 JSON 定义的 Kernel Entity 字段／配置、权威移动与 HP／MP 操作、Protobuf 标量基线／增量，以及真实 Net 传输；通过 `ARK_BUILD_GUEST_ROOM_EXAMPLE` 启用。[构建、ARK2 协议与原生验证](../../examples/guest_room/README_CN.md)；官方 [C# Godot 客户端](https://github.com/OpenArkStudio/ark-client-godot) |
+| `examples/guest_room`／`guest_room` | `guest_room_plugin` | 可选二维访客大厅，使用 JSON 定义的 Kernel 标量字段、背包表格及装备子 Entity、权威移动／七种操作、嵌套 Protobuf 基线／增量和真实 Net 传输；通过 `ARK_BUILD_GUEST_ROOM_EXAMPLE` 启用。[构建、协议与原生验证](../../examples/guest_room/README_CN.md)；官方 [C# Godot 客户端](https://github.com/OpenArkStudio/ark-client-godot) |
 | `examples/mysql_sample`／`mysql_sample` | `mysql_sample_plugin` | 原生 MySQL 协程示例；应用示例列表中仍关闭，开启 SSL 的数据库测试检查其装配 |
 | `examples/redis_sample`／`redis_sample` | `redis_sample_plugin` | 原生 Redis 协程示例；应用示例列表中仍关闭，数据库测试检查其装配 |
 | `examples/physics_scene`／`physics_scene` | `physics_scene_plugin` | 关闭，依赖不支持的旧 PhysX 3；保留源码与清单不代表集成可运行 |
@@ -16,6 +16,17 @@
 
 每个目录中的 hpp/cpp 继续并排存放。可从 [timers 快速开始](../get-started/quick-start_CN.md)入手。
 通用启动脚本选择 `conf/<name>.app.toml`，因此进程名称和应用清单都应使用能力名称。Kernel 示例仍需要业务元数据。
+
+## 访客房间 Entity 复制
+
+每个玩家对应一条固定授权的根流。完整基线包含成员 200 的背包表格和成员 300 的
+装备容器，后续变化使用[通用 Entity 协议](../reference/entity-protocol_CN.md)及原子
+C++／C# 接收端。七种操作为 `damage`、`skill`、`rest`、`pickup`、`use_potion`、
+`equip` 和 `upgrade`。当前握手值为 `2`，服务端与客户端须协调升级。房间只保留一套
+协议，通过重连恢复。通用订阅、动态授权及 AOI 仍为 TODO。
+
+原生检查、可移植 C# 测试和实际 Godot 执行保留各自证据。示例不构成部署或容量验收，
+见[本机优先级与负载验收前置条件](../project/roadmap_CN.md#当前优先级)。
 
 ## 访客房间资源清理
 

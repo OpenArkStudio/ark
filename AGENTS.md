@@ -192,8 +192,12 @@ branch or worktree when the existing checkout contains uncommitted changes.
 - Keep raw measurements and build logs outside the source repository. Published
   performance claims must identify the machine, workload, units and tested
   revision; local tests do not establish production PCU capacity.
-- Guest-room client/server message bodies use the canonical
-  `src/proto/proto/guest_room.proto`; Entity definitions and profiles remain JSON.
+- Guest-room envelopes use the canonical `src/proto/proto/guest_room.proto`,
+  importing `src/proto/proto/entity_sync.proto` for generic nested Entity values.
+  Keep one current room contract; its handshake value is `2`. Coordinate client
+  and server upgrades without retaining the former scalar-only wire path or
+  adding version suffixes to message, file or API names.
+  Entity definitions and profiles remain JSON.
   Use lowercase `snake_case` for every project `.proto` filename, message, enum,
   enum value, field and handwritten oneof. Keep field numbers, types and enum
   numbers stable during naming changes; retain existing JSON keys explicitly
@@ -202,8 +206,9 @@ branch or worktree when the existing checkout contains uncommitted changes.
   compiler-generated map entries and optional-field oneofs are not source names.
   Synchronize the Godot schema, generated C# and golden vectors with wire changes,
   verify cross-repository parity and run the real two-client integration before
-  claiming acceptance. Preserve owning scalar capture, explicit authorized
-  fields, owner-thread flush, revision checks and bounded pending messages.
+  claiming acceptance. Preserve owning scalar/row/child capture, independently
+  trusted projections, lifetime identities, owner-thread flush, single-root
+  atomic commit, revision checks and bounded pending messages.
   Incompatible wire changes require coordinated server/client upgrades and a
   migration notice; never hand-edit generated Protobuf output.
 
