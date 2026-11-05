@@ -361,7 +361,7 @@ Entity incarnations are allocated monotonically within one loaded `entity_impl` 
 
 **Breaking ABI change:** the new virtual Kernel method and Entity/row/table implementation layout changes require rebuilding all plugins, hosts and consumers together. Do not load old binaries with these headers. Source subclasses may keep the default method, which throws `std::logic_error`. The independent `check-kernel-plugin` host exercises the actual loaded virtual method and retains nested values after child destruction, table clearing and normal stop.
 
-Capture provides the owning source values used by the [nested publisher/replica](#nested-baselines-and-deltas). Existing scalar APIs and room v1 messages are unchanged; no nested sender queue or codec is provided. Applications bind authorization and retain fixed projections for their stream. The [replication design](../project/entity-replication-design.md) records the selected consistency/recovery boundaries.
+Capture provides the owning source values used by the [nested publisher/replica](#nested-baselines-and-deltas) and the [Entity protocol codec](entity-protocol.md). Applications bind authorization and retain fixed projections for their stream; sender queues remain application-owned. The [replication design](../project/entity-replication-design.md) records the selected consistency/recovery boundaries.
 
 ## Maps and data conversion
 
@@ -566,9 +566,11 @@ peak and bound its own retained handles/queues. Use each publisher/replica on on
 owner thread. Release plugin-created shared handles before unloading their code;
 these handles do not certify arbitrary DSO unloading.
 
-The header requires no Protobuf or transport. There is no nested codec, sender
-queue, ACK/replay log, in-place reset, dynamic permission change, cross-root commit
-or room v1 change. A returned publication acknowledges no delivery; an adapter
+The stream header requires no Protobuf or transport. The separate
+[Entity protocol codec](entity-protocol.md) maps publications to canonical Protobuf
+messages against the same trusted binding. There is no sender queue, ACK/replay
+log, in-place reset, dynamic permission change or cross-root commit. A returned
+publication acknowledges no delivery; an adapter
 must separately bind sessions, bound encoded/pending work and close the affected
 stream on admission/send failure. `check-entity-stream` covers typed binding,
 recursive patches, row/Entity reuse, duplicates, gaps, atomic invalidation and

@@ -18,10 +18,13 @@ foreach(mode IN LISTS modes)
     file(WRITE "${directory}/application.toml"
         "[application]\nplugin_library_dir = '${plugin_directory}/'\nplugin_config_dir = './'\n"
         "[[plugins]]\nname = 'ark_business_runtime_probe'\nconfig = '${mode}'\n")
+    # The selected hook tightens stop_until() to an expired deadline on its
+    # active stack. A short launcher budget could expire during earlier trace
+    # writes or scheduling and select the wrong boundary. CLI elapsed-time
+    # behavior is covered separately by business_runtime.cmake.
     execute_process(
         COMMAND "${PROGRAM}" --busid=1.0.1.1 --name=shutdown-deadline-test
             "--app_conf=${directory}/application.toml"
-             --shutdown_timeout_ms=50
         WORKING_DIRECTORY "${directory}" INPUT_FILE "${directory}/exit.txt"
         RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE errors TIMEOUT 5)
     file(WRITE "${directory}/output.log" "${output}\n${errors}")
@@ -31,15 +34,15 @@ foreach(mode IN LISTS modes)
     endif()
     file(STRINGS "${directory}/business-runtime.trace" events)
     if(mode STREQUAL "boundary_readiness")
-        set(expected request-stop ready ready-return)
+        set(expected request-stop ready deadline-expired ready-return)
         set(forbidden pre-shut pre-shut-return shut shut-return)
         set(phase ready_to_shut)
     elseif(mode STREQUAL "boundary_pre_shut")
-        set(expected request-stop ready ready-return pre-shut pre-shut-return)
+        set(expected request-stop ready ready-return pre-shut deadline-expired pre-shut-return)
         set(forbidden shut shut-return)
         set(phase pre_shut)
     else()
-        set(expected request-stop ready ready-return pre-shut pre-shut-return shut shut-return)
+        set(expected request-stop ready ready-return pre-shut pre-shut-return shut deadline-expired shut-return)
         set(forbidden)
         set(phase shut)
     endif()
@@ -66,8 +69,8 @@ foreach(mode IN LISTS modes)
     string(REGEX MATCHALL "Shutdown (failed at |wait timed out |update failed)" diagnostics "${output}\n${errors}")
     list(LENGTH diagnostics count)
     if(NOT count EQUAL 1 OR NOT "${output}\n${errors}" MATCHES
-        "Shutdown wait timed out after [0-9]+ ms.*limit=50 ms.*pending=0.*phase=${phase}.*process and resources are retained")
+        "Shutdown wait timed out after [0-9]+ ms.*limit=0 ms.*pending=0.*phase=${phase}.*process and resources are retained")
         message(FATAL_ERROR "${mode}: expected one phase-specific timeout diagnostic\n${output}\n${errors}")
     endif()
-    message(STATUS "${mode}: successful slow hook returned; no later cleanup or successful exit")
+    message(STATUS "${mode}: successful hook returned after controlled expiry; no later cleanup or successful exit")
 endforeach()

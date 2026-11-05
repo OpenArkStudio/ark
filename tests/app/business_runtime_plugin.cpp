@@ -173,7 +173,7 @@ public:
             trace("ready");
             if (mode_ == "boundary_readiness")
             {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                expire_shutdown_deadline();
             }
             trace("ready-return");
             return true;
@@ -206,7 +206,7 @@ public:
             cleanup_started_ = true;
             if (mode_ == "boundary_pre_shut")
             {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                expire_shutdown_deadline();
             }
             trace("pre-shut-return");
             return true;
@@ -223,7 +223,7 @@ public:
         trace("shut");
         if (mode_ == "boundary_shut")
         {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            expire_shutdown_deadline();
             trace("shut-return");
         }
         if (mode_ == "shut_throw")
@@ -235,6 +235,19 @@ public:
 
 private:
     using callback = std::function<void(std::exception_ptr, std::string)>;
+
+    void expire_shutdown_deadline() const {
+        // Tighten the active stop only after reaching the hook under test.
+        // Earlier tracing or scheduling must not choose a different boundary.
+        // Reentrant stop cannot clean up this hook's active stack; its caller
+        // must notice expiry after the successful hook returns.
+        if (manager_.stop_until(manager_.get_now_time(), std::chrono::steady_clock::time_point::min()) ||
+            manager_.get_shutdown_state() != ark::plugin_manager::shutdown_state::stopping)
+        {
+            throw std::runtime_error("Shutdown deadline entered the active lifecycle hook");
+        }
+        trace("deadline-expired");
+    }
 
     std::uint64_t start(callback complete) {
         if (pending_)

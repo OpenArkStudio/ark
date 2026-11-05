@@ -159,6 +159,19 @@ add_custom_target(check-entity-stream
     COMMAND $<TARGET_FILE:ark_entity_stream_tests>
     DEPENDS ark_entity_stream_tests USES_TERMINAL)
 add_dependencies(check-core check-entity-stream)
+if(ARK_BUILD_PROTO)
+    set(ark_nested_wire_test_sources nested_wire.cpp nested_wire_macro.cpp nested_wire_macro_first.cpp)
+    add_executable(ark_nested_wire_tests $<TARGET_OBJECTS:ark_kernel_test_main> ${ark_nested_wire_test_sources})
+    set_property(TARGET ark_nested_wire_tests PROPERTY LINK_LIBRARIES ark::kernel ark::proto)
+    add_executable(ark_nested_wire_guid32_tests main.cpp ${ark_nested_wire_test_sources})
+    set_property(TARGET ark_nested_wire_guid32_tests PROPERTY LINK_LIBRARIES ark::kernel ark::proto)
+    target_compile_definitions(ark_nested_wire_guid32_tests PRIVATE ARK_USE_GUID_32)
+    add_custom_target(check-nested-wire
+        COMMAND $<TARGET_FILE:ark_nested_wire_tests>
+        COMMAND $<TARGET_FILE:ark_nested_wire_guid32_tests>
+        DEPENDS ark_nested_wire_tests ark_nested_wire_guid32_tests USES_TERMINAL VERBATIM)
+    add_dependencies(check-core check-nested-wire)
+endif()
 add_executable(ark_scalar_stream_allocation_tests $<TARGET_OBJECTS:ark_kernel_test_main> entity_scalar_stream_allocation.cpp)
 set_property(TARGET ark_scalar_stream_allocation_tests PROPERTY LINK_LIBRARIES ark::kernel)
 add_custom_target(check-scalar-stream-allocation
