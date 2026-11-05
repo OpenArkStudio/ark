@@ -5,6 +5,18 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { reportCacheStats } from '../../.github/scripts/cache-stats.mjs';
 
+test('seed diagnostics distinguish a restored snapshot from whether this revision was built', () => {
+  const env = { COMPILER_ARCHIVE_HIT: 'true', ARK_CACHE_SAMPLE: 'seed-or-restored-snapshot',
+    ARK_CACHE_BUILD_EXECUTED: 'false', GITHUB_SHA: 'a'.repeat(40),
+    ARK_CACHE_ARCHIVE_KEY: 'ark-sccache-0.16.0-v2-Linux-trusted-2026-W45' };
+  const report = reportCacheStats({ env, log: () => {} });
+  assert.match(report, /Compiler archive cache exact hit: true/);
+  assert.match(report, /Cache measurement sample: seed-or-restored-snapshot/);
+  assert.match(report, /Project build executed: false/);
+  assert.ok(report.includes(`Source revision: ${env.GITHUB_SHA}`));
+  assert.ok(report.includes(`Requested archive key: ${env.ARK_CACHE_ARCHIVE_KEY}`));
+});
+
 test('cache diagnostics distinguish archive restoration, configured budget, policy and actual object statistics', t => {
   const root = mkdtempSync(join(tmpdir(), 'ark-cache-stats-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));

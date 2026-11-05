@@ -24,6 +24,15 @@ export function reportCacheStats({ env = process.env, run = spawnSync, append = 
     `Compiler local cache budget: ${cacheSize}`,
     `Compiler archive publication allowed: ${env.ARK_COMPILER_CACHE_SAVE_ENABLED === 'true'} (scope=${scope}, epoch=${epoch})`,
   ];
+  if (['controlled-cold', 'controlled-warm', 'seed-or-restored-snapshot'].includes(env.ARK_CACHE_SAMPLE)) {
+    const source = /^[a-f0-9]{40}$/.test(env.GITHUB_SHA ?? '') ? env.GITHUB_SHA : 'unavailable';
+    const key = /^ark-sccache-[a-zA-Z0-9.-]{1,240}$/.test(env.ARK_CACHE_ARCHIVE_KEY ?? '')
+      ? env.ARK_CACHE_ARCHIVE_KEY : 'unavailable';
+    lines.unshift(`Cache measurement sample: ${env.ARK_CACHE_SAMPLE}`, `Source revision: ${source}`,
+      `Requested archive key: ${key}`,
+      `Project build executed: ${['true', 'false'].includes(env.ARK_CACHE_BUILD_EXECUTED)
+        ? env.ARK_CACHE_BUILD_EXECUTED : 'unavailable'}`);
+  }
   if (env.ARK_COMPILER_LAUNCHER) {
     let statistics = 'sccache statistics unavailable';
     try {

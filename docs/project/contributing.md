@@ -17,159 +17,50 @@ The site provides language switching, search, code highlighting and plain Markdo
 
 ## CI documentation scope
 
-The exact root `AGENTS.md` file is documentation. When the changed range is known,
-nonempty and confined to recognized documentation, and the Nimbus site is available,
-both source PRs and merge-group candidates require the documentation checks and
-`CI - required`, while native jobs are explicitly skipped. Nimbus checks the site;
-root README link checks run only when a root README changes.
+| Change | Source PR | Merge queue / manual |
+| --- | --- | --- |
+| Recognized documentation only | Nimbus and relevant README links | Same documentation checks |
+| Reviewed application inputs | Related check targets and their CMake dependencies | Complete platform matrix and application build |
+| Public interfaces, build, dependencies, CI or unknown inputs | Full affected application coverage; uncertain scope keeps all modules | Complete platform matrix |
 
-Nested unknown `AGENTS.md` paths, similarly named code, mixed source changes,
-unavailable ranges or an unavailable site retain native checks. Manual runs keep
-the full native matrix. Changes to the CI policy itself still require native
-acceptance; this documentation exception does not change that requirement.
+All PRs require `CI - required`. Missing or failed classification falls back to full work. Target selection never reduces queue/manual coverage, archived integration construction checks, sanitizer coverage or test timeouts. Draft previews do not establish acceptance.
 
-The Applications job has a 60-minute aggregate budget for dependency setup,
-compilation and regressions. Cold Windows dependency configuration alone can
-take about 26 minutes. Individual test timeouts and all required checks remain
-unchanged; a cancelled job does not establish acceptance and needs a fresh
-successful merge candidate.
+## CI build resources
+
+Compile jobs are selected from detected CPU and memory, capped at four. A 7–8 GiB runner keeps two compile jobs and one link; a 16 GiB runner uses four compile jobs and one link. Two concurrent links require at least 19 GiB. These are scheduling estimates, not a guarantee about a translation unit's peak memory.
+
+Ninja uses separate compile/link pools. `ARK_BUILD_JOBS_OVERRIDE` and `ARK_LINK_JOBS_OVERRIDE` may only lower the computed limits. Missing resource data falls back conservatively.
 
 ## CI dependency archive cache
 
-CI restores vcpkg package archives from the runner temporary directory with
-`actions/cache`. A versioned v2 key contains a compatibility prefix and an exact
-runner-image suffix. The prefix includes the runner OS and architecture,
-`ImageOS`, pinned vcpkg revision, manifest and configuration bytes (including the
-baseline), local port overlay, selected/default features, build profile, compiler
-environment flags and target/host triplet overrides. Only `ImageVersion` is moved
-to the suffix. Within each ref searched by Actions, lookup uses the exact key
-first, then that single prefix; there is no OS-only or cross-profile fallback.
-Both image fields remain required.
+vcpkg package archives and compiler objects use separate caches. Dependency keys retain OS/architecture, dependency manifests and overlays, features, profiles and compiler environment. Image-version fallback still requires each package's actual vcpkg ABI hash; compiler tracking is never disabled.
 
-An archive restore only makes candidates available to the vcpkg `files` provider.
-It does not install an existing dependency tree. vcpkg computes each requested
-package's full ABI hash, including compiler tracking, and retrieves only matching
-archives; mismatched packages build from source. The workflow does not disable
-compiler tracking, override ABI hashes or rename package archives. See the
-[vcpkg ABI mismatch guide](https://learn.microsoft.com/en-us/vcpkg/users/binarycaching-troubleshooting#cause-3-differences-between-local-and-remote-build-environments).
-A rolling image can therefore share an archive cache without treating its
-packages as compatible in advance.
-
-After successful configuration, a miss or prefix restore saves only the exact
-key. There is no second save under the compatibility prefix. Image-specific
-snapshots can still overlap and use cache capacity. The v1 keys cannot be safely
-searched by this prefix and are deliberately excluded: v2 starts cold until an
-accessible run has saved a v2 cache for the same dependency configuration.
-Actions cache branch/ref visibility still applies; see the [Actions cache reference](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#cache-key-matching).
-This change does not make caches from another merge-queue ref readable. A compatible v2 archive on the default branch is needed to seed queue
-runs that cannot access each other's entries.
-
-`Dependency cache seed` (`.github/workflows/vcpkg-seed.yml`) creates that baseline
-for Windows Applications on `main`. It runs after main pushes change `vcpkg.json`,
-`vcpkg-configuration.json`, `ports/**`, `.gitattributes`, the cache-key helper or
-the seed workflow itself. Its first deployment also starts the seed job.
-For a new runner image or a missing baseline, explicitly run
-`gh workflow run vcpkg-seed.yml --ref main`; manual runs on other refs skip the job.
-There is no schedule. Policy tests require the seed's cache identity, tool versions
-and complete Windows configuration to match the required Applications job;
-changes to those inputs must update both workflows.
-
-The seed runs CMake configuration and dependency installation, then saves archives
-in main's cache scope. It does not build ark targets, run the native regression
-matrix or enable Windows compiler caching, and it does not replace required CI.
-The seed fails if configuration fails, the files provider/key is unavailable,
-package archives are empty, or a required save fails to produce a verifiable exact
-cache entry. An existing exact hit skips saving. After saving, a metadata-only
-exact-key lookup and an explicit hit check also reject warning-only upload failures.
-Restore and diagnostics remain best effort; required CI's caches remain optional.
-Seed success confirms current archive availability, not reuse by a later candidate.
-Confirm that candidate's archive restore and matching vcpkg package reuse before
-claiming a warm build or timing improvement. Image/ABI changes and cache eviction
-can still cause cold builds.
-
-In required CI, missing identity, unsupported dependency layout or archive paths keep persistence
-disabled with `VCPKG_BINARY_SOURCES=clear`. Cache-service failures retain ordinary
-source configuration, compilation and regressions. The cache covers archives only,
-not installed trees. Project object caching is configured separately below. Local Node tests validate the
-lookup boundaries, exports and workflow wiring; hosted cache reuse and any timing
-improvement require separate CI evidence.
-
+The existing **Dependency cache seed** workflow prepares Windows application dependencies on trusted `main`. It configures dependencies without compiling ark or repeating native tests. Seed availability is verified with an exact cache lookup. Required CI treats cache failures as optional and builds normally.
 
 ### Windows ABI diagnostics
 
-After dependency configuration and the existing archive-save step, Windows
-Applications logs a bounded JSON report for Asio, spdlog and Protobuf. The
-helper reads only `ci-build/vcpkg_installed/x64-windows/share/<port>/vcpkg_abi_info.txt`,
-without searching directories or invoking build tools. It rejects symbolic links,
-non-regular files, malformed records, unexpected triplets and files over 64 KiB.
-Absent or rejected metadata is explicitly `unavailable`; missing optional fields
-also remain `unavailable` rather than being treated as equal.
-
-`packageAbi` is the SHA256 of the exact ABI metadata bytes. Field values are
-reported only as SHA256 fingerprints under fixed names: `triplet`, `triplet_abi`,
-`features`, `cmake`, `powershell`, `compiler_hash`, `portfile.cmake`, `ports.cmake`,
-`vcpkg.json`, `post_build_checks`, `sbom_info`, `vcpkg-cmake`, `vcpkg-cmake-config`,
-`abseil` and `utf8-range`. Unknown field names and all raw values are omitted;
-no full environment, absolute paths or credentials are logged. Metadata files
-and artifacts are not uploaded.
-A separate `compiler_hash` record may be absent; the report does not infer one
-from a compiler version string or split the opaque `triplet_abi` value.
-
-The diagnostic also runs after an earlier step fails, unless the job is cancelled.
-Its availability status describes metadata only. It cannot turn failed
-configuration, compilation or tests into success, and diagnostic errors do not
-become a new native acceptance requirement. Cache keys/providers, compiler
-tracking and build settings remain unchanged. Compare the fingerprints across
-runs to narrow an ABI difference; equal reported fields do not establish equal
-unreported inputs. This report is neither a cache-hit verdict nor a performance
-measurement.
-
+Diagnostics report available vcpkg ABI metadata after configuration, including failed configurations. They do not infer missing hashes, change dependency selection or convert a failed build into a pass.
 
 ## CI compiler object cache
 
-Linux and macOS native jobs optionally use `Mozilla-Actions/sccache-action@v0.0.11`
-with sccache `v0.16.0`. Preparation verifies the exact executable version before
-exporting both C and C++ CMake compiler launchers. The compiler remains selected
-by CMake; all platforms, dependency profiles, sanitizer flags, build targets,
-parallelism, regressions and timeouts retain their existing settings. Windows
-Debug jobs compile directly: their existing `/Zi` shared PDB configuration is not
-changed to force compiler-cache hits.
+| Setting | Behavior |
+| --- | --- |
+| Linux/macOS | Pinned sccache 0.16.0; CMake retains the actual compiler |
+| Windows Debug | Direct compilation; existing `/Zi` settings remain |
+| Compatibility | Dependency/profile family retained; sccache validates actual compiler, flags, sources and headers |
+| Snapshots | One immutable snapshot per family, trust scope and ISO week |
+| Application snapshots | Written only by trusted `main`; PRs and queue restore them |
+| Other source-PR profiles | May keep a bounded weekly snapshot within their own PR ref |
+| Queue snapshots | Restore only; no duplicate uploads per candidate |
 
-The compiler archive has its own namespace, separate from the vcpkg archive.
-Its compatibility prefix uses the complete existing dependency key, including
-its exact image version, manifest/overlay fingerprint, compiler environment and
-module/sanitizer/dependency profile. The source commit is only an immutable
-snapshot suffix. There is no run ID or source commit in the compatibility prefix
-or `SCCACHE_C_CUSTOM_CACHE_BUSTER`, so another commit with the same identity can
-restore objects. There is no cross-image or cross-profile compiler restore.
-sccache still validates compiler identity, compile arguments and source/header
-inputs for every invocation; an archive restore alone does not establish an
-object hit or bypass compilation validation.
+The **Compiler cache seed** workflow builds accepted Linux/macOS application inputs on `main`, without repeating the regression matrix. Superseded push inputs may skip this cache-only work; active acceptance runs are preserved. Linux application cache capacity is 1 GiB, macOS 512 MiB. Capacity is configurable from 64 to 1024 MiB; it is a local job budget, not a repository storage limit. This change does not increase paid cache storage or remove existing remote caches.
 
-Each job sets `SCCACHE_CACHE_SIZE=512M` under the runner temporary directory.
-The full matrix has nine eligible Linux/macOS jobs, giving nine such local cache
-budgets per source snapshot; Windows adds no compiler cache. Actions stores
-immutable snapshots, which may overlap across commits and refs, so this is not a
-repository-wide storage cap. Compression, metadata, dependency archives and cache
-service retention are separate. Actions branch/ref visibility still applies;
-queue refs cannot read each other's entries merely because their keys match.
+An exact weekly hit may reuse an earlier accepted snapshot without rebuilding it. Ordinary CI still compiles and validates its actual revision; new inputs can miss until the next snapshot. An archive hit is distinct from an object hit. [GitHub's cache access rules](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching) still apply.
 
-Installation, version validation, cache restoration or server startup failures
-leave an empty launcher and normal compilation. Cache service I/O failures use
-`SCCACHE_IGNORE_SERVER_IO_ERROR=1`. Compiler and test failures still fail the job;
-the workflow never retries a compiler failure without the launcher. After successful
-launcher startup, non-cancelled jobs save new compiler snapshots on an exact-key
-miss even if compilation or a regression fails. A best-effort job summary reports
-dependency archive availability, compiler archive exact hits and sccache statistics.
-Prefix restoration and object hits are different observations.
+## Verify CI changes
 
-Run `node --test tests/ci/*.test.mjs` for the cache identity/fallback and workflow
-contracts. The permanent CMake/Ninja fixture compiles C and C++ through a launcher
-path containing spaces and checks that intentional compiler errors propagate
-with and without a launcher. It uses a transparent fixture launcher, not sccache,
-and does not prove hosted cache hits. Hosted acceptance must compare a cold job
-and a subsequent job with the same identity, record the source revisions,
-archive lookup, sccache hits/misses and setup/configure/build/test durations,
-and retain all required regressions. No build-time improvement is claimed before
-that evidence is available. Native CI also needs separate Linux/macOS acceptance;
-Windows remains uncached.
+    node --test tests/ci/*.test.mjs
+
+The tests cover scope fallbacks, workflow boundaries, compiler errors and real CMake/Ninja dependency and resource controls. Native and hosted acceptance remain separate.
+
+To measure reuse, dispatch **Compiler cache seed** on `main` with `verify_reuse=true`. It explicitly clears only the job's local compiler objects, records a controlled cold build, cleans project outputs and records a warm rebuild with the same source and settings. Remote caches stay intact. Summaries identify source, archive lookup, build execution, sample type and object statistics. Compare setup, compilation and regression durations before claiming a speed improvement.

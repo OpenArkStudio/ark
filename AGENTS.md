@@ -100,6 +100,16 @@ branch or worktree when the existing checkout contains uncommitted changes.
   flags, matrix coverage and failure propagation; use an empty launcher when cache
   setup is unavailable. Windows Debug remains uncached without changing `/Zi`.
   Record hosted cold/warm cache evidence before claiming a speed improvement.
+- Source application plans may compile reviewed check-target dependency closures;
+  failed/missing scope, public interfaces, unknown inputs and queue/manual runs
+  retain complete application coverage. Never infer acceptance from cache warmup.
+- Select CI compile/link parallelism from actual CPU and memory with conservative
+  limits; preserve compiler flags and use separate Ninja pools. Overrides only
+  lower these limits. Measure hosted time and memory before claiming improvement.
+- Compiler snapshots use compatible families and bounded weekly epochs. Application
+  seeds run only on trusted main; PR/queue jobs cannot publish trusted snapshots.
+  Cache-only jobs may skip superseded main inputs without cancelling acceptance.
+  Do not increase paid cache quotas or delete remote caches as an implicit tuning step.
 - CI policy tests: `node --test tests/ci/*.test.mjs`. Nimbus documentation:
   `npm ci --prefix docs/site` followed by `npm run check --prefix docs/site`.
 - Keep official plugins in the ark repository and application business plugins

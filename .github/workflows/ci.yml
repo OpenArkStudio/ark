@@ -28,6 +28,7 @@ jobs:
       native_check: ${{ steps.scope.outputs.native_check }}
       network_check: ${{ steps.scope.outputs.network_check }}
       applications_check: ${{ steps.scope.outputs.applications_check }}
+      app_plan_json: ${{ steps.scope.outputs.app_plan_json }}
       database_check: ${{ steps.scope.outputs.database_check }}
       format_check: ${{ steps.scope.outputs.format_check }}
       docs_check: ${{ steps.scope.outputs.docs_check }}
@@ -105,6 +106,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 26
+      - name: Select bounded build parallelism
+        id: build-parallelism
+        run: node .github/scripts/build-parallelism.mjs
       - name: Prepare vcpkg binary cache
         id: vcpkg-cache
         env:
@@ -134,6 +138,7 @@ jobs:
         id: compiler-cache
         env:
           COMPILER_CACHE_IDENTITY: ${{ steps.vcpkg-cache.outputs.key }}
+          COMPILER_CACHE_PROFILE: network-${{ matrix.sanitizer }}
           SCCACHE_SETUP_OUTCOME: ${{ steps.sccache-setup.outcome }}
         run: node .github/scripts/compiler-cache.mjs --prepare
       - name: Restore compiler cache
@@ -150,6 +155,7 @@ jobs:
         if: steps.compiler-cache.outputs.enabled == 'true'
         env:
           COMPILER_CACHE_IDENTITY: ${{ steps.vcpkg-cache.outputs.key }}
+          COMPILER_CACHE_PROFILE: network-${{ matrix.sanitizer }}
           SCCACHE_SETUP_OUTCOME: ${{ steps.sccache-setup.outcome }}
           SCCACHE_RESTORE_OUTCOME: ${{ steps.compiler-restore.outcome }}
         run: node .github/scripts/compiler-cache.mjs
@@ -170,6 +176,9 @@ jobs:
           -DCMAKE_BUILD_TYPE=Debug
           "-DCMAKE_C_COMPILER_LAUNCHER=$env:ARK_COMPILER_LAUNCHER"
           "-DCMAKE_CXX_COMPILER_LAUNCHER=$env:ARK_COMPILER_LAUNCHER"
+          "-DCMAKE_JOB_POOLS=$env:ARK_CMAKE_JOB_POOLS"
+          -DCMAKE_JOB_POOL_COMPILE=ark_compile
+          -DCMAKE_JOB_POOL_LINK=ark_link
           -DARK_BUILD_APPLICATIONS=OFF
           -DARK_BUILD_NETWORK_TESTS=ON
           -DASIO_STANDALONE=OFF
@@ -181,7 +190,7 @@ jobs:
         with:
           path: ${{ steps.vcpkg-cache.outputs.directory }}
           key: ${{ steps.vcpkg-cache.outputs.key }}
-      - run: cmake --build ci-build --parallel 2
+      - run: cmake --build ci-build --parallel ${{ steps.build-parallelism.outputs.build_jobs }}
       - name: Run network regressions
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
@@ -197,7 +206,7 @@ jobs:
           COMPILER_ARCHIVE_HIT: ${{ steps.compiler-restore.outputs.cache-hit }}
         run: node .github/scripts/cache-stats.mjs
       - name: Save compiler cache
-        if: ${{ !cancelled() && steps.compiler-start.outcome == 'success' && steps.compiler-start.outputs.enabled == 'true' && steps.compiler-restore.outputs.cache-hit != 'true' }}
+        if: ${{ !cancelled() && steps.compiler-start.outcome == 'success' && steps.compiler-start.outputs.enabled == 'true' && steps.compiler-restore.outputs.cache-hit != 'true' && steps.compiler-start.outputs.save_enabled == 'true' && (github.event_name == 'pull_request' || ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main')) }}
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
@@ -211,6 +220,12 @@ jobs:
     # Cold Windows dependency configuration and the full C++ build share this
     # budget. Individual regression timeouts and required checks are unchanged.
     timeout-minutes: 60
+    env:
+      ARK_APPLICATION_PLAN: ${{ needs.scope.outputs.app_plan_json }}
+      ARK_APPLICATION_SCOPE_RESULT: ${{ needs.scope.result }}
+      ARK_APPLICATION_VALIDATION_STAGE: ${{ needs.scope.outputs.validation_stage }}
+      ARK_APPLICATION_FILES_KNOWN: ${{ needs.scope.outputs.files_known }}
+      COMPILER_CACHE_MAX_MIB: 1024
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(github.event_name == 'pull_request' && needs.scope.result == 'success' && needs.scope.outputs.validation_stage == 'modules' && '{"include":[{"os":"ubuntu-latest"}]}' || '{"include":[{"os":"ubuntu-latest"},{"os":"macos-latest"},{"os":"windows-latest"}]}') }}
@@ -221,6 +236,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 26
+      - name: Select bounded build parallelism
+        id: build-parallelism
+        run: node .github/scripts/build-parallelism.mjs
       - name: Prepare vcpkg binary cache
         id: vcpkg-cache
         env:
@@ -250,6 +268,7 @@ jobs:
         id: compiler-cache
         env:
           COMPILER_CACHE_IDENTITY: ${{ steps.vcpkg-cache.outputs.key }}
+          COMPILER_CACHE_PROFILE: applications
           SCCACHE_SETUP_OUTCOME: ${{ steps.sccache-setup.outcome }}
         run: node .github/scripts/compiler-cache.mjs --prepare
       - name: Restore compiler cache
@@ -266,6 +285,7 @@ jobs:
         if: steps.compiler-cache.outputs.enabled == 'true'
         env:
           COMPILER_CACHE_IDENTITY: ${{ steps.vcpkg-cache.outputs.key }}
+          COMPILER_CACHE_PROFILE: applications
           SCCACHE_SETUP_OUTCOME: ${{ steps.sccache-setup.outcome }}
           SCCACHE_RESTORE_OUTCOME: ${{ steps.compiler-restore.outcome }}
         run: node .github/scripts/compiler-cache.mjs
@@ -275,29 +295,7 @@ jobs:
           vcpkgGitCommitId: 0699a19d0c6386247ce50d4dedbb8217d484d536
           vcpkgJsonGlob: vcpkg.json
       - name: Configure applications
-        shell: pwsh
-        run: >-
-          cmake -S . -B ci-build -G Ninja
-          "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
-          "-DVCPKG_MANIFEST_FEATURES=application;boost;compression-tests;etcd-client;guest-room;config-tool"
-          -DCMAKE_BUILD_TYPE=Debug
-          "-DCMAKE_C_COMPILER_LAUNCHER=$env:ARK_COMPILER_LAUNCHER"
-          "-DCMAKE_CXX_COMPILER_LAUNCHER=$env:ARK_COMPILER_LAUNCHER"
-          ${{ runner.os == 'Windows' && '-DVCPKG_APPLOCAL_DEPS=OFF' || '' }}
-          -DARK_BUILD_APPLICATIONS=ON
-          -DARK_BUILD_BENCHMARKS=ON
-          -DARK_BUILD_PLUGIN_HTTP=ON
-          -DARK_BUILD_PLUGIN_CONSUL=ON
-          -DARK_BUILD_PLUGIN_ETCD_CLIENT=ON
-          -DARK_BUILD_PROTO=ON
-          -DARK_BUILD_TESTS=ON
-          -DARK_BUILD_CORE_TESTS=ON
-          -DARK_BUILD_COMPRESSION_TESTS=ON
-          -DARK_BUILD_EXAMPLES=ON
-          -DARK_BUILD_GUEST_ROOM_EXAMPLE=ON
-          -DARK_BUILD_CONFIG_TOOL=ON
-          -DARK_BUILD_CONFIG_TOOL_TESTS=ON
-          -DASIO_STANDALONE=OFF
+        run: node .github/scripts/ci-applications.mjs configure
       - name: Save vcpkg package archives
         if: ${{ success() && steps.vcpkg-cache.outputs.enabled == 'true' && steps.vcpkg-restore.outputs.cache-hit != 'true' }}
         continue-on-error: true
@@ -312,11 +310,10 @@ jobs:
       - name: Set Windows dependency runtime PATH
         if: runner.os == 'Windows'
         run: cmake -DBUILD_DIR=ci-build -P .github/scripts/windows-runtime.cmake
-      - run: cmake --build ci-build --parallel 2
+      - name: Build selected application inputs
+        run: node .github/scripts/ci-applications.mjs build
       - name: Run core and Protobuf regressions
-        run: cmake --build ci-build --target check-core
-      - name: Check entity benchmark CLI without measurements
-        run: cmake --build ci-build --target check-entity-benchmark-smoke
+        run: node .github/scripts/ci-applications.mjs check
 
       - name: Report native cache statistics
         if: ${{ !cancelled() }}
@@ -327,7 +324,7 @@ jobs:
           COMPILER_ARCHIVE_HIT: ${{ steps.compiler-restore.outputs.cache-hit }}
         run: node .github/scripts/cache-stats.mjs
       - name: Save compiler cache
-        if: ${{ !cancelled() && steps.compiler-start.outcome == 'success' && steps.compiler-start.outputs.enabled == 'true' && steps.compiler-restore.outputs.cache-hit != 'true' }}
+        if: ${{ !cancelled() && steps.compiler-start.outcome == 'success' && steps.compiler-start.outputs.enabled == 'true' && steps.compiler-restore.outputs.cache-hit != 'true' && steps.compiler-start.outputs.save_enabled == 'true' && (github.event_name == 'pull_request' || ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main')) }}
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
@@ -355,6 +352,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 26
+      - name: Select bounded build parallelism
+        id: build-parallelism
+        run: node .github/scripts/build-parallelism.mjs
       - name: Prepare vcpkg binary cache
         id: vcpkg-cache
         env:
@@ -384,6 +384,7 @@ jobs:
         id: compiler-cache
         env:
           COMPILER_CACHE_IDENTITY: ${{ steps.vcpkg-cache.outputs.key }}
+          COMPILER_CACHE_PROFILE: database-${{ matrix.asio }}
           SCCACHE_SETUP_OUTCOME: ${{ steps.sccache-setup.outcome }}
         run: node .github/scripts/compiler-cache.mjs --prepare
       - name: Restore compiler cache
@@ -400,6 +401,7 @@ jobs:
         if: steps.compiler-cache.outputs.enabled == 'true'
         env:
           COMPILER_CACHE_IDENTITY: ${{ steps.vcpkg-cache.outputs.key }}
+          COMPILER_CACHE_PROFILE: database-${{ matrix.asio }}
           SCCACHE_SETUP_OUTCOME: ${{ steps.sccache-setup.outcome }}
           SCCACHE_RESTORE_OUTCOME: ${{ steps.compiler-restore.outcome }}
         run: node .github/scripts/compiler-cache.mjs
@@ -418,6 +420,9 @@ jobs:
           -DCMAKE_BUILD_TYPE=Debug
           "-DCMAKE_C_COMPILER_LAUNCHER=$env:ARK_COMPILER_LAUNCHER"
           "-DCMAKE_CXX_COMPILER_LAUNCHER=$env:ARK_COMPILER_LAUNCHER"
+          "-DCMAKE_JOB_POOLS=$env:ARK_CMAKE_JOB_POOLS"
+          -DCMAKE_JOB_POOL_COMPILE=ark_compile
+          -DCMAKE_JOB_POOL_LINK=ark_link
           -DARK_BUILD_APPLICATIONS=OFF
           -DARK_BUILD_PROTO=OFF
           -DARK_BUILD_TESTS=OFF
@@ -436,7 +441,7 @@ jobs:
           path: ${{ steps.vcpkg-cache.outputs.directory }}
           key: ${{ steps.vcpkg-cache.outputs.key }}
       - name: Compile native services and coroutine tests
-        run: cmake --build ci-database --parallel 2
+        run: cmake --build ci-database --parallel ${{ steps.build-parallelism.outputs.build_jobs }}
       - name: Run local database lifetime regressions
         run: cmake --build ci-database --target check-database
       - name: Run local database benchmark self-tests
@@ -450,7 +455,7 @@ jobs:
           COMPILER_ARCHIVE_HIT: ${{ steps.compiler-restore.outputs.cache-hit }}
         run: node .github/scripts/cache-stats.mjs
       - name: Save compiler cache
-        if: ${{ !cancelled() && steps.compiler-start.outcome == 'success' && steps.compiler-start.outputs.enabled == 'true' && steps.compiler-restore.outputs.cache-hit != 'true' }}
+        if: ${{ !cancelled() && steps.compiler-start.outcome == 'success' && steps.compiler-start.outputs.enabled == 'true' && steps.compiler-restore.outputs.cache-hit != 'true' && steps.compiler-start.outputs.save_enabled == 'true' && (github.event_name == 'pull_request' || ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main')) }}
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
