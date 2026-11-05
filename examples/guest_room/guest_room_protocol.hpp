@@ -20,7 +20,7 @@ inline constexpr msg_id_t unsupported = 60007; // Internal dispatch key, never e
 inline constexpr msg_id_t action = 60008;
 inline constexpr msg_id_t delta = 60009;
 inline constexpr std::uint32_t max_body = 8192;
-inline constexpr std::uint32_t protocol_version = 1;
+inline constexpr std::uint32_t protocol_version = 2;
 
 class header final : public msg_header
 {

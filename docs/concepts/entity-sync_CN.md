@@ -1,25 +1,37 @@
-# Entity 增量同步
+# Entity 同步
 
-Kernel 提供拥有型标量／嵌套捕获及有界、带修订号的 C++ 基线／增量／接收端接口。访客房间通过显式公开字段将标量状态接入 Protobuf 与 Godot C#。嵌套状态在进程内使用固定可信绑定；嵌套线协议编解码、客户端适配及通用订阅仍属后续工作。房间标量 v1 保持不变。
+Kernel 在所有者线程捕获拥有型值，带修订号的发布通过[通用 Protobuf 协议](../reference/entity-protocol_CN.md)
+进入可移植 C# 副本，Godot 只展示已提交的状态。
 
-![标量同步流程](../assets/entity-sync-flow_CN.svg)
+| 层次 | 职责 |
+| --- | --- |
+| 应用 | 为每个接收者绑定根、Schema、固定字段／类型投影及允许的子身份 |
+| Kernel | `capture_nested_snapshot` 冻结标量、稳定的表格行存续期及容器／子 Entity 关系 |
+| 发布 | `nested_publisher` 将可见变化合并为一次根修订；状态未变时不发消息 |
+| 协议 | `entity_sync.proto` 保留标量类型、行身份、容器替换与子字段补丁 |
+| 客户端 | `NestedReplica` 在私有候选中验证后原子提交整个根；房间适配器同时提交消息内全部根 |
+| 表现 | 展示已确认的移动、HP/MP、背包和装备；操作按钮只发送请求，不提前修改权威值 |
 
-## 当前能力与边界
+## 基线、增量与移除
 
-| 组件 | 已提供 | 边界 · 契约 |
-| --- | --- | --- |
-| Kernel | `capture_scalar_snapshot`、`scalar_publisher`、`scalar_replica`；合并变化、原子修订校验与删除标记 | 进程内 C++ 值，由调用者选择授权字段和刷新点；字段／文本上限覆盖重建状态，不代表编码大小 · [标量接口](../reference/kernel_CN.md#标量基线与增量)、[捕获上限](../reference/kernel_CN.md#拥有型标量快照) |
-| 嵌套状态 | `capture_nested_snapshot`、`nested_publisher`、`nested_replica`；拥有型行／子存续期、固定可信投影、整根原子校验及聚合上限 | 进程内 C++；无嵌套编解码／队列，不改变房间 v1 · [捕获](../reference/kernel_CN.md#拥有型嵌套快照)、[状态流](../reference/kernel_CN.md#嵌套基线与增量) |
-| 房间 v1 | 加入／重连基线、后加入玩家基线、TCP 标量增量与移除；公开字段 100–108，隐藏配置字段 99 | 服务端分配玩家／Entity 身份，客户端请求操作；单个大厅，工作量／输出有界，不提供账号服务或持久化 · [协议、身份与具体上限](../../examples/guest_room/protocol_CN.md) |
-| Godot C# | 生成的 Protobuf 消息、共享样本、整体校验后提交房间状态、引擎线程更新场景 | 两端协同升级，使用 JSON 消息体的旧端不兼容；Entity 定义／业务配置仍用 JSON · [兼容契约](../../examples/guest_room/protocol_CN.md)、[客户端](https://github.com/OpenArkStudio/ark-client-godot) |
-| Net／arknet | 框架帧交付／传输 IO | 入队不等于应用确认；房间 v1 不提供 ACK／重放、分片或 AOI · [Net 所有权](../reference/network_CN.md) |
+| 变化 | 发布内容 |
+| --- | --- |
+| 加入或重连 | 完整授权基线，包含空表、空容器与零值 |
+| 标量／行列修改 | 带明确类型的稀疏字段补丁 |
+| 删除行后复用行号 | 退役旧行存续期，以新存续期引入替代行 |
+| 换装 | 用完整子状态替换该容器最终授权成员 |
+| 强化当前装备 | 修改同一子身份与存续期的字段 |
+| 移除根 | 删除标记；旧增量不能使其复活 |
 
-原生检查覆盖 C++ 状态流程与房间传输，本机双引擎 Godot 测试覆盖移动、HP／MP、移除与重连。main CI 已在 Linux、macOS、Windows 上通过。这些结果不构成生产容量或通用复制验收。
+合法重复不会回退状态。修订缺口、未知身份、错误类型或超限会使对应流失效。
+房间关闭连接，再以新绑定和基线恢复；不重放请求，也不进行原地重置。
 
-## 嵌套状态与剩余工作
+## 演示与边界
 
-拥有型嵌套捕获记录稳定的行存续期，并将子身份与容器槽位分开。嵌套 C++ 发布端／接收端按顺序提交一个授权根投影。行号可以复用；删除行会改变展示位置，但不会重编号其余行键。现有借用型延迟同步回调不能提供拥有型嵌套发布。
+[访客房间](../guides/examples_CN.md)使用真实 Kernel Entity：公开字段 100～108、背包表格 200、
+装备容器 300。只维护一套当前客户端／服务端协议，旧标量客户端须与服务端一起重新构建。
+[房间协议](../../examples/guest_room/protocol_CN.md)列出请求、应用上限及迁移要求。
 
-[通用 Entity 复制设计](../project/entity-replication-design_CN.md)将这些约束对应到当前源码，定义基线／增量顺序、授权、恢复及内存上限，并记录已选定的边界：行存续期标记、单根原子且不提供跨根事务、固定投影和重连恢复。已提供捕获及进程内差异器／接收端；嵌套编解码及客户端适配另行交付。方案复用标量叶子值，保持房间 v1 不变。
-
-所有者线程规则继续适用：Net 回调通过 Update 交付，HTTP IO 处理器须将 Entity 命令转交所有者线程。参见 [Net](../reference/network_CN.md)、[生命周期](application-architecture_CN.md)、[数据模型](data-driven_CN.md)与[数据结构](../guides/data-structures_CN.md)。RPC、持久化、Registry 和热更新仍不在本设计范围内。
+可复用的 C++ 标量接口仍可用于应用中的纯标量投影，它们不是第二套房间协议。
+通用订阅、连接内变更权限、AOI、跨根事务、分片、持久化及 ACK／重放历史不在本轮范围内。
+[复制设计](../project/entity-replication-design_CN.md)记录这些边界。

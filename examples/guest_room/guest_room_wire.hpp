@@ -5,24 +5,30 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
-#include <type_traits>
 #include <utility>
 
-#include "ark/kernel/entity_stream.hpp"
+#include "ark/kernel/nested_wire.hpp"
 #include "ark/proto/guest_room.pb.h"
 #include "guest_room_protocol.hpp"
 
 namespace ark::guest_room {
+
 namespace wire = protobuf::guest_room;
-inline constexpr auto player_schema = "ark.guest-player.v1";
+namespace state_wire = protobuf::entity_sync;
+inline constexpr auto player_schema = "ark.guest-player";
 inline constexpr std::array<std::uint32_t, 9> player_fields{100, 101, 102, 103, 104, 105, 106, 107, 108};
-inline constexpr entity_sync::snapshot_limits player_limits{9, 128};
+inline constexpr std::uint32_t inventory_index = 200;
+inline constexpr std::uint32_t equipment_index = 300;
+
+inline entity_sync::nested_wire::limits player_limits() {
+    return {{{1, 3, 8, 64, 512}, 128, 64, 512, 64}, max_body, 16};
+}
 
 inline guid_t decode_guid(std::uint64_t value) {
-    if (value > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) ||
+    if (value == 0 || value > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) ||
         value > static_cast<std::uint64_t>(std::numeric_limits<guid_t>::max()))
     {
-        throw std::invalid_argument("Scalar GUID exceeds the native width");
+        throw std::invalid_argument("Room Entity GUID must be positive and fit the native width");
     }
     return static_cast<guid_t>(value);
 }
@@ -35,219 +41,168 @@ inline std::uint64_t encode_identity(guid_t value) {
     return static_cast<std::uint64_t>(value);
 }
 
-inline void encode_field(std::uint32_t index, const entity_sync::scalar_value& value, wire::scalar_field& output) {
-    if (index == 0)
+inline entity_sync::nested_entity_layout player_layout(const std::array<guid_t, 2>& equipment) {
+    using type = entity_sync::nested_scalar_type;
+    entity_sync::nested_entity_layout layout{"GuestPlayer", {}, {}, {}};
+    for (const auto index : player_fields)
     {
-        throw std::invalid_argument("Scalar field index must be positive");
+        layout.fields.emplace(index, index == 100 ? type::bytes : index <= 102 ? type::real64 : type::uint32);
     }
-    output.set_index(index);
-    std::visit(
-        [&](const auto& item) {
-            using type = std::decay_t<decltype(item)>;
-            if constexpr (std::is_floating_point_v<type>)
-            {
-                if (!std::isfinite(item))
-                {
-                    throw std::invalid_argument("Non-finite scalar value");
-                }
-            }
-            if constexpr (std::is_same_v<type, bool>)
-            {
-                output.set_bool_value(item);
-            }
-            else if constexpr (std::is_same_v<type, std::int32_t>)
-            {
-                output.set_int32_value(item);
-            }
-            else if constexpr (std::is_same_v<type, std::uint32_t>)
-            {
-                output.set_uint32_value(item);
-            }
-            else if constexpr (std::is_same_v<type, std::int64_t>)
-            {
-                output.set_int64_value(item);
-            }
-            else if constexpr (std::is_same_v<type, std::uint64_t>)
-            {
-                output.set_uint64_value(item);
-            }
-            else if constexpr (std::is_same_v<type, float>)
-            {
-                output.set_float_value(item);
-            }
-            else if constexpr (std::is_same_v<type, double>)
-            {
-                output.set_double_value(item);
-            }
-            else if constexpr (std::is_same_v<type, std::string>)
-            {
-                output.set_string_value(item);
-            }
-            else if constexpr (std::is_same_v<type, entity_sync::guid_value>)
-            {
-                if (!std::in_range<std::int64_t>(item.value))
-                {
-                    throw std::invalid_argument("Scalar GUID exceeds the wire width");
-                }
-                output.set_guid_value(static_cast<std::int64_t>(item.value));
-            }
-        },
-        value);
-}
-
-inline entity_sync::scalar_value decode_field(const wire::scalar_field& input) {
-    if (input.index() == 0)
+    layout.tables.emplace(
+        inventory_index, entity_sync::nested_table_layout{"InventoryItem", {{1, type::uint32}, {2, type::uint32}}});
+    auto& children = layout.containers[equipment_index];
+    for (const auto id : equipment)
     {
-        throw std::invalid_argument("Scalar field index must be positive");
-    }
-    switch (input.value_case())
-    {
-    case wire::scalar_field::kBoolValue:
-        return input.bool_value();
-    case wire::scalar_field::kInt32Value:
-        return input.int32_value();
-    case wire::scalar_field::kUint32Value:
-        return input.uint32_value();
-    case wire::scalar_field::kInt64Value:
-        return input.int64_value();
-    case wire::scalar_field::kUint64Value:
-        return input.uint64_value();
-    case wire::scalar_field::kFloatValue:
-        if (std::isfinite(input.float_value()))
+        encode_identity(id);
+        if (!children
+                 .emplace(id, entity_sync::nested_entity_layout{"GuestEquipment",
+                                  {{1, type::uint32}, {2, type::uint32}}, {}, {}})
+                 .second)
         {
-            return input.float_value();
-        }
-        break;
-    case wire::scalar_field::kDoubleValue:
-        if (std::isfinite(input.double_value()))
-        {
-            return input.double_value();
-        }
-        break;
-    case wire::scalar_field::kStringValue:
-        return input.string_value();
-    case wire::scalar_field::kGuidValue:
-        if (input.guid_value() >= std::numeric_limits<guid_t>::min() &&
-            input.guid_value() <= std::numeric_limits<guid_t>::max())
-        {
-            return entity_sync::guid_value{static_cast<guid_t>(input.guid_value())};
-        }
-        break;
-    default:
-        break;
-    }
-    throw std::invalid_argument("Missing or non-finite scalar value");
-}
-
-inline void encode(const entity_sync::scalar_baseline& input, wire::scalar_baseline& output) {
-    entity_sync::scalar_publisher validated(input);
-    if (input.snapshot.entity_id <= 0)
-    {
-        throw std::invalid_argument("Room Entity GUID must be positive");
-    }
-    output.Clear();
-    output.set_schema_id(input.schema_id);
-    output.set_generation(input.generation);
-    output.set_revision(input.revision);
-    output.set_entity_id(encode_identity(input.snapshot.entity_id));
-    output.set_class_name(input.snapshot.class_name);
-    for (const auto& [index, value] : input.snapshot.fields)
-    {
-        encode_field(index, value, *output.add_fields());
-    }
-}
-
-inline entity_sync::scalar_baseline decode(
-    const wire::scalar_baseline& input, const entity_sync::snapshot_limits& limits = {}) {
-    entity_sync::scalar_baseline output{input.schema_id(), input.generation(), input.revision(),
-        {decode_guid(input.entity_id()), input.class_name(), {}}};
-    if (static_cast<std::size_t>(input.fields_size()) > limits.max_fields)
-    {
-        throw std::length_error("Scalar field count exceeds limit");
-    }
-    for (const auto& field : input.fields())
-    {
-        if (!output.snapshot.fields.emplace(field.index(), decode_field(field)).second)
-        {
-            throw std::invalid_argument("Duplicate scalar field index");
+            throw std::invalid_argument("Duplicate equipment binding");
         }
     }
-    entity_sync::scalar_publisher validated(output, limits);
-    return output;
+    return layout;
 }
 
-inline void encode(const entity_sync::scalar_delta& input, wire::scalar_delta& output) {
-    entity_sync::detail::validate_scalar_schema(input.schema_id, {});
-    entity_sync::detail::validate_scalar_state(input.entity_id, input.class_name, input.fields, {});
-    if (input.entity_id <= 0 || input.generation == 0 || input.required_revision == 0 ||
-        input.required_revision == std::numeric_limits<std::uint64_t>::max() ||
-        input.revision != input.required_revision + 1 || (input.removed && !input.fields.empty()) ||
-        (!input.removed && input.fields.empty()))
+inline entity_sync::nested_projection player_projection(guid_t root, const std::array<guid_t, 2>& equipment) {
+    entity_sync::nested_projection projection{player_schema, root,
+        {"GuestPlayer", {player_fields.begin(), player_fields.end()}, {{inventory_index, {1, 2}}}, {}}};
+    for (const auto id : equipment)
     {
-        throw std::invalid_argument("Invalid scalar delta envelope");
+        projection.root.containers[equipment_index].emplace(
+            id, entity_sync::nested_entity_projection{"GuestEquipment", {1, 2}, {}, {}});
     }
-    output.Clear();
-    output.set_schema_id(input.schema_id);
-    output.set_generation(input.generation);
-    output.set_required_revision(input.required_revision);
-    output.set_revision(input.revision);
-    output.set_entity_id(encode_identity(input.entity_id));
-    output.set_class_name(input.class_name);
-    output.set_removed(input.removed);
-    for (const auto& [index, value] : input.fields)
-    {
-        encode_field(index, value, *output.add_fields());
-    }
+    return projection;
 }
 
-inline entity_sync::scalar_delta decode(
-    const wire::scalar_delta& input, const entity_sync::snapshot_limits& limits = {}) {
-    entity_sync::scalar_delta output{input.schema_id(), input.generation(), input.required_revision(), input.revision(),
-        decode_guid(input.entity_id()), input.class_name(), {}, input.removed()};
-    if (static_cast<std::size_t>(input.fields_size()) > limits.max_fields)
+inline entity_sync::nested_stream_binding decode_binding(const wire::player_binding& input) {
+    if (input.equipment_ids_size() != 2 || input.incarnation() == 0 || input.generation() == 0)
     {
-        throw std::length_error("Scalar field count exceeds limit");
+        throw std::invalid_argument("Missing fixed player instance binding");
     }
-    for (const auto& field : input.fields())
+    const auto root = decode_guid(input.entity_id());
+    std::array<guid_t, 2> equipment{};
+    for (std::size_t i = 0; i < equipment.size(); ++i)
     {
-        if (!output.fields.emplace(field.index(), decode_field(field)).second)
+        if (input.equipment_ids(static_cast<int>(i)) <= 0)
         {
-            throw std::invalid_argument("Duplicate scalar field index");
+            throw std::invalid_argument("Invalid equipment binding");
+        }
+        equipment[i] = decode_guid(static_cast<std::uint64_t>(input.equipment_ids(static_cast<int>(i))));
+        if (equipment[i] == root)
+        {
+            throw std::invalid_argument("Equipment aliases its root");
         }
     }
-    wire::scalar_delta validated;
-    encode(output, validated);
-    entity_sync::detail::validate_scalar_state(output.entity_id, output.class_name, output.fields, limits);
-    return output;
+    return {player_schema, root, input.incarnation(), input.generation(), player_layout(equipment)};
 }
 
-inline void validate_player(const entity_sync::scalar_baseline& input) {
-    const auto& state = input.snapshot;
-    if (input.schema_id != player_schema || state.class_name != "GuestPlayer" ||
-        state.fields.size() != player_fields.size())
+inline void encode_binding(const entity_sync::nested_stream_binding& input, wire::player_binding& output) {
+    wire::player_binding staged;
+    staged.set_entity_id(encode_identity(input.root_id));
+    staged.set_incarnation(input.root_incarnation);
+    staged.set_generation(input.generation);
+    for (const auto& [id, layout] : input.root.containers.at(equipment_index))
+    {
+        staged.add_equipment_ids(static_cast<std::int64_t>(encode_identity(id)));
+    }
+    static_cast<void>(decode_binding(staged));
+    output.Swap(&staged);
+}
+
+inline void validate_player(const entity_sync::nested_snapshot& input) {
+    const auto& root = input.root;
+    const auto& fields = root.scalars.fields;
+    if (input.schema_id != player_schema || root.scalars.class_name != "GuestPlayer" ||
+        fields.size() != player_fields.size() || root.tables.size() != 1 || root.containers.size() != 1)
     {
         throw std::invalid_argument("Unsupported GuestPlayer projection");
     }
     for (const auto index : player_fields)
     {
-        const auto field = state.fields.find(index);
-        if (field == state.fields.end() || (index == 100      ? !std::holds_alternative<std::string>(field->second)
-                                               : index <= 102 ? !std::holds_alternative<double>(field->second)
-                                                              : !std::holds_alternative<std::uint32_t>(field->second)))
+        const auto field = fields.find(index);
+        if (field == fields.end() || (index == 100      ? !std::holds_alternative<std::string>(field->second)
+                                         : index <= 102 ? !std::holds_alternative<double>(field->second)
+                                                        : !std::holds_alternative<std::uint32_t>(field->second)))
         {
-            throw std::invalid_argument("Wrong GuestPlayer scalar field or type");
+            throw std::invalid_argument("Wrong GuestPlayer field or type");
         }
     }
-    const auto x = std::get<double>(state.fields.at(101));
-    const auto y = std::get<double>(state.fields.at(102));
-    if (!valid_name(std::get<std::string>(state.fields.at(100))) || !std::isfinite(x) || !std::isfinite(y) || x < 0 ||
-        x > 960 || y < 0 || y > 540 || std::get<std::uint32_t>(state.fields.at(106)) == 0 ||
-        std::get<std::uint32_t>(state.fields.at(107)) == 0 ||
-        std::get<std::uint32_t>(state.fields.at(104)) > std::get<std::uint32_t>(state.fields.at(106)) ||
-        std::get<std::uint32_t>(state.fields.at(105)) > std::get<std::uint32_t>(state.fields.at(107)))
+    const auto x = std::get<double>(fields.at(101));
+    const auto y = std::get<double>(fields.at(102));
+    if (!valid_name(std::get<std::string>(fields.at(100))) || !std::isfinite(x) || !std::isfinite(y) || x < 0 ||
+        x > 960 || y < 0 || y > 540 || std::get<std::uint32_t>(fields.at(106)) == 0 ||
+        std::get<std::uint32_t>(fields.at(107)) == 0 ||
+        std::get<std::uint32_t>(fields.at(104)) > std::get<std::uint32_t>(fields.at(106)) ||
+        std::get<std::uint32_t>(fields.at(105)) > std::get<std::uint32_t>(fields.at(107)))
     {
         throw std::invalid_argument("Invalid GuestPlayer public state");
     }
+    if (!root.tables.contains(inventory_index) || !root.containers.contains(equipment_index))
+    {
+        throw std::invalid_argument("Missing demo inventory or equipment");
+    }
+    const auto& inventory = root.tables.at(inventory_index);
+    if (inventory.class_name != "InventoryItem" || inventory.rows.size() > 1)
+    {
+        throw std::invalid_argument("Invalid demo inventory");
+    }
+    for (const auto& [number, row] : inventory.rows)
+    {
+        if (row.fields.size() != 2 || !row.fields.contains(1) || !row.fields.contains(2) ||
+            !std::holds_alternative<std::uint32_t>(row.fields.at(1)) ||
+            !std::holds_alternative<std::uint32_t>(row.fields.at(2)))
+        {
+            throw std::invalid_argument("Wrong inventory column or type");
+        }
+        if (number != 1 || std::get<std::uint32_t>(row.fields.at(1)) != 1 ||
+            std::get<std::uint32_t>(row.fields.at(2)) == 0 || std::get<std::uint32_t>(row.fields.at(2)) > 99)
+        {
+            throw std::invalid_argument("Invalid potion row");
+        }
+    }
+    const auto& slots = root.containers.at(equipment_index);
+    if (slots.size() != 1 || !slots.contains(1))
+    {
+        throw std::invalid_argument("Invalid demo equipment slot");
+    }
+    const auto& child = slots.at(1);
+    if (child.scalars.fields.size() != 2 || !child.scalars.fields.contains(1) || !child.scalars.fields.contains(2) ||
+        !std::holds_alternative<std::uint32_t>(child.scalars.fields.at(1)) ||
+        !std::holds_alternative<std::uint32_t>(child.scalars.fields.at(2)))
+    {
+        throw std::invalid_argument("Wrong equipment field or type");
+    }
+    const auto item = std::get<std::uint32_t>(child.scalars.fields.at(1));
+    if (child.scalars.class_name != "GuestEquipment" || (item != 1001 && item != 1002) ||
+        std::get<std::uint32_t>(child.scalars.fields.at(2)) > 100)
+    {
+        throw std::invalid_argument("Invalid demo equipment attributes");
+    }
+}
+
+inline void encode(const entity_sync::nested_baseline& input, state_wire::nested_baseline& output,
+    const entity_sync::nested_stream_binding& binding) {
+    validate_player(input.snapshot);
+    entity_sync::nested_wire::encode(input, output, binding, player_limits());
+}
+
+inline void encode(const entity_sync::nested_delta& input, state_wire::nested_delta& output,
+    const entity_sync::nested_stream_binding& binding) {
+    entity_sync::nested_wire::encode(input, output, binding, player_limits());
+}
+
+inline entity_sync::nested_baseline decode(
+    const state_wire::nested_baseline& input, const entity_sync::nested_stream_binding& binding) {
+    auto result = entity_sync::nested_wire::decode(input, binding, player_limits());
+    validate_player(result.snapshot);
+    return result;
+}
+
+inline entity_sync::nested_delta decode(
+    const state_wire::nested_delta& input, const entity_sync::nested_stream_binding& binding) {
+    return entity_sync::nested_wire::decode(input, binding, player_limits());
 }
 
 } // namespace ark::guest_room
