@@ -43,14 +43,15 @@ export function buildParallelismPlan({ cpuCount, memoryBytes, buildJobsOverride,
   // Initial CI budget: reserve 1 GiB and allow 3 GiB per compiler process.
   // Keep the existing two-job ceiling when either resource is unknown. This
   // leaves 7-8 GiB runners at two jobs and never exceeds four on larger hosts.
+  // These are initial scheduling estimates, not peak-memory guarantees.
   const memoryJobs = memory === null ? 2 : Math.max(1, Math.floor((memory - gibibyte) / (3 * gibibyte)));
   const resourceJobs = Math.min(maxBuildJobs, cpu ?? 2, memoryJobs);
   const buildJobs = applyOverride(buildJobsOverride, resourceJobs, 2, maxBuildJobs);
-  // Links have a separate six-GiB budget; Ninja's overall --parallel bound still
-  // applies when compile and link jobs overlap. This is a scheduling limit,
-  // not a guarantee about an individual translation unit's peak memory.
-  const memoryLinks = memory === null ? 1 : Math.max(1, Math.floor((memory - gibibyte) / (6 * gibibyte)));
-  const resourceLinks = buildJobs === maxBuildJobs ? Math.min(2, memoryLinks) : 1;
+  // Two six-GiB links can overlap with two three-GiB compilers at four jobs:
+  // reserve 1 + 2*6 + 2*3 = 19 GiB before admitting both links. Smaller hosts
+  // retain a single link alongside the existing compile-job heuristic.
+  const twoLinkMemory = (1 + 2 * 6 + (maxBuildJobs - 2) * 3) * gibibyte;
+  const resourceLinks = buildJobs === maxBuildJobs && memory !== null && memory >= twoLinkMemory ? 2 : 1;
   const linkJobs = applyOverride(linkJobsOverride, resourceLinks, 1, 2);
   return { cpuCount: cpu, memoryBytes: memory, buildJobs, linkJobs,
     jobPools: `ark_compile=${buildJobs};ark_link=${linkJobs}` };

@@ -16,7 +16,8 @@ function fixture(t) {
 
 test('CPU and memory jointly bound compilation while small runners retain two jobs', () => {
   for (const [cpuCount, gib, buildJobs, linkJobs] of [
-    [4, 16, 4, 2], [64, 256, 4, 2], [3, 7, 2, 1], [8, 8, 2, 1],
+    [4, 16, 4, 1], [4, 13, 4, 1], [4, 19 - 1 / gibibyte, 4, 1],
+    [4, 19, 4, 2], [4, 48, 4, 2], [64, 256, 4, 2], [3, 7, 2, 1], [8, 8, 2, 1],
     [8, 10, 3, 1], [8, 4, 1, 1], [1, 16, 1, 1], [4, 0.5, 1, 1],
   ]) {
     const plan = buildParallelismPlan({ cpuCount, memoryBytes: gib * gibibyte });
@@ -65,6 +66,7 @@ test('overrides only reduce resource budgets and malformed overrides use conserv
   assert.equal(buildParallelismPlan({ ...resources, buildJobsOverride: '2', linkJobsOverride: '2' }).linkJobs, 1);
   assert.equal(buildParallelismPlan({ ...resources, linkJobsOverride: '1' }).linkJobs, 1);
   assert.equal(buildParallelismPlan({ ...resources, linkJobsOverride: '2' }).linkJobs, 2);
+  assert.equal(buildParallelismPlan({ cpuCount: 4, memoryBytes: 16 * gibibyte, linkJobsOverride: '2' }).linkJobs, 1);
   assert.equal(buildParallelismPlan({ ...resources, buildJobsOverride: '' }).buildJobs, 4);
   for (const value of ['0', '-1', '5', 'Infinity', '2.5', '02', ' 2 ', '2\nINJECTED=value', 4, null]) {
     assert.equal(buildParallelismPlan({ ...resources, buildJobsOverride: value }).buildJobs, 2, String(value));
@@ -109,7 +111,7 @@ endforeach()
 `);
   writeFileSync(join(root, 'main.cpp'), 'int main() { return 0; }\n');
   const run = args => spawnSync('cmake', args, { encoding: 'utf8', timeout: 30_000 });
-  for (const gib of [8, 16]) {
+  for (const gib of [8, 16, 19]) {
     const plan = buildParallelismPlan({ cpuCount: 4, memoryBytes: gib * gibibyte });
     const build = join(root, `build-${gib}`);
     const configured = run(['-S', root, '-B', build, '-G', 'Ninja',
