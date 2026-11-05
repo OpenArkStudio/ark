@@ -1,59 +1,52 @@
-# Guest room example
+# Guest room
 
 [中文](README_CN.md)
 
-`guest_room_plugin` runs a small 2D guest lobby through the real ARK launcher, Utility, Kernel, Bus and Net plugins. A joined session owns a `GuestPlayer` Kernel Entity whose formal fields and initial profile come from JSON. Movement and HP/MP actions update that Entity; the owner-thread flush captures selected fields and publishes Protobuf baselines/deltas. Net callbacks and all business mutations execute on the launcher owner thread. Login and the default CS/SS framing and 4096-byte limit are unchanged. No Registry, Consul, database, account or persistence service is required.
+A 2D multiplayer example running through the real ark launcher, Utility, Kernel,
+Bus and Net plugins. Two [Godot C# clients](https://github.com/OpenArkStudio/ark-client-godot)
+observe each other's movement, HP/MP, inventory and equipment through owning
+Protobuf baselines and deltas. It needs no database or service-discovery server.
 
-The matching C# Godot client uses ARK2 and displays HP/MP. `damage` reduces own HP by 15, `skill` spends 20 MP when available, and `rest` restores 20 HP/MP up to the configured maxima. HP zero still permits movement. The server owns amounts and targets; the client requests only a kind and an independent action sequence. See the [protocol and migration](protocol.md).
+| Interaction | Entity data |
+| --- | --- |
+| Move, take a hit, use a skill, rest | Typed scalar fields |
+| Pick up or consume potions | Inventory table rows, quantities and row lifetimes |
+| Switch or upgrade weapons | Equipment container membership and child fields |
+| Leave and reconnect | Root tombstone, new identity and complete baseline |
 
-## Entity schema and initial profile
-
-[resource/meta/entity_schema.json](resource/meta/entity_schema.json) is the authoritative Kernel schema and static configuration. It declares the required empty `Player` class, `GuestPlayer` fields at stable indices 100..108 (`name`, `x`, `y`, `move_seq`, `hp`, `mp`, `hp_max`, `mp_max`, `action_seq`), and profile identifier `id` at index 99. Name is a string, coordinates are doubles, and sequences/attributes are uint32. This replaces the example's placeholder XML metadata and custom fields.
-
-The `GuestPlayer` configuration row with `id = 1` supplies every scalar value, including HP/MP/maxima of 100 and both sequences zero. Joining calls `create_entity(..., "GuestPlayer", 1, ...)` and then assigns the session name and spawn coordinates through ordinary Entity setters. Schema definitions determine field types and indices; business JSON rows provide values. There are no hardcoded replacement attribute defaults or runtime schema edits. The profile ID is separate from the opaque session player ID in snapshots. Schema masks are metadata; the module explicitly selects public indices 100..108 for `capture_scalar_snapshot` and `scalar_publisher`. New connections receive a complete baseline; existing peers receive added baselines, changed fields and tombstones. Movement and actions coalesce before each owner-thread flush.
-
-Edit a profile through the framework's [JSON Entity schema and business-data workflow](../../docs/reference/kernel.md#json-entity-schema-and-business-data), export valid JSON, stage it and restart the example. HP/MP maxima must be positive, current values must not exceed their maxima and initial sequences must be zero. Kernel selects this file when present and rejects malformed selected JSON without falling back to XML. The example checks the required field indices/types and profile in `pre_update()`, after every module's `post_init()` has loaded its static configuration, before opening its listener. Restart/rejoin creates fresh state; there is no hot reload or persistence.
-
-## Process stop and resource cleanup
-
-Join, Move, Action, Ping and connection events use ordinary callbacks. Leaving manager `running` no longer automatically returns `server_stopping`. The application/operator completes announcements, business-ingress closure, player removal and saving before process stop. This example has no persistence service or saving guarantee.
-
-At process stop the manager requests managed-task cancellation and waits for frame/native-resource safety. All consumer-first `pre_shut()` calls close native callback sources while module objects remain alive; reverse `shut()` and owned-object destruction follow, then plugin exits and all DSO closes last. Net closes endpoints before clearing callback captures. Keep the room, Kernel and callback receivers alive through that closure. Existing work/output limits and protocol behavior remain. Shared IO, Registry, hot update, nested wire changes and the TCP 5000 workstream remain paused.
+All business changes and captures run on the launcher owner thread. The client
+submits intents and displays server-confirmed state. JSON defines fields and the
+initial business profile; the reusable nested publisher/replica owns pending values.
 
 ## Build and run
 
-Use the repository's normal native dependencies, including Protobuf and the existing optional `nlohmann_json` CMake package. Enable applications, examples and this optional example in the same build:
-
 ```sh
-cmake -S . -B app-build -DARK_BUILD_APPLICATIONS=ON -DARK_BUILD_EXAMPLES=ON -DARK_BUILD_GUEST_ROOM_EXAMPLE=ON -DARK_BUILD_PROTO=ON
-cmake --build app-build --target app guest_room_plugin ark_kernel_plugin ark_utility_plugin ark_bus_plugin ark_net_plugin --parallel 1
-./examples/guest_room/run.sh --bin-dir "$PWD/app-build/bin" --runtime-dir "$PWD/run/guest_room" --host 127.0.0.1 --port 19100
+cmake -S . -B out/guest-room -DCMAKE_BUILD_TYPE=Release -DARK_BUILD_GUEST_ROOM_EXAMPLE=ON
+cmake --build out/guest-room --target app guest_room_plugin ark_kernel_plugin ark_utility_plugin ark_bus_plugin ark_net_plugin --parallel 2
+bash examples/guest_room/run.sh --bin-dir out/guest-room/bin --runtime-dir /tmp/ark-guest-room
 ```
 
-Supply the normal dependency toolchain/prefix arguments when configuring; select the `guest-room` vcpkg manifest feature when using vcpkg. Add `--debug` to the run command for a Debug build (`app_d` and `_d` plugins). The script stages a complete matching binary directory, the TOML manifests and the example's metadata. `--host` is a local bind address/hostname; `--port` must be 1..65535. Use a fresh runtime directory. Stop with Ctrl+C. This example script explicitly sets a five-second resource-cleanup safeguard; expiry retains resources and reports failure. It is not the framework default or a business-saving budget.
+Use the regular [application build prerequisites](../../docs/get-started/installation.md).
+The target also needs the Utility, Kernel, Bus and Net runtime plugins enabled.
+See [run.sh](run.sh) for its launcher arguments and [the Godot guide](https://github.com/OpenArkStudio/ark-client-godot#readme)
+for client setup. Existing Login/CS/SS listeners do not implement this example protocol.
 
-The equivalent platform-neutral staging command is:
-
-```sh
-cmake -DBIN_DIR=/absolute/app-build/bin -DRUNTIME_DIR=/absolute/run/guest_room -DHOST=127.0.0.1 -DPORT=19100 -P examples/guest_room/stage.cmake
-cd /absolute/run/guest_room
-./bin/app --busid=1.1.31.1 --name=guest_room --app_conf=conf/guest_room.app.toml --shutdown_timeout_ms=5000
-```
-
-Use `app.exe` / `app_d.exe` on Windows. Connect the official [C# Godot client](https://github.com/OpenArkStudio/ark-client-godot) to the same host/port; send movement at about 10 Hz. The client must join again after reconnecting, clear old frame/state buffers and accept a new player ID and actual Entity GUID. Detailed wire fields and errors are in the [protocol](protocol.md); [wire-vectors.json](wire-vectors.json) mirrors the C# test fixture.
-
-## Native verification
+## Validation
 
 ```sh
-cmake --build app-build --target check-guest-room --parallel 1
+cmake --build out/guest-room --target check-guest-room
 ```
 
-`check-guest-room-codec` uses the real Net parser to verify shared Protobuf body/frame hex, every split point, coalescing, 8192/8193-byte limits, headers, fresh parser state and strict UTF-8 names. Adapter tests cover all nine scalar alternatives, integer boundaries, arbitrary bytes, zero-value presence, duplicate fields, limits, malformed encodings, public projection types, revision gaps, duplicates, tombstones and revision exhaustion. A 16-player worst-size Protobuf baseline must fit the frame budget.
+The codec target checks shared C++/C# vectors, typed values, malformed inputs,
+framing and the 16-player baseline budget. On POSIX the server target starts the
+actual launcher and two native clients, covering movement, row deletion/reuse,
+equipment replacement/patches, errors, removal, reconnect and normal shutdown.
+It uses owned runtime directories and port 19191; run one copy at a time.
+Actual Godot execution is a separate client-side integration check.
 
-On POSIX, `check-guest-room-server` starts the real launcher/plugin libraries and two native TCP clients. It checks Accepted/Entity binding, late-join full baselines, added baselines for existing peers, coalesced movement deltas, HP/MP actions, sequence-only clamped actions, quiet unchanged flushes, errors without state changes, tombstones, reconnect with new Entity GUIDs, malformed-frame shutdown and normal shutdown. Additional processes load near-UINT32_MAX and 19-MP profiles and reject invalid initial profiles. Tests own runtime directories and port 19191; run one copy at a time. This process controller does not establish Windows or C# Godot acceptance.
+[Room protocol and bounds](protocol.md) · [Generic Entity protocol](../../docs/reference/entity-protocol.md)
+· [Shutdown ownership](../../docs/project/lifecycle-closeout.md)
 
-The same executable starts a resource-cleanup child with a 20-second observation deadline. Actual Room/Kernel/Net DSOs handle an ordinary Join, then two explicit Net `pre_shut()` calls check endpoint closure, callback-capture release and inert updates on retained closed services before manager stop. Normal protocol tests remain. The controller terminates/reaps only its own child on timeout; this is not successful framework shutdown. The controlled host keeps the room DSO loaded and does not establish image unmapping. These describe test scope; acceptance requires actual execution results.
-
-The Applications workflow enables this optional example on its existing platform matrix. Its default build includes the plugin on Linux, macOS and Windows; `check-core` includes the codec checks everywhere and the real launcher/two-peer process checks on POSIX systems. Workflow configuration is separate from the result of an individual hosted run.
-
-The sample limits bodies to 8192 bytes, connections to 32 and joined players to 16. Each tick permits 64 business callbacks; each connection permits 32 messages per second and eight queued frames / `8 * (8192 + 12)` owned bytes. Work/output overflow or transport send rejection closes the session. Unsupported captured state or revision exhaustion requires reconnection and a fresh baseline. These bounds and native tests do not establish production capacity, deployment or Godot visual acceptance. See the [protocol](protocol.md) for compatibility, projection, revision and recovery rules.
+**Breaking change:** the current generic Entity messages replace the former
+scalar-only room contract. Rebuild the server and Godot client together; there
+is no compatibility branch. Local functional checks do not establish production capacity.

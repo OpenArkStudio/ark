@@ -1,6 +1,7 @@
 // Copyright (c) 2026 OpenArkStudio. Licensed under Apache-2.0. See LICENSE.
 #pragma once
 
+#include <array>
 #include <chrono>
 #include <deque>
 #include <map>
@@ -34,7 +35,9 @@ private:
     {
         std::shared_ptr<entity> player;
         std::string player_id;
-        std::unique_ptr<entity_sync::scalar_publisher> publisher;
+        std::unique_ptr<entity_sync::nested_publisher> publisher;
+        entity_sync::nested_stream_binding binding;
+        std::array<std::shared_ptr<entity>, 2> equipment;
         bool needs_baseline{true};
         std::size_t pending_bytes{0};
         std::deque<output> pending;
@@ -53,13 +56,15 @@ private:
     void reject(peer& connection, const std::string& code, const std::string& reason);
     void flush_room();
     void retire(peer& connection);
+    void release_player(peer& connection);
     void owner_thread() const;
 
     kernel_module* kernel_{nullptr};
     std::shared_ptr<net_server_service> server_;
     std::map<conv_id_t, peer> peers_;
     std::thread::id owner_;
-    std::vector<std::shared_ptr<const entity_sync::scalar_delta>> removed_;
+    std::vector<std::pair<std::shared_ptr<const entity_sync::nested_delta>, entity_sync::nested_stream_binding>>
+        removed_;
     std::uint64_t next_player_{1};
     unsigned tick_messages_{0};
 };

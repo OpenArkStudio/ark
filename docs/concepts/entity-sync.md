@@ -1,25 +1,44 @@
-# Entity incremental synchronization
+# Entity synchronization
 
-Kernel provides owning scalar/nested captures and bounded revisioned C++ baseline/delta/replica APIs. The guest room connects scalar state to Protobuf and Godot C# through an explicit public projection. Nested state uses a fixed trusted binding in process; a nested wire codec, client adapter and general subscriptions remain future work. Room scalar v1 is unchanged.
+Kernel captures owning values on its owner thread. A revisioned publication then
+crosses the [generic Protobuf boundary](../reference/entity-protocol.md) into a
+portable C# replica; Godot presents only committed state.
 
-![Scalar synchronization flow](../assets/entity-sync-flow.svg)
+| Layer | Responsibility |
+| --- | --- |
+| Application | Bind each recipient to a root, schema, fixed field/type projection and allowed child identities |
+| Kernel | `capture_nested_snapshot` freezes scalar fields, stable table-row lifetimes and container/child relationships |
+| Publication | `nested_publisher` coalesces visible changes into one root revision; unchanged state emits nothing |
+| Wire | `entity_sync.proto` preserves scalar types, explicit row identities, container replacements and child patches |
+| Client | `NestedReplica` validates a private candidate and commits a complete root atomically; the room adapter commits all roots in its envelope together |
+| Presentation | Render committed movement, HP/MP, inventory and equipment; controls send requests without changing authoritative values |
 
-## Current capability and boundary
+## Baseline, delta and removal
 
-| Component | Available | Boundary · contract |
-| --- | --- | --- |
-| Kernel | `capture_scalar_snapshot`, `scalar_publisher`, `scalar_replica`; coalesced changes, atomic revision checks and tombstones | In-process C++ values; caller selects authorized fields and flush point. Field/text limits cover reconstructed state, not encoded size · [scalar API](../reference/kernel.md#scalar-baselines-and-deltas), [capture limits](../reference/kernel.md#owning-scalar-snapshots) |
-| Nested state | `capture_nested_snapshot`, `nested_publisher`, `nested_replica`; owned row/child lifetimes, fixed trusted projection, atomic root validation and aggregate bounds | In-process C++; no nested codec, queue or room v1 change · [capture](../reference/kernel.md#owning-nested-snapshots), [stream](../reference/kernel.md#nested-baselines-and-deltas) |
-| Room v1 | Join/reconnect baseline, later player baselines, scalar deltas and removal over TCP; public fields 100–108, hidden configuration field 99 | Server assigns player/Entity identities; clients request actions. One lobby with bounded work/output, no account service or persistence · [protocol, identity and numeric limits](../../examples/guest_room/protocol.md) |
-| Godot C# | Generated Protobuf messages, shared fixtures, whole-room validation before commit and scene updates on the engine thread | Upgrade both peers together; JSON-only room peers are incompatible. Entity definitions/profiles stay JSON · [compatibility contract](../../examples/guest_room/protocol.md), [client](https://github.com/OpenArkStudio/ark-client-godot) |
-| Net / arknet | Framework frame delivery / transport IO | Enqueue is not an application acknowledgment; no ACK/replay, fragmentation or AOI in room v1 · [Net ownership](../reference/network.md) |
+| Change | Publication |
+| --- | --- |
+| Join or reconnect | Complete authorized baseline, including empty tables/containers and zero values |
+| Scalar/row-column edit | Sparse typed field patch |
+| Row deletion and reuse | Remove the old row incarnation; introduce the replacement with a new incarnation |
+| Equipment switch | Replace that container's final authorized membership with complete child state |
+| Equipped child upgrade | Patch the same child identity and incarnation |
+| Root removal | Tombstone; old deltas cannot resurrect it |
 
-Native checks cover the C++ state loop and room transport; local two-engine Godot tests cover movement, HP/MP, removal and reconnect. Main CI passed on Linux, macOS and Windows. These results do not establish production capacity or general replication.
+A valid duplicate does not roll state backward. A revision gap, unknown identity,
+wrong type or exhausted bound invalidates the affected stream. The room closes
+the connection and reconnects with a fresh binding and baseline; it does not
+replay requests or perform an in-place reset.
 
-## Nested state and remaining work
+## Demonstration and boundaries
 
-Owning nested capture records stable row lifetimes and separates child identity from container slots. The nested C++ publisher/replica commits one authorized root projection in order. Row numbers can be reused; deleting a row changes presentation positions without renumbering surviving row keys. Existing borrowed delayed-sync callbacks cannot provide owning nested publications.
+The [guest room](../guides/examples.md) uses actual Kernel Entities: public fields
+100–108, inventory table 200 and equipment container 300. It keeps one current
+client/server contract; earlier scalar-only clients must be rebuilt together with
+the server. [Room protocol](../../examples/guest_room/protocol.md) lists requests,
+application limits and migration requirements.
 
-The [general Entity replication design](../project/entity-replication-design.md) ties these constraints to current source, defines baseline/delta ordering, authorization, recovery and memory bounds, and records the selected boundaries: row lifetime tokens, one atomic root without cross-root transactions, and fixed projections with reconnect recovery. Capture and the in-process differ/replica are provided; a nested codec and client adapter remain separate work. It reuses the scalar leaf values while keeping room v1 unchanged.
-
-Owner-thread rules remain in force: Net callbacks arrive through Update; HTTP IO handlers must marshal Entity commands to the owner thread. See [Net](../reference/network.md), [lifecycle](application-architecture.md), [data model](data-driven.md) and [data structures](../guides/data-structures.md). RPC, persistence, Registry and hot update remain outside this design.
+The reusable C++ scalar interfaces remain available for scalar-only application
+projections. They are not a second room protocol. Generic subscriptions, changing
+permissions during a connection, AOI, cross-root transactions, fragmentation,
+persistence and ACK/replay history remain outside this delivery. The
+[replication design](../project/entity-replication-design.md) records these boundaries.

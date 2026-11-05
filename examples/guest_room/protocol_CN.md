@@ -1,51 +1,68 @@
-# ARK 访客房间 Protobuf 协议
+# 访客房间协议
 
-[English](protocol.md)
+房间使用框架的[通用 Entity 协议](../../docs/reference/entity-protocol_CN.md)。
+规范源为 `src/proto/proto/entity_sync.proto` 与 `guest_room.proto`；客户端副本及
+[共享测试向量](wire-vectors.json)必须与服务端逐字节一致。
 
-[guest_room.proto](../../src/proto/proto/guest_room.proto) 是权威契约，包名为 `ark.protobuf.guest_room`，C# 命名空间为 `Ark.Client.Protocol`。两端从该 schema 生成消息。应用协议版本为 `1`，Join 和 Accepted 均须携带。服务端与 Godot 客户端须一起升级：传输标记仍为 `ARK2`，但原有 ARK2 JSON 正文已不兼容。服务端 Entity 字段定义与配置仍使用 JSON。
+## 连接与消息帧
 
-TCP 帧使用固定的 12 字节头部：第 `0..3` 字节为 ASCII `ARK2`，第 `4..5` 字节为大端无符号 16 位消息 ID，第 `6..7` 字节为必须为零的 16 位 flags，第 `8..11` 字节为大端无符号 32 位正文长度。正文长度不含头部，最多为 8192 字节。正文为不压缩的 Protobuf。示例头部上限不改变原生 CS／SS 头部及其 4096 字节默认上限。标记、flags 或长度非法时，在业务回调之前关闭连接。解析器保留不完整帧并分别解析粘包；每个连接使用全新的解析状态。
+| 项目 | 约定 |
+| --- | --- |
+| 消息头 | 12 字节：`ARK2` 标识、大端 uint16 消息 ID、两个零字节、大端 uint32 正文长度 |
+| 正文 | Protobuf，最多 8192 字节；非法头或超限正文关闭连接 |
+| 加入 | `join_request` 指定 `lobby`、1～64 字节且不含控制字符的有效 UTF-8 名称，以及 `protocol_version = 2` |
+| 接受 | 服务端分配逻辑玩家 ID 与正的有符号 64 位 Entity GUID；客户端绑定自身身份后才安装房间基线 |
+| 兼容性 | 只维护这一套当前协议。服务端与客户端须一起重新构建；旧标量房间消息不兼容，不进行兼容协商 |
 
-| ID | 方向 | Protobuf 消息 |
-| --- | --- | --- |
-| 60000 | 客户端 → 服务端 | `join_request`：name、room、protocol_version |
-| 60001 | 服务端 → 加入者 | `join_accepted`：逻辑 player_id、名称、房间、尺寸、实际 entity_id、protocol_version |
-| 60002 | 客户端 → 服务端 | `move_request`：sequence、x、y |
-| 60003 | 服务端 → 加入者 | `room_baseline`：当前完整授权名单 |
-| 60004 | 服务端 → 客户端 | `error_response`：code、message、可选 action_sequence |
-| 60005／60006 | Ping／pong | `heartbeat`：uint32 nonce |
-| 60008 | 客户端 → 服务端 | `action_request`：sequence 与操作枚举 |
-| 60009 | 服务端 → 已加入者 | `room_delta`：新增基线及修改／删除增量 |
+| ID | 请求／响应 |
+| ---: | --- |
+| 60000／60001 | 加入／接受 |
+| 60002 | 移动意图：递增 `sequence`，有限坐标位于 960 × 540 范围内 |
+| 60003 | 完整房间基线：各玩家的实例绑定与通用嵌套基线 |
+| 60004 | 错误；可选 `action_sequence` 对应被拒绝的动作 |
+| 60005／60006 | Ping／Pong nonce |
+| 60008 | 业务动作意图，使用独立递增的动作序列号 |
+| 60009 | 新增玩家基线、通用 Entity 增量与删除标记 |
 
-60007 仅用于内部不支持消息的分发，不向网络发出。客户端仅可发送 Join、Move、Ping 和 Action。未知／方向错误的消息 ID 及经解析的畸形 Protobuf 会关闭连接；停止接收时 Join／Move 的例外见下文。允许 Protobuf 未知字段以支持向前兼容；未知操作枚举返回业务错误。错误码包括 `room_full`、`already_joined`、`not_joined`、`invalid_message`、`stale_sequence`、`insufficient_resource` 和 `server_stopping`。未超过工作量／输出限制时，业务错误保留连接。操作错误携带 `action_sequence`，缺少序列号时为零；其他错误不携带该字段。
+## 显式公开投影
 
-管理器离开 `running` 后，在所属线程回调入口拒绝 Join、Move、Action，错误码为 `server_stopping`，不修改成员关系或 Entity 字段。Action 拒绝仅解析正文以回传 `action_sequence`；畸形 Action 仍关闭连接。Join／Move 拒绝不解析正文，因此即使正文畸形也返回停止接收错误。Ping、不支持消息及连接事件继续普通派发，工作量／输出限制同样约束拒绝路径。客户端通过匹配的错误结束操作等待；重连后重新加入，不自动重放。此约定不增加 schema 字段或修改线格式，不保证原生发送交付、TCP 停止接收或动态库卸载。
+应用独立提供字段与类型布局，不从状态值推导权限。玩家绑定声明根身份、根存续期、流代次
+及两个固定授权的装备 GUID，不能增加字段权限或类型。两个客户端都能看到下列演示数据；
+这里没有账号或隐私系统。
 
-仅提供一个 `lobby`，最多容纳 16 名玩家，不进行账号认证。名称须为 `1..64` 个有效 UTF-8 字节，且不含 Unicode C0／C1 控制字符。坐标须为有限值，分别位于 `0..960`／`0..540` 内；出生位置由服务端确定。移动及属性操作分别使用从 1 开始、独立递增的 uint32 序列号。玩家 ID 是进程内唯一的不透明十进制字符串；Entity GUID 标识实际 Kernel 实例。Accepted 将请求会话的两个标识绑定。请求不能通过提供身份选择或授权修改 Entity。
+| 成员 | 数据 |
+| --- | --- |
+| `GuestPlayer` 字段 100～108 | 名称、x/y、移动序列号、HP/MP、上限及动作序列号；配置 ID 99 不公开 |
+| 表格 200，`InventoryItem` | 行 1 保存药水物品 1 和数量；列 1／2 为 uint32 物品 ID／数量 |
+| 容器 300 | 槽位 1 放置一个授权的 `GuestEquipment`；字段 1／2 为 uint32 物品 ID／强度 |
+| 初始数据 | HP/MP 与上限来自配置 1；药水数量 2，刀具物品 1001／强度 10；备用法杖物品 1002／强度 20 可供切换 |
 
-## 公开 Entity 投影
+## 发布与恢复
 
-公开类为 `GuestPlayer`，schema ID 为 `ark.guest-player.v1`。每份玩家基线必须完整且仅包含以下字段；索引 99 的配置 ID 及服务端私有字段不对外同步。
+1. 业务请求在所有者线程修改真实 Kernel 字段、表格行及容器关系。
+2. 每次刷新对每个授权根捕获一次完整状态；`nested_publisher` 为新玩家发布基线，可见状态变化时发布增量。
+3. 行号保持稳定。删除后再创建行 1 会获得新存续期，旧行补丁不能作用于新行。换装替换容器成员，强化则只修改该子 Entity 的字段。
+4. 客户端在私有候选状态中验证整个房间消息，全部通过才对外提交。根修订号、流代次、行存续期、授权子身份与资源上限都须匹配；合法重复不会回退状态。
+5. 非法状态或修订缺口关闭会话。重连清空旧副本和待确认意图，以新身份安装完整基线。不提供重放、ACK 历史、原地重置或跨根事务。
 
-| 索引 | 字段 | Protobuf 标量分支 |
-| --- | --- | --- |
-| 100 | name | `string_value` 字节，并按上述名称规则验证 |
-| 101／102 | x／y | `double_value` |
-| 103 | move_seq | `uint32_value` |
-| 104／105 | hp／mp | `uint32_value` |
-| 106／107 | hp_max／mp_max | `uint32_value` |
-| 108 | action_seq | `uint32_value` |
+| 动作 | 服务端结果 |
+| --- | --- |
+| `damage`／`skill`／`rest` | HP 减少 15；MP 足够时消耗 20；HP/MP 各恢复最多 20 |
+| `pickup` | 药水增加 1，最多 99；空表新增一行并分配新存续期 |
+| `use_potion` | 消耗 1 瓶药水，HP 恢复最多 10；耗尽时删除该行 |
+| `equip` | 在两个固定授权的装备 Entity 间切换 |
+| `upgrade` | 当前装备强度增加 1，最多 100 |
 
-通用标量 oneof 明确区分 bool、sint32、uint32、sint64、uint64、float、double、bytes 和有符号 64 位 GUID；零值仍保留分支存在性。通用适配器的 bytes 可包含任意字节，公开名称另行应用严格 UTF-8 规则。通用 GUID 值保留原生负值，受有符号 64 位线格式及原生位宽限制。房间 Entity 身份仍为正 uint64 值，并限制在原生 `guid_t` 范围。可移植客户端在提交名单修改前验证完整房间消息，包括投影／类型、身份、schema／类、有限坐标、正 HP／MP 上限及当前值范围。
+达到上限的成功动作仍确认其序列号。被拒绝的请求不改变状态，也不推进服务端动作序列号。
+点击按钮或本地发送完成，都不代表服务端已经确认。
 
-房间所属线程在 update 时，为每个活跃 Entity 调用一次真实 `kernel.capture_scalar_snapshot`，再由 `scalar_publisher` 比较选定字段。新连接先收到 Accepted，再收到完整 RoomBaseline。已有连接通过 RoomDelta 收到新增玩家基线、修改字段或 `removed = true` 墓碑。接受 Move／Action 时不立即广播完整名单。同一次 flush 前的修改合并；新增基线已包含最终状态，不再附带中间增量。状态未变化时不发增量。发布前即创建并删除的 Entity 可以不发消息。
+## 上限
 
-每个 Entity 发布器从 generation 1、revision 1 开始。增量保持相同 generation 和实际 Entity GUID，`required_revision` 等于前一版本，且 `revision = required_revision + 1`。删除也推进 revision，不携带字段。版本缺口、schema／类型非法或代际倒退需要通过新连接／基线恢复；重复增量不得使状态回退，墓碑阻止旧实例复活。不提供 ACK、重放或持久化副本历史。重连清空旧解析／副本状态，以新的逻辑 ID 和 Entity GUID 加入并安装完整基线。
+房间最多 16 名已加入玩家、32 条连接。每连接每秒最多 32 条请求、8 个待发帧及
+`8 * (8192 + 12)` 字节拥有型输出；所有者线程每轮最多处理 64 条请求。
+超限或发送拒绝关闭对应会话。
 
-## 服务端操作与限制
-
-`action_damage` 将自身 HP 减少 15，最低为零。`action_skill` 要求并消耗 20 MP。`action_rest` 恢复 20 HP／MP，不超过配置上限，且不发生 uint32 溢出。拒绝 `action_unspecified` 及未知枚举。初始值来自配置行 1，随示例提供的 HP／MP／上限均为 100，两类序列号均为零。HP 为零仍可移动。数值已到边界的操作仍推进 `action_seq`，因此增量可以仅包含索引 108。非法／过期／资源不足的操作不修改字段或序列号。客户端仅根据匹配的错误或权威序列号确认结束操作等待，不自动重放。
-
-示例限制为 32 个连接、16 名已加入玩家、所属线程每轮 64 次业务回调、每连接每秒 32 条消息。每连接最多持有八个待发送帧及 `8 * (8192 + 12)` 个待发送字节。工作量／队列超限、序列化／入队／发送失败、捕获状态不支持或 revision 耗尽时关闭相关会话；流级捕获失败时关闭已加入会话，避免继续发布部分状态。仍受底层传输发送队列限制。这些演示限制不代表生产容量、完整恶意客户端防护或 Godot 视觉验收。
-
-[wire-vectors.json](wire-vectors.json) 为 C++ 与 C# 提供共享 Protobuf 正文／帧十六进制向量，包含完整基线、HP 增量及墓碑。服务端和客户端仓库中的 schema 与向量须逐字节一致。
+每个根最多：深度 1、3 个 Entity、8 行、64 个字段／成员记录、512 字节文本与元数据。
+补丁另限 128 个操作、64 个值和 512 字节文本；存续期历史最多 64 项。
+Protobuf 深度上限为 16，正文限额与原生状态／补丁限额分别计算。
+这些是演示上限，不是框架默认值或生产容量。
