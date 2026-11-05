@@ -10,13 +10,15 @@
 #include <vector>
 
 #include "ark/kernel/kernel_module.hpp"
+#include "ark/kernel/map_module.hpp"
 #include "ark/module_base.hpp"
 #include "ark/net/net_server_service.hpp"
+#include "ark/net/net_service_manager_module.hpp"
 #include "guest_room_wire.hpp"
 
 namespace ark::guest_room {
 
-class room_module final : public module_base<module>
+class room_module final : public module_base<module, kernel_module, map_module, net_service_manager_module>
 {
 public:
     bool init() override;

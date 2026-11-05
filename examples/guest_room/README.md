@@ -17,6 +17,8 @@ Protobuf baselines and deltas. It needs no database or service-discovery server.
 All business changes and captures run on the launcher owner thread. The client
 submits intents and displays server-confirmed state. JSON defines fields and the
 initial business profile; the reusable nested publisher/replica owns pending values.
+The room declares Kernel, Map and Net providers so reverse dependency cleanup
+retires player state and callbacks before those providers stop.
 
 ## Build and run
 

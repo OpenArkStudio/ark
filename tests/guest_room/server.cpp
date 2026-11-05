@@ -16,6 +16,7 @@
 #include <string>
 #include <sys/wait.h>
 #include <thread>
+#include <typeinfo>
 #include <unistd.h>
 #include <vector>
 
@@ -24,6 +25,7 @@
 
 #include "../../examples/guest_room/guest_room_module.hpp"
 #include "../../examples/guest_room/guest_room_wire.hpp"
+#include "ark/kernel/map_module.hpp"
 #include "ark/net/net_service_manager_module.hpp"
 #include "ark/plugin_manager.hpp"
 
@@ -744,6 +746,11 @@ int main(int argc, char** argv) {
     try
     {
         require(argc == 4, "usage: server-test LAUNCHER RUNTIME_DIR PORT");
+        const room_module dependency_probe;
+        require(dependency_probe.get_dependencies() == std::vector<std::string>{typeid(ark::kernel_module).name(),
+                                                           typeid(ark::map_module).name(),
+                                                           typeid(ark::net_service_manager_module).name()},
+            "room must retire its Entity state and callbacks before Kernel, Map and Net shutdown");
         if (std::string(argv[1]) == "--resource-cleanup-only")
         {
             exercise_resource_cleanup(
