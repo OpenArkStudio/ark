@@ -1,0 +1,115 @@
+syntax = "proto3";
+package ark.protobuf.entity_sync;
+option csharp_namespace = "Ark.Client.Protocol.EntitySync";
+
+// Indexed collections are repeated records, not maps. Decoders reject duplicate
+// indices before installing any state. A schema and authorized projection must
+// be trusted independently of these messages.
+message scalar_field {
+  uint32 index = 1;
+  oneof value {
+    bool bool_value = 2;
+    sint32 int32_value = 3;
+    uint32 uint32_value = 4;
+    sint64 int64_value = 5;
+    uint64 uint64_value = 6;
+    float float_value = 7;
+    double double_value = 8;
+    bytes string_value = 9;
+    sint64 guid_value = 10;
+  }
+}
+
+message row_snapshot {
+  uint32 number = 1;
+  uint64 incarnation = 2;
+  repeated scalar_field fields = 3;
+}
+
+message table_snapshot {
+  uint32 index = 1;
+  string class_name = 2;
+  repeated row_snapshot rows = 3;
+}
+
+message entity_slot {
+  uint32 slot = 1;
+  entity_snapshot state = 2;
+}
+
+message container_snapshot {
+  uint32 index = 1;
+  repeated entity_slot slots = 2;
+}
+
+message entity_snapshot {
+  sint64 entity_id = 1;
+  uint64 incarnation = 2;
+  string class_name = 3;
+  repeated scalar_field fields = 4;
+  repeated table_snapshot tables = 5;
+  repeated container_snapshot containers = 6;
+}
+
+message nested_snapshot {
+  string schema_id = 1;
+  entity_snapshot root = 2;
+}
+
+message nested_baseline {
+  uint64 generation = 1;
+  uint64 revision = 2;
+  nested_snapshot snapshot = 3;
+}
+
+// required=0 adds a complete row; incarnation=0 removes a row; equal nonzero
+// incarnations patch columns; a newer incarnation completely replaces a row.
+message row_delta {
+  uint32 number = 1;
+  uint64 required_incarnation = 2;
+  uint64 incarnation = 3;
+  repeated scalar_field fields = 4;
+}
+
+message table_delta {
+  uint32 index = 1;
+  repeated row_delta rows = 2;
+}
+
+message entity_change {
+  uint32 slot = 1;
+  entity_delta change = 2;
+}
+
+message container_replacement {
+  repeated entity_slot slots = 1;
+}
+
+message container_patch {
+  repeated entity_change changed = 1;
+}
+
+message container_delta {
+  uint32 index = 1;
+  oneof update {
+    container_replacement replacement = 2;
+    container_patch patch = 3;
+  }
+}
+
+message entity_delta {
+  sint64 entity_id = 1;
+  uint64 incarnation = 2;
+  repeated scalar_field fields = 3;
+  repeated table_delta tables = 4;
+  repeated container_delta containers = 5;
+}
+
+message nested_delta {
+  string schema_id = 1;
+  uint64 generation = 2;
+  uint64 required_revision = 3;
+  uint64 revision = 4;
+  entity_delta root = 5;
+  bool removed = 6;
+}
