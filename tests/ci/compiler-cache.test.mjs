@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { cachePlan } from '../../.github/scripts/vcpkg-cache.mjs';
-import { prepareCompilerCache, sccacheVersion } from '../../.github/scripts/compiler-cache.mjs';
+import { compilerCachePlan, prepareCompilerCache, sccacheVersion } from '../../.github/scripts/compiler-cache.mjs';
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'ark-compiler-cache-'));
@@ -15,10 +15,12 @@ function fixture(t) {
   writeFileSync(join(root, 'vcpkg-configuration.json'), '{"overlay-ports":["ports"]}');
   const env = {
     GITHUB_SHA: 'b'.repeat(40), GITHUB_RUN_ID: '1001', GITHUB_RUN_ATTEMPT: '1',
+    GITHUB_EVENT_NAME: 'pull_request', GITHUB_REF: 'refs/pull/7/merge',
+    COMPILER_CACHE_PROFILE: 'applications', COMPILER_CACHE_EPOCH: '2026-W45',
     RUNNER_OS: 'Linux', RUNNER_ARCH: 'X64', RUNNER_TEMP: join(root, 'runner temp'),
     ImageOS: 'ubuntu24', ImageVersion: '20261020.1', VCPKG_CACHE_REVISION: 'a'.repeat(40),
     VCPKG_CACHE_FEATURES: 'boost;ssl', VCPKG_CACHE_DEFAULT_FEATURES: 'true',
-    VCPKG_CACHE_PROFILE: 'ON-ON-OFF-Release', VCPKG_DEFAULT_TRIPLET: 'x64-linux',
+    VCPKG_CACHE_PROFILE: 'applications', VCPKG_DEFAULT_TRIPLET: 'x64-linux',
     VCPKG_DEFAULT_HOST_TRIPLET: 'x64-linux', GITHUB_ENV: join(root, 'env'),
     GITHUB_OUTPUT: join(root, 'output'), SCCACHE_SETUP_OUTCOME: 'success',
     SCCACHE_PATH: '/tool cache/sccache', SCCACHE_RESTORE_OUTCOME: 'success',
@@ -34,7 +36,7 @@ test('compiler launcher uses only the verified pinned version with cache IO fall
     calls.push([command, args]);
     assert.equal(options.env.SCCACHE_GHA_ENABLED, 'false');
     assert.equal(options.env.SCCACHE_IGNORE_SERVER_IO_ERROR, '1');
-    assert.match(options.env.SCCACHE_C_CUSTOM_CACHE_BUSTER, /ark-sccache-0.16.0-v1/);
+    assert.match(options.env.SCCACHE_C_CUSTOM_CACHE_BUSTER, /ark-sccache-0.16.0-v2/);
     return { status: 0, stdout: `sccache ${sccacheVersion}\n` };
   } });
   assert.equal(plan.enabled, true);
@@ -111,25 +113,26 @@ test('CMake passes a launcher path with spaces, keeps the compiler and propagate
   assert.notEqual(run(['--build', direct, '--parallel', '1']).status, 0, 'cold builds must preserve compiler errors');
 });
 
-test('source commits and run attempts share object compatibility while immutable snapshots differ', t => {
+test('source commits and run attempts share one weekly immutable snapshot', t => {
   const f = fixture(t);
   const run = () => ({ status: 0, stdout: `sccache ${sccacheVersion}` });
   const first = prepareCompilerCache({ ...f, run });
   const next = prepareCompilerCache({ ...f, env: { ...f.env, GITHUB_SHA: 'c'.repeat(40), GITHUB_RUN_ID: '2002', GITHUB_RUN_ATTEMPT: '2' }, run });
   assert.equal(first.key, next.key);
   assert.equal(first.restoreKeys, next.restoreKeys);
-  assert.notEqual(first.archiveKey, next.archiveKey);
-  assert.ok(first.archiveKey.startsWith(next.restoreKeys));
+  assert.equal(first.archiveKey, next.archiveKey);
+  assert.ok(first.archiveKey.startsWith(next.restoreKeys.split('\n')[0]));
   assert.equal(first.key.includes(f.env.GITHUB_SHA), false);
   assert.equal(first.directory, next.directory);
 });
 
-test('runner image, compiler flags, dependency contents and profiles isolate compiler restore prefixes', t => {
+test('image OS, compiler flags, dependency contents and profiles isolate compiler restore prefixes', t => {
   const f = fixture(t);
   const run = () => ({ status: 0, stdout: `sccache ${sccacheVersion}` });
   const baseline = prepareCompilerCache({ ...f, run });
-  for (const extra of [{ ImageVersion: 'different-image' }, { CXXFLAGS: '-fsanitize=thread' },
-    { CXX: '/other/compiler' }, { VCPKG_CACHE_PROFILE: 'database-Standalone' },
+  for (const extra of [{ ImageOS: 'ubuntu26' }, { CXXFLAGS: '-fsanitize=thread' }, { CFLAGS: '-O3' }, { LDFLAGS: '-flto' },
+    { VCPKG_DEFAULT_TRIPLET: 'arm64-linux' },
+    { CXX: '/other/compiler' }, { VCPKG_CACHE_PROFILE: 'database-Standalone' }, { VCPKG_CACHE_PROFILE: 'network-address' },
     { VCPKG_CACHE_FEATURES: 'database' }, { VCPKG_CACHE_REVISION: 'd'.repeat(40) }]) {
     const identity = cachePlan({ root: f.root, env: { ...f.env, ...extra } }).key;
     const plan = prepareCompilerCache({ ...f, env: { ...f.env, COMPILER_CACHE_IDENTITY: identity }, run });
@@ -165,6 +168,109 @@ test('failed restore or startup clears the previously prepared launcher before C
     assert.equal(prepareCompilerCache({ env, run }).enabled, false);
     const launchers = readFileSync(f.env.GITHUB_ENV, 'utf8').split('\n').filter(line => line.startsWith('ARK_COMPILER_LAUNCHER='));
     assert.deepEqual(launchers, [`ARK_COMPILER_LAUNCHER=${f.env.SCCACHE_PATH}`, 'ARK_COMPILER_LAUNCHER=']);
-    assert.ok(readFileSync(f.env.GITHUB_OUTPUT, 'utf8').endsWith('enabled=false\ndirectory=\nkey=\narchive_key=\nrestore_keys=\n'));
+    assert.match(readFileSync(f.env.GITHUB_OUTPUT, 'utf8'), /enabled=false\ndirectory=\nkey=\narchive_key=\nsave_enabled=false\ncache_size=512M\nepoch=\narchive_scope=\nrestore_keys=\n$/);
+  }
+});
+
+test('compatible image versions retain the same object buster and archive family', t => {
+  const f = fixture(t);
+  const run = () => ({ status: 0, stdout: `sccache ${sccacheVersion}` });
+  const first = prepareCompilerCache({ ...f, run });
+  const identity = cachePlan({ root: f.root, env: { ...f.env, ImageVersion: '20261108.2' } }).key;
+  assert.notEqual(identity, f.env.COMPILER_CACHE_IDENTITY);
+  const next = prepareCompilerCache({ env: { ...f.env, COMPILER_CACHE_IDENTITY: identity }, run });
+  assert.equal(first.key, next.key);
+  assert.equal(first.archiveKey, next.archiveKey);
+  assert.equal(first.restoreKeys, next.restoreKeys);
+  assert.match(readFileSync(f.env.GITHUB_OUTPUT, 'utf8'), /restore_keys<<ARK_SCCACHE_RESTORE_KEYS\n[^\n]+-untrusted-\n[^\n]+-trusted-\nARK_SCCACHE_RESTORE_KEYS\n/);
+});
+
+test('weekly snapshots grow only on epoch change and retain a compatible restore prefix', t => {
+  const f = fixture(t);
+  delete f.env.COMPILER_CACHE_EPOCH;
+  const plan = date => compilerCachePlan({ env: f.env, now: new Date(date) });
+  const first = plan('2026-11-02T00:00:00Z');
+  const sameWeek = plan('2026-11-08T23:59:59Z');
+  const nextWeek = plan('2026-11-09T00:00:00Z');
+  assert.equal(first.epoch, '2026-W45');
+  assert.equal(first.archiveKey, sameWeek.archiveKey);
+  assert.notEqual(first.archiveKey, nextWeek.archiveKey);
+  assert.equal(first.key, nextWeek.key);
+  assert.equal(first.restoreKeys, nextWeek.restoreKeys);
+  assert.equal(plan('2021-01-01T00:00:00Z').epoch, '2020-W53');
+});
+
+test('trusted main archives are isolated from untrusted PR snapshots and queue writes', t => {
+  const f = fixture(t);
+  const plan = extra => compilerCachePlan({ env: { ...f.env, ...extra } });
+  const main = plan({ GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/main', COMPILER_CACHE_WRITE: 'true' });
+  const pr = plan({});
+  const queue = plan({ GITHUB_EVENT_NAME: 'merge_group', GITHUB_REF: 'refs/heads/gh-readonly-queue/main/pr-7' });
+  assert.equal(main.saveEnabled, true);
+  assert.equal(main.scope, 'trusted');
+  assert.doesNotMatch(main.restoreKeys, /untrusted/);
+  assert.equal(pr.saveEnabled, false, 'Applications PRs consume the main seed');
+  assert.match(pr.restoreKeys, /-untrusted-\n.*-trusted-$/);
+  assert.equal(pr.key, main.key, 'archive trust boundaries do not prevent object reuse from a trusted seed');
+  assert.equal(queue.saveEnabled, false);
+  assert.doesNotMatch(queue.restoreKeys, /untrusted/);
+  for (const extra of [
+    { COMPILER_CACHE_WRITE: 'true' }, // An untrusted request cannot opt Applications into saving.
+    { GITHUB_EVENT_NAME: 'pull_request_target', GITHUB_REF: 'refs/heads/main', COMPILER_CACHE_WRITE: 'true' },
+    { GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/topic', COMPILER_CACHE_WRITE: 'true' },
+    { GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF: 'refs/heads/topic', COMPILER_CACHE_WRITE: 'true' },
+    { GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/main' },
+    { GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/main', COMPILER_CACHE_WRITE: 'false' },
+  ]) assert.equal(plan(extra).saveEnabled, false, JSON.stringify(extra));
+  assert.equal(plan({ GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF: 'refs/heads/main', COMPILER_CACHE_WRITE: 'true' }).saveEnabled, true);
+});
+
+test('network and database source PRs retain bounded per-ref weekly snapshots', t => {
+  const f = fixture(t);
+  for (const profile of ['network-none', 'network-address', 'network-thread', 'database-Boost', 'database-Standalone']) {
+    const env = { ...f.env, COMPILER_CACHE_PROFILE: profile, VCPKG_CACHE_PROFILE: profile };
+    env.COMPILER_CACHE_IDENTITY = cachePlan({ root: f.root, env }).key;
+    const first = compilerCachePlan({ env });
+    assert.equal(first.saveEnabled, true, profile);
+    assert.equal(first.scope, 'untrusted');
+    assert.equal(first.cacheSize, '512M');
+    assert.equal(first.archiveKey, compilerCachePlan({ env: { ...env, GITHUB_SHA: 'e'.repeat(40) } }).archiveKey);
+    assert.equal(compilerCachePlan({ env: { ...env, COMPILER_CACHE_WRITE: 'false' } }).saveEnabled, false);
+    assert.equal(compilerCachePlan({ env: { ...env, GITHUB_REF: 'refs/pull/7/merge\n' } }).saveEnabled, false);
+    assert.equal(compilerCachePlan({ env: { ...env, GITHUB_EVENT_NAME: 'merge_group' } }).saveEnabled, false);
+  }
+});
+
+test('cache capacity is bounded, optional, and exported without changing compatibility', t => {
+  const f = fixture(t);
+  const original = compilerCachePlan(f);
+  for (const capacity of ['64', '512', '768', '1024']) {
+    const env = { ...f.env, COMPILER_CACHE_MAX_MIB: capacity };
+    const seen = [];
+    const plan = prepareCompilerCache({ env, run: (_command, _args, options) => {
+      seen.push(options.env.SCCACHE_CACHE_SIZE);
+      return { status: 0, stdout: `sccache ${sccacheVersion}` };
+    } });
+    assert.equal(plan.enabled, true);
+    assert.equal(plan.cacheSize, `${capacity}M`);
+    assert.equal(plan.key, original.key);
+    assert.deepEqual(seen, [`${capacity}M`, `${capacity}M`]);
+    assert.match(readFileSync(env.GITHUB_ENV, 'utf8'), new RegExp(`SCCACHE_CACHE_SIZE=${capacity}M\\n`));
+  }
+});
+
+test('invalid capacity, profile, epoch or publication settings disable optional caching safely', t => {
+  for (const extra of [
+    ...['', '0', '63', '1025', '2048', '-1', '512M', '0.5', '0512', '512\n', '512;bad'].map(COMPILER_CACHE_MAX_MIB => ({ COMPILER_CACHE_MAX_MIB })),
+    ...['', '2026-W00', '2026-W54', '2026-W45\n', 'bad'].map(COMPILER_CACHE_EPOCH => ({ COMPILER_CACHE_EPOCH })),
+    ...['', 'applications\n', 'unknown'].map(COMPILER_CACHE_PROFILE => ({ COMPILER_CACHE_PROFILE })),
+    { COMPILER_CACHE_WRITE: 'maybe' }, { GITHUB_SHA: 'b'.repeat(40) + '\n' },
+  ]) {
+    const f = fixture(t);
+    const plan = prepareCompilerCache({ env: { ...f.env, ...extra }, run: () => assert.fail('invalid cache settings must not launch a tool') });
+    assert.equal(plan.enabled, false, JSON.stringify(extra));
+    assert.equal(plan.saveEnabled, false);
+    assert.equal(plan.launcher, '');
+    assert.match(readFileSync(f.env.GITHUB_ENV, 'utf8'), /^ARK_COMPILER_LAUNCHER=\n/);
   }
 });
