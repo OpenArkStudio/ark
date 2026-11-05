@@ -379,6 +379,10 @@ bool kernel_module_impl::inner_destroy_entity(std::shared_ptr<entity> entity_ptr
         do_event(self, class_name, entity_event::entity_evt_pre_destroy, data_list_impl());
         do_event(self, class_name, entity_event::entity_evt_destroy, data_list_impl());
 
+        // Retire updates collected before or during destruction callbacks,
+        // including a detached flush. Parent-container destruction markers are
+        // queued under the surviving parent and remain available for delivery.
+        class_call_back_manager::retire_delay_sync(self);
         return objects_.erase(self);
     }
     else

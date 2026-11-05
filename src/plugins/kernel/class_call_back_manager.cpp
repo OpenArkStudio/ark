@@ -22,6 +22,19 @@
 
 namespace ark {
 
+namespace {
+
+struct delayed_sync_dispatch
+{
+    class_call_back_manager::delay_sync_data_list pending;
+    const guid_t* current{};
+    bool retired{};
+};
+
+delayed_sync_dispatch* active_delay_sync{};
+
+} // namespace
+
 class_call_back_manager::node_sync_call_backs class_call_back_manager::node_sync_call_back_list_;
 class_call_back_manager::table_sync_call_backs class_call_back_manager::table_sync_call_back_list_;
 class_call_back_manager::container_sync_call_back class_call_back_manager::container_sync_call_backs_list_;
@@ -262,34 +275,38 @@ void class_call_back_manager::add_delay_sync_call_back(const data_mask mask_valu
 }
 
 bool class_call_back_manager::on_delay_sync() {
-    static bool flushing = false;
-    if (flushing)
+    if (active_delay_sync)
     {
         return false;
     }
 
     struct flush_guard
     {
-        bool& active;
-
         ~flush_guard() {
-            active = false;
+            active_delay_sync = nullptr;
         }
     };
 
-    flushing = true;
-    flush_guard guard{flushing};
-
     // Newly collected entries remain pending for the next flush, even on throw.
     // Borrowed node values are not frozen. The detached batch is not replayed.
-    delay_sync_data_list batch;
-    batch.swap(delay_sync_data_list_);
-    for (auto& iter : batch)
+    delayed_sync_dispatch dispatch;
+    dispatch.pending.swap(delay_sync_data_list_);
+    active_delay_sync = &dispatch;
+    flush_guard guard;
+    while (!dispatch.pending.empty())
     {
-        auto& guid = iter.first;
-        auto& mask_data_map = iter.second;
-        for (auto& iter_data : mask_data_map)
+        // Extract the current entity before invoking user code. Retirement can
+        // then erase any later entity without invalidating our traversal.
+        auto entry = dispatch.pending.extract(dispatch.pending.begin());
+        auto& guid = entry.key();
+        dispatch.current = &guid;
+        dispatch.retired = false;
+        for (auto& iter_data : entry.mapped())
         {
+            if (dispatch.retired)
+            {
+                break;
+            }
             auto mask_value = iter_data.first;
             auto iter_call_back = delay_sync_call_back_list_.find(mask_value);
             if (iter_call_back == delay_sync_call_back_list_.end())
@@ -299,9 +316,22 @@ bool class_call_back_manager::on_delay_sync() {
 
             iter_call_back->second(guid, mask_value, iter_data.second);
         }
+        dispatch.current = nullptr;
     }
 
     return true;
+}
+
+void class_call_back_manager::retire_delay_sync(const guid_t& self) {
+    delay_sync_data_list_.erase(self);
+    if (active_delay_sync)
+    {
+        active_delay_sync->pending.erase(self);
+        if (active_delay_sync->current && *active_delay_sync->current == self)
+        {
+            active_delay_sync->retired = true;
+        }
+    }
 }
 
 class_call_back_manager::delay_sync_mask_data& class_call_back_manager::get_delay_sync_mask_data(const guid_t& self) {

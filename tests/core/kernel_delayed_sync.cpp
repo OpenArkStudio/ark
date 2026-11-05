@@ -93,7 +93,12 @@ class delayed_sync_world
 public:
     delayed_sync_world() {
         ark::logger::init(&logger_);
-        logger_.set_log_func([](spdlog::level::level_enum, const std::string&) {});
+        logger_.set_log_func([this](spdlog::level::level_enum level, const std::string& message) {
+            if (level >= spdlog::level::err)
+            {
+                errors.push_back(message);
+            }
+        });
         add<ark::class_meta_module>(metadata_);
         add<ark::config_module>(config_);
         add<ark::kernel_module>(kernel);
@@ -168,6 +173,7 @@ public:
     ark::kernel_module_impl kernel;
     std::shared_ptr<ark::entity> owner;
     std::vector<delivery> deliveries;
+    std::vector<std::string> errors;
     std::function<void(ark::data_mask)> on_delivery;
 
 private:
@@ -188,6 +194,131 @@ private:
 };
 
 } // namespace
+
+TEST_CASE("Kernel retirement cancels queued updates while preserving live entities and destroy events") {
+    struct destroy_observer
+    {
+        std::vector<ark::entity_event> events;
+        std::shared_ptr<ark::entity> owner;
+
+        int on_event(const ark::guid_t& id, const std::string&, ark::entity_event event, const ark::data_list&) {
+            if (id == 10 &&
+                (event == ark::entity_event::entity_evt_pre_destroy || event == ark::entity_event::entity_evt_destroy))
+            {
+                events.push_back(event);
+                // Destruction callbacks may collect one final old-object change.
+                REQUIRE(owner->set_u_int32(100, 80 + static_cast<std::uint32_t>(events.size())));
+            }
+            return 0;
+        }
+    } observed;
+
+    delayed_sync_world world;
+    observed.owner = world.owner;
+    REQUIRE(static_cast<ark::kernel_module&>(world.kernel)
+                .add_class_call_back("Owner", &observed, &destroy_observer::on_event, 100));
+    const auto live = world.kernel.create_entity(20, 1, 0, "Owner", 0, ark::data_list_impl{});
+    REQUIRE(live != nullptr);
+    REQUIRE(world.owner->set_u_int32(100, 7));
+    REQUIRE(live->set_u_int32(100, 29));
+    const std::weak_ptr<ark::entity> retired = world.owner;
+    REQUIRE(world.kernel.destroy_entity(10));
+    world.owner.reset();
+    observed.owner.reset();
+    CHECK(retired.expired());
+    CHECK(observed.events == std::vector<ark::entity_event>{
+                                 ark::entity_event::entity_evt_pre_destroy, ark::entity_event::entity_evt_destroy});
+    REQUIRE(world.kernel.update());
+    CHECK(world.errors.empty());
+    REQUIRE(world.deliveries.size() == 2);
+    for (const auto& event : world.deliveries)
+    {
+        CHECK(event.target == 20);
+        CHECK(event.message.data().datas_uint32().at(100) == 29);
+    }
+}
+
+TEST_CASE("Kernel retirement during delivery skips later masks of the active entity lifetime") {
+    delayed_sync_world world;
+    REQUIRE(world.owner->set_u_int32(100, 7));
+    const auto old_owner = world.owner;
+    bool retired = false;
+    bool recreate = false;
+    SUBCASE("ordinary retirement") {
+    }
+    SUBCASE("same GUID creates a distinct lifetime for the next flush") {
+        recreate = true;
+    }
+    world.on_delivery = [&](ark::data_mask) {
+        if (retired)
+        {
+            return;
+        }
+        retired = true;
+        REQUIRE(world.kernel.destroy_entity(10));
+        if (recreate)
+        {
+            world.owner = world.kernel.create_entity(10, 1, 0, "Owner", 0, ark::data_list_impl{});
+            REQUIRE(world.owner != nullptr);
+            REQUIRE(world.owner != old_owner);
+            REQUIRE(world.owner->set_u_int32(100, 99));
+        }
+    };
+    REQUIRE(world.kernel.update());
+    CHECK(retired);
+    CHECK(world.errors.empty());
+    REQUIRE(world.deliveries.size() == 1);
+    CHECK(world.deliveries.front().mask == ark::data_mask::pf_sync_view);
+    CHECK(world.deliveries.front().message.data().datas_uint32().at(100) == 7);
+    world.on_delivery = {};
+    world.deliveries.clear();
+    if (recreate)
+    {
+        world.flush();
+        for (const auto& event : world.deliveries)
+        {
+            CHECK(event.message.data().datas_uint32().at(100) == 99);
+        }
+    }
+    else
+    {
+        REQUIRE(world.kernel.update());
+        CHECK(world.deliveries.empty());
+    }
+    CHECK(world.errors.empty());
+}
+
+TEST_CASE("Kernel retirement during delivery removes another queued lifetime without losing its neighbors") {
+    delayed_sync_world world;
+    auto victim = world.kernel.create_entity(20, 1, 0, "Owner", 0, ark::data_list_impl{});
+    const auto live = world.kernel.create_entity(30, 1, 0, "Owner", 0, ark::data_list_impl{});
+    REQUIRE(victim != nullptr);
+    REQUIRE(live != nullptr);
+    REQUIRE(world.owner->set_u_int32(100, 7));
+    REQUIRE(victim->set_u_int32(100, 17));
+    REQUIRE(live->set_u_int32(100, 27));
+    const std::weak_ptr<ark::entity> retired_lifetime = victim;
+    bool retired = false;
+    world.on_delivery = [&](ark::data_mask) {
+        if (!retired)
+        {
+            retired = true;
+            REQUIRE(world.kernel.destroy_entity(20));
+            victim.reset();
+            CHECK(retired_lifetime.expired());
+        }
+    };
+    REQUIRE(world.kernel.update());
+    CHECK(world.errors.empty());
+    REQUIRE(world.deliveries.size() == 4);
+    std::map<ark::guid_t, unsigned> counts;
+    for (const auto& event : world.deliveries)
+    {
+        ++counts[event.target];
+        CHECK(event.message.data().datas_uint32().at(100) == (event.target == 10 ? 7 : 27));
+    }
+    CHECK(counts == std::map<ark::guid_t, unsigned>{{10, 2}, {30, 2}});
+}
 
 TEST_CASE("Kernel delayed container-only changes reach existing mask delivery callbacks") {
     delayed_sync_world world;
