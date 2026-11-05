@@ -13,11 +13,22 @@
 #include <utility>
 #include <vector>
 
+// A caller may already have Win32's object-like GetMessage macro in scope.
+// Keep Protobuf declarations independent of that macro's include order.
+#pragma push_macro("GetMessage")
+#undef GetMessage
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/message.h>
 #include <google/protobuf/unknown_field_set.h>
+#pragma pop_macro("GetMessage")
 
 #include "ark/kernel/nested_stream.hpp"
+
+// nested_stream can introduce Win32 macros through ark/platform.hpp after the
+// Protobuf declarations above. Protect generated headers and our implementation
+// separately, then restore the caller's macro state at the end of this header.
+#pragma push_macro("GetMessage")
+#undef GetMessage
 #include "ark/proto/entity_sync.pb.h"
 
 namespace ark::entity_sync::nested_wire {
@@ -505,3 +516,5 @@ inline nested_delta decode_delta(
 }
 
 } // namespace ark::entity_sync::nested_wire
+
+#pragma pop_macro("GetMessage")
