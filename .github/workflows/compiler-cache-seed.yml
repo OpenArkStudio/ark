@@ -1,0 +1,203 @@
+name: Compiler cache seed
+run-name: Compiler cache seed - ${{ github.event_name }} - ${{ github.ref_name }}
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'examples/**'
+      - 'tests/**'
+      - 'benchmarks/**'
+      - 'cmake/**'
+      - 'ports/**'
+      - 'vcpkg*.json'
+      - CMakeLists.txt
+      - .github/workflows/ci.yml
+      - .github/workflows/compiler-cache-seed.yml
+      - .github/scripts/compiler-cache.mjs
+      - .github/scripts/application-build-plan.mjs
+      - .github/scripts/ci-applications.mjs
+      - .github/scripts/build-parallelism.mjs
+  workflow_dispatch:
+    inputs:
+      verify_reuse:
+        description: Clean and rebuild once to measure compiler-cache reuse
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-main
+  cancel-in-progress: false
+
+jobs:
+  applications:
+    name: Seed ${{ matrix.os }} application compiler cache
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            cache_mib: 1024
+          - os: macos-latest
+            cache_mib: 512
+    env:
+      COMPILER_CACHE_WRITE: 'true'
+      COMPILER_CACHE_PROFILE: applications
+      COMPILER_CACHE_MAX_MIB: ${{ matrix.cache_mib }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - name: Select current main inputs
+        id: current
+        env:
+          CACHE_VERIFY_REUSE: ${{ inputs.verify_reuse == true && 'true' || 'false' }}
+        run: node .github/scripts/compiler-seed-plan.mjs
+      - name: Select bounded build parallelism
+        id: build-parallelism
+        if: steps.current.outputs.build == 'true'
+        run: node .github/scripts/build-parallelism.mjs
+      - name: Prepare vcpkg binary cache
+        id: vcpkg-cache
+        if: steps.current.outputs.build == 'true'
+        env:
+          VCPKG_CACHE_REVISION: 0699a19d0c6386247ce50d4dedbb8217d484d536
+          VCPKG_CACHE_FEATURES: 'application;boost;compression-tests;etcd-client;guest-room;config-tool'
+          VCPKG_CACHE_DEFAULT_FEATURES: 'true'
+          VCPKG_CACHE_PROFILE: applications
+        run: node .github/scripts/vcpkg-cache.mjs
+      - name: Restore vcpkg package archives
+        id: vcpkg-restore
+        if: steps.current.outputs.build == 'true' && steps.vcpkg-cache.outputs.enabled == 'true'
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.vcpkg-cache.outputs.directory }}
+          key: ${{ steps.vcpkg-cache.outputs.key }}
+          restore-keys: ${{ steps.vcpkg-cache.outputs.restore-key }}
+      - name: Install compiler cache
+        id: sccache-setup
+        if: steps.current.outputs.build == 'true'
+        uses: Mozilla-Actions/sccache-action@v0.0.11
+        with:
+          version: v0.16.0
+          disable_annotations: true
+      - name: Prepare compiler launcher
+        id: compiler-cache
+        if: steps.current.outputs.build == 'true'
+        env:
+          COMPILER_CACHE_IDENTITY: ${{ steps.vcpkg-cache.outputs.key }}
+          SCCACHE_SETUP_OUTCOME: ${{ steps.sccache-setup.outcome }}
+        run: node .github/scripts/compiler-cache.mjs --prepare
+      - name: Restore compiler cache
+        id: compiler-restore
+        if: steps.current.outputs.build == 'true' && steps.compiler-cache.outputs.enabled == 'true'
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.compiler-cache.outputs.directory }}
+          key: ${{ steps.compiler-cache.outputs.archive_key }}
+          restore-keys: ${{ steps.compiler-cache.outputs.restore_keys }}
+      - name: Start compiler cache after archive restore
+        id: compiler-start
+        if: steps.current.outputs.build == 'true' && steps.compiler-cache.outputs.enabled == 'true'
+        env:
+          COMPILER_CACHE_IDENTITY: ${{ steps.vcpkg-cache.outputs.key }}
+          SCCACHE_SETUP_OUTCOME: ${{ steps.sccache-setup.outcome }}
+          SCCACHE_RESTORE_OUTCOME: ${{ steps.compiler-restore.outcome }}
+        run: node .github/scripts/compiler-cache.mjs
+      - name: Require trusted compiler cache inputs
+        if: steps.current.outputs.build == 'true'
+        env:
+          CACHE_ENABLED: ${{ steps.compiler-start.outputs.enabled }}
+          CACHE_WRITE_ENABLED: ${{ steps.compiler-start.outputs.save_enabled }}
+        run: |
+          test "$CACHE_ENABLED" = true
+          test "$CACHE_WRITE_ENABLED" = true
+      - uses: lukka/get-cmake@latest
+        if: steps.current.outputs.build == 'true'
+      - uses: lukka/run-vcpkg@v11
+        if: steps.current.outputs.build == 'true'
+        with:
+          vcpkgGitCommitId: 0699a19d0c6386247ce50d4dedbb8217d484d536
+          vcpkgJsonGlob: vcpkg.json
+      - name: Configure applications
+        if: steps.current.outputs.build == 'true'
+        run: node .github/scripts/ci-applications.mjs configure
+      - name: Save application dependency archives
+        if: ${{ success() && steps.current.outputs.build == 'true' && steps.vcpkg-cache.outputs.enabled == 'true' && steps.vcpkg-restore.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.vcpkg-cache.outputs.directory }}
+          key: ${{ steps.vcpkg-cache.outputs.key }}
+      - name: Prepare controlled cold-cache measurement
+        if: steps.current.outputs.build == 'true' && inputs.verify_reuse == true
+        shell: pwsh
+        run: |
+          & $env:SCCACHE_PATH --stop-server
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Remove-Item -LiteralPath $env:SCCACHE_DIR -Recurse -Force
+          New-Item -ItemType Directory -Path $env:SCCACHE_DIR | Out-Null
+          & $env:SCCACHE_PATH --start-server
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $env:SCCACHE_PATH --zero-stats
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output 'Controlled cold build: restored local compiler objects were cleared; remote cache is unchanged.'
+      - name: Compile accepted main inputs
+        if: steps.current.outputs.build == 'true' && (steps.compiler-restore.outputs.cache-hit != 'true' || inputs.verify_reuse == true)
+        run: node .github/scripts/ci-applications.mjs build
+      - name: Report first build cache statistics
+        if: ${{ !cancelled() && steps.current.outputs.build == 'true' }}
+        continue-on-error: true
+        env:
+          COMPILER_ARCHIVE_HIT: ${{ steps.compiler-restore.outputs.cache-hit }}
+          VCPKG_ARCHIVE_HIT: ${{ steps.vcpkg-restore.outputs.cache-hit }}
+          VCPKG_ARCHIVE_DIRECTORY: ${{ steps.vcpkg-cache.outputs.directory }}
+          ARK_CACHE_SAMPLE: ${{ inputs.verify_reuse == true && 'controlled-cold' || 'seed-or-restored-snapshot' }}
+          ARK_CACHE_BUILD_EXECUTED: ${{ (steps.compiler-restore.outputs.cache-hit != 'true' || inputs.verify_reuse == true) && 'true' || 'false' }}
+          ARK_CACHE_ARCHIVE_KEY: ${{ steps.compiler-cache.outputs.archive_key }}
+        run: node .github/scripts/cache-stats.mjs
+      - name: Measure reuse after cleaning project outputs
+        if: steps.current.outputs.build == 'true' && inputs.verify_reuse == true
+        shell: pwsh
+        env:
+          COMPILER_ARCHIVE_HIT: ${{ steps.compiler-restore.outputs.cache-hit }}
+          ARK_CACHE_SAMPLE: controlled-warm
+          VCPKG_ARCHIVE_HIT: ${{ steps.vcpkg-restore.outputs.cache-hit }}
+          VCPKG_ARCHIVE_DIRECTORY: ${{ steps.vcpkg-cache.outputs.directory }}
+          ARK_CACHE_BUILD_EXECUTED: 'true'
+          ARK_CACHE_ARCHIVE_KEY: ${{ steps.compiler-cache.outputs.archive_key }}
+        run: |
+          cmake --build ci-build --target clean
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $env:SCCACHE_PATH --zero-stats
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node .github/scripts/ci-applications.mjs build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node .github/scripts/cache-stats.mjs
+      - name: Save compiler cache
+        if: ${{ success() && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && steps.compiler-start.outputs.enabled == 'true' && steps.compiler-start.outputs.save_enabled == 'true' && steps.compiler-restore.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.compiler-cache.outputs.directory }}
+          key: ${{ steps.compiler-cache.outputs.archive_key }}
+      - name: Verify trusted main cache availability
+        if: steps.current.outputs.build == 'true' && steps.compiler-start.outputs.enabled == 'true' && steps.compiler-start.outputs.save_enabled == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.compiler-cache.outputs.directory }}
+          key: ${{ steps.compiler-cache.outputs.archive_key }}
+          lookup-only: true
+          fail-on-cache-miss: true

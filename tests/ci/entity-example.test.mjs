@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { applicationCommands } from '../../.github/scripts/ci-applications.mjs';
 const read = path => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 
 test('entity benchmark stays optional with an independent CLI smoke entry', () => {
@@ -17,9 +18,14 @@ test('Applications CI compiles the optional entity benchmark and runs only its c
   const apps = workflow.split(/(?=^  [a-z][a-z0-9_-]*:$)/m).find(block => block.startsWith('  applications:\n'));
   assert.ok(apps);
   const configure = apps.match(/      - name: Configure applications[\s\S]*?(?=\n      - )/)?.[0];
-  assert.match(configure ?? '', /(?:^|\s)-DARK_BUILD_BENCHMARKS=ON(?:\s|$)/);
+  assert.match(configure ?? '', /run: node \.github\/scripts\/ci-applications\.mjs configure$/m);
+  const env = { GITHUB_EVENT_NAME: 'merge_group', VCPKG_ROOT: '/vcpkg' };
+  assert.ok(applicationCommands('configure', env)[0].includes('-DARK_BUILD_BENCHMARKS=ON'));
   const steps = apps.split(/(?=^      - )/m).slice(1);
-  const smoke = steps.filter(step => step.includes('run: cmake --build ci-build --target check-entity-benchmark-smoke'));
+  const smoke = steps.filter(step => step.includes('run: node .github/scripts/ci-applications.mjs check\n'));
   assert.equal(smoke.length, 1);
   assert.doesNotMatch(smoke[0], /continue-on-error:|if:|--iterations/);
+  const commands = applicationCommands('check', env).filter(args => args[3] === 'check-entity-benchmark-smoke');
+  assert.equal(commands.length, 1, 'the full check phase must include the independent benchmark smoke');
+  assert.doesNotMatch(commands[0].join(' '), /--iterations/);
 });

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { applicationCommands } from '../../.github/scripts/ci-applications.mjs';
 
 const exporter = fileURLToPath(new URL('../../.github/scripts/windows-runtime.cmake', import.meta.url));
 const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
@@ -41,14 +42,22 @@ function fixture(t, overrides = {}) {
 
 test('only Windows Applications disables per-target staging and exports its configured dependency directory before build', () => {
   const applications = job('applications');
-  assert.match(applications, /\$\{\{ runner.os == 'Windows' && '-DVCPKG_APPLOCAL_DEPS=OFF' \|\| '' \}\}/);
+  assert.match(applications, /run: node \.github\/scripts\/ci-applications\.mjs configure\n/);
+  for (const runner of ['Windows', 'Linux', 'macOS']) {
+    const [args] = applicationCommands('configure', { GITHUB_EVENT_NAME: 'merge_group', RUNNER_OS: runner, VCPKG_ROOT: '/vcpkg' });
+    assert.equal(args.includes('-DVCPKG_APPLOCAL_DEPS=OFF'), runner === 'Windows', runner);
+  }
   const runtime = applications.split(/(?=^      - )/m).find(step => step.includes('Set Windows dependency runtime PATH'));
   assert.match(runtime, /^        if: runner.os == 'Windows'$/m);
   assert.match(runtime, /run: cmake -DBUILD_DIR=ci-build -P .github\/scripts\/windows-runtime.cmake/);
   assert.doesNotMatch(runtime, /continue-on-error:|always\(\)|\|\| true/);
   assert.ok(applications.indexOf('Configure applications') < applications.indexOf(runtime));
-  assert.ok(applications.indexOf(runtime) < applications.indexOf('run: cmake --build ci-build --parallel 2'));
-  assert.ok(applications.indexOf('run: cmake --build ci-build --parallel 2') < applications.indexOf('run: cmake --build ci-build --target check-core'));
+  const build = applications.indexOf('run: node .github/scripts/ci-applications.mjs build\n');
+  const check = applications.indexOf('run: node .github/scripts/ci-applications.mjs check\n');
+  assert.ok(applications.indexOf(runtime) < build);
+  assert.ok(build < check);
+  assert.ok(applicationCommands('check', { GITHUB_EVENT_NAME: 'merge_group', RUNNER_OS: 'Windows' })
+    .some(command => command[3] === 'check-core'));
   assert.doesNotMatch(job('network') + job('database'), /VCPKG_APPLOCAL_DEPS|windows-runtime.cmake/);
   const core = readFileSync(new URL('../core/CMakeLists.txt', import.meta.url), 'utf8');
   for (const check of ['check-app-business-runtime', 'check-app-startup-failures', 'check-app-manifest-failures']) {

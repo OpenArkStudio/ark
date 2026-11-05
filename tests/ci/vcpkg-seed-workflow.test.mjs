@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import test from 'node:test';
+import { applicationCommands } from '../../.github/scripts/ci-applications.mjs';
 import { requireArchives, requireAvailableSeed } from '../../.github/scripts/vcpkg-seed-check.mjs';
 
 const read = file => readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8').replaceAll('\r\n', '\n');
@@ -55,7 +56,13 @@ test('manual runs on another branch cannot write a seed and only read-only check
 test('seed identity, package provider and tools exactly match Windows Applications CI', () => {
   // New inherited compiler/triplet overrides also need an explicit seed review.
   assert.doesNotMatch(ci.split(/^jobs:/m)[0], /^env:/m);
-  assert.doesNotMatch(applications.split(/^    steps:/m)[0], /^    env:/m);
+  const settings = applications.split(/^    steps:/m)[0];
+  const inherited = settings.match(/^    env:\n((?:      .+\n)+)/m)?.[1];
+  assert.ok(inherited);
+  assert.deepEqual([...inherited.matchAll(/^      (\w+):/gm)].map(match => match[1]), [
+    'ARK_APPLICATION_PLAN', 'ARK_APPLICATION_SCOPE_RESULT', 'ARK_APPLICATION_VALIDATION_STAGE',
+    'ARK_APPLICATION_FILES_KNOWN', 'COMPILER_CACHE_MAX_MIB',
+  ], 'only reviewed scheduling/cache-size inputs may differ from the dependency-only seed');
   for (const match of ['id: vcpkg-cache\n', 'id: vcpkg-restore\n',
     'uses: lukka/get-cmake@', 'uses: lukka/run-vcpkg@']) {
     assert.equal(onlyStep(seed, match).trimEnd(), onlyStep(applications, match).trimEnd(), match);
@@ -75,10 +82,25 @@ test('seed identity, package provider and tools exactly match Windows Applicatio
 
 test('the complete Windows configuration stays equal and fatal without building ark targets', () => {
   const configure = onlyStep(seed, 'name: Configure applications\n');
-  const windowsConfigure = onlyStep(applications, 'name: Configure applications\n')
-    .replace("${{ runner.os == 'Windows' && '-DVCPKG_APPLOCAL_DEPS=OFF' || '' }}", '-DVCPKG_APPLOCAL_DEPS=OFF');
-  assert.equal(configure.trimEnd(), windowsConfigure.trimEnd());
-  assert.doesNotMatch(configure, /^        (?:if|continue-on-error):/m);
+  const windowsConfigure = onlyStep(applications, 'name: Configure applications\n');
+  assert.match(windowsConfigure, /^        run: node \.github\/scripts\/ci-applications\.mjs configure$/m);
+  for (const step of [configure, windowsConfigure]) assert.doesNotMatch(step, /^        (?:if|continue-on-error):/m);
+  const root = join(tmpdir(), 'tool cache', 'vcpkg');
+  const lines = configure.trimEnd().split('\n');
+  const command = lines.findIndex(line => line.startsWith('          cmake '));
+  assert.ok(command >= 0);
+  assert.equal(lines[command].trim(), 'cmake -S . -B ci-build -G Ninja');
+  const seedArgs = ['-S', '.', '-B', 'ci-build', '-G', 'Ninja', ...lines.slice(command + 1).map(line => {
+    assert.match(line, /^          (?:"-D[^"\n]+"|-D[^\s]+)$/);
+    return line.trim().replace(/^"|"$/g, '').replaceAll('$env:VCPKG_ROOT', root).replaceAll('$env:ARK_COMPILER_LAUNCHER', '');
+  })];
+  const pools = new Set(['-DCMAKE_JOB_POOLS=ark_compile=2;ark_link=1',
+    '-DCMAKE_JOB_POOL_COMPILE=ark_compile', '-DCMAKE_JOB_POOL_LINK=ark_link']);
+  const [runnerArgs] = applicationCommands('configure', { RUNNER_OS: 'Windows', VCPKG_ROOT: root,
+    GITHUB_EVENT_NAME: 'merge_group', ARK_COMPILER_LAUNCHER: '' });
+  const normalizeToolchain = arg => arg.startsWith('-DCMAKE_TOOLCHAIN_FILE=') ? arg.replaceAll('\\', '/') : arg;
+  assert.deepEqual(runnerArgs.filter(arg => !pools.has(arg)).map(normalizeToolchain), seedArgs.map(normalizeToolchain),
+    'dependency features, Debug flags and every application build option remain identical');
   assert.match(seed, /^    env:\n      ARK_COMPILER_LAUNCHER: ''$/m);
   assert.doesNotMatch(seed, /cmake --build|ctest|sccache|compiler-cache\.mjs|CMAKE_(?:C|CXX)_FLAGS|\/(?:Zi|Z7)\b/);
   assert.doesNotMatch(seed, /VCPKG_DISABLE_COMPILER_TRACKING|VCPKG_ENV_PASSTHROUGH_UNTRACKED|--editable|upload-artifact/);
