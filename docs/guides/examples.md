@@ -7,7 +7,7 @@ The bundled examples use capability names. Configure with applications and examp
 | `examples/timers` / `timers` | `timers_plugin` | Utility timers and module lifecycle; enabled, participates in updates |
 | `examples/module_lifecycle` / `module_lifecycle` | `module_lifecycle_plugin` | Lifecycle and a small data-list demonstration; enabled, no update override. The callback demonstration remains commented out |
 | `examples/entity_operations` / `entity_operations` | `entity_operations_plugin` | Kernel entity/data/table operations; enabled, no update override. Startup performs a bounded functional demonstration; the [old timed workload](../../benchmarks/ENTITY_OPERATIONS.md) runs only through an explicit benchmark command |
-| `examples/guest_room` / `guest_room` | `guest_room_plugin` | Optional 2D guest lobby with JSON-defined Kernel Entity fields/configuration, authoritative movement and HP/MP actions, Protobuf scalar baselines/deltas and the real Net transport; enable `ARK_BUILD_GUEST_ROOM_EXAMPLE`. [Build, ARK2 protocol and native verification](../../examples/guest_room/README.md); official [C# Godot client](https://github.com/OpenArkStudio/ark-client-godot) |
+| `examples/guest_room` / `guest_room` | `guest_room_plugin` | Optional 2D guest lobby with JSON-defined Kernel scalar fields, inventory tables and equipment children, authoritative movement/seven actions, nested Protobuf baselines/deltas and real Net transport; enable `ARK_BUILD_GUEST_ROOM_EXAMPLE`. [Build, protocol and native verification](../../examples/guest_room/README.md); official [C# Godot client](https://github.com/OpenArkStudio/ark-client-godot) |
 | `examples/mysql_sample` / `mysql_sample` | `mysql_sample_plugin` | Native MySQL coroutine example; disabled in the application example list, assembly checked by database tests with SSL enabled |
 | `examples/redis_sample` / `redis_sample` | `redis_sample_plugin` | Native Redis coroutine example; disabled in the application example list, assembly checked by database tests |
 | `examples/physics_scene` / `physics_scene` | `physics_scene_plugin` | Disabled; requires unsupported legacy PhysX 3. The checked-in sources and manifest do not establish a runnable integration |
@@ -15,6 +15,20 @@ The bundled examples use capability names. Configure with applications and examp
 | `examples/http_client` / `http_client_sample` | `http_client_sample_plugin` | Disabled as an application example; retained future/callback POST and archived Etcd Client lease demonstration with fixed external endpoints |
 
 hpp/cpp files remain adjacent in each directory. Start with the [timers quick start](../get-started/quick-start.md). The generic launcher helpers select `conf/<name>.app.toml`, so use the capability name for both the process and application manifest. Kernel examples still require their business metadata.
+
+## Guest-room Entity replication
+
+Each player is one fixed authorized root stream. Its complete baseline contains
+the inventory table at member 200 and the equipment container at member 300;
+subsequent changes use [the generic Entity protocol](../reference/entity-protocol.md)
+and an atomic C++/C# replica. Actions are `damage`, `skill`, `rest`, `pickup`,
+`use_potion`, `equip` and `upgrade`. The current handshake value is `2`; upgrade
+server and client together. The room keeps one protocol and reconnects for recovery.
+General subscriptions, dynamic authorization and AOI remain TODO.
+
+Native checks, portable C# tests and actual Godot execution have separate evidence.
+This sample does not establish deployment or capacity acceptance; see the
+[local priorities and load-test prerequisite](../project/roadmap.md#current-priorities).
 
 ## Guest-room resource cleanup
 

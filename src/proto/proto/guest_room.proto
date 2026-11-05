@@ -1,4 +1,5 @@
 syntax = "proto3";
+import "entity_sync.proto";
 package ark.protobuf.guest_room;
 option csharp_namespace = "Ark.Client.Protocol";
 
@@ -30,6 +31,10 @@ enum action_kind {
   action_damage = 1;
   action_skill = 2;
   action_rest = 3;
+  action_pickup = 4;
+  action_use_potion = 5;
+  action_equip = 6;
+  action_upgrade = 7;
 }
 
 message action_request {
@@ -47,47 +52,21 @@ message heartbeat {
   uint32 nonce = 1;
 }
 
-// Explicit alternatives preserve scalar width, signedness and zero-value
-// presence. string_value carries bytes; a presentation layer must validate its
-// own UTF-8 rules.
-message scalar_field {
-  uint32 index = 1;
-  oneof value {
-    bool bool_value = 2;
-    sint32 int32_value = 3;
-    uint32 uint32_value = 4;
-    sint64 int64_value = 5;
-    uint64 uint64_value = 6;
-    float float_value = 7;
-    double double_value = 8;
-    bytes string_value = 9;
-    sint64 guid_value = 10;
-  }
-}
-
-message scalar_baseline {
-  string schema_id = 1;
-  uint64 generation = 2;
-  uint64 revision = 3;
-  uint64 entity_id = 4;
-  string class_name = 5;
-  repeated scalar_field fields = 6;
-}
-
-message scalar_delta {
-  string schema_id = 1;
-  uint64 generation = 2;
-  uint64 required_revision = 3;
-  uint64 revision = 4;
-  uint64 entity_id = 5;
-  string class_name = 6;
-  repeated scalar_field fields = 7;
-  bool removed = 8;
+// Application-owned instance bindings are separate from untrusted state values.
+// The field/type projection is fixed by the sample on both sides, not supplied
+// by this message. The two declared equipment identities remain fixed per
+// stream.
+message player_binding {
+  uint64 entity_id = 1;
+  uint64 incarnation = 2;
+  uint64 generation = 3;
+  repeated sint64 equipment_ids = 4;
 }
 
 message player_baseline {
   string player_id = 1;
-  scalar_baseline state = 2;
+  ark.protobuf.entity_sync.nested_baseline state = 2;
+  player_binding binding = 3;
 }
 
 message room_baseline {
@@ -98,5 +77,5 @@ message room_baseline {
 message room_delta {
   string room = 1;
   repeated player_baseline added = 2;
-  repeated scalar_delta changed = 3;
+  repeated ark.protobuf.entity_sync.nested_delta changed = 3;
 }

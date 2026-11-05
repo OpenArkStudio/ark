@@ -84,7 +84,7 @@ bool room_module::pre_update() {
         }
     }
     server_->reg_net_event_callback(this, &room_module::on_event);
-    ARK_LOG_INFO("guest_room ready: lobby, 16 players, ARK2 protocol");
+    ARK_LOG_INFO("guest_room ready: lobby, 16 players, Protobuf Entity synchronization");
     return true;
 }
 
@@ -120,8 +120,24 @@ void room_module::retire(peer& connection) {
     }
     if (connection.publisher)
     {
-        removed_.push_back(connection.publisher->remove());
+        removed_.emplace_back(connection.publisher->remove(), connection.binding);
         connection.publisher.reset();
+    }
+    release_player(connection);
+}
+
+void room_module::release_player(peer& connection) {
+    for (auto& equipment : connection.equipment)
+    {
+        if (equipment)
+        {
+            kernel_->destroy_entity(equipment->get_id());
+            equipment.reset();
+        }
+    }
+    if (!connection.player)
+    {
+        return;
     }
     kernel_->destroy_entity(connection.player->get_id());
     connection.player.reset();
@@ -143,28 +159,33 @@ void room_module::flush_room() {
         {
             continue;
         }
-        auto state = kernel_->capture_scalar_snapshot(*connection.player, player_fields, player_limits);
+        const std::array<guid_t, 2> equipment{connection.equipment[0]->get_id(), connection.equipment[1]->get_id()};
+        auto state = kernel_->capture_nested_snapshot(*connection.player,
+            player_projection(connection.player->get_id(), equipment), player_limits().stream.snapshot);
+        validate_player(state);
         if (!connection.publisher)
         {
-            entity_sync::scalar_baseline initial{player_schema, 1, 1, std::move(state)};
-            validate_player(initial);
-            connection.publisher = std::make_unique<entity_sync::scalar_publisher>(initial, player_limits);
+            connection.binding = {
+                player_schema, connection.player->get_id(), state.root.incarnation, 1, player_layout(equipment)};
+            entity_sync::nested_baseline initial{1, 1, std::move(state)};
+            connection.publisher =
+                std::make_unique<entity_sync::nested_publisher>(connection.binding, initial, player_limits().stream);
             auto& added = *changes.add_added();
             added.set_player_id(connection.player_id);
-            encode(initial, *added.mutable_state());
+            encode_binding(connection.binding, *added.mutable_binding());
+            encode(initial, *added.mutable_state(), connection.binding);
         }
         else
         {
-            validate_player({player_schema, 1, 1, state});
             if (const auto changed = connection.publisher->update(state))
             {
-                encode(*changed, *changes.add_changed());
+                encode(*changed, *changes.add_changed(), connection.binding);
             }
         }
     }
-    for (const auto& removed : removed_)
+    for (const auto& [removed, binding] : removed_)
     {
-        encode(*removed, *changes.add_changed());
+        encode(*removed, *changes.add_changed(), binding);
     }
     for (auto& [session, connection] : peers_)
     {
@@ -182,7 +203,8 @@ void room_module::flush_room() {
                 {
                     auto& added = *baseline.add_players();
                     added.set_player_id(other.player_id);
-                    encode(other.publisher->baseline(), *added.mutable_state());
+                    encode_binding(other.binding, *added.mutable_binding());
+                    encode(*other.publisher->baseline(), *added.mutable_state(), other.binding);
                 }
             }
             enqueue(connection, snapshot, baseline);
@@ -205,7 +227,7 @@ void room_module::join_room(peer& connection, const wire::join_request& body) {
     if (body.protocol_version() != protocol_version || !valid_name(body.name()) || body.room() != "lobby")
     {
         reject(connection, "invalid_message",
-            "Expected protocol version 1, lobby and a name of 1..64 UTF-8 bytes without controls");
+            "Expected the current protocol, lobby and a name of 1..64 UTF-8 bytes without controls");
         return;
     }
     const auto count =
@@ -226,6 +248,42 @@ void room_module::join_room(peer& connection, const wire::join_request& body) {
     player->set_double("y", 100.0 + static_cast<double>(((next_player_ - 1) / 8) % 2) * 200.0);
     connection.player_id = std::to_string(next_player_++);
     connection.player = std::move(player);
+    try
+    {
+        auto* inventory = connection.player->find_table(inventory_index);
+        auto container = connection.player->find_container(equipment_index);
+        if (inventory == nullptr || !container)
+        {
+            throw std::runtime_error("GuestPlayer requires inventory and equipment members");
+        }
+        auto* potion = inventory->add_row(1);
+        if (potion == nullptr)
+        {
+            throw std::runtime_error("Cannot initialize inventory row");
+        }
+        potion->set_u_int32(1, 1);
+        potion->set_u_int32(2, 2);
+        for (std::size_t i = 0; i < connection.equipment.size(); ++i)
+        {
+            auto child = kernel_->create_entity(null_guid, 1, 0, "GuestEquipment", 0, data_list_impl());
+            if (!child)
+            {
+                throw std::runtime_error("Cannot create equipment Entity");
+            }
+            connection.equipment[i] = child;
+            child->set_u_int32(1, 1001 + static_cast<std::uint32_t>(i));
+            child->set_u_int32(2, 10 + 10 * static_cast<std::uint32_t>(i));
+        }
+        if (!container->place(1, connection.equipment[0]))
+        {
+            throw std::runtime_error("Cannot equip initial item");
+        }
+    }
+    catch (...)
+    {
+        release_player(connection);
+        throw;
+    }
     wire::join_accepted response;
     response.set_player_id(connection.player_id);
     response.set_name(body.name());
@@ -276,9 +334,9 @@ void room_module::act_player(peer& connection, const wire::action_request& body)
         return;
     }
     const auto kind = body.kind();
-    if (sequence == 0 || kind < wire::action_damage || kind > wire::action_rest)
+    if (sequence == 0 || kind < wire::action_damage || kind > wire::action_upgrade)
     {
-        fail("invalid_message", "Expected sequence >= 1 and action damage, skill or rest");
+        fail("invalid_message", "Expected a positive sequence and a supported action");
         return;
     }
     auto& player = *connection.player;
@@ -302,12 +360,78 @@ void room_module::act_player(peer& connection, const wire::action_request& body)
         }
         mp -= 20;
     }
-    else
+    else if (kind == wire::action_rest)
     {
         const auto hp_max = player.get_u_int32("hp_max");
         const auto mp_max = player.get_u_int32("mp_max");
         hp += std::min(std::uint32_t{20}, hp_max - hp);
         mp += std::min(std::uint32_t{20}, mp_max - mp);
+    }
+    else if (kind == wire::action_pickup || kind == wire::action_use_potion)
+    {
+        auto* inventory = player.find_table(inventory_index);
+        auto* potion = inventory->find_row(1);
+        if (kind == wire::action_pickup)
+        {
+            if (potion && potion->get_u_int32(2) >= 99)
+            {
+                fail("inventory_full", "Potion stack is full");
+                return;
+            }
+            if (!potion)
+            {
+                potion = inventory->add_row(1);
+                if (!potion)
+                {
+                    throw std::runtime_error("Cannot add potion row");
+                }
+                potion->set_u_int32(1, 1);
+                potion->set_u_int32(2, 1);
+            }
+            else
+            {
+                potion->set_u_int32(2, potion->get_u_int32(2) + 1);
+            }
+        }
+        else
+        {
+            if (!potion)
+            {
+                fail("insufficient_resource", "No potion in inventory");
+                return;
+            }
+            const auto count = potion->get_u_int32(2);
+            if (count == 1)
+            {
+                if (!inventory->remove_row(1))
+                {
+                    throw std::runtime_error("Cannot remove consumed potion row");
+                }
+            }
+            else
+            {
+                potion->set_u_int32(2, count - 1);
+            }
+            hp += std::min(std::uint32_t{10}, player.get_u_int32("hp_max") - hp);
+        }
+    }
+    else
+    {
+        auto container = player.find_container(equipment_index);
+        auto equipped = container->find(std::uint32_t{1});
+        if (kind == wire::action_upgrade)
+        {
+            const auto power = equipped->get_u_int32(2);
+            equipped->set_u_int32(2, std::min(std::uint32_t{100}, power + 1));
+        }
+        else
+        {
+            const auto next = equipped == connection.equipment[0] ? connection.equipment[1] : connection.equipment[0];
+            if (!container->remove(std::uint32_t{1}) || !container->place(1, next))
+            {
+                throw std::runtime_error("Cannot replace equipment slot");
+            }
+        }
     }
     // A clamped no-op still acknowledges the independently increasing action sequence.
     player.set_u_int32("hp", hp);
@@ -429,7 +553,7 @@ void room_module::on_event(const net_event* event) {
                 }
                 if (found->second.player)
                 {
-                    kernel_->destroy_entity(found->second.player->get_id());
+                    release_player(found->second);
                 }
             }
             peers_.erase(found);
@@ -444,7 +568,7 @@ bool room_module::update() {
     { flush_room(); }
     catch (const std::exception& exception)
     {
-        ARK_LOG_ERROR("guest_room scalar flush failed: {}", exception.what());
+        ARK_LOG_ERROR("guest_room Entity flush failed: {}", exception.what());
         for (auto& [session, connection] : peers_)
         {
             connection.closing = true;
@@ -484,7 +608,7 @@ bool room_module::pre_shut() {
     {
         if (connection.player != nullptr)
         {
-            kernel_->destroy_entity(connection.player->get_id());
+            release_player(connection);
         }
     }
     peers_.clear();

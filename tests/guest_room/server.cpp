@@ -16,6 +16,7 @@
 #include <string>
 #include <sys/wait.h>
 #include <thread>
+#include <typeinfo>
 #include <unistd.h>
 #include <vector>
 
@@ -24,6 +25,7 @@
 
 #include "../../examples/guest_room/guest_room_module.hpp"
 #include "../../examples/guest_room/guest_room_wire.hpp"
+#include "ark/kernel/map_module.hpp"
 #include "ark/net/net_service_manager_module.hpp"
 #include "ark/plugin_manager.hpp"
 
@@ -291,18 +293,19 @@ void error_is(client& peer, const std::string& code, std::optional<std::uint32_t
 
 struct roster
 {
-    std::map<ark::guid_t, std::unique_ptr<ark::entity_sync::scalar_replica>> players;
+    std::map<ark::guid_t, std::unique_ptr<ark::entity_sync::nested_replica>> players;
+    std::map<ark::guid_t, ark::entity_sync::nested_stream_binding> bindings;
     std::map<std::string, ark::guid_t> identities;
 
     void add(const wire::player_baseline& player) {
-        require(!player.player_id().empty() && player.has_state(), "missing baseline identity");
-        const auto baseline = decode(player.state(), player_limits);
-        validate_player(baseline);
-        const auto id = baseline.snapshot.entity_id;
+        require(!player.player_id().empty() && player.has_state() && player.has_binding(), "missing baseline identity");
+        const auto binding = decode_binding(player.binding());
+        const auto baseline = decode(player.state(), binding);
+        const auto id = baseline.snapshot.root.scalars.entity_id;
         require(!players.contains(id) && !identities.contains(player.player_id()), "duplicate identity");
-        auto replica =
-            std::make_unique<ark::entity_sync::scalar_replica>(player_schema, id, "GuestPlayer", player_limits);
-        require(replica->apply(baseline) == ark::entity_sync::scalar_apply_result::applied, "baseline rejected");
+        auto replica = std::make_unique<ark::entity_sync::nested_replica>(binding, player_limits().stream);
+        require(replica->apply(baseline) == ark::entity_sync::nested_apply_result::applied, "baseline rejected");
+        bindings.emplace(id, binding);
         identities.emplace(player.player_id(), id);
         players.emplace(id, std::move(replica));
     }
@@ -311,6 +314,7 @@ struct roster
         const auto body = peer.receive<wire::room_baseline>(snapshot);
         require(body.room() == "lobby", "wrong baseline room");
         players.clear();
+        bindings.clear();
         identities.clear();
         for (const auto& value : body.players())
         {
@@ -327,10 +331,15 @@ struct roster
         }
         for (const auto& value : body.changed())
         {
-            const auto change = decode(value, player_limits);
-            require(players.contains(change.entity_id), "delta references unknown Entity");
-            require(players.at(change.entity_id)->apply(change) == ark::entity_sync::scalar_apply_result::applied,
+            const auto id = static_cast<ark::guid_t>(value.root().entity_id());
+            require(players.contains(id), "delta references unknown Entity");
+            const auto change = decode(value, bindings.at(id));
+            require(players.at(id)->apply(change) == ark::entity_sync::nested_apply_result::applied,
                 "delta gap, invalid fields or stale generation");
+            if (const auto state = players.at(id)->state())
+            {
+                validate_player(*state);
+            }
         }
         return body;
     }
@@ -338,11 +347,15 @@ struct roster
     const ark::entity_sync::scalar_snapshot& player(const std::string& id) const {
         const auto state = players.at(identities.at(id))->state();
         require(state != nullptr, "player removed");
-        return *state;
+        return state->root.scalars;
     }
 
     std::uint32_t number(const std::string& id, std::uint32_t index) const {
         return std::get<std::uint32_t>(player(id).fields.at(index));
+    }
+
+    const ark::entity_sync::nested_entity_snapshot& root(const std::string& id) const {
+        return players.at(identities.at(id))->state()->root;
     }
 };
 
@@ -402,12 +415,55 @@ void exercise(unsigned short port) {
     alice.quiet();
     bob.quiet();
 
+    const auto initial_row = own.root(first.player_id()).tables.at(inventory_index).rows.at(1).incarnation;
+    const auto perform = [&](std::uint32_t sequence, wire::action_kind kind) {
+        wire::action_request request;
+        request.set_sequence(sequence);
+        request.set_kind(kind);
+        alice.send(action, request);
+        own.changes(alice);
+        other.changes(bob);
+        require(own.number(first.player_id(), 108) == sequence && other.number(first.player_id(), 108) == sequence,
+            "action acknowledgement was not replicated to both clients");
+    };
+    perform(1, wire::action_use_potion);
+    require(
+        std::get<std::uint32_t>(own.root(first.player_id()).tables.at(inventory_index).rows.at(1).fields.at(2)) == 1,
+        "potion quantity patch missing");
+    perform(2, wire::action_use_potion);
+    require(own.root(first.player_id()).tables.at(inventory_index).rows.empty() &&
+                other.root(first.player_id()).tables.at(inventory_index).rows.empty(),
+        "consumed row was not removed");
+    wire::action_request missing_potion;
+    missing_potion.set_sequence(3);
+    missing_potion.set_kind(wire::action_use_potion);
+    alice.send(action, missing_potion);
+    error_is(alice, "insufficient_resource", 3);
+    perform(4, wire::action_pickup);
+    require(own.root(first.player_id()).tables.at(inventory_index).rows.at(1).incarnation > initial_row,
+        "reused inventory row retained its old lifetime");
+    perform(5, wire::action_pickup);
+    perform(6, wire::action_equip);
+    const auto& equipped = own.root(first.player_id()).containers.at(equipment_index).at(1);
+    require(std::get<std::uint32_t>(equipped.scalars.fields.at(1)) == 1002, "equipment relation replacement missing");
+    const auto equipment_identity = equipped.scalars.entity_id;
+    const auto equipment_incarnation = equipped.incarnation;
+    perform(7, wire::action_upgrade);
+    const auto& upgraded = other.root(first.player_id()).containers.at(equipment_index).at(1);
+    require(upgraded.scalars.entity_id == equipment_identity && upgraded.incarnation == equipment_incarnation &&
+                std::get<std::uint32_t>(upgraded.scalars.fields.at(2)) == 21,
+        "nested equipment field patch missing");
+    perform(8, wire::action_equip);
+    require(std::get<std::uint32_t>(
+                own.root(first.player_id()).containers.at(equipment_index).at(1).scalars.fields.at(1)) == 1001,
+        "fixed-authorized child could not reappear");
+
     bob.send(ark::guest_room::move, move_to(1, 900, 500));
     own.changes(alice);
     other.changes(bob);
     bob.close();
     const auto removal = own.changes(alice);
-    require(removal.changed_size() == 1 && removal.changed(0).removed() && removal.changed(0).fields_size() == 0,
+    require(removal.changed_size() == 1 && removal.changed(0).removed() && removal.changed(0).root().fields_size() == 0,
         "disconnect did not emit a tombstone");
     require(!own.players.at(static_cast<ark::guid_t>(second.entity_id()))->state(), "retired Entity remained live");
     client fresh(port);
@@ -516,7 +572,7 @@ void exercise_attributes(unsigned short port) {
     reject_action(3, static_cast<wire::action_kind>(99), "invalid_message");
     accept_action(3, wire::action_rest, 100, 100);
     const auto noop = accept_action(4, wire::action_rest, 100, 100);
-    require(noop.changed(0).fields_size() == 1 && noop.changed(0).fields(0).index() == 108,
+    require(noop.changed(0).root().fields_size() == 1 && noop.changed(0).root().fields(0).index() == 108,
         "clamped action must acknowledge only action_seq");
     for (std::uint32_t next = 5; next <= 9; ++next)
     {
@@ -690,6 +746,11 @@ int main(int argc, char** argv) {
     try
     {
         require(argc == 4, "usage: server-test LAUNCHER RUNTIME_DIR PORT");
+        const room_module dependency_probe;
+        require(dependency_probe.get_dependencies() == std::vector<std::string>{typeid(ark::kernel_module).name(),
+                                                           typeid(ark::map_module).name(),
+                                                           typeid(ark::net_service_manager_module).name()},
+            "room must retire its Entity state and callbacks before Kernel, Map and Net shutdown");
         if (std::string(argv[1]) == "--resource-cleanup-only")
         {
             exercise_resource_cleanup(
