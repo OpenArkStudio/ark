@@ -160,6 +160,9 @@ public:
     static bool on_delay_sync();
 
 private:
+    friend class kernel_module_impl;
+    static void retire_delay_sync(const guid_t& self);
+
     delay_sync_mask_data& get_delay_sync_mask_data(const guid_t& self);
     delay_sync_table& get_delay_sync_mask_table(
         delay_sync_mask_data& mask_data_map, const data_mask mask_value, uint32_t index);
