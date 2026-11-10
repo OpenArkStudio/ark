@@ -95,6 +95,8 @@ branch or worktree when the existing checkout contains uncommitted changes.
   platform-header dependencies in a valid order. Separate include blocks,
   namespaces and adjacent definitions with the prescribed blank lines.
 - Run `CLANG_FORMAT=/path/to/clang-format bash scripts/format.sh --check`.
+- Include first-party native tools in the same formatting scope as core, plugins,
+  examples and tests; do not leave the Entity exporter outside the check.
 - The formatter selects Git-tracked files. Stage intended new C++ files before
   running it, or format those paths explicitly. Run the complete check again
   after committing so newly tracked tests and headers cannot escape validation.

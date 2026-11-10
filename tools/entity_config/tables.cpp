@@ -14,14 +14,12 @@ namespace ark::entity_export {
 namespace {
 
 std::string decimal(double value) {
-    if (!std::isfinite(value))
-    {
+    if (!std::isfinite(value)) {
         throw std::runtime_error("non-finite spreadsheet number");
     }
     char buffer[64];
     const auto result = std::to_chars(buffer, buffer + sizeof(buffer), value);
-    if (result.ec != std::errc{})
-    {
+    if (result.ec != std::errc{}) {
         throw std::runtime_error("could not represent spreadsheet number");
     }
     return std::string(buffer, result.ptr);
@@ -31,20 +29,16 @@ table worksheet(OpenXLSX::XLWorksheet sheet, const std::string& source) {
     table output{source + "[" + sheet.name() + "]", {}};
     const auto columns = sheet.columnCount();
     const auto rows = sheet.rowCount();
-    for (std::uint32_t row = 1; row <= rows; ++row)
-    {
+    for (std::uint32_t row = 1; row <= rows; ++row) {
         std::vector<cell> values;
-        for (std::uint32_t column = 1; column <= columns; ++column)
-        {
+        for (std::uint32_t column = 1; column <= columns; ++column) {
             auto item = sheet.cell(row, static_cast<std::uint16_t>(column));
-            if (item.hasFormula())
-            {
+            if (item.hasFormula()) {
                 throw std::runtime_error(output.source + ": row " + std::to_string(row) +
                                          " contains a formula; export evaluated values or CSV instead");
             }
             const auto& value = item.value();
-            switch (value.type())
-            {
+            switch (value.type()) {
             case OpenXLSX::XLValueType::Empty:
                 values.push_back({"", cell_kind::empty});
                 break;
@@ -54,16 +48,12 @@ table worksheet(OpenXLSX::XLWorksheet sheet, const std::string& source) {
             case OpenXLSX::XLValueType::Integer:
                 values.push_back({std::to_string(value.get<std::int64_t>()), cell_kind::number});
                 break;
-            case OpenXLSX::XLValueType::Float:
-            {
+            case OpenXLSX::XLValueType::Float: {
                 const auto number = value.get<double>();
                 // Small integral values should retain integer spelling for typed integer columns.
-                if (std::isfinite(number) && std::trunc(number) == number && std::abs(number) <= 9007199254740991.0)
-                {
+                if (std::isfinite(number) && std::trunc(number) == number && std::abs(number) <= 9007199254740991.0) {
                     values.push_back({std::to_string(static_cast<std::int64_t>(number)), cell_kind::number});
-                }
-                else
-                {
+                } else {
                     values.push_back({decimal(number), cell_kind::number});
                 }
                 break;
@@ -84,8 +74,7 @@ table worksheet(OpenXLSX::XLWorksheet sheet, const std::string& source) {
 } // namespace
 
 table parse_csv(std::string_view input, std::string source) {
-    if (input.starts_with("\xef\xbb\xbf"))
-    {
+    if (input.starts_with("\xef\xbb\xbf")) {
         input.remove_prefix(3);
     }
     table output{std::move(source), {}};
@@ -98,54 +87,37 @@ table parse_csv(std::string_view input, std::string source) {
         closed = false;
         pending = false;
     };
-    for (std::size_t i = 0; i < input.size(); ++i)
-    {
+    for (std::size_t i = 0; i < input.size(); ++i) {
         const char c = input[i];
-        if (quoted)
-        {
-            if (c == '"')
-            {
-                if (i + 1 < input.size() && input[i + 1] == '"')
-                {
+        if (quoted) {
+            if (c == '"') {
+                if (i + 1 < input.size() && input[i + 1] == '"') {
                     field += '"';
                     ++i;
-                }
-                else
-                {
+                } else {
                     quoted = false;
                     closed = true;
                 }
-            }
-            else
-            {
+            } else {
                 field += c;
             }
             continue;
         }
-        if (c == ',')
-        {
+        if (c == ',') {
             finish_field();
             pending = true;
-        }
-        else if (c == '\r' || c == '\n')
-        {
+        } else if (c == '\r' || c == '\n') {
             finish_field();
             output.rows.push_back(std::move(row));
             row.clear();
-            if (c == '\r' && i + 1 < input.size() && input[i + 1] == '\n')
-            {
+            if (c == '\r' && i + 1 < input.size() && input[i + 1] == '\n') {
                 ++i;
             }
-        }
-        else if (c == '"' && field.empty() && !closed)
-        {
+        } else if (c == '"' && field.empty() && !closed) {
             quoted = true;
             pending = true;
-        }
-        else
-        {
-            if (closed || c == '"')
-            {
+        } else {
+            if (closed || c == '"') {
                 throw std::runtime_error(
                     output.source + ": malformed CSV quoting near record " + std::to_string(output.rows.size() + 1));
             }
@@ -153,12 +125,10 @@ table parse_csv(std::string_view input, std::string source) {
             pending = true;
         }
     }
-    if (quoted)
-    {
+    if (quoted) {
         throw std::runtime_error(output.source + ": unterminated CSV quoted field");
     }
-    if (pending || closed || !row.empty() || !field.empty())
-    {
+    if (pending || closed || !row.empty() || !field.empty()) {
         finish_field();
         output.rows.push_back(std::move(row));
     }
@@ -169,8 +139,7 @@ std::map<std::string, table> read_workbook(const std::filesystem::path& path) {
     OpenXLSX::XLDocument document;
     document.open(utf8_string(path));
     std::map<std::string, table> result;
-    for (const auto& name : document.workbook().worksheetNames())
-    {
+    for (const auto& name : document.workbook().worksheetNames()) {
         result.emplace(name, worksheet(document.workbook().worksheet(name), utf8_string(path)));
     }
     document.close();
@@ -179,47 +148,37 @@ std::map<std::string, table> read_workbook(const std::filesystem::path& path) {
 
 table read_table(const std::filesystem::path& path, const std::string& sheet) {
     auto extension = utf8_string(path.extension());
-    for (auto& c : extension)
-    {
-        if (c >= 'A' && c <= 'Z')
-        {
+    for (auto& c : extension) {
+        if (c >= 'A' && c <= 'Z') {
             c = static_cast<char>(c + ('a' - 'A'));
         }
     }
-    if (extension == ".xlsx")
-    {
+    if (extension == ".xlsx") {
         auto workbook = read_workbook(path);
-        if (!sheet.empty())
-        {
+        if (!sheet.empty()) {
             const auto it = workbook.find(sheet);
-            if (it == workbook.end())
-            {
+            if (it == workbook.end()) {
                 throw std::runtime_error(utf8_string(path) + ": missing worksheet " + sheet);
             }
             return std::move(it->second);
         }
-        if (workbook.size() != 1)
-        {
+        if (workbook.size() != 1) {
             throw std::runtime_error(utf8_string(path) + ": select an explicit worksheet for a multi-sheet input");
         }
         return std::move(workbook.begin()->second);
     }
-    if (extension != ".csv")
-    {
+    if (extension != ".csv") {
         throw std::runtime_error(utf8_string(path) + ": expected .csv or .xlsx input");
     }
-    if (!sheet.empty())
-    {
+    if (!sheet.empty()) {
         throw std::runtime_error(utf8_string(path) + ": a CSV file has no worksheets");
     }
     std::ifstream file(path, std::ios::binary);
-    if (!file)
-    {
+    if (!file) {
         throw std::runtime_error(utf8_string(path) + ": cannot open input");
     }
     const std::string text{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
-    if (file.bad())
-    {
+    if (file.bad()) {
         throw std::runtime_error(utf8_string(path) + ": input read failed");
     }
     return parse_csv(text, utf8_string(path));
