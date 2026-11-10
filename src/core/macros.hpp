@@ -60,22 +60,17 @@ inline size_t strlcpy(char* dst, const char* src, size_t siz) {
     size_t n = siz;
 
     /* Copy as many bytes as will fit */
-    if ((n != 0) && ((--n) != 0))
-    {
-        do
-        {
-            if ((*d++ = *s++) == 0)
-            {
+    if ((n != 0) && ((--n) != 0)) {
+        do {
+            if ((*d++ = *s++) == 0) {
                 break;
             }
         } while (--n != 0);
     }
 
     /* Not enough room in dst, add NUL and traverse rest of src */
-    if (n == 0)
-    {
-        if (siz != 0)
-        {
+    if (n == 0) {
+        if (siz != 0) {
             *d = '\0'; /* NUL-terminate dst */
         }
 
@@ -96,10 +91,8 @@ inline size_t strlcpy(char* dst, const char* src, size_t siz) {
 #define ARK_STRICMP _stricmp
 #define ARK_STRNCPY strlcpy
 #define ARK_ASSERT(exp_, msg_, file_, func_)                                                                           \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        if (!(exp_))                                                                                                   \
-        {                                                                                                              \
+    do {                                                                                                               \
+        if (!(exp_)) {                                                                                                 \
             std::string error_message("Message:");                                                                     \
             error_message += msg_ + std::string(" don't exist or some warning") + std::string("\n\nFile:") +           \
                              std::string(file_) + std::string("\n Function:") + func_;                                 \
@@ -133,8 +126,7 @@ typedef struct HINSTANCE__* library_instance;
 #define ARK_STRICMP strcasecmp
 #define ARK_STRNCPY strlcpy
 #define ARK_ASSERT(exp_, msg_, file_, func_)                                                                           \
-    do                                                                                                                 \
-    {                                                                                                                  \
+    do {                                                                                                               \
         if ((exp_))                                                                                                    \
             break;                                                                                                     \
         assert(exp_);                                                                                                  \
@@ -161,8 +153,7 @@ typedef struct HINSTANCE__* library_instance;
 #define ARK_STRICMP strcasecmp
 #define ARK_STRNCPY strlcpy
 #define ARK_ASSERT(exp_, msg_, file_, func_)                                                                           \
-    do                                                                                                                 \
-    {                                                                                                                  \
+    do {                                                                                                               \
         if ((exp_))                                                                                                    \
             break;                                                                                                     \
         assert(exp_);                                                                                                  \
@@ -222,8 +213,7 @@ typedef struct HINSTANCE__* library_instance;
 #endif
 
 #define ARK_ASSERT_RET_VAL(exp_, val)                                                                                  \
-    do                                                                                                                 \
-    {                                                                                                                  \
+    do {                                                                                                               \
         if ((exp_))                                                                                                    \
             break;                                                                                                     \
         assert(exp_);                                                                                                  \
@@ -231,30 +221,26 @@ typedef struct HINSTANCE__* library_instance;
     } while (false)
 
 #define ARK_ASSERT_RET_VAL_NO_EFFECT(exp_, val)                                                                        \
-    do                                                                                                                 \
-    {                                                                                                                  \
+    do {                                                                                                               \
         if ((exp_))                                                                                                    \
             break;                                                                                                     \
         return val;                                                                                                    \
     } while (false)
 
 #define ARK_ASSERT_BREAK(exp_)                                                                                         \
-    if (!(exp_))                                                                                                       \
-    {                                                                                                                  \
+    if (!(exp_)) {                                                                                                     \
         assert(exp_);                                                                                                  \
         break;                                                                                                         \
     }
 
 #define ARK_ASSERT_CONTINUE(exp_)                                                                                      \
-    if (!(exp_))                                                                                                       \
-    {                                                                                                                  \
+    if (!(exp_)) {                                                                                                     \
         assert(exp_);                                                                                                  \
         continue;                                                                                                      \
     }
 
 #define ARK_ASSERT_RET_NONE(exp_)                                                                                      \
-    do                                                                                                                 \
-    {                                                                                                                  \
+    do {                                                                                                               \
         if ((exp_))                                                                                                    \
             break;                                                                                                     \
         assert(exp_);                                                                                                  \
@@ -262,8 +248,7 @@ typedef struct HINSTANCE__* library_instance;
     } while (false)
 
 #define ARK_ASSERT_NO_EFFECT(exp_)                                                                                     \
-    do                                                                                                                 \
-    {                                                                                                                  \
+    do {                                                                                                               \
         if (exp_)                                                                                                      \
             break;                                                                                                     \
         assert(exp_);                                                                                                  \
@@ -287,18 +272,15 @@ typedef struct HINSTANCE__* library_instance;
 
 #ifndef ARK_NEW_ARRAY_RET
 #define ARK_NEW_ARRAY_RET(element_type, size)                                                                          \
-    do                                                                                                                 \
-    {                                                                                                                  \
+    do {                                                                                                               \
         return new (std::nothrow) element_type[(size)];                                                                \
     } while (false);
 #endif // ARK_NEW_ARRAY_RET
 
 #ifndef ARK_DELETE
 #define ARK_DELETE(p)                                                                                                  \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        if ((p) != nullptr)                                                                                            \
-        {                                                                                                              \
+    do {                                                                                                               \
+        if ((p) != nullptr) {                                                                                          \
             delete (p);                                                                                                \
             (p) = nullptr;                                                                                             \
         }                                                                                                              \
@@ -307,10 +289,8 @@ typedef struct HINSTANCE__* library_instance;
 
 #ifndef ARK_DELETE_ARRAY
 #define ARK_DELETE_ARRAY(element_type, p)                                                                              \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        if ((p) != nullptr)                                                                                            \
-        {                                                                                                              \
+    do {                                                                                                               \
+        if ((p) != nullptr) {                                                                                          \
             element_type* t_ptr = static_cast<element_type*>((p));                                                     \
             delete[] t_ptr;                                                                                            \
             t_ptr = nullptr;                                                                                           \
@@ -331,8 +311,7 @@ typedef struct HINSTANCE__* library_instance;
 //////////////////////////////////////////////////////////////////////////
 // Plugin macros
 #define ARK_DECLARE_PLUGIN(plugin_type)                                                                                \
-    class plugin_type final : public plugin                                                                            \
-    {                                                                                                                  \
+    class plugin_type final : public plugin {                                                                          \
     public:                                                                                                            \
         int get_plugin_version() override {                                                                            \
             return 0;                                                                                                  \
@@ -374,8 +353,7 @@ typedef struct HINSTANCE__* library_instance;
     std::string plugin_type::plugin_conf_ = ""; // init the plugin_conf in here cuz the duplicate symbol
 
 #define ARK_REGISTER_MODULE(module_type, implementation_type)                                                          \
-    do                                                                                                                 \
-    {                                                                                                                  \
+    do {                                                                                                               \
         ARK_ASSERT_RET_NONE((std::is_base_of<module, module_type>::value));                                            \
         ARK_ASSERT_RET_NONE((std::is_base_of<module_type, implementation_type>::value));                               \
         module* registered_module = ARK_NEW implementation_type();                                                     \
@@ -384,8 +362,7 @@ typedef struct HINSTANCE__* library_instance;
         registered_module->set_name(GET_CLASS_NAME(module_type));                                                      \
         get_plugin_manager()->add_module(registered_module->get_name(), registered_module);                            \
         modules_.insert(std::make_pair(registered_module->get_name(), registered_module));                             \
-        if (typeid(&module::update) != typeid(&implementation_type::update))                                           \
-        {                                                                                                              \
+        if (typeid(&module::update) != typeid(&implementation_type::update)) {                                         \
             get_plugin_manager()->add_update_module(registered_module);                                                \
         }                                                                                                              \
     } while (0)

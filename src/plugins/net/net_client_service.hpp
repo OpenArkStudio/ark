@@ -30,11 +30,9 @@
 
 namespace ark {
 
-class connection_data
-{
+class connection_data {
 public:
-    enum connect_state
-    {
+    enum connect_state {
         disconnect,
         connecting,
         connected,
@@ -50,8 +48,7 @@ public:
     int64_t last_active_time{0};
 };
 
-class net_client_service : public noncopyable
-{
+class net_client_service : public noncopyable {
 public:
     virtual ~net_client_service() = default;
 

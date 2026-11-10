@@ -17,8 +17,7 @@ static_assert(std::string_view(SPDLOG_FILE_BASENAME("")) == "external-basename")
 
 namespace {
 
-class captured_logger
-{
+class captured_logger {
 public:
     std::vector<std::pair<spdlog::level::level_enum, std::string>> messages;
 
@@ -61,8 +60,7 @@ TEST_CASE("Logging macros capture caller file and line at every level") {
         spdlog::level::info, spdlog::level::warn, spdlog::level::err, spdlog::level::critical};
     constexpr std::array<const char*, 6> contents = {"trace", "debug 1", "info", "warn 2", "error", "critical 3"};
     REQUIRE(capture.messages.size() == levels.size());
-    for (std::size_t index = 0; index < levels.size(); ++index)
-    {
+    for (std::size_t index = 0; index < levels.size(); ++index) {
         CHECK(capture.messages[index].first == levels[index]);
         CHECK(capture.messages[index].second ==
               "[logging_source.cpp:" + std::to_string(lines[index]) + "]" + contents[index]);

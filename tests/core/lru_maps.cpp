@@ -9,8 +9,7 @@
 
 namespace {
 
-struct checked_key
-{
+struct checked_key {
     int value{};
     static inline int copies_before_failure{-1};
 
@@ -20,12 +19,10 @@ struct checked_key
 
     checked_key(const checked_key& other)
         : value(other.value) {
-        if (copies_before_failure == 0)
-        {
+        if (copies_before_failure == 0) {
             throw std::runtime_error("key copy failed");
         }
-        if (copies_before_failure > 0)
-        {
+        if (copies_before_failure > 0) {
             --copies_before_failure;
         }
     }
@@ -38,8 +35,7 @@ struct checked_key
 } // namespace
 
 template<>
-struct std::hash<checked_key>
-{
+struct std::hash<checked_key> {
     std::size_t operator()(const checked_key& key) const noexcept {
         return std::hash<int>{}(key.value);
     }
@@ -89,21 +85,20 @@ TEST_CASE("LRU copy assignment replaces entries and preserves independent evicti
 TEST_CASE("LRU failed insertion preserves recency and can be followed by lookup erase and eviction") {
     bool saw_failure{};
     bool saw_success{};
-    for (int limit = 0; limit < 12; ++limit)
-    {
+    for (int limit = 0; limit < 12; ++limit) {
         ark::lru_map<checked_key, int> values(2);
         values.insert(checked_key{1}, 10);
         values.insert(checked_key{2}, 20);
         const checked_key candidate{3};
         checked_key::copies_before_failure = limit;
         bool caught{};
-        try
-        { values.insert(candidate, 30); }
-        catch (const std::runtime_error&)
-        { caught = true; }
+        try {
+            values.insert(candidate, 30);
+        } catch (const std::runtime_error&) {
+            caught = true;
+        }
         checked_key::copies_before_failure = -1;
-        if (caught)
-        {
+        if (caught) {
             saw_failure = true;
             REQUIRE(values.size() == 2);
             CHECK(values.find(candidate) == values.end());
@@ -112,9 +107,7 @@ TEST_CASE("LRU failed insertion preserves recency and can be followed by lookup 
             REQUIRE(values.find(checked_key{2}) != values.end());
             values.erase(checked_key{2});
             CHECK(values.size() == 1);
-        }
-        else
-        {
+        } else {
             saw_success = true;
             REQUIRE(values.size() == 2);
             CHECK(values.find(checked_key{1}) == values.end());
@@ -130,8 +123,7 @@ TEST_CASE("LRU failed insertion preserves recency and can be followed by lookup 
 TEST_CASE("LRU key copy failure during assignment retains both caches and their eviction order") {
     bool saw_failure{};
     bool saw_success{};
-    for (int limit = 0; limit < 12; ++limit)
-    {
+    for (int limit = 0; limit < 12; ++limit) {
         const auto source_owner = std::make_shared<int>(10);
         ark::lru_map<checked_key, std::shared_ptr<int>> source(2);
         source.insert(checked_key{1}, source_owner);
@@ -142,14 +134,14 @@ TEST_CASE("LRU key copy failure during assignment retains both caches and their 
         destination.insert(checked_key{9}, destination_owner);
         bool caught{};
         checked_key::copies_before_failure = limit;
-        try
-        { destination = source; }
-        catch (const std::runtime_error&)
-        { caught = true; }
+        try {
+            destination = source;
+        } catch (const std::runtime_error&) {
+            caught = true;
+        }
         checked_key::copies_before_failure = -1;
         REQUIRE(source.size() == 2);
-        if (caught)
-        {
+        if (caught) {
             saw_failure = true;
             REQUIRE(destination.size() == 1);
             REQUIRE(destination.find(checked_key{9}) != destination.end());
@@ -162,9 +154,7 @@ TEST_CASE("LRU key copy failure during assignment retains both caches and their 
             source.insert(checked_key{3}, std::make_shared<int>(30));
             CHECK(source.find(checked_key{2}) == source.end());
             REQUIRE(source.find(checked_key{1}) != source.end());
-        }
-        else
-        {
+        } else {
             saw_success = true;
             CHECK(destination_owner.use_count() == 1);
             CHECK(source_owner.use_count() == 3);

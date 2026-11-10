@@ -11,8 +11,7 @@ namespace {
 bool fail_next_receive_array{};
 
 char* allocate_receive_bytes(std::size_t size) {
-    if (fail_next_receive_array)
-    {
+    if (fail_next_receive_array) {
         fail_next_receive_array = false;
         return nullptr;
     }
@@ -33,8 +32,7 @@ bool fail_next_array{};
 bool fail_next_object{};
 int live_headers{};
 
-class test_header final : public ark::s_msg_header
-{
+class test_header final : public ark::s_msg_header {
 public:
     test_header() {
         ++live_headers;
@@ -56,8 +54,7 @@ public:
     }
 
     ark::msg_header* clone() const override {
-        if (throw_clone)
-        {
+        if (throw_clone) {
             throw std::bad_alloc{};
         }
         return fail_clone ? nullptr : new (std::nothrow) test_header(*this);
@@ -87,13 +84,11 @@ message_owner make_message(const std::string& body) {
 
 // Each hook fails exactly one small request; ordinary doctest allocations are unaffected.
 void* operator new[](std::size_t size) {
-    if (fail_next_array)
-    {
+    if (fail_next_array) {
         fail_next_array = false;
         throw std::bad_alloc{};
     }
-    if (auto* value = std::malloc(size ? size : 1))
-    {
+    if (auto* value = std::malloc(size ? size : 1)) {
         return value;
     }
     throw std::bad_alloc{};
@@ -108,15 +103,15 @@ void operator delete[](void* value, std::size_t) noexcept {
 }
 
 void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
-    if (fail_next_object)
-    {
+    if (fail_next_object) {
         fail_next_object = false;
         return nullptr;
     }
-    try
-    { return ::operator new(size); }
-    catch (...)
-    { return nullptr; }
+    try {
+        return ::operator new(size);
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void operator delete(void* value, const std::nothrow_t&) noexcept {
@@ -193,8 +188,7 @@ TEST_CASE("Event and native header factories return null on nothrow allocation f
     CHECK_FALSE(fail_next_object);
     ark::s_msg_header cs;
     ark::ss_msg_header ss;
-    for (ark::msg_header* header : {static_cast<ark::msg_header*>(&cs), static_cast<ark::msg_header*>(&ss)})
-    {
+    for (ark::msg_header* header : {static_cast<ark::msg_header*>(&cs), static_cast<ark::msg_header*>(&ss)}) {
         fail_next_object = true;
         auto* created = header->create();
         CHECK(created == nullptr);
@@ -207,8 +201,7 @@ TEST_CASE("Event and native header factories return null on nothrow allocation f
 }
 
 TEST_CASE("Receive parsing rejects failed header, message and body allocations without queueing") {
-    for (int failure = 0; failure != 3; ++failure)
-    {
+    for (int failure = 0; failure != 3; ++failure) {
         INFO("failure=", failure);
         auto prototype = std::make_shared<test_header>();
         ark::tcp_client_session session(prototype, 1);

@@ -6,8 +6,7 @@
 
 namespace ark {
 
-class http_server
-{
+class http_server {
 private:
     std::shared_ptr<arknet::http_server> server_;
 

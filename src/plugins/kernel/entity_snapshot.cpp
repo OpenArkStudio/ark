@@ -12,8 +12,7 @@ namespace ark::entity_sync {
 
 // The public entity interface exposes only materialized node types. This
 // private bridge reads selected schema entries without materializing any nodes.
-class snapshot_access
-{
+class snapshot_access {
 public:
     static const class_meta* schema(const entity_impl& source) {
         return source.class_meta_.get();
@@ -32,8 +31,7 @@ public:
     }
 
     static const container* find_container(const entity_impl& source, std::uint32_t index) {
-        if (!source.opt_charactor_ || !source.opt_charactor_->containers)
-        {
+        if (!source.opt_charactor_ || !source.opt_charactor_->containers) {
             return nullptr;
         }
         return source.opt_charactor_->containers->get_container_list().find_value(index).get();
@@ -58,27 +56,23 @@ public:
 
 namespace {
 
-struct selected_field
-{
+struct selected_field {
     data_type type;
     const node* value;
 };
 
 void add_string_bytes(std::size_t bytes, std::size_t& total, const snapshot_limits& limits) {
-    if (bytes > limits.max_string_bytes - total)
-    {
+    if (bytes > limits.max_string_bytes - total) {
         throw std::length_error("scalar snapshot string byte limit exceeded");
     }
     total += bytes;
 }
 
 void validate_field(const selected_field& field, std::size_t& string_bytes, const snapshot_limits& limits) {
-    if (field.value && field.value->get_type() != field.type)
-    {
+    if (field.value && field.value->get_type() != field.type) {
         throw std::invalid_argument("scalar snapshot node type does not match schema");
     }
-    switch (field.type)
-    {
+    switch (field.type) {
     case data_type::dt_boolean:
     case data_type::dt_int32:
     case data_type::dt_uint32:
@@ -87,20 +81,17 @@ void validate_field(const selected_field& field, std::size_t& string_bytes, cons
     case data_type::dt_guid:
         break;
     case data_type::dt_float:
-        if (field.value && !std::isfinite(field.value->get_float()))
-        {
+        if (field.value && !std::isfinite(field.value->get_float())) {
             throw std::invalid_argument("scalar snapshot requires finite float values");
         }
         break;
     case data_type::dt_double:
-        if (field.value && !std::isfinite(field.value->get_double()))
-        {
+        if (field.value && !std::isfinite(field.value->get_double())) {
             throw std::invalid_argument("scalar snapshot requires finite double values");
         }
         break;
     case data_type::dt_string:
-        if (field.value)
-        {
+        if (field.value) {
             add_string_bytes(field.value->get_string().size(), string_bytes, limits);
         }
         break;
@@ -110,8 +101,7 @@ void validate_field(const selected_field& field, std::size_t& string_bytes, cons
 }
 
 scalar_value copy_field(const selected_field& field) {
-    switch (field.type)
-    {
+    switch (field.type) {
     case data_type::dt_boolean:
         return field.value ? field.value->get_bool() : false;
     case data_type::dt_int32:
@@ -139,39 +129,32 @@ scalar_value copy_field(const selected_field& field) {
 
 static scalar_snapshot capture_selected_scalars(
     const entity& source, std::span<const std::uint32_t> allowed_indices, const snapshot_limits& limits) {
-    if (allowed_indices.size() > limits.max_fields)
-    {
+    if (allowed_indices.size() > limits.max_fields) {
         throw std::length_error("scalar snapshot field limit exceeded");
     }
     const auto* implementation = dynamic_cast<const entity_impl*>(&source);
-    if (!implementation)
-    {
+    if (!implementation) {
         throw std::invalid_argument("scalar snapshots require the framework entity_impl");
     }
     const auto* schema = snapshot_access::schema(*implementation);
-    if (!schema)
-    {
+    if (!schema) {
         throw std::invalid_argument("scalar snapshot entity has no schema");
     }
 
     std::size_t string_bytes = 0;
     add_string_bytes(schema->get_name().size(), string_bytes, limits);
     std::map<std::uint32_t, selected_field> selected;
-    for (const auto index : allowed_indices)
-    {
-        if (index == 0)
-        {
+    for (const auto index : allowed_indices) {
+        if (index == 0) {
             throw std::invalid_argument("scalar snapshot field indices must be nonzero");
         }
         const auto meta = schema->find_data_meta(index);
-        if (!meta)
-        {
+        if (!meta) {
             throw std::invalid_argument("scalar snapshot field index is not declared");
         }
         const auto [position, inserted] = selected.emplace(
             index, selected_field{meta->get_type(), snapshot_access::find_node(*implementation, index)});
-        if (!inserted)
-        {
+        if (!inserted) {
             throw std::invalid_argument("scalar snapshot field indices must be unique");
         }
         validate_field(position->second, string_bytes, limits);
@@ -179,8 +162,7 @@ static scalar_snapshot capture_selected_scalars(
 
     // Validate every selection and cumulative text limit before copying strings.
     scalar_snapshot result{source.get_id(), schema->get_name(), {}};
-    for (const auto& [index, field] : selected)
-    {
+    for (const auto& [index, field] : selected) {
         result.fields.emplace(index, copy_field(field));
     }
     return result;
@@ -189,15 +171,13 @@ static scalar_snapshot capture_selected_scalars(
 namespace {
 
 void consume(std::size_t count, std::size_t& remaining) {
-    if (count > remaining)
-    {
+    if (count > remaining) {
         throw std::length_error("Nested snapshot limit exceeded");
     }
     remaining -= count;
 }
 
-struct nested_budget
-{
+struct nested_budget {
     explicit nested_budget(const nested_snapshot_limits& input)
         : limits(input)
         , entities(input.max_entities)
@@ -215,10 +195,8 @@ struct nested_budget
 void validate_indices(const std::vector<std::uint32_t>& indices, nested_budget& budget) {
     consume(indices.size(), budget.fields);
     std::set<std::uint32_t> unique;
-    for (const auto index : indices)
-    {
-        if (index == 0 || !unique.insert(index).second)
-        {
+    for (const auto index : indices) {
+        if (index == 0 || !unique.insert(index).second) {
             throw std::invalid_argument("Nested projection indices must be nonzero and unique");
         }
     }
@@ -226,37 +204,29 @@ void validate_indices(const std::vector<std::uint32_t>& indices, nested_budget& 
 
 // Bound authorization input as well as output, including currently absent children.
 void validate_projection(const nested_entity_projection& projection, std::size_t depth, nested_budget& budget) {
-    if (depth > budget.limits.max_depth)
-    {
+    if (depth > budget.limits.max_depth) {
         throw std::length_error("Nested projection depth limit exceeded");
     }
-    if (projection.class_name.empty())
-    {
+    if (projection.class_name.empty()) {
         throw std::invalid_argument("Nested projection class binding is missing");
     }
     consume(1, budget.entities);
     consume(projection.class_name.size(), budget.strings);
     validate_indices(projection.fields, budget);
     consume(projection.tables.size(), budget.fields);
-    for (const auto& [index, columns] : projection.tables)
-    {
-        if (index == 0)
-        {
+    for (const auto& [index, columns] : projection.tables) {
+        if (index == 0) {
             throw std::invalid_argument("Nested table index must be nonzero");
         }
         validate_indices(columns, budget);
     }
     consume(projection.containers.size(), budget.fields);
-    for (const auto& [index, children] : projection.containers)
-    {
-        if (index == 0)
-        {
+    for (const auto& [index, children] : projection.containers) {
+        if (index == 0) {
             throw std::invalid_argument("Nested container index must be nonzero");
         }
-        for (const auto& [id, child] : children)
-        {
-            if (id == null_guid)
-            {
+        for (const auto& [id, child] : children) {
+            if (id == null_guid) {
                 throw std::invalid_argument("Nested child authorization requires a GUID binding");
             }
             validate_projection(child, depth + 1, budget);
@@ -267,11 +237,9 @@ void validate_projection(const nested_entity_projection& projection, std::size_t
 std::map<std::uint32_t, data_type> selected_columns(
     const class_meta& schema, const std::vector<std::uint32_t>& columns) {
     std::map<std::uint32_t, data_type> selected;
-    for (const auto index : columns)
-    {
+    for (const auto index : columns) {
         const auto meta = schema.find_data_meta(index);
-        if (!meta)
-        {
+        if (!meta) {
             throw std::invalid_argument("Nested column index is not declared in the row class");
         }
         std::size_t bytes = 0;
@@ -284,23 +252,20 @@ std::map<std::uint32_t, data_type> selected_columns(
 nested_row_snapshot capture_row(
     const row& source, const std::map<std::uint32_t, data_type>& columns, nested_budget& budget) {
     const auto* implementation = dynamic_cast<const row_impl*>(&source);
-    if (!implementation || snapshot_access::incarnation(*implementation) == 0)
-    {
+    if (!implementation || snapshot_access::incarnation(*implementation) == 0) {
         throw std::invalid_argument("Nested snapshots require a published framework row");
     }
     consume(columns.size(), budget.fields);
     std::map<std::uint32_t, selected_field> selected;
     std::size_t bytes = 0;
-    for (const auto& [index, type] : columns)
-    {
+    for (const auto& [index, type] : columns) {
         selected_field field{type, snapshot_access::find_node(*implementation, index)};
         validate_field(field, bytes, {columns.size(), budget.strings});
         selected.emplace(index, field);
     }
     consume(bytes, budget.strings);
     nested_row_snapshot result{snapshot_access::incarnation(*implementation), {}};
-    for (const auto& [index, field] : selected)
-    {
+    for (const auto& [index, field] : selected) {
         result.fields.emplace(index, copy_field(field));
     }
     return result;
@@ -308,16 +273,14 @@ nested_row_snapshot capture_row(
 
 nested_entity_snapshot capture_nested_entity(
     const entity& source, const nested_entity_projection& projection, std::size_t depth, nested_budget& budget) {
-    if (depth > budget.limits.max_depth)
-    {
+    if (depth > budget.limits.max_depth) {
         throw std::length_error("Nested snapshot depth limit exceeded");
     }
     consume(1, budget.entities);
     const auto* implementation = dynamic_cast<const entity_impl*>(&source);
     const auto* schema = implementation ? snapshot_access::schema(*implementation) : nullptr;
     if (!schema || source.get_id() == null_guid || schema->get_name() != projection.class_name ||
-        !budget.identities.insert(source.get_id()).second)
-    {
+        !budget.identities.insert(source.get_id()).second) {
         throw std::invalid_argument("Nested entity binding is invalid, repeated or cyclic");
     }
     consume(projection.fields.size(), budget.fields);
@@ -325,37 +288,29 @@ nested_entity_snapshot capture_nested_entity(
     consume(projection.containers.size(), budget.fields);
     auto scalars = capture_selected_scalars(source, projection.fields, {projection.fields.size(), budget.strings});
     consume(scalars.class_name.size(), budget.strings);
-    for (const auto& [index, value] : scalars.fields)
-    {
-        if (const auto text = std::get_if<std::string>(&value))
-        {
+    for (const auto& [index, value] : scalars.fields) {
+        if (const auto text = std::get_if<std::string>(&value)) {
             consume(text->size(), budget.strings);
         }
     }
     nested_entity_snapshot result{snapshot_access::incarnation(*implementation), std::move(scalars), {}, {}};
-    for (const auto& [index, columns] : projection.tables)
-    {
+    for (const auto& [index, columns] : projection.tables) {
         const auto meta = schema->find_table_meta(index);
         const auto row_schema = meta ? meta->get_class_meta() : nullptr;
-        if (!row_schema || row_schema->get_name().empty())
-        {
+        if (!row_schema || row_schema->get_name().empty()) {
             throw std::invalid_argument("Nested table index or row class is not declared");
         }
         const auto selected = selected_columns(*row_schema, columns);
         consume(row_schema->get_name().size(), budget.strings);
         nested_table_snapshot table_state{row_schema->get_name(), {}};
-        if (const auto* table = snapshot_access::find_table(*implementation, index))
-        {
+        if (const auto* table = snapshot_access::find_table(*implementation, index)) {
             const auto* actual = dynamic_cast<const table_impl*>(table);
-            if (!actual)
-            {
+            if (!actual) {
                 throw std::invalid_argument("Nested snapshots require a framework table");
             }
             consume(snapshot_access::rows(*actual).size(), budget.rows);
-            for (const auto& [number, row] : snapshot_access::rows(*actual))
-            {
-                if (!row || number == 0 || row->get_row() != number)
-                {
+            for (const auto& [number, row] : snapshot_access::rows(*actual)) {
+                if (!row || number == 0 || row->get_row() != number) {
                     throw std::invalid_argument("Nested row binding is invalid");
                 }
                 table_state.rows.emplace(number, capture_row(*row, selected, budget));
@@ -363,49 +318,38 @@ nested_entity_snapshot capture_nested_entity(
         }
         result.tables.emplace(index, std::move(table_state));
     }
-    for (const auto& [index, allowed_children] : projection.containers)
-    {
+    for (const auto& [index, allowed_children] : projection.containers) {
         const auto meta = schema->find_container_meta(index);
-        if (!meta || meta->get_class_name().empty())
-        {
+        if (!meta || meta->get_class_name().empty()) {
             throw std::invalid_argument("Nested container index or child class is not declared");
         }
-        for (const auto& [id, child_projection] : allowed_children)
-        {
-            if (child_projection.class_name != meta->get_class_name())
-            {
+        for (const auto& [id, child_projection] : allowed_children) {
+            if (child_projection.class_name != meta->get_class_name()) {
                 throw std::invalid_argument("Nested child class does not match its container schema");
             }
         }
         auto& children = result.containers[index];
-        if (allowed_children.empty())
-        {
+        if (allowed_children.empty()) {
             continue;
         }
         const auto* container = snapshot_access::find_container(*implementation, index);
-        if (!container)
-        {
+        if (!container) {
             continue;
         }
         const auto* actual = dynamic_cast<const container_impl*>(container);
-        if (!actual)
-        {
+        if (!actual) {
             throw std::invalid_argument("Nested snapshots require a framework container");
         }
         consume(snapshot_access::children(*actual).size(), budget.inspected_children);
-        for (const auto& [slot, child] : snapshot_access::children(*actual))
-        {
-            if (!child)
-            {
+        for (const auto& [slot, child] : snapshot_access::children(*actual)) {
+            if (!child) {
                 throw std::invalid_argument("Nested container has a null child");
             }
             const auto allowed = allowed_children.find(child->get_id());
-            if (allowed == allowed_children.end())
-            {
+            if (allowed == allowed_children.end()) {
                 continue;
             }
-            if (slot == 0 || child->get_parent_container().get() != container)
-            {
+            if (slot == 0 || child->get_parent_container().get() != container) {
                 throw std::invalid_argument("Nested child relationship is invalid");
             }
             children.emplace(slot, capture_nested_entity(*child, allowed->second, depth + 1, budget));
@@ -416,8 +360,7 @@ nested_entity_snapshot capture_nested_entity(
 
 nested_snapshot capture_selected_nested(
     const entity& source, const nested_projection& projection, const nested_snapshot_limits& limits) {
-    if (projection.schema_id.empty() || projection.root_id == null_guid || projection.root_id != source.get_id())
-    {
+    if (projection.schema_id.empty() || projection.root_id == null_guid || projection.root_id != source.get_id()) {
         throw std::invalid_argument("Nested capture requires an explicit schema and authorized root binding");
     }
     nested_budget authorization(limits);

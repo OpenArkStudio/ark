@@ -28,8 +28,7 @@ static_assert(std::is_abstract_v<ark::mysql_module> && std::is_abstract_v<ark::r
 namespace {
 
 void require(bool condition, const std::string& reason) {
-    if (!condition)
-    {
+    if (!condition) {
         std::cerr << reason << std::endl;
         // A failed acceptance must not unwind through owners still in use.
         std::_Exit(1);
@@ -87,8 +86,7 @@ int run(const std::filesystem::path& directory) {
     require(manager.pending_tasks() == 0 && manager.update(ark::date_time::get_now_time()),
         "unconfigured database lifecycle failed");
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (!manager.stop_until(ark::date_time::get_now_time(), deadline))
-    {
+    while (!manager.stop_until(ark::date_time::get_now_time(), deadline)) {
         require(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopping &&
                     manager.get_shutdown_failure().empty() && !manager.get_shutdown_exception() &&
                     std::chrono::steady_clock::now() < deadline,

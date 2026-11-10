@@ -25,8 +25,7 @@
 
 namespace ark {
 
-class oss_sdk_module_impl final : public module_base<oss_sdk_module>
-{
+class oss_sdk_module_impl final : public module_base<oss_sdk_module> {
 public:
     // TODO
 

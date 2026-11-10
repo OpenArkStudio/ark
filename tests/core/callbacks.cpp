@@ -18,8 +18,7 @@
 
 namespace {
 
-struct receiver
-{
+struct receiver {
     void on_timer(std::uint64_t timer_id, const ark::guid_t& entity_id) {
         timer_id_ = timer_id;
         entity_id_ = entity_id;
@@ -34,8 +33,7 @@ struct receiver
     int calls_{};
 };
 
-class capturing_timer final : public ark::timer_module
-{
+class capturing_timer final : public ark::timer_module {
 public:
     using ark::timer_module::add_forever_timer;
     using ark::timer_module::add_single_timer;
@@ -60,8 +58,7 @@ private:
     }
 };
 
-class capturing_schedule final : public ark::schedule_module
-{
+class capturing_schedule final : public ark::schedule_module {
 public:
     using ark::schedule_module::add_at_schedule;
     using ark::schedule_module::add_interval_schedule;
@@ -128,8 +125,7 @@ DOCTEST_TEST_CASE("Member schedule callbacks preserve receiver and scheduling ex
 #if defined(ARK_HAS_PROTOBUF)
 namespace {
 
-struct network_receiver
-{
+struct network_receiver {
     network_receiver() = default;
     network_receiver(const network_receiver&) = delete;
 
@@ -153,8 +149,7 @@ struct network_receiver
     std::vector<const ark::net_event*> events;
 };
 
-struct callback_capture
-{
+struct callback_capture {
     ark::net_msg_functor message;
     ark::net_msg_functor forward;
     ark::net_event_functor event;
@@ -165,8 +160,7 @@ struct callback_capture
 
 class capturing_server final
     : public ark::net_server_service
-    , public callback_capture
-{
+    , public callback_capture {
 public:
     bool start(std::shared_ptr<const ark::msg_header>, ark::bus_id_t, const ark::endpoint&, uint8_t, uint32_t,
         size_t) override {
@@ -208,8 +202,7 @@ public:
 
 class capturing_client final
     : public ark::net_client_service
-    , public callback_capture
-{
+    , public callback_capture {
 public:
     bool start_client(std::shared_ptr<const ark::msg_header>, ark::bus_id_t, const ark::endpoint&) override {
         return false;
@@ -268,14 +261,11 @@ void check_network_registration(service_type& service, callback_capture& capture
     constexpr bool server = std::is_same_v<service_type, ark::net_server_service>;
     network_receiver target;
     REQUIRE(service.reg_msg_callback(71, &target, &network_receiver::on_message));
-    if constexpr (std::is_same_v<service_type, ark::net_server_service>)
-    {
+    if constexpr (std::is_same_v<service_type, ark::net_server_service>) {
         // The existing server forward overload takes int rather than conv_id_t.
         REQUIRE(service.reg_forward_msg_callback(&target, &network_receiver::on_forward));
         REQUIRE(service.reg_reg_server_call_back(&target, &network_receiver::on_message));
-    }
-    else
-    {
+    } else {
         REQUIRE(service.reg_forward_msg_callback(&target, &network_receiver::on_message));
     }
     REQUIRE(service.reg_net_event_callback(&target, &network_receiver::on_event));
@@ -293,14 +283,12 @@ void check_network_registration(service_type& service, callback_capture& capture
     captured.message(message.get(), session);
     captured.forward(message.get(), session + 1);
     copied(message.get(), session + 2);
-    if (server)
-    {
+    if (server) {
         captured.session(message.get(), session + 3);
     }
     captured.event(&event);
     REQUIRE(target.messages.size() == (server ? 4 : 3));
-    for (std::size_t index = 0; index < target.messages.size(); ++index)
-    {
+    for (std::size_t index = 0; index < target.messages.size(); ++index) {
         CHECK(target.messages[index].first == message.get());
         CHECK(target.messages[index].second == session + index);
     }

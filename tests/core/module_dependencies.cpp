@@ -15,8 +15,7 @@ namespace {
 
 constexpr std::array dependency_phases{"init", "post_init", "check_config", "pre_update"};
 
-class dependency_module final : public ark::module
-{
+class dependency_module final : public ark::module {
 public:
     dependency_module(std::string name, std::vector<std::string> dependencies, std::vector<std::string>& events)
         : name(std::move(name))
@@ -25,8 +24,7 @@ public:
     }
 
     std::vector<std::string> get_dependencies() const override {
-        if (metadata_throws)
-        {
+        if (metadata_throws) {
             throw std::runtime_error("dependency metadata failed");
         }
         return dependencies;
@@ -58,10 +56,8 @@ public:
 private:
     bool record(int phase) {
         events.emplace_back(std::string(dependency_phases[phase]) + ":" + name);
-        if (phase == failed_phase)
-        {
-            if (throws)
-            {
+        if (phase == failed_phase) {
+            if (throws) {
                 throw std::runtime_error("ordered startup failed");
             }
             return false;
@@ -76,24 +72,20 @@ bool start_dependencies(ark::plugin_manager& manager) {
 
 std::vector<std::string> phase_events(const std::vector<std::string>& order) {
     std::vector<std::string> events;
-    for (const auto* phase : dependency_phases)
-    {
-        for (const auto& name : order)
-        {
+    for (const auto* phase : dependency_phases) {
+        for (const auto& name : order) {
             events.emplace_back(std::string(phase) + ":" + name);
         }
     }
     return events;
 }
 
-class dependency_provider : public ark::module
-{
+class dependency_provider : public ark::module {
 public:
     bool initialized{};
 };
 
-class dependency_provider_impl final : public ark::module_base<dependency_provider>
-{
+class dependency_provider_impl final : public ark::module_base<dependency_provider> {
 public:
     bool init() override {
         initialized = true;
@@ -101,12 +93,9 @@ public:
     }
 };
 
-class dependency_consumer : public ark::module
-{
-};
+class dependency_consumer : public ark::module {};
 
-class dependency_consumer_impl final : public ark::module_base<dependency_consumer, dependency_provider>
-{
+class dependency_consumer_impl final : public ark::module_base<dependency_consumer, dependency_provider> {
 public:
     bool init() override {
         return find_module<dependency_provider>()->initialized;
@@ -143,8 +132,7 @@ TEST_CASE("Module dependencies reject missing providers before any startup hook"
 }
 
 TEST_CASE("Module dependencies reject self and indirect cycles before independent modules start") {
-    for (const bool self : {false, true})
-    {
+    for (const bool self : {false, true}) {
         ark::plugin_manager manager;
         std::vector<std::string> events;
         dependency_module first("first", {self ? "first" : "second"}, events);
@@ -160,8 +148,7 @@ TEST_CASE("Module dependencies reject self and indirect cycles before independen
 }
 
 TEST_CASE("Module dependencies order transitive diamond providers once in every startup phase") {
-    for (const bool reverse : {false, true})
-    {
+    for (const bool reverse : {false, true}) {
         ark::plugin_manager manager;
         std::vector<std::string> events;
         dependency_module root("root", {}, events);
@@ -169,12 +156,10 @@ TEST_CASE("Module dependencies order transitive diamond providers once in every 
         dependency_module right("right", {"root", "root"}, events);
         dependency_module sink("sink", {"right", "left"}, events);
         std::array modules{&root, &left, &right, &sink};
-        if (reverse)
-        {
+        if (reverse) {
             std::reverse(modules.begin(), modules.end());
         }
-        for (auto* module : modules)
-        {
+        for (auto* module : modules) {
             REQUIRE(manager.add_module(module->name, module));
         }
         REQUIRE(start_dependencies(manager));
@@ -184,20 +169,17 @@ TEST_CASE("Module dependencies order transitive diamond providers once in every 
 }
 
 TEST_CASE("Module dependencies use stable registration-key order for independent ready nodes") {
-    for (const bool reverse : {false, true})
-    {
+    for (const bool reverse : {false, true}) {
         ark::plugin_manager manager;
         std::vector<std::string> events;
         dependency_module first("alpha", {}, events);
         dependency_module second("middle", {}, events);
         dependency_module third("omega", {}, events);
         std::array modules{&first, &second, &third};
-        if (reverse)
-        {
+        if (reverse) {
             std::reverse(modules.begin(), modules.end());
         }
-        for (auto* module : modules)
-        {
+        for (auto* module : modules) {
             REQUIRE(manager.add_module(module->name, module));
         }
         REQUIRE(start_dependencies(manager));
@@ -206,10 +188,8 @@ TEST_CASE("Module dependencies use stable registration-key order for independent
 }
 
 TEST_CASE("Module dependencies stop ordered startup at its first false or exception") {
-    for (int phase = 0; phase < static_cast<int>(dependency_phases.size()); ++phase)
-    {
-        for (const bool throws : {false, true})
-        {
+    for (int phase = 0; phase < static_cast<int>(dependency_phases.size()); ++phase) {
+        for (const bool throws : {false, true}) {
             ark::plugin_manager manager;
             std::vector<std::string> events;
             dependency_module provider("provider", {}, events);
@@ -217,16 +197,12 @@ TEST_CASE("Module dependencies stop ordered startup at its first false or except
             dependency_module later("later", {"failing"}, events);
             failing.failed_phase = phase;
             failing.throws = throws;
-            for (auto* module : {&later, &failing, &provider})
-            {
+            for (auto* module : {&later, &failing, &provider}) {
                 REQUIRE(manager.add_module(module->name, module));
             }
-            if (throws)
-            {
+            if (throws) {
                 CHECK_THROWS_WITH_AS(start_dependencies(manager), "ordered startup failed", std::runtime_error);
-            }
-            else
-            {
+            } else {
                 CHECK_FALSE(start_dependencies(manager));
             }
             auto expected = phase_events({"provider", "failing", "later"});

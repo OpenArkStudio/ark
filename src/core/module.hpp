@@ -30,8 +30,7 @@ namespace ark {
 
 class plugin_manager;
 
-class module
-{
+class module {
 public:
     module() = default;
     virtual ~module() = default;

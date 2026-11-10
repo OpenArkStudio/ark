@@ -27,8 +27,7 @@
 
 namespace ark {
 
-class bus_module : public module
-{
+class bus_module : public module {
 public:
     // get the app whole name, like app-bus_id
     virtual const std::string get_app_whole_name(bus_id_t bus_id) = 0;

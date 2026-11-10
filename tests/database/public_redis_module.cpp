@@ -22,14 +22,12 @@ using result_type = arknet::redis::result;
 using client_errc = arknet::redis::client_errc;
 
 // Bounded loopback RESP protocol peer, not a Redis server implementation.
-class redis_peer
-{
+class redis_peer {
 public:
     explicit redis_peer(bool tls = false)
         : tls_(tls) {
 #if defined(ARKNET_ENABLE_SSL)
-        if (tls_)
-        {
+        if (tls_) {
             const std::string directory = ARK_DATABASE_REDIS_CERT_DIR;
             context_.use_certificate_chain_file(directory + "/server.pem");
             context_.use_private_key_file(directory + "/server-key.pem", asio::ssl::context::pem);
@@ -67,8 +65,7 @@ private:
     asio::awaitable<void> serve() {
         deadline_.expires_after(5s);
         deadline_.async_wait([this](arknet::error_code error) {
-            if (!error)
-            {
+            if (!error) {
                 arknet::error_code ignored;
                 acceptor_.close(ignored);
                 socket_.close(ignored);
@@ -76,18 +73,15 @@ private:
         });
         arknet::error_code error;
         co_await acceptor_.async_accept(socket_, asio::redirect_error(asio::use_awaitable, error));
-        if (error)
-        {
+        if (error) {
             co_return;
         }
 #if defined(ARKNET_ENABLE_SSL)
-        if (tls_)
-        {
+        if (tls_) {
             asio::ssl::stream<asio::ip::tcp::socket&> stream(socket_, context_);
             co_await stream.async_handshake(
                 asio::ssl::stream_base::server, asio::redirect_error(asio::use_awaitable, error));
-            if (!error)
-            {
+            if (!error) {
                 co_await exchange(stream);
             }
             co_return;
@@ -100,84 +94,59 @@ private:
     asio::awaitable<void> exchange(stream_type& stream) {
         arknet::error_code error;
         arknet::redis::detail::resp_decoder decoder;
-        for (;;)
-        {
+        for (;;) {
             arknet::redis::value value;
             const auto status = decoder.next(value);
-            if (status == arknet::redis::detail::resp_status::ready)
-            {
-                if (value.type != arknet::redis::value_type::array || value.elements.empty())
-                {
+            if (status == arknet::redis::detail::resp_status::ready) {
+                if (value.type != arknet::redis::value_type::array || value.elements.empty()) {
                     throw std::runtime_error("Expected RESP command array");
                 }
                 arknet::redis::command arguments;
-                for (auto& argument : value.elements)
-                {
+                for (auto& argument : value.elements) {
                     arguments.push_back(std::move(argument.text));
                 }
                 std::string response;
-                if (arguments == arknet::redis::command{"HELLO", "3"})
-                {
+                if (arguments == arknet::redis::command{"HELLO", "3"}) {
                     response = "%1\r\n+proto\r\n:3\r\n";
-                }
-                else if (arguments == arknet::redis::command{"RESET"})
-                {
+                } else if (arguments == arknet::redis::command{"RESET"}) {
                     response = "+RESET\r\n";
-                }
-                else
-                {
+                } else {
                     ++business_commands_;
-                    if (arguments.size() == 2 && arguments[0] == "ECHO")
-                    {
+                    if (arguments.size() == 2 && arguments[0] == "ECHO") {
                         response = "$" + std::to_string(arguments[1].size()) + "\r\n" + arguments[1] + "\r\n";
-                    }
-                    else if (arguments == arknet::redis::command{"PING"})
-                    {
+                    } else if (arguments == arknet::redis::command{"PING"}) {
                         response = "+PONG\r\n";
-                    }
-                    else if (arguments == arknet::redis::command{"GET", "missing"})
-                    {
+                    } else if (arguments == arknet::redis::command{"GET", "missing"}) {
                         response = "$-1\r\n";
-                    }
-                    else if (arguments == arknet::redis::command{"FAIL"})
-                    {
+                    } else if (arguments == arknet::redis::command{"FAIL"}) {
                         response = "-ERR fixture\r\n";
-                    }
-                    else if (arguments == arknet::redis::command{"BLOCK"})
-                    {
+                    } else if (arguments == arknet::redis::command{"BLOCK"}) {
                         blocked_ = true;
                         continue;
-                    }
-                    else
-                    {
+                    } else {
                         throw std::runtime_error("Unexpected command in RESP fixture");
                     }
                 }
-                if (blocked_)
-                {
+                if (blocked_) {
                     continue;
                 }
                 co_await asio::async_write(
                     stream, asio::buffer(response), asio::redirect_error(asio::use_awaitable, error));
-                if (error)
-                {
+                if (error) {
                     co_return;
                 }
                 continue;
             }
-            if (status != arknet::redis::detail::resp_status::need_more)
-            {
+            if (status != arknet::redis::detail::resp_status::need_more) {
                 throw std::runtime_error("Invalid fixture RESP input");
             }
             std::array<char, 4096> bytes;
             const auto count =
                 co_await stream.async_read_some(asio::buffer(bytes), asio::redirect_error(asio::use_awaitable, error));
-            if (error)
-            {
+            if (error) {
                 co_return;
             }
-            if (!decoder.append(std::string_view(bytes.data(), count)))
-            {
+            if (!decoder.append(std::string_view(bytes.data(), count))) {
                 throw std::runtime_error("RESP fixture limit reached");
             }
         }
@@ -197,8 +166,7 @@ private:
     std::thread worker_;
 };
 
-struct module_owner
-{
+struct module_owner {
     ark::plugin_manager manager;
     std::unique_ptr<ark::redis_module> redis_owner{ark::detail::make_redis_module()};
     ark::redis_module& redis{*redis_owner};
@@ -211,13 +179,11 @@ struct module_owner
     module_owner() {
         redis.set_plugin_manager(&manager);
         redis.set_name("redis");
-        if (!manager.add_module("redis", &redis) || !manager.add_module("consumer", &consumer))
-        {
+        if (!manager.add_module("redis", &redis) || !manager.add_module("consumer", &consumer)) {
             throw std::runtime_error("Cannot install Redis test modules");
         }
         // ARK_REGISTER_MODULE installs this update hook before module init.
-        if (!manager.add_update_module(&redis))
-        {
+        if (!manager.add_update_module(&redis)) {
             throw std::runtime_error("Cannot register Redis update hook");
         }
         tasks = &manager.create_task_group(consumer);
@@ -225,8 +191,7 @@ struct module_owner
 
     ~module_owner() {
         const auto deadline = std::chrono::steady_clock::now() + 4s;
-        while (!manager.stop(0) && std::chrono::steady_clock::now() < deadline)
-        {
+        while (!manager.stop(0) && std::chrono::steady_clock::now() < deadline) {
             manager.update(0);
             std::this_thread::sleep_for(1ms);
         }
@@ -256,10 +221,8 @@ struct module_owner
     template<class predicate_type>
     bool pump_until(predicate_type predicate) {
         const auto deadline = std::chrono::steady_clock::now() + 3s;
-        while (!predicate())
-        {
-            if (std::chrono::steady_clock::now() >= deadline)
-            {
+        while (!predicate()) {
+            if (std::chrono::steady_clock::now() >= deadline) {
                 return false;
             }
             manager.update(0);

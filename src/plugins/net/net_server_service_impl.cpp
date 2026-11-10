@@ -38,8 +38,7 @@ net_server_service_impl::~net_server_service_impl() {
 void net_server_service_impl::shutdown() {
     closed_ = true;
     callback_lifetime_.reset();
-    if (network_)
-    {
+    if (network_) {
         network_->shutdown();
         network_.reset();
     }
@@ -53,45 +52,35 @@ void net_server_service_impl::shutdown() {
 
 bool net_server_service_impl::start(std::shared_ptr<const msg_header> head, bus_id_t bus_id, const endpoint& ep,
     uint8_t thread_count, uint32_t max_connection, const size_t silent_timeout) {
-    if (closed_)
-    {
+    if (closed_) {
         return false;
     }
     const std::weak_ptr<void> lifetime = callback_lifetime_;
     const net_msg_functor message_callback = [this, lifetime](const net_msg* message, conv_id_t session) {
-        if (const auto alive = lifetime.lock())
-        {
+        if (const auto alive = lifetime.lock()) {
             on_net_msg(message, session);
         }
     };
     const net_event_functor event_callback = [this, lifetime](const net_event* event) {
-        if (const auto alive = lifetime.lock())
-        {
+        if (const auto alive = lifetime.lock()) {
             on_net_event(event);
         }
     };
     bool ret = false;
-    if (ep.proto() == proto_type::tcp)
-    {
+    if (ep.proto() == proto_type::tcp) {
         network_ = std::make_shared<tcp_server>(message_callback, event_callback);
         ret = network_->start_server(
             head, bus_id, ep.get_ip(), ep.get_port(), thread_count, max_connection, silent_timeout);
 
         //AFINetServerService::RegMsgCallback(
         //    ark::protobuf::e_ss_msg_id_server_report, this, &AFCNetServerService::OnClientRegister);
-    }
-    else if (ep.proto() == proto_type::udp)
-    {
+    } else if (ep.proto() == proto_type::udp) {
         network_ = std::make_shared<rudp_server>(message_callback, event_callback);
         ret = network_->start_server(
             head, bus_id, ep.get_ip(), ep.get_port(), thread_count, max_connection, silent_timeout);
-    }
-    else if (ep.proto() == proto_type::ws)
-    {
+    } else if (ep.proto() == proto_type::ws) {
         // will add websocket server
-    }
-    else
-    {
+    } else {
         // other protocols will be supported
         return false;
     }
@@ -100,8 +89,7 @@ bool net_server_service_impl::start(std::shared_ptr<const msg_header> head, bus_
 }
 
 bool net_server_service_impl::update() {
-    if (closed_)
-    {
+    if (closed_) {
         return true;
     }
     ARK_ASSERT_RET_VAL(network_ != nullptr, false);
@@ -117,12 +105,9 @@ std::shared_ptr<net> net_server_service_impl::get_net() {
 }
 
 bool net_server_service_impl::reg_msg_callback(msg_id_t msg_id, net_msg_functor&& cb) {
-    if (net_msg_callbacks_.find(msg_id) != net_msg_callbacks_.end())
-    {
+    if (net_msg_callbacks_.find(msg_id) != net_msg_callbacks_.end()) {
         return false;
-    }
-    else
-    {
+    } else {
         net_msg_callbacks_.insert(std::make_pair(msg_id, std::forward<net_msg_functor>(cb)));
         return true;
     }
@@ -144,8 +129,7 @@ bool net_server_service_impl::reg_reg_server_call_back(net_msg_session_functor&&
 }
 
 void net_server_service_impl::set_timeout_interval(const int32_t interval) {
-    if (interval <= 0)
-    {
+    if (interval <= 0) {
         return;
     }
 
@@ -156,8 +140,7 @@ void net_server_service_impl::on_net_msg(const net_msg* msg, conv_id_t session_i
     ARK_LOG_DEBUG("[msg][recv] msg id = {} session id = {}", msg->get_msg_id(), session_id);
 
     auto msg_id = msg->get_msg_id();
-    if (msg_id == ark::protobuf::e_ss_msg_id_reg_to_server)
-    {
+    if (msg_id == ark::protobuf::e_ss_msg_id_reg_to_server) {
         reg_server_call_back_(msg, session_id);
 
         net_service_manager_->remove_net_connection_bus(msg->get_src_bus());
@@ -166,25 +149,19 @@ void net_server_service_impl::on_net_msg(const net_msg* msg, conv_id_t session_i
         remove_connection(msg->get_src_bus());
         add_connection(msg->get_src_bus(), session_id);
         return;
-    }
-    else if (msg_id == ark::protobuf::e_ss_msg_id_heart_beat)
-    {
+    } else if (msg_id == ark::protobuf::e_ss_msg_id_heart_beat) {
         update_connection(msg->get_src_bus());
         return;
     }
 
-    if (msg->get_src_bus() == 0)
-    {
+    if (msg->get_src_bus() == 0) {
         update_client_connection(session_id);
     }
 
     auto it = net_msg_callbacks_.find(msg_id);
-    if (it != net_msg_callbacks_.end())
-    {
+    if (it != net_msg_callbacks_.end()) {
         (it->second)(msg, session_id);
-    }
-    else
-    {
+    } else {
         // TODO:forward to other server process
 
         ARK_LOG_ERROR("Invalid message, id = {}", msg_id);
@@ -197,8 +174,7 @@ void net_server_service_impl::on_net_msg(const net_msg* msg, conv_id_t session_i
 }
 
 void net_server_service_impl::on_net_event(const net_event* event) {
-    switch (event->get_type())
-    {
+    switch (event->get_type()) {
     case net_event_type::connect:
         ARK_LOG_INFO("Connected server = {} succenssfully, ip = {}, session_id = {}",
             bus_addr(event->get_bus_id()).to_string(), event->get_ip(), event->get_id());
@@ -215,8 +191,7 @@ void net_server_service_impl::on_net_event(const net_event* event) {
         break;
     }
 
-    for (const auto& it : net_event_callbacks_)
-    {
+    for (const auto& it : net_event_callbacks_) {
         (it)(event);
     }
 }
@@ -225,8 +200,7 @@ void net_server_service_impl::on_disconnect_net_event(const net_event* event) {
     ARK_LOG_INFO("TimeOut Disconnected server = {} succenssfully, ip = {}, session_id = {}",
         bus_addr(event->get_bus_id()).to_string(), event->get_ip(), event->get_id());
 
-    for (const auto& it : net_event_callbacks_)
-    {
+    for (const auto& it : net_event_callbacks_) {
         (it)(event);
     }
 }
@@ -272,11 +246,9 @@ void net_server_service_impl::process_client_connection() {
 
     ///check connection
     auto now = date_time::get_now_time();
-    for (auto& iter : client_connection_list_)
-    {
+    for (auto& iter : client_connection_list_) {
         auto& connection = iter.second;
-        if (connection.last_active_time + client_timeout_interval_ < now)
-        {
+        if (connection.last_active_time + client_timeout_interval_ < now) {
             /// close session
             close_list.push_back(iter.first);
             network_->close_session(iter.first);
@@ -289,8 +261,7 @@ void net_server_service_impl::process_client_connection() {
         }
     }
 
-    for (auto iter : close_list)
-    {
+    for (auto iter : close_list) {
         remove_client_connection(iter);
     }
 }
@@ -309,8 +280,7 @@ void net_server_service_impl::add_connection(bus_id_t bus_id, conv_id_t session_
 
 void net_server_service_impl::update_connection(bus_id_t bus_id) {
     auto connection = connection_list_.find_value(bus_id);
-    if (!connection)
-    {
+    if (!connection) {
         return;
     }
 
@@ -324,14 +294,11 @@ void net_server_service_impl::remove_connection(bus_id_t bus_id) {
 
 void net_server_service_impl::update_client_connection(conv_id_t session_id) {
     auto iter = client_connection_list_.find(session_id);
-    if (iter == client_connection_list_.end())
-    {
+    if (iter == client_connection_list_.end()) {
         auto connection =
             ark::connection(0, session_id, date_time::get_now_time(), ark::connection::connect_state::connected);
         client_connection_list_.insert(std::make_pair(session_id, connection));
-    }
-    else
-    {
+    } else {
         iter->second.last_active_time = date_time::get_now_time();
     }
 }

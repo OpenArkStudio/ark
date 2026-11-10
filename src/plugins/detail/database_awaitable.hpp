@@ -40,13 +40,11 @@ inline bool is_database_executor(const asio::any_io_executor& candidate, arknet:
 // must outlive accepted operations. Destroy only on the owner after pending()==0.
 // stop_accepting() prevents new starts, but never suppresses accepted terminals.
 template<class result_type>
-class database_awaitable
-{
+class database_awaitable {
     static_assert(std::is_nothrow_move_constructible_v<result_type>);
     static_assert(std::is_nothrow_default_constructible_v<result_type>);
 
-    struct operation
-    {
+    struct operation {
         std::size_t index{};
         std::uint64_t native_id{};
         bool published{};
@@ -64,8 +62,7 @@ class database_awaitable
     };
 
     template<class handler_type, class cancel_type>
-    struct typed_operation final : operation
-    {
+    struct typed_operation final : operation {
         std::optional<handler_type> handler;
         cancel_type cancel_native;
         asio::cancellation_slot slot;
@@ -90,8 +87,7 @@ class database_awaitable
         }
     };
 
-    struct state : std::enable_shared_from_this<state>
-    {
+    struct state : std::enable_shared_from_this<state> {
         std::shared_ptr<arknet::manual_runtime> runtime;
         const std::thread::id owner = std::this_thread::get_id();
         mutable std::mutex mutex;
@@ -106,15 +102,13 @@ class database_awaitable
         state(std::shared_ptr<arknet::manual_runtime> execution, std::size_t maximum)
             : runtime(std::move(execution))
             , slots(maximum) {
-            if (!runtime || !maximum)
-            {
+            if (!runtime || !maximum) {
                 throw std::invalid_argument("Database awaitable requires a runtime and positive operation limit");
             }
         }
 
         void check_owner() const {
-            if (std::this_thread::get_id() != owner)
-            {
+            if (std::this_thread::get_id() != owner) {
                 throw std::logic_error("Database awaitable requires its constructing thread");
             }
         }
@@ -122,14 +116,11 @@ class database_awaitable
         void admit(const std::shared_ptr<operation>& pending) {
             check_owner();
             std::lock_guard lock(mutex);
-            if (!accepting)
-            {
+            if (!accepting) {
                 throw std::logic_error("Database awaitable is not accepting operations");
             }
-            for (std::size_t index = 0; index < slots.size(); ++index)
-            {
-                if (!slots[index])
-                {
+            for (std::size_t index = 0; index < slots.size(); ++index) {
+                if (!slots[index]) {
                     pending->index = index;
                     slots[index] = pending;
                     ++count;
@@ -142,12 +133,10 @@ class database_awaitable
         void check_admission() const {
             check_owner();
             std::lock_guard lock(mutex);
-            if (!accepting)
-            {
+            if (!accepting) {
                 throw std::logic_error("Database awaitable is not accepting operations");
             }
-            if (count == slots.size())
-            {
+            if (count == slots.size()) {
                 throw std::length_error("Database awaitable operation limit reached");
             }
         }
@@ -156,19 +145,15 @@ class database_awaitable
         // allocated before start; completion itself allocates no delivery node.
         void complete(const std::shared_ptr<operation>& pending, std::exception_ptr error, result_type result) {
             std::lock_guard lock(mutex);
-            if (pending->retired || pending->ready)
-            {
+            if (pending->retired || pending->ready) {
                 return;
             }
             pending->exception = std::move(error);
             pending->response.emplace(std::move(result));
             pending->ready = true;
-            if (tail)
-            {
+            if (tail) {
                 tail->next = pending;
-            }
-            else
-            {
+            } else {
                 head = pending;
             }
             tail = pending;
@@ -179,19 +164,16 @@ class database_awaitable
             std::uint64_t id{};
             {
                 std::lock_guard lock(mutex);
-                if (pending->retired || pending->ready)
-                {
+                if (pending->retired || pending->ready) {
                     return;
                 }
                 pending->cancel_requested = true;
-                if (pending->published && pending->native_id && !pending->cancel_forwarded)
-                {
+                if (pending->published && pending->native_id && !pending->cancel_forwarded) {
                     id = pending->native_id;
                     pending->cancel_forwarded = true;
                 }
             }
-            if (id)
-            {
+            if (id) {
                 // Native cancellation is a request, not a synthetic terminal.
                 // Keep the record until the native service returns its result.
                 forward_cancel(pending, id);
@@ -199,15 +181,13 @@ class database_awaitable
         }
 
         void forward_cancel(const std::shared_ptr<operation>& pending, std::uint64_t id) noexcept {
-            try
-            { pending->cancel(id); }
-            catch (...)
-            {
+            try {
+                pending->cancel(id);
+            } catch (...) {
                 // The request is already accepted. A failed cancellation
                 // submission is a separate diagnostic, never its terminal.
                 // This state is read/written only by the owner thread.
-                if (!cancel_exception)
-                {
+                if (!cancel_exception) {
                     cancel_exception = std::current_exception();
                 }
             }
@@ -221,13 +201,11 @@ class database_awaitable
                 pending->native_id = id;
                 pending->published = true;
                 cancel = pending->cancel_requested && !pending->ready && !pending->retired && id;
-                if (cancel)
-                {
+                if (cancel) {
                     pending->cancel_forwarded = true;
                 }
             }
-            if (cancel)
-            {
+            if (cancel) {
                 forward_cancel(pending, id);
             }
         }
@@ -235,8 +213,7 @@ class database_awaitable
         void drain(std::size_t maximum) {
             check_owner();
 
-            struct scheduled_guard
-            {
+            struct scheduled_guard {
                 state& shared;
 
                 ~scheduled_guard() {
@@ -245,19 +222,16 @@ class database_awaitable
                 }
             } guard{*this};
 
-            for (std::size_t completed = 0; completed < maximum; ++completed)
-            {
+            for (std::size_t completed = 0; completed < maximum; ++completed) {
                 std::shared_ptr<operation> pending;
                 {
                     std::lock_guard lock(mutex);
-                    if (!head)
-                    {
+                    if (!head) {
                         break;
                     }
                     pending = std::move(head);
                     head = std::move(pending->next);
-                    if (!head)
-                    {
+                    if (!head) {
                         tail.reset();
                     }
                     pending->retired = true;
@@ -276,18 +250,14 @@ class database_awaitable
             check_owner();
             {
                 std::lock_guard lock(mutex);
-                if (scheduled || !head || !maximum)
-                {
+                if (scheduled || !head || !maximum) {
                     return false;
                 }
                 scheduled = true;
             }
-            try
-            {
+            try {
                 post(runtime->get_executor(), [shared = this->shared_from_this(), maximum] { shared->drain(maximum); });
-            }
-            catch (...)
-            {
+            } catch (...) {
                 std::lock_guard lock(mutex);
                 scheduled = false;
                 throw;
@@ -305,8 +275,7 @@ public:
     database_awaitable& operator=(const database_awaitable&) = delete;
 
     ~database_awaitable() {
-        if (state_->owner != std::this_thread::get_id() || pending())
-        {
+        if (state_->owner != std::this_thread::get_id() || pending()) {
             std::terminate();
         }
     }
@@ -361,8 +330,7 @@ private:
     template<class start_type, class cancel_type>
     static module_task<result_type> await_result(std::shared_ptr<state> shared, start_type start, cancel_type cancel) {
         const auto executor = co_await asio::this_coro::executor;
-        if (!is_database_executor(executor, *shared->runtime))
-        {
+        if (!is_database_executor(executor, *shared->runtime)) {
             throw std::logic_error("Database awaitable must run on its manual runtime executor");
         }
         // Reject before use_awaitable transfers ownership of the Asio coroutine
@@ -374,38 +342,30 @@ private:
             static_assert(std::is_nothrow_move_constructible_v<cancel_type>);
             std::shared_ptr<typed_operation<handler_type, cancel_type>> pending;
             std::uint64_t id{};
-            try
-            {
+            try {
                 // Allocation precedes the noexcept moves of handler/cancel.
                 // If it fails, handler still owns the Asio coroutine thread.
                 pending =
                     std::make_shared<typed_operation<handler_type, cancel_type>>(std::move(handler), std::move(cancel));
-            }
-            catch (...)
-            {
+            } catch (...) {
                 // No native operation or delivery record was accepted. We are
                 // already on the required manual executor; propagate through
                 // Asio rather than dropping its detached coroutine thread.
                 handler(std::current_exception(), result_type{});
                 return;
             }
-            try
-            { shared->admit(pending); }
-            catch (...)
-            {
+            try {
+                shared->admit(pending);
+            } catch (...) {
                 pending->deliver(std::current_exception(), result_type{});
                 return;
             }
-            try
-            {
-                if (pending->slot.is_connected())
-                {
+            try {
+                if (pending->slot.is_connected()) {
                     pending->slot.assign(
                         [shared, weak = std::weak_ptr<operation>(pending)](asio::cancellation_type type) {
-                            if (type != asio::cancellation_type::none)
-                            {
-                                if (auto operation = weak.lock())
-                                {
+                            if (type != asio::cancellation_type::none) {
+                                if (auto operation = weak.lock()) {
                                     shared->request_cancel(operation);
                                 }
                             }
@@ -414,9 +374,7 @@ private:
                 id = start([shared, pending](std::exception_ptr error, result_type result) {
                     shared->complete(pending, std::move(error), std::move(result));
                 });
-            }
-            catch (...)
-            {
+            } catch (...) {
                 shared->complete(pending, std::current_exception(), result_type{});
                 return;
             }

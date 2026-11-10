@@ -32,27 +32,23 @@ namespace ark {
 
 #define PRE_ALLOCATED_LZ4_BUFF_SIZE (1024 * 1024)
 
-class lz4_compress
-{
+class lz4_compress {
 public:
     static bool compress(
         IN const char* in_data, IN std::size_t in_size, IN int c_level, OUT std::string& compress_buff) {
-        if (in_size > static_cast<std::size_t>((std::numeric_limits<int>::max)()))
-        {
+        if (in_size > static_cast<std::size_t>((std::numeric_limits<int>::max)())) {
             return false;
         }
 
         const int source_size = static_cast<int>(in_size);
         const int pre_buff_size = LZ4_compressBound(source_size);
-        if (pre_buff_size <= 0 || pre_buff_size >= PRE_ALLOCATED_LZ4_BUFF_SIZE)
-        {
+        if (pre_buff_size <= 0 || pre_buff_size >= PRE_ALLOCATED_LZ4_BUFF_SIZE) {
             return false;
         }
 
         std::vector<char> pre_buffer(pre_buff_size);
         const int compressed_size = LZ4_compress_fast(in_data, pre_buffer.data(), source_size, pre_buff_size, c_level);
-        if (compressed_size <= 0)
-        {
+        if (compressed_size <= 0) {
             return false;
         }
 
@@ -61,16 +57,14 @@ public:
     }
 
     static bool decompress(IN const char* in_data, IN std::size_t in_size, OUT std::string& decompress_buff) {
-        if (in_size > static_cast<std::size_t>((std::numeric_limits<int>::max)()))
-        {
+        if (in_size > static_cast<std::size_t>((std::numeric_limits<int>::max)())) {
             return false;
         }
 
         std::vector<char> pre_buffer(PRE_ALLOCATED_LZ4_BUFF_SIZE);
         int const decompressed_size = LZ4_decompress_safe(
             in_data, pre_buffer.data(), static_cast<int>(in_size), static_cast<int>(pre_buffer.size()));
-        if (decompressed_size <= 0)
-        {
+        if (decompressed_size <= 0) {
             return false;
         }
 

@@ -24,8 +24,7 @@ namespace ark {
 
 namespace {
 
-struct delayed_sync_dispatch
-{
+struct delayed_sync_dispatch {
     class_call_back_manager::delay_sync_data_list pending;
     const guid_t* current{};
     bool retired{};
@@ -49,14 +48,11 @@ bool class_call_back_manager::add_class_call_back(class_event_functor&& cb, cons
 bool class_call_back_manager::add_data_call_back(
     const uint32_t index, data_node_event_functor&& cb, const int32_t prio) {
     auto iter = data_call_backs_list_.find(index);
-    if (iter == data_call_backs_list_.end())
-    {
+    if (iter == data_call_backs_list_.end()) {
         node_call_backs call_backs;
         call_backs.insert(std::make_pair(prio, std::move(cb)));
         data_call_backs_list_.insert(std::make_pair(index, call_backs));
-    }
-    else
-    {
+    } else {
         iter->second.insert(std::make_pair(prio, std::move(cb)));
     }
 
@@ -66,15 +62,12 @@ bool class_call_back_manager::add_data_call_back(
 bool class_call_back_manager::add_table_call_back(
     const uint32_t index, data_table_event_functor&& cb, const int32_t prio) {
     auto iter = table_call_backs_list_.find(index);
-    if (iter == table_call_backs_list_.end())
-    {
+    if (iter == table_call_backs_list_.end()) {
         table_call_backs call_backs;
 
         call_backs.insert(std::make_pair(prio, std::move(cb)));
         table_call_backs_list_.insert(std::make_pair(index, call_backs));
-    }
-    else
-    {
+    } else {
         iter->second.insert(std::make_pair(prio, std::move(cb)));
     }
 
@@ -84,15 +77,12 @@ bool class_call_back_manager::add_table_call_back(
 bool class_call_back_manager::add_container_call_back(
     const uint32_t index, container_event_functor&& cb, const int32_t prio) {
     auto iter = container_call_backs_list_.find(index);
-    if (iter == container_call_backs_list_.end())
-    {
+    if (iter == container_call_backs_list_.end()) {
         container_call_backs call_backs;
 
         call_backs.insert(std::make_pair(prio, std::move(cb)));
         container_call_backs_list_.insert(std::make_pair(index, call_backs));
-    }
-    else
-    {
+    } else {
         iter->second.insert(std::make_pair(prio, std::move(cb)));
     }
 
@@ -116,8 +106,7 @@ bool class_call_back_manager::add_move_event(move_event_functor&& cb, const int3
 
 bool class_call_back_manager::on_class_event(
     const guid_t& id, const std::string& class_name, const entity_event class_event, const data_list& value_list) {
-    for (auto& iter : class_events_)
-    {
+    for (auto& iter : class_events_) {
         iter.second(id, class_name, class_event, value_list);
     }
 
@@ -130,30 +119,23 @@ bool class_call_back_manager::on_node_call_back(
     auto& name = node_ptr->get_name();
 
     // sync call back
-    if (node_ptr->have_mask(data_mask::pf_real_time))
-    {
-        for (auto& iter : node_sync_call_back_list_)
-        {
+    if (node_ptr->have_mask(data_mask::pf_real_time)) {
+        for (auto& iter : node_sync_call_back_list_) {
             auto mask_value = iter.first;
-            if (!node_ptr->have_mask(mask_value))
-            {
+            if (!node_ptr->have_mask(mask_value)) {
                 continue;
             }
 
             iter.second(self, index, mask_value, new_data);
         }
-    }
-    else
-    {
+    } else {
         update_delay_node_list(self, node_ptr);
     }
 
     // common call back
     auto iter_call_backs = data_call_backs_list_.find(index);
-    if (iter_call_backs != data_call_backs_list_.end())
-    {
-        for (auto& iter : iter_call_backs->second)
-        {
+    if (iter_call_backs != data_call_backs_list_.end()) {
+        for (auto& iter : iter_call_backs->second) {
             iter.second(self, name, index, old_data, new_data);
         }
     }
@@ -164,31 +146,24 @@ bool class_call_back_manager::on_node_call_back(
 bool class_call_back_manager::on_table_call_back(const guid_t& self, const mask_type mask, node* node_ptr,
     const table_event_data& event_data, const data& old_data, const data& new_data) {
     // sync call back
-    if (mask.test((size_t)data_mask::pf_real_time))
-    {
-        for (auto& iter : table_sync_call_back_list_)
-        {
+    if (mask.test((size_t)data_mask::pf_real_time)) {
+        for (auto& iter : table_sync_call_back_list_) {
             auto mask_value = iter.first;
-            if (!mask.test((size_t)mask_value))
-            {
+            if (!mask.test((size_t)mask_value)) {
                 continue;
             }
 
             iter.second(self, event_data, mask_value, new_data);
         }
-    }
-    else
-    {
+    } else {
         update_delay_table_list(
             self, mask, event_data.table_index, event_data.row, (table_op_type)event_data.op_type, node_ptr);
     }
 
     // common call back
     auto iter_call_backs = table_call_backs_list_.find(event_data.table_index);
-    if (iter_call_backs != table_call_backs_list_.end())
-    {
-        for (auto& iter : iter_call_backs->second)
-        {
+    if (iter_call_backs != table_call_backs_list_.end()) {
+        for (auto& iter : iter_call_backs->second) {
             iter.second(self, event_data, old_data, new_data);
         }
     }
@@ -200,29 +175,22 @@ bool class_call_back_manager::on_container_call_back(const guid_t& self, const u
     const container_op_type op_type, uint32_t src_index, uint32_t dest_index,
     std::shared_ptr<entity> src_entity /* = nullptr*/) {
     // sync call back
-    if (mask.test((size_t)data_mask::pf_real_time))
-    {
-        for (auto& iter : container_sync_call_backs_list_)
-        {
+    if (mask.test((size_t)data_mask::pf_real_time)) {
+        for (auto& iter : container_sync_call_backs_list_) {
             auto mask_value = iter.first;
-            if (!mask.test((size_t)mask_value))
-            {
+            if (!mask.test((size_t)mask_value)) {
                 continue;
             }
 
             iter.second(self, index, mask_value, op_type, src_index, dest_index);
         }
-    }
-    else
-    {
+    } else {
         update_delay_container_list(self, index, mask, op_type, src_index, dest_index, src_entity);
     }
 
     auto iter_call_backs = container_call_backs_list_.find(index);
-    if (iter_call_backs != container_call_backs_list_.end())
-    {
-        for (auto& iter : iter_call_backs->second)
-        {
+    if (iter_call_backs != container_call_backs_list_.end()) {
+        for (auto& iter : iter_call_backs->second) {
             iter.second(self, index, op_type, src_index, dest_index);
         }
     }
@@ -231,8 +199,7 @@ bool class_call_back_manager::on_container_call_back(const guid_t& self, const u
 }
 
 bool class_call_back_manager::on_leave_scene_event(const guid_t& self, const int map_id, const int map_inst_id) {
-    for (auto& iter : leave_scene_events_)
-    {
+    for (auto& iter : leave_scene_events_) {
         iter.second(self, map_id, map_inst_id);
     }
 
@@ -240,8 +207,7 @@ bool class_call_back_manager::on_leave_scene_event(const guid_t& self, const int
 }
 
 bool class_call_back_manager::on_enter_scene_event(const guid_t& self, const int map_id, const int map_inst_id) {
-    for (auto& iter : enter_scene_events_)
-    {
+    for (auto& iter : enter_scene_events_) {
         iter.second(self, map_id, map_inst_id);
     }
 
@@ -249,8 +215,7 @@ bool class_call_back_manager::on_enter_scene_event(const guid_t& self, const int
 }
 
 bool class_call_back_manager::on_move_event(const guid_t& self, const vector3d& old_pos, const vector3d& new_pos) {
-    for (auto& iter : move_events_)
-    {
+    for (auto& iter : move_events_) {
         iter.second(self, old_pos, new_pos);
     }
 
@@ -275,13 +240,11 @@ void class_call_back_manager::add_delay_sync_call_back(const data_mask mask_valu
 }
 
 bool class_call_back_manager::on_delay_sync() {
-    if (active_delay_sync)
-    {
+    if (active_delay_sync) {
         return false;
     }
 
-    struct flush_guard
-    {
+    struct flush_guard {
         ~flush_guard() {
             active_delay_sync = nullptr;
         }
@@ -293,24 +256,20 @@ bool class_call_back_manager::on_delay_sync() {
     dispatch.pending.swap(delay_sync_data_list_);
     active_delay_sync = &dispatch;
     flush_guard guard;
-    while (!dispatch.pending.empty())
-    {
+    while (!dispatch.pending.empty()) {
         // Extract the current entity before invoking user code. Retirement can
         // then erase any later entity without invalidating our traversal.
         auto entry = dispatch.pending.extract(dispatch.pending.begin());
         auto& guid = entry.key();
         dispatch.current = &guid;
         dispatch.retired = false;
-        for (auto& iter_data : entry.mapped())
-        {
-            if (dispatch.retired)
-            {
+        for (auto& iter_data : entry.mapped()) {
+            if (dispatch.retired) {
                 break;
             }
             auto mask_value = iter_data.first;
             auto iter_call_back = delay_sync_call_back_list_.find(mask_value);
-            if (iter_call_back == delay_sync_call_back_list_.end())
-            {
+            if (iter_call_back == delay_sync_call_back_list_.end()) {
                 continue;
             }
 
@@ -324,11 +283,9 @@ bool class_call_back_manager::on_delay_sync() {
 
 void class_call_back_manager::retire_delay_sync(const guid_t& self) {
     delay_sync_data_list_.erase(self);
-    if (active_delay_sync)
-    {
+    if (active_delay_sync) {
         active_delay_sync->pending.erase(self);
-        if (active_delay_sync->current && *active_delay_sync->current == self)
-        {
+        if (active_delay_sync->current && *active_delay_sync->current == self) {
             active_delay_sync->retired = true;
         }
     }
@@ -336,8 +293,7 @@ void class_call_back_manager::retire_delay_sync(const guid_t& self) {
 
 class_call_back_manager::delay_sync_mask_data& class_call_back_manager::get_delay_sync_mask_data(const guid_t& self) {
     auto iter_data = delay_sync_data_list_.find(self);
-    if (iter_data == delay_sync_data_list_.end())
-    {
+    if (iter_data == delay_sync_data_list_.end()) {
         delay_sync_mask_data mask_data_map;
         iter_data = delay_sync_data_list_.insert(std::make_pair(self, mask_data_map)).first;
     }
@@ -348,16 +304,14 @@ class_call_back_manager::delay_sync_mask_data& class_call_back_manager::get_dela
 delay_sync_table& class_call_back_manager::get_delay_sync_mask_table(
     delay_sync_mask_data& mask_data_map, const data_mask mask_value, uint32_t index) {
     auto iter_mask_data = mask_data_map.find(mask_value);
-    if (iter_mask_data == mask_data_map.end())
-    {
+    if (iter_mask_data == mask_data_map.end()) {
         delay_sync_data data;
         iter_mask_data = mask_data_map.insert(std::make_pair(mask_value, data)).first;
     }
 
     auto& table_list = iter_mask_data->second.table_list;
     auto iter_table = table_list.find(index);
-    if (iter_table == table_list.end())
-    {
+    if (iter_table == table_list.end()) {
         delay_sync_table table;
         iter_table = table_list.insert(std::make_pair(index, table)).first;
     }
@@ -368,16 +322,14 @@ delay_sync_table& class_call_back_manager::get_delay_sync_mask_table(
 delay_sync_container& class_call_back_manager::get_delay_sync_mask_container(
     delay_sync_mask_data& mask_data_map, const data_mask mask_value, uint32_t index) {
     auto iter_mask_data = mask_data_map.find(mask_value);
-    if (iter_mask_data == mask_data_map.end())
-    {
+    if (iter_mask_data == mask_data_map.end()) {
         delay_sync_data data;
         iter_mask_data = mask_data_map.insert(std::make_pair(mask_value, data)).first;
     }
 
     auto& contaier_list = iter_mask_data->second.container_list;
     auto iter_container = contaier_list.find(index);
-    if (iter_container == contaier_list.end())
-    {
+    if (iter_container == contaier_list.end()) {
         delay_sync_container container;
         iter_container = contaier_list.insert(std::make_pair(index, container)).first;
     }
@@ -388,23 +340,18 @@ delay_sync_container& class_call_back_manager::get_delay_sync_mask_container(
 void class_call_back_manager::update_delay_node_list(const guid_t& self, node* node_ptr) {
     // update node list
     auto& mask_data_map = get_delay_sync_mask_data(self);
-    for (auto& iter : delay_sync_call_back_list_)
-    {
+    for (auto& iter : delay_sync_call_back_list_) {
         auto mask_value = iter.first;
-        if (!node_ptr->have_mask(mask_value))
-        {
+        if (!node_ptr->have_mask(mask_value)) {
             continue;
         }
 
         auto iter_mask_data = mask_data_map.find(mask_value);
-        if (iter_mask_data == mask_data_map.end())
-        {
+        if (iter_mask_data == mask_data_map.end()) {
             delay_sync_data data;
             data.node_list.insert(node_ptr);
             mask_data_map.insert(std::make_pair(mask_value, data));
-        }
-        else
-        {
+        } else {
             iter_mask_data->second.node_list.insert(node_ptr);
         }
     }
@@ -413,33 +360,22 @@ void class_call_back_manager::update_delay_node_list(const guid_t& self, node* n
 void class_call_back_manager::update_delay_table_list(const guid_t& self, const mask_type mask,
     const uint32_t table_index, const uint32_t row_index, table_op_type op_type, node* node_ptr) {
     auto& mask_data_map = get_delay_sync_mask_data(self);
-    for (auto& iter : delay_sync_call_back_list_)
-    {
+    for (auto& iter : delay_sync_call_back_list_) {
         auto mask_value = iter.first;
-        if (!mask.test((size_t)mask_value))
-        {
+        if (!mask.test((size_t)mask_value)) {
             continue;
         }
 
         auto& table = get_delay_sync_mask_table(mask_data_map, mask_value, table_index);
-        if (op_type == table_op_type::table_add)
-        {
+        if (op_type == table_op_type::table_add) {
             on_table_add(table, row_index);
-        }
-        else if (op_type == table_op_type::table_delete)
-        {
+        } else if (op_type == table_op_type::table_delete) {
             on_table_delete(table, row_index);
-        }
-        else if (op_type == table_op_type::table_update)
-        {
+        } else if (op_type == table_op_type::table_update) {
             on_table_row_update(table, row_index, node_ptr);
-        }
-        else if (op_type == table_op_type::table_swap)
-        {
+        } else if (op_type == table_op_type::table_swap) {
             // todo : for now there is no operation swap
-        }
-        else if (op_type == table_op_type::table_clear)
-        {
+        } else if (op_type == table_op_type::table_clear) {
             on_table_clear(table);
         }
     }
@@ -450,29 +386,20 @@ void class_call_back_manager::update_delay_container_list(const guid_t& self, co
     std::shared_ptr<entity> src_entity = nullptr) {
     // update container list
     auto& mask_data_map = get_delay_sync_mask_data(self);
-    for (auto& iter : delay_sync_call_back_list_)
-    {
+    for (auto& iter : delay_sync_call_back_list_) {
         auto mask_value = iter.first;
-        if (!mask.test((size_t)mask_value))
-        {
+        if (!mask.test((size_t)mask_value)) {
             continue;
         }
 
         auto& container = get_delay_sync_mask_container(mask_data_map, mask_value, index);
-        if (op_type == container_op_type::op_place)
-        {
+        if (op_type == container_op_type::op_place) {
             on_container_place(container, src_index);
-        }
-        else if (op_type == container_op_type::op_remove)
-        {
+        } else if (op_type == container_op_type::op_remove) {
             on_container_remove(container, src_index);
-        }
-        else if (op_type == container_op_type::op_destroy)
-        {
+        } else if (op_type == container_op_type::op_destroy) {
             on_container_destroy(container, src_index, src_entity);
-        }
-        else if (op_type == container_op_type::op_swap)
-        {
+        } else if (op_type == container_op_type::op_swap) {
             on_container_swap(container, src_index, dest_index);
         }
     }
@@ -480,28 +407,22 @@ void class_call_back_manager::update_delay_container_list(const guid_t& self, co
 
 void class_call_back_manager::on_table_add(delay_sync_table& table, const int row) {
     auto iter = table.row_list.find(row);
-    if (iter == table.row_list.end())
-    {
+    if (iter == table.row_list.end()) {
         delay_sync_row row_data(row);
         table.row_list.insert(std::make_pair(row, row_data));
-    }
-    else
-    {
+    } else {
         iter->second.node_list.clear();
     }
 }
 
 void class_call_back_manager::on_table_delete(delay_sync_table& table, const int row) {
     auto iter = table.row_list.find(row);
-    if (iter == table.row_list.end())
-    {
+    if (iter == table.row_list.end()) {
         delay_sync_row row_data(row);
         row_data.need_clear = true;
 
         table.row_list.insert(std::make_pair(row, row_data));
-    }
-    else
-    {
+    } else {
         iter->second.need_clear = true;
         iter->second.node_list.clear();
     }
@@ -509,14 +430,11 @@ void class_call_back_manager::on_table_delete(delay_sync_table& table, const int
 
 void class_call_back_manager::on_table_row_update(delay_sync_table& table, const int row, node* node_ptr) {
     auto iter = table.row_list.find(row);
-    if (iter == table.row_list.end())
-    {
+    if (iter == table.row_list.end()) {
         delay_sync_row row_data(row);
         row_data.node_list.insert(node_ptr);
         table.row_list.insert(std::make_pair(row, row_data));
-    }
-    else
-    {
+    } else {
         iter->second.node_list.insert(node_ptr);
     }
 }
@@ -536,8 +454,7 @@ void class_call_back_manager::on_container_remove(delay_sync_container& containe
 
 void class_call_back_manager::on_container_destroy(
     delay_sync_container& container, uint32_t index, std::shared_ptr<entity> src_entity) {
-    if (src_entity->is_sent())
-    {
+    if (src_entity->is_sent()) {
         container.destroy_list.insert(index);
     }
 

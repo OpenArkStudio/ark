@@ -28,8 +28,7 @@ using namespace std::chrono_literals;
 using http_result = std::pair<bool, std::string>;
 
 void require(bool condition, const std::string& message) {
-    if (!condition)
-    {
+    if (!condition) {
         std::cerr << message << std::endl;
         std::_Exit(1);
     }
@@ -38,16 +37,14 @@ void require(bool condition, const std::string& message) {
 template<class predicate, class pump>
 void wait_for(predicate ready, pump update) {
     const auto deadline = std::chrono::steady_clock::now() + 5s;
-    while (!ready() && std::chrono::steady_clock::now() < deadline)
-    {
+    while (!ready() && std::chrono::steady_clock::now() < deadline) {
         update();
         std::this_thread::sleep_for(1ms);
     }
     require(ready(), "Timed out waiting for HTTP DSO drain");
 }
 
-class controlled_peer
-{
+class controlled_peer {
 public:
     controlled_peer() {
         server_.bind_recv([this](auto& session, arknet::http_request::request_type& request) {
@@ -111,8 +108,7 @@ private:
 
 ark::task<> cancelled_request(
     ark::plugin_manager& manager, asio::steady_timer& resume, bool& entered, bool& frame_retired) {
-    struct frame_lifetime
-    {
+    struct frame_lifetime {
         bool& retired;
 
         ~frame_lifetime() {
@@ -196,8 +192,7 @@ int main(int argc, char* argv[]) {
     require(frame_retired && tasks.closed() && manager.pending_tasks() == 0,
         "Manager did not cancel and retire the suspended host coroutine");
     require(future.valid(), "Native HTTP request did not obtain a DSO-created future");
-    if (future.wait_for(0ms) == std::future_status::ready)
-    {
+    if (future.wait_for(0ms) == std::future_status::ready) {
         const auto early = future.get();
         require(false,
             "Actual Net DSO completed the accepted task request before its controlled wire response: " + early.second);

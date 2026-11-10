@@ -14,8 +14,7 @@
 
 namespace {
 
-class common_event_guid final : public ark::guid_module
-{
+class common_event_guid final : public ark::guid_module {
 public:
     ark::guid_t create_guid() override {
         return 1;
@@ -26,8 +25,7 @@ public:
     }
 };
 
-class common_event_receiver
-{
+class common_event_receiver {
 public:
     explicit common_event_receiver(std::vector<std::string>& deliveries)
         : deliveries_(deliveries) {
@@ -58,8 +56,7 @@ TEST_CASE("Kernel common class callbacks remain callable for every real metadata
     ark::logger::init(&logger);
     logger.set_log_func([](spdlog::level::level_enum, const std::string&) {});
 
-    struct reset_logger
-    {
+    struct reset_logger {
         ~reset_logger() {
             ark::logger::set_instance(nullptr);
         }
@@ -92,8 +89,7 @@ TEST_CASE("Kernel common class callbacks remain callable for every real metadata
     common_event_receiver receiver(deliveries);
     receiver.expected_arguments = &arguments;
     REQUIRE(kernel.add_common_class_event(&receiver, &common_event_receiver::on_class, -4));
-    for (const auto* name : {"Player", "Item", "Player", "Item"})
-    {
+    for (const auto* name : {"Player", "Item", "Player", "Item"}) {
         REQUIRE(kernel.do_event(77, name, ark::entity_event::entity_evt_all_finished, arguments));
     }
     CHECK(deliveries == std::vector<std::string>{"Player", "Item", "Player", "Item"});

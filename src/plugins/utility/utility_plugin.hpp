@@ -30,8 +30,7 @@
 
 namespace ark {
 
-class utility_plugin final : public plugin_base<utility_plugin>
-{
+class utility_plugin final : public plugin_base<utility_plugin> {
 public:
     void install() override;
     void uninstall() override;

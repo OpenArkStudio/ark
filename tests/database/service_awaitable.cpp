@@ -37,16 +37,14 @@ unsigned checks{};
 
 void require(bool condition, const char* message) {
     ++checks;
-    if (!condition)
-    {
+    if (!condition) {
         throw std::runtime_error(message);
     }
 }
 
 std::string environment(const char* name, bool allow_empty = false) {
     const auto* value = std::getenv(name);
-    if (!value || (!allow_empty && !*value))
-    {
+    if (!value || (!allow_empty && !*value)) {
         throw std::invalid_argument(std::string("Required test environment variable: ") + name);
     }
     return value;
@@ -56,8 +54,7 @@ std::uint16_t port(const char* name) {
     const auto text = environment(name);
     unsigned number{};
     const auto parsed = std::from_chars(text.data(), text.data() + text.size(), number);
-    if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size() || number == 0 || number > 65535)
-    {
+    if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size() || number == 0 || number > 65535) {
         throw std::invalid_argument(std::string(name) + " must be an integer between 1 and 65535");
     }
     return static_cast<std::uint16_t>(number);
@@ -66,15 +63,13 @@ std::uint16_t port(const char* name) {
 template<class service_type, class result_type>
 void pump(service_type& service, database_awaitable<result_type>& bridge, module_task_group& group) {
     const auto deadline = std::chrono::steady_clock::now() + 10s;
-    while (group.pending() && std::chrono::steady_clock::now() < deadline)
-    {
+    while (group.pending() && std::chrono::steady_clock::now() < deadline) {
         service.update();
         bridge.dispatch();
         group.poll();
         std::this_thread::sleep_for(1ms);
     }
-    if (group.pending() || bridge.pending())
-    {
+    if (group.pending() || bridge.pending()) {
         // A failed drain cannot safely destroy its suspended task owner. Make
         // that failed test explicit without pretending destructors can join.
         std::cerr << "Native coroutine did not drain before the test deadline\n" << std::flush;
@@ -88,12 +83,10 @@ void check_redis() {
     arknet::redis::pool_options options;
     options.connection.host = environment("ARK_DATABASE_REDIS_HOST");
     options.connection.port = std::to_string(port("ARK_DATABASE_REDIS_PORT"));
-    if (const auto* user = std::getenv("ARK_DATABASE_REDIS_USER"))
-    {
+    if (const auto* user = std::getenv("ARK_DATABASE_REDIS_USER")) {
         options.connection.username = user;
     }
-    if (const auto* password = std::getenv("ARK_DATABASE_REDIS_PASSWORD"))
-    {
+    if (const auto* password = std::getenv("ARK_DATABASE_REDIS_PASSWORD")) {
         options.connection.password = password;
     }
     options.max_connections = 1;
@@ -129,8 +122,7 @@ void check_redis() {
     };
     require(group.start(sequence(), done) != 0, "Redis coroutine task was not accepted");
     pump(service, bridge, group);
-    if (task_error)
-    {
+    if (task_error) {
         std::rethrow_exception(task_error);
     }
     require(completions == 1, "Redis task did not complete exactly once");
@@ -152,8 +144,7 @@ void check_redis() {
     group.close();
     require(!group.closed(), "Redis close silently detached a pending coroutine");
     pump(service, bridge, group);
-    if (task_error)
-    {
+    if (task_error) {
         std::rethrow_exception(task_error);
     }
     require(group.closed() && completions == 2, "Redis close did not drain every accepted task");
@@ -213,8 +204,7 @@ void check_mysql() {
     };
     require(group.start(sequence(), done) != 0, "MySQL coroutine task was not accepted");
     pump(service, bridge, group);
-    if (task_error)
-    {
+    if (task_error) {
         std::rethrow_exception(task_error);
     }
     require(completions == 1, "MySQL task did not complete exactly once");
@@ -233,8 +223,7 @@ void check_mysql() {
     group.close();
     require(!group.closed(), "MySQL close silently detached a pending coroutine");
     pump(service, bridge, group);
-    if (task_error)
-    {
+    if (task_error) {
         std::rethrow_exception(task_error);
     }
     require(group.closed() && completions == 2, "MySQL close did not drain every accepted task");
@@ -245,32 +234,25 @@ void check_mysql() {
 } // namespace
 
 int main(int argc, char** argv) {
-    try
-    {
-        if (argc != 2)
-        {
+    try {
+        if (argc != 2) {
             throw std::invalid_argument("Usage: ark_database_service_awaitable_tests redis|mysql");
         }
         const std::string_view protocol(argv[1]);
-        if (protocol == "redis")
-        {
+        if (protocol == "redis") {
             check_redis();
         }
 #if defined(ARKNET_ENABLE_SSL)
-        else if (protocol == "mysql")
-        {
+        else if (protocol == "mysql") {
             check_mysql();
         }
 #endif
-        else
-        {
+        else {
             throw std::invalid_argument("Requested protocol is not enabled in this test executable");
         }
         std::cout << protocol << " native coroutine checks passed: " << checks << '\n';
         return 0;
-    }
-    catch (const std::exception& error)
-    {
+    } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;
     }

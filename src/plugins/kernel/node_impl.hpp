@@ -62,8 +62,7 @@ private:                                                                        
     std::shared_ptr<node_meta> data_meta_{nullptr};
 
 // data int32_t
-class node_int32 final : public node
-{
+class node_int32 final : public node {
 public:
     explicit node_int32(std::shared_ptr<node_meta> data_meta_ptr) {
         data_meta_ = data_meta_ptr;
@@ -125,8 +124,7 @@ public:
 };
 
 // data uint32_t
-class node_u_int32 final : public node
-{
+class node_u_int32 final : public node {
 public:
     explicit node_u_int32(std::shared_ptr<node_meta> data_meta_ptr) {
         data_meta_ = data_meta_ptr;
@@ -188,8 +186,7 @@ public:
 };
 
 // data string
-class node_string final : public node
-{
+class node_string final : public node {
 public:
     explicit node_string(std::shared_ptr<node_meta> data_meta_ptr) {
         data_meta_ = data_meta_ptr;
@@ -251,8 +248,7 @@ public:
 };
 
 // data bool
-class node_bool final : public node
-{
+class node_bool final : public node {
 public:
     explicit node_bool(std::shared_ptr<node_meta> data_meta_ptr) {
         data_meta_ = data_meta_ptr;
@@ -314,8 +310,7 @@ public:
 };
 
 // data int64
-class node_int64 final : public node
-{
+class node_int64 final : public node {
 public:
     explicit node_int64(std::shared_ptr<node_meta> data_meta_ptr) {
         data_meta_ = data_meta_ptr;
@@ -377,8 +372,7 @@ public:
 };
 
 // data uint64
-class node_u_int64 final : public node
-{
+class node_u_int64 final : public node {
 public:
     explicit node_u_int64(std::shared_ptr<node_meta> data_meta_ptr) {
         data_meta_ = data_meta_ptr;
@@ -440,8 +434,7 @@ public:
 };
 
 // data float
-class node_float final : public node
-{
+class node_float final : public node {
 public:
     explicit node_float(std::shared_ptr<node_meta> data_meta_ptr) {
         data_meta_ = data_meta_ptr;
@@ -503,8 +496,7 @@ public:
 };
 
 // data double
-class node_double final : public node
-{
+class node_double final : public node {
 public:
     explicit node_double(std::shared_ptr<node_meta> data_meta_ptr) {
         data_meta_ = data_meta_ptr;
@@ -566,8 +558,7 @@ public:
 };
 
 // data object
-class node_guid final : public node
-{
+class node_guid final : public node {
 public:
     explicit node_guid(std::shared_ptr<node_meta> data_meta_ptr) {
         data_meta_ = data_meta_ptr;
@@ -633,8 +624,7 @@ static node* create_data_by_meta(std::shared_ptr<node_meta> data_meta_ptr) {
     ARK_ASSERT_RET_VAL(data_meta_ptr != nullptr, nullptr);
 
     node* data_ptr = nullptr;
-    switch (data_meta_ptr->get_type())
-    {
+    switch (data_meta_ptr->get_type()) {
     case ark::data_type::dt_boolean:
         data_ptr = ARK_NEW node_bool(data_meta_ptr);
         break;

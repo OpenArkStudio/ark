@@ -39,25 +39,24 @@ void fail_string_buffer_allocation(std::size_t minimum_size) {
 } // namespace
 
 void* operator new(std::size_t size) {
-    if ((fail_minimum_size && size >= fail_minimum_size) || (fail_remaining && --fail_remaining == 0))
-    {
+    if ((fail_minimum_size && size >= fail_minimum_size) || (fail_remaining && --fail_remaining == 0)) {
         fail_minimum_size = 0;
         failed_size = size;
         failure_consumed = true;
         throw std::bad_alloc{};
     }
-    if (auto* pointer = std::malloc(size ? size : 1))
-    {
+    if (auto* pointer = std::malloc(size ? size : 1)) {
         return pointer;
     }
     throw std::bad_alloc{};
 }
 
 void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
-    try
-    { return ::operator new(size); }
-    catch (...)
-    { return nullptr; }
+    try {
+        return ::operator new(size);
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void operator delete(void* pointer) noexcept {
@@ -73,8 +72,7 @@ void operator delete(void* pointer, const std::nothrow_t&) noexcept {
 }
 
 TEST_CASE("Node clone string allocation failure destroys the unpublished candidate") {
-    for (bool simulate_proxy : {false, true})
-    {
+    for (bool simulate_proxy : {false, true}) {
         CAPTURE(simulate_proxy);
         const auto schema = std::make_shared<ark::class_meta>("Copy");
         auto meta = field(schema, ark::data_type::dt_string);
@@ -92,18 +90,16 @@ TEST_CASE("Node clone string allocation failure destroys the unpublished candida
         // character buffer allocated by copy_from(), independent of STL rounding.
         fail_string_buffer_allocation(minimum_size);
         bool threw{};
-        try
-        {
-            if (simulate_proxy)
-            {
+        try {
+            if (simulate_proxy) {
                 // Exercise an extra small allocation even on libraries without proxies.
                 auto* proxy = ::operator new(2 * sizeof(void*));
                 ::operator delete(proxy);
             }
             manager.create_data(&source);
+        } catch (const std::bad_alloc&) {
+            threw = true;
         }
-        catch (const std::bad_alloc&)
-        { threw = true; }
         CHECK(threw);
         CHECK(failure_consumed);
         CHECK(failed_size >= minimum_size);
@@ -128,10 +124,11 @@ TEST_CASE("Node clone map allocation failure destroys the copied unpublished can
 #endif
     fail_second_allocation();
     bool threw{};
-    try
-    { manager.create_data(&source); }
-    catch (const std::bad_alloc&)
-    { threw = true; }
+    try {
+        manager.create_data(&source);
+    } catch (const std::bad_alloc&) {
+        threw = true;
+    }
     CHECK(threw);
     CHECK(failure_consumed);
     CHECK(manager.is_empty());
@@ -143,8 +140,7 @@ TEST_CASE("Node clone map allocation failure destroys the copied unpublished can
 }
 
 TEST_CASE("Node creation and lazy creation release candidates if map insertion throws") {
-    for (bool lazy : {false, true})
-    {
+    for (bool lazy : {false, true}) {
         const auto schema = std::make_shared<ark::class_meta>("Create");
         auto meta = field(schema, ark::data_type::dt_int32);
         ark::node_manager manager(schema);
@@ -152,19 +148,15 @@ TEST_CASE("Node creation and lazy creation release candidates if map insertion t
         const auto references = meta.use_count();
         fail_second_allocation();
         bool threw{};
-        try
-        {
-            if (lazy)
-            {
+        try {
+            if (lazy) {
                 manager.create_data(name);
-            }
-            else
-            {
+            } else {
                 manager.create_data(meta);
             }
+        } catch (const std::bad_alloc&) {
+            threw = true;
         }
-        catch (const std::bad_alloc&)
-        { threw = true; }
         CHECK(threw);
         CHECK(failure_consumed);
         CHECK(manager.is_empty());

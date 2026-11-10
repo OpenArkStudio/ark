@@ -53,15 +53,13 @@ rotating_file_with_date_sink<mutex_type>::split_by_dir_and_extenstion(const spdl
     auto ext_index = fname.rfind('.');
 
     // no valid extension found - return whole path and empty string as extension
-    if (ext_index == filename_t::npos || ext_index == 0 || ext_index == fname.size() - 1)
-    {
+    if (ext_index == filename_t::npos || ext_index == 0 || ext_index == fname.size() - 1) {
         return std::make_tuple(spdlog::filename_t(), fname, spdlog::filename_t());
     }
 
     // treat cases like "/etc/rc.d/somelogfile or "/abc/.hiddenfile"
     auto folder_index = fname.find_last_of(details::os::folder_seps_filename);
-    if (folder_index != fname.npos && folder_index >= ext_index - 1)
-    {
+    if (folder_index != fname.npos && folder_index >= ext_index - 1) {
         return std::make_tuple(fname.substr(0, folder_index), fname.substr(folder_index + 1), spdlog::filename_t());
     }
 
@@ -82,12 +80,9 @@ SPDLOG_INLINE filename_t rotating_file_with_date_sink<mutex_type>::calc_filename
         spdlog::details::os::folder_seps_filename[0], tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
         spdlog::details::os::folder_seps_filename[0]);
 
-    if (index != 0u)
-    {
+    if (index != 0u) {
         return fmt::format(SPDLOG_FILENAME_T("{}{}.{}{}"), dir_path, basename, index, ext);
-    }
-    else
-    {
+    } else {
         return fmt::format(SPDLOG_FILENAME_T("{}{}{}"), dir_path, basename, ext);
     }
 }
@@ -97,8 +92,7 @@ SPDLOG_INLINE void rotating_file_with_date_sink<mutex_type>::sink_it_(const deta
     memory_buf_t formatted;
     base_sink<mutex_type>::formatter_->format(msg, formatted);
     current_size_ += formatted.size();
-    if (current_size_ > max_size_)
-    {
+    if (current_size_ > max_size_) {
         rotate();
         current_size_ = formatted.size();
     }
@@ -119,24 +113,20 @@ template<typename mutex_type>
 void rotating_file_with_date_sink<mutex_type>::rotate() {
     using details::os::filename_to_str;
     file_helper_.close();
-    for (auto i = max_files_; i > 0; --i)
-    {
+    for (auto i = max_files_; i > 0; --i) {
         filename_t src = calc_filename(base_filename_, i - 1);
         std::error_code error;
-        if (!std::filesystem::exists(ark::detail::logging_native_path(src), error))
-        {
+        if (!std::filesystem::exists(ark::detail::logging_native_path(src), error)) {
             continue;
         }
         filename_t target = calc_filename(base_filename_, i);
 
-        if (!rename_file(src, target))
-        {
+        if (!rename_file(src, target)) {
             // if failed try again after a small delay.
             // this is a workaround to a windows issue, where very high rotation
             // rates can cause the rename to fail with permission denied (because of antivirus?).
             details::os::sleep_for_millis(100);
-            if (!rename_file(src, target))
-            {
+            if (!rename_file(src, target)) {
                 file_helper_.reopen(true); // truncate the log file anyway to prevent it to grow beyond its limit!
                 current_size_ = 0;
                 throw spdlog_ex(

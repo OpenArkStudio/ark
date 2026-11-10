@@ -28,8 +28,7 @@
 
 namespace ark {
 
-class msg_module_impl final : public module_base<msg_module, bus_module, net_service_manager_module>
-{
+class msg_module_impl final : public module_base<msg_module, bus_module, net_service_manager_module> {
 public:
     bool init() override;
 
@@ -84,8 +83,7 @@ bool msg_module_impl::send_msg_by_app_type(
     const app_type app_type, msg_header* header, const google::protobuf::Message& msg) {
     /// firstly find net client service
     auto client_service_ptr = net_service_manager_module_->get_client_service(app_type);
-    if (client_service_ptr == nullptr)
-    {
+    if (client_service_ptr == nullptr) {
         ARK_LOG_ERROR("net client service not be found, src_bus={} app_type={} msg_id={} actor_id={}",
             bus_module_->get_self_bus_id(), (uint8_t)app_type, header->message_id(), header->actor_id());
         return false;
@@ -95,8 +93,7 @@ bool msg_module_impl::send_msg_by_app_type(
 
     auto busid = bus_module_->get_self_bus_id();
     auto connection_info_ptr = client_service_ptr->get_suitable_connect(misc::to_string(busid));
-    if (connection_info_ptr == nullptr)
-    {
+    if (connection_info_ptr == nullptr) {
         ARK_LOG_ERROR("connection info not be found, src_bus={} app_type={} msg_id={} actor_id={}", busid,
             (uint8_t)app_type, header->message_id(), header->actor_id());
         return false;
@@ -123,8 +120,7 @@ bool msg_module_impl::send_msg_by_bus_id(
 bool msg_module_impl::send_to_client(
     conv_id_t session_id, msg_id_t msg_id, const google::protobuf::Message& msg, const guid_t& guid) {
     std::string msg_data;
-    if (!msg.SerializeToString(&msg_data))
-    {
+    if (!msg.SerializeToString(&msg_data)) {
         ARK_LOG_ERROR("msg serializing failed, src_bus={} target_bus={} msg_id={} actor_id={}", msg_id, guid);
         return false;
     }
@@ -135,8 +131,7 @@ bool msg_module_impl::send_to_client(
 bool msg_module_impl::send_to_client(conv_id_t session_id, msg_id_t msg_id, const std::string& msg_data,
     bool compressed /* = false*/, const guid_t& guid) {
     auto net_service_ptr = net_service_manager_module_->get_inter_net_server();
-    if (net_service_ptr == nullptr)
-    {
+    if (net_service_ptr == nullptr) {
         ARK_LOG_ERROR("net service is null, src_bus={} session id ={} msg_id={} actor_id={}",
             bus_module_->get_self_bus_id(), session_id, msg_id, guid);
         return false;
@@ -152,8 +147,7 @@ bool msg_module_impl::send_to_client(conv_id_t session_id, msg_id_t msg_id, cons
 bool msg_module_impl::send_to_intra(
     conv_id_t session_id, msg_id_t msg_id, const google::protobuf::Message& msg, const guid_t& guid) {
     auto net_service_ptr = net_service_manager_module_->get_intra_net_server();
-    if (net_service_ptr == nullptr)
-    {
+    if (net_service_ptr == nullptr) {
         ARK_LOG_ERROR("net service is null, src_bus={} session id ={} msg_id={} actor_id={}",
             bus_module_->get_self_bus_id(), session_id, msg_id, guid);
         return false;
@@ -171,8 +165,7 @@ bool msg_module_impl::send_to_intra(
 bool msg_module_impl::send_msg(std::shared_ptr<net>& net_ptr, msg_header* header, const google::protobuf::Message& msg,
     const conv_id_t session_id) {
     std::string msg_data;
-    if (!msg.SerializeToString(&msg_data))
-    {
+    if (!msg.SerializeToString(&msg_data)) {
         ARK_LOG_ERROR("msg serializing failed, src_bus={} target_bus={} msg_id={} actor_id={}", header->source_bus_id(),
             header->dest_bus_id(), header->message_id(), header->actor_id());
         return false;
@@ -183,16 +176,14 @@ bool msg_module_impl::send_msg(std::shared_ptr<net>& net_ptr, msg_header* header
 
 bool msg_module_impl::send_msg(
     std::shared_ptr<net>& net_ptr, msg_header* header, const std::string& msg_data, const conv_id_t session_id) {
-    if (net_ptr == nullptr)
-    {
+    if (net_ptr == nullptr) {
         ARK_LOG_ERROR("net is invalid, src_bus={} target_bus={} msg_id={} actor_id={}", header->source_bus_id(),
             header->dest_bus_id(), header->message_id(), header->actor_id());
         return false;
     }
 
     auto conv_id = session_id;
-    if (conv_id == 0)
-    {
+    if (conv_id == 0) {
         conv_id = net_service_manager_module_->get_session_id(header->dest_bus_id());
     }
 

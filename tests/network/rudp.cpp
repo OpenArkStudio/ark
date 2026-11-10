@@ -21,8 +21,7 @@ namespace {
 
 using namespace std::chrono_literals;
 
-struct rudp_message
-{
+struct rudp_message {
     ark::msg_id_t id;
     ark::conv_id_t session;
     std::string body;
@@ -32,16 +31,14 @@ struct rudp_message
     bool compressed;
 };
 
-struct rudp_event
-{
+struct rudp_event {
     ark::net_event_type type;
     ark::conv_id_t session;
     ark::bus_id_t bus;
     std::string ip;
 };
 
-class rudp_receiver
-{
+class rudp_receiver {
 public:
     void receive(const ark::net_msg* message, ark::conv_id_t session) {
         {
@@ -52,8 +49,7 @@ public:
                                           : std::string{},
                 message->get_actor_id(), message->get_src_bus(), message->get_dst_bus(), message->get_compress() != 0});
         }
-        if (on_receive)
-        {
+        if (on_receive) {
             on_receive(message, session);
         }
     }
@@ -104,11 +100,9 @@ std::uint16_t reserve_rudp_port() {
 template<class predicate_type, class update_type>
 bool await_rudp(predicate_type&& predicate, update_type&& update, std::chrono::milliseconds timeout = 5s) {
     const auto deadline = std::chrono::steady_clock::now() + timeout;
-    do
-    {
+    do {
         update();
-        if (predicate())
-        {
+        if (predicate()) {
             return true;
         }
         std::this_thread::sleep_for(1ms);
@@ -118,8 +112,7 @@ bool await_rudp(predicate_type&& predicate, update_type&& update, std::chrono::m
 
 std::string rudp_payload(std::size_t size) {
     std::string result(size, '\0');
-    for (std::size_t index = 0; index < size; ++index)
-    {
+    for (std::size_t index = 0; index < size; ++index) {
         result[index] = static_cast<char>((index * 19 + 37) & 0xff);
     }
     return result;
@@ -143,13 +136,11 @@ std::shared_ptr<ark::rudp_server> rudp_server(rudp_receiver& receiver) {
     return std::make_shared<ark::rudp_server>(&receiver, &rudp_receiver::receive, &rudp_receiver::event);
 }
 
-class rudp_serialization_header : public ark::s_msg_header
-{
+class rudp_serialization_header : public ark::s_msg_header {
 public:
     void serialize_to_string(std::string& buffer) override {
         ark::s_msg_header::serialize_to_string(buffer);
-        if (auto callback = std::exchange(on_serialize, {}))
-        {
+        if (auto callback = std::exchange(on_serialize, {})) {
             callback();
         }
     }
@@ -189,14 +180,12 @@ TEST_CASE_TEMPLATE("RUDP preserves ARK framing and dispatches on Update", header
         header_type response(*header);
         response.set_message_id(message->get_msg_id());
         response.set_message_length(message->get_msg_length());
-        if (!server->send_msg(&response, message->get_msg_length() ? message->get_msg_data() : "", session))
-        {
+        if (!server->send_msg(&response, message->get_msg_length() ? message->get_msg_data() : "", session)) {
             ++rejected_echoes;
         }
     };
     const std::vector<std::size_t> sizes{0, 1, 23, 511, 1024, header->max_body_size()};
-    for (std::size_t index = 0; index < sizes.size(); ++index)
-    {
+    for (std::size_t index = 0; index < sizes.size(); ++index) {
         header_type request(*header);
         request.set_message_id(static_cast<ark::msg_id_t>(40 + index));
         request.set_message_length(static_cast<std::uint32_t>(sizes[index]));
@@ -214,8 +203,7 @@ TEST_CASE_TEMPLATE("RUDP preserves ARK framing and dispatches on Update", header
     CHECK(rejected_echoes == 0);
     const auto sent = server_receiver.messages();
     const auto echoed = client_receiver.messages();
-    for (std::size_t index = 0; index < sizes.size(); ++index)
-    {
+    for (std::size_t index = 0; index < sizes.size(); ++index) {
         CHECK(sent[index].id == 40 + index);
         CHECK(echoed[index].id == sent[index].id);
         CHECK(sent[index].body == rudp_payload(sizes[index]));
@@ -445,8 +433,7 @@ TEST_CASE("RUDP closes malformed business frames through the Update event path")
         arknet::rudp_server server;
         std::atomic<bool> rejected = false;
         server.bind_connect([&](auto& session) {
-            if (!session->async_send(wire))
-            {
+            if (!session->async_send(wire)) {
                 rejected = true;
             }
         });
@@ -482,14 +469,12 @@ TEST_CASE("RUDP rejects an old-session send after reconnect during serialization
 
     // Release before either transport is destroyed, including a failed REQUIRE.
     // The latch itself outlives server callbacks and their joined IO threads.
-    struct publication_release
-    {
+    struct publication_release {
         std::latch& allowed;
         bool released{};
 
         void release() {
-            if (!released)
-            {
+            if (!released) {
                 allowed.count_down();
                 released = true;
             }
@@ -501,8 +486,7 @@ TEST_CASE("RUDP rejects an old-session send after reconnect during serialization
     } publication{publication_allowed};
 
     server.bind_connect([&, delay_peer_publication](auto& session) {
-        if (delay_peer_publication)
-        {
+        if (delay_peer_publication) {
             publication_allowed.wait();
         }
         std::lock_guard lock(peer_mutex);
@@ -517,8 +501,7 @@ TEST_CASE("RUDP rejects an old-session send after reconnect during serialization
     REQUIRE(await_rudp(
         [&] {
             const auto connected = receiver.event_count(ark::net_event_type::connect) == 1;
-            if (connected)
-            {
+            if (connected) {
                 publication.release();
             }
             // Native ACK precedes bind_connect: client readiness alone does not
@@ -539,8 +522,7 @@ TEST_CASE("RUDP rejects an old-session send after reconnect during serialization
             std::lock_guard lock(peer_mutex);
             old_peer = peer;
         }
-        if (!old_peer)
-        {
+        if (!old_peer) {
             return;
         }
         old_peer->stop();

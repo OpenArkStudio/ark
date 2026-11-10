@@ -19,22 +19,18 @@
 namespace {
 
 void require(bool condition, const std::string& message) {
-    if (!condition)
-    {
+    if (!condition) {
         std::cerr << message << '\n';
         std::_Exit(1);
     }
 }
 
-struct entity_events
-{
+struct entity_events {
     int on_event(const ark::guid_t&, const std::string&, ark::entity_event event, const ark::data_list&) {
-        if (event == ark::entity_event::entity_evt_data_finished)
-        {
+        if (event == ark::entity_event::entity_evt_data_finished) {
             ++created;
         }
-        if (event == ark::entity_event::entity_evt_destroy)
-        {
+        if (event == ark::entity_event::entity_evt_destroy) {
             ++destroyed;
         }
         return 0;
@@ -61,18 +57,14 @@ int main(int argc, char* argv[]) {
     log.set_log_func([](spdlog::level::level_enum, const std::string&) {});
     entity_events events;
     ark::plugin_manager manager;
-    if (argc == 3)
-    {
+    if (argc == 3) {
         const std::string mode = argv[2];
         require(mode == "missing-json" || mode == "invalid-json", "Unknown JSON failure mode");
-        try
-        {
+        try {
             static_cast<void>(manager.start(
                 0, std::string(argv[1]) + "/", "conf/", {{"ark_kernel_plugin", ""}, {"ark_utility_plugin", ""}}));
             require(false, "Kernel startup accepted missing or invalid required JSON");
-        }
-        catch (const ark::entity_json::error& error)
-        {
+        } catch (const ark::entity_json::error& error) {
             require(error.source() == "resource/meta/entity_schema.json" && error.pointer() == "/" &&
                         manager.get_startup_failure().starts_with("init:"),
                 "Kernel JSON startup failure lost its source, pointer or lifecycle phase");
@@ -161,10 +153,11 @@ int main(int argc, char* argv[]) {
                     std::get<std::uint64_t>(values.at(107)) == std::numeric_limits<std::uint64_t>::max(),
             "Kernel DSO snapshot retained borrowed scalar state");
         bool limited = false;
-        try
-        { static_cast<void>(kernel->capture_scalar_snapshot(*entity, selection, {1, 0})); }
-        catch (const std::length_error&)
-        { limited = true; }
+        try {
+            static_cast<void>(kernel->capture_scalar_snapshot(*entity, selection, {1, 0}));
+        } catch (const std::length_error&) {
+            limited = true;
+        }
         require(limited, "Kernel DSO capture did not enforce its limits");
         auto lazy = kernel->create_entity(1002, 7, 0, "LazyOwner", 0, ark::data_list_impl{});
         require(lazy != nullptr, "Kernel DSO lazy entity creation failed");
@@ -188,14 +181,12 @@ int main(int argc, char* argv[]) {
         "Kernel actual DSO");
     require(events.destroyed == 1, "Kernel shutdown did not dispatch entity destruction exactly once");
     require(manager.stop(++tick), "Repeated Kernel stop failed");
-    if (retained)
-    {
+    if (retained) {
         require(std::get<std::string>(retained->fields.at(100)) == "Configured" &&
                     std::get<ark::entity_sync::guid_value>(retained->fields.at(111)).value == 42,
             "Kernel DSO unload invalidated an owning scalar snapshot");
     }
-    if (retained_nested)
-    {
+    if (retained_nested) {
         require(std::get<std::string>(retained_nested->root.scalars.fields.at(100)) == "Configured" &&
                     std::get<std::string>(retained_nested->root.tables.at(200).rows.at(3).fields.at(2)) ==
                         std::string("a\0b", 3) &&

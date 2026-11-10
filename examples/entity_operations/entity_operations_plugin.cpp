@@ -34,15 +34,13 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void entity_operations_plugin::install() {
-    if (!register_module(make_entity_operations_module(), module_update::disabled))
-    {
+    if (!register_module(make_entity_operations_module(), module_update::disabled)) {
         throw std::runtime_error("entity_operations module registration rejected");
     }
 }
 
 void entity_operations_plugin::uninstall() {
-    if (!unregister_module<entity_operations_module>())
-    {
+    if (!unregister_module<entity_operations_module>()) {
         throw std::runtime_error("entity_operations module unregistration rejected");
     }
 }

@@ -28,16 +28,14 @@ namespace ark {
 // will be used for internal errors
 class error_category
     : public std::error_category
-    , public singleton<error_category>
-{
+    , public singleton<error_category> {
 public:
     const char* name() const noexcept override {
         return "ark_error";
     }
 
     std::string message(int err_val) const override {
-        switch (err_val)
-        {
+        switch (err_val) {
         case -1:
             return "first error";
         case -2:

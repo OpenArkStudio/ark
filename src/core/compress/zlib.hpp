@@ -36,27 +36,23 @@ namespace ark {
 // compressBound() returns an upper bound on the compressed size after compress() or compress2() on sourceLen bytes.
 // It would be used before a compress() or compress2() call to allocate the destination buffer.
 
-class zlib_compress final
-{
+class zlib_compress final {
 public:
     static bool compress(
         IN const char* in_data, IN std::size_t in_size, IN uint8_t compress_level, OUT std::string& compress_buff) {
-        if (in_size >= PRE_ALLOCATED_ZLIB_BUFF_SIZE || in_size > (std::numeric_limits<uLong>::max)())
-        {
+        if (in_size >= PRE_ALLOCATED_ZLIB_BUFF_SIZE || in_size > (std::numeric_limits<uLong>::max)()) {
             return false;
         }
 
         uLongf pre_buff_size = compressBound(static_cast<uLong>(in_size)); // calc needed size
-        if (pre_buff_size >= PRE_ALLOCATED_ZLIB_BUFF_SIZE)
-        {
+        if (pre_buff_size >= PRE_ALLOCATED_ZLIB_BUFF_SIZE) {
             return false;
         }
 
         std::vector<unsigned char> pre_buffer(pre_buff_size);
         int ret = compress2(pre_buffer.data(), &pre_buff_size, reinterpret_cast<const Bytef*>(in_data),
             static_cast<uLong>(in_size), compress_level);
-        if (ret != Z_OK)
-        {
+        if (ret != Z_OK) {
             return false;
         }
 
@@ -65,8 +61,7 @@ public:
     }
 
     static bool decompress(IN const char* in_data, IN std::size_t in_size, OUT std::string& decompress_buff) {
-        if (in_size > (std::numeric_limits<uLong>::max)())
-        {
+        if (in_size > (std::numeric_limits<uLong>::max)()) {
             return false;
         }
 
@@ -74,8 +69,7 @@ public:
         uLongf pre_buff_size = static_cast<uLongf>(pre_buffer.size());
         uLong source_size = static_cast<uLong>(in_size);
         int ret = uncompress2(pre_buffer.data(), &pre_buff_size, reinterpret_cast<const Bytef*>(in_data), &source_size);
-        if (ret != Z_OK)
-        {
+        if (ret != Z_OK) {
             return false;
         }
 

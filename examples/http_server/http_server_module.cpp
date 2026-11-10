@@ -25,8 +25,7 @@
 namespace ark {
 namespace {
 
-class http_server_sample_module_impl final : public module_base<http_server_sample_module>
-{
+class http_server_sample_module_impl final : public module_base<http_server_sample_module> {
 public:
     bool init() override;
     bool post_init() override;

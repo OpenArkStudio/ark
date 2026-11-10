@@ -26,8 +26,7 @@
 
 namespace ark {
 
-class node_manager final
-{
+class node_manager final {
 public:
     using node_map = object_map<uint32_t, node>;
     using node_manager_functor = std::function<int(node*, const data&, const data&)>;

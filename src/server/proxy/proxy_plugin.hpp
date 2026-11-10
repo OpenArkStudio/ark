@@ -24,8 +24,7 @@
 
 namespace ark {
 
-class proxy_plugin final : public plugin_base<proxy_plugin>
-{
+class proxy_plugin final : public plugin_base<proxy_plugin> {
 public:
     void install() override;
     void uninstall() override;

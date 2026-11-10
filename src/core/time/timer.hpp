@@ -36,8 +36,7 @@ const uint32_t tv_size = 1 << tv_bits; // 256 slots each time_vec
 const uint32_t tv_mask = tv_size - 1;
 const uint32_t tv_num = 6; // 6 levels
 
-class time_wheel_data
-{
+class time_wheel_data {
 public:
     uint64_t idx{0};
     uint32_t count{0};    // =0 means forever
@@ -49,17 +48,14 @@ public:
     guid_t entity_id{null_guid};
 };
 
-class time_wheel_vec
-{
+class time_wheel_vec {
 public:
     int index{0};
     std::vector<std::list<time_wheel_data*>> vec;
 };
 
-class time_wheel_manager
-{
-    struct timer_deleter
-    {
+class time_wheel_manager {
+    struct timer_deleter {
         template<typename T>
         void operator()(T* value) const noexcept {
             ARK_DELETE(value);
@@ -84,16 +80,14 @@ public:
         std::array<timer_vec_owner, tv_num> tw_vecs{};
         timer_storage.reserve(free_timer_size);
 
-        for (uint32_t i = 0; i < free_timer_size; ++i)
-        {
+        for (uint32_t i = 0; i < free_timer_size; ++i) {
             timer_owner data(ARK_NEW time_wheel_data());
             ARK_ASSERT_RET_NONE(data != nullptr);
             free_timers.push_back(data.get());
             timer_storage.push_back(std::move(data));
         }
 
-        for (uint32_t i = 0; i < tv_num; ++i)
-        {
+        for (uint32_t i = 0; i < tv_num; ++i) {
             timer_vec_owner tv(ARK_NEW time_wheel_vec());
             ARK_ASSERT_RET_NONE(tv != nullptr);
             init_timer_vec(tv.get(), tv_size);
@@ -116,10 +110,8 @@ public:
     bool has_retained_callbacks() const noexcept {
         // Active IDs omit completed timers and additions interrupted by a
         // container exception. Only the owning pool covers every callback.
-        for (const auto& timer : timer_storage_)
-        {
-            if (timer->callback)
-            {
+        for (const auto& timer : timer_storage_) {
+            if (timer->callback) {
                 return true;
             }
         }
@@ -127,8 +119,7 @@ public:
     }
 
     void update(int64_t now_time) {
-        if (tw_vecs_[0])
-        {
+        if (tw_vecs_[0]) {
             update_timer(now_time);
         }
     }
@@ -136,8 +127,7 @@ public:
     void shut() {
         timers_.clear();
         free_timers_.clear();
-        for (auto& tv : tw_vecs_)
-        {
+        for (auto& tv : tw_vecs_) {
             tv.reset();
         }
         timer_storage_.clear();
@@ -163,8 +153,7 @@ public:
 
     bool remove_timer(uint64_t idx) {
         auto iter = timers_.find(idx);
-        if (iter == timers_.end())
-        {
+        if (iter == timers_.end()) {
             return false;
         }
 
@@ -179,23 +168,19 @@ protected:
     void init_timer_vec(time_wheel_vec* tv, int32_t size) {
         tv->index = 0;
         tv->vec.resize(size);
-        for (int i = 0; i < size; ++i)
-        {
+        for (int i = 0; i < size; ++i) {
             tv->vec[i] = std::list<time_wheel_data*>();
         }
     }
 
     time_wheel_data* get_free_timer() {
         time_wheel_data* timer = nullptr;
-        if (free_timers_.empty())
-        {
+        if (free_timers_.empty()) {
             timer_owner data(ARK_NEW time_wheel_data);
             ARK_ASSERT_RET_VAL(data != nullptr, nullptr);
             timer = data.get();
             timer_storage_.push_back(std::move(data));
-        }
-        else
-        {
+        } else {
             timer = free_timers_.front();
             free_timers_.pop_front();
         }
@@ -210,15 +195,13 @@ protected:
     void update_timer(int64_t now_time) {
         uint64_t passed_slot = (now_time - last_update_time_) / timer_precision;
 
-        if (passed_slot == 0)
-        {
+        if (passed_slot == 0) {
             return;
         }
 
         last_update_time_ += passed_slot * timer_precision;
 
-        for (uint64_t i = 0; i < passed_slot; ++i)
-        {
+        for (uint64_t i = 0; i < passed_slot; ++i) {
             update_slot_timer();
         }
     }
@@ -226,8 +209,7 @@ protected:
     void add_timer_internal(time_wheel_data* timer_data) {
         uint64_t expires = timer_data->expires;
         int64_t idx = expires - now_slot_;
-        if (idx <= 0)
-        {
+        if (idx <= 0) {
             time_wheel_vec* tv = tw_vecs_[0].get();
             tv->vec[tv->index].push_back(timer_data);
             return;
@@ -235,11 +217,9 @@ protected:
 
         uint32_t index = 0;
         uint64_t max_tv_num = 0;
-        for (uint32_t i = 0; i < tv_num; ++i)
-        {
+        for (uint32_t i = 0; i < tv_num; ++i) {
             max_tv_num = ((uint64_t)1 << ((i + 1) * tv_bits));
-            if ((uint64_t)idx < max_tv_num)
-            {
+            if ((uint64_t)idx < max_tv_num) {
                 index = ((expires >> (i * tv_bits)) & tv_mask);
                 tw_vecs_[i]->vec[index].push_back(timer_data);
                 return;
@@ -250,23 +230,19 @@ protected:
     }
 
     void update_slot_timer() {
-        if (tw_vecs_[0]->index == 0)
-        {
+        if (tw_vecs_[0]->index == 0) {
             uint32_t n = 1;
-            do
-            {
+            do {
                 carry_timers(tw_vecs_[n].get());
             } while (tw_vecs_[n]->index == 1 && (++n < tv_num));
         }
 
         int32_t index = tw_vecs_[0]->index;
-        while (!tw_vecs_[0]->vec[index].empty())
-        {
+        while (!tw_vecs_[0]->vec[index].empty()) {
             time_wheel_data* timer = tw_vecs_[0]->vec[index].front();
             tw_vecs_[0]->vec[index].pop_front();
 
-            if (timer->callback == nullptr)
-            {
+            if (timer->callback == nullptr) {
                 add_to_free_timer(timer);
                 continue;
             }
@@ -275,21 +251,17 @@ protected:
             (timer->callback)(timer->idx, timer->entity_id);
 
             // forever timer
-            if (timer->count == 0 && timer->interval > 0)
-            {
+            if (timer->count == 0 && timer->interval > 0) {
                 timer->expires = static_cast<uint64_t>(now_slot_) + timer->interval;
                 add_timer_internal(timer);
                 continue;
             }
 
             timer->count--;
-            if (timer->count > 0 && timer->interval > 0)
-            {
+            if (timer->count > 0 && timer->interval > 0) {
                 timer->expires = static_cast<uint64_t>(now_slot_) + timer->interval;
                 add_timer_internal(timer);
-            }
-            else
-            {
+            } else {
                 timers_.erase(timer->idx);
                 add_to_free_timer(timer);
             }
@@ -301,8 +273,7 @@ protected:
 
     void carry_timers(time_wheel_vec* tv) {
         int32_t index = tv->index;
-        while (!tv->vec[index].empty())
-        {
+        while (!tv->vec[index].empty()) {
             time_wheel_data* timer = tv->vec[index].front();
             add_timer_internal(timer);
             tv->vec[index].pop_front();

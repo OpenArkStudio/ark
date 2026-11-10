@@ -26,12 +26,9 @@ module_task<arknet::redis::result> redis_command(service_type& service,
             return service.start(
                 std::move(command),
                 [completion = std::move(completion)](redis_service_result result) mutable {
-                    if (auto* error = std::get_if<std::exception_ptr>(&result))
-                    {
+                    if (auto* error = std::get_if<std::exception_ptr>(&result)) {
                         completion(*error, {});
-                    }
-                    else
-                    {
+                    } else {
                         completion({}, std::get<arknet::redis::result>(std::move(result)));
                     }
                 },
@@ -49,12 +46,9 @@ module_task<arknet::redis::result> redis_pipeline(service_type& service,
             return service.start_pipeline(
                 std::move(commands),
                 [completion = std::move(completion)](redis_service_result result) mutable {
-                    if (auto* error = std::get_if<std::exception_ptr>(&result))
-                    {
+                    if (auto* error = std::get_if<std::exception_ptr>(&result)) {
                         completion(*error, {});
-                    }
-                    else
-                    {
+                    } else {
                         completion({}, std::get<arknet::redis::result>(std::move(result)));
                     }
                 },

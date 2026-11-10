@@ -14,8 +14,7 @@ bool kafka_module_impl::init() {
 }
 
 bool kafka_module_impl::update() {
-    for (size_t i = 0; i < producers_.get_count(); ++i)
-    {
+    for (size_t i = 0; i < producers_.get_count(); ++i) {
         producers_[i]->poll();
     }
 
@@ -23,14 +22,12 @@ bool kafka_module_impl::update() {
 }
 
 bool kafka_module_impl::init_producer(std::string const& brokers, std::string const& topic) {
-    if (topic.empty() || brokers.empty())
-    {
+    if (topic.empty() || brokers.empty()) {
         return false;
     }
 
     auto* found = producers_.get_element(topic);
-    if (found != nullptr)
-    {
+    if (found != nullptr) {
         return false;
     }
 
@@ -41,8 +38,7 @@ bool kafka_module_impl::init_producer(std::string const& brokers, std::string co
 
 int kafka_module_impl::produce(std::string const& topic, std::string const& payload, void* user_data) {
     auto* producer = producers_.get_element(topic);
-    if (producer == nullptr)
-    {
+    if (producer == nullptr) {
         return false;
     }
 
@@ -52,8 +48,7 @@ int kafka_module_impl::produce(std::string const& topic, std::string const& payl
 void kafka_module_impl::dr_cb(RdKafka::Message& msg) {
     //auto task = reinterpret_cast<TaskInfo*>(msg.msg_opaque());
     auto err = msg.err();
-    if (err != RdKafka::ERR_NO_ERROR)
-    {
+    if (err != RdKafka::ERR_NO_ERROR) {
         //        errStr_ = RdKafka::err2str(err);
         //        LOG(WARNING) << "Push msg failed, retry later! msgID=" << task->MsgID << " offset=" << task->Offset
         //                     << " infocode=" << task->Infocode << " err=" << errStr_;
@@ -65,8 +60,7 @@ void kafka_module_impl::dr_cb(RdKafka::Message& msg) {
 }
 
 void kafka_module_impl::event_cb(RdKafka::Event& event) {
-    switch (event.type())
-    {
+    switch (event.type()) {
     case RdKafka::Event::EVENT_ERROR:
         ARK_LOG_WARN("Kafka error! err=[{}]:{} msg={}", static_cast<int>(event.err()), RdKafka::err2str(event.err()),
             event.str());

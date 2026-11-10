@@ -8,8 +8,7 @@
 
 namespace {
 
-struct release_service
-{
+struct release_service {
     std::unique_ptr<ark::detail::redis_service>* owner{};
     bool* destroyed{};
 
@@ -22,11 +21,9 @@ struct release_service
 } // namespace
 
 int main() {
-    try
-    {
+    try {
         const auto missing_lease = ark::detail::redis_acquire_failure({});
-        if (missing_lease.error != arknet::redis::client_errc::not_connected || missing_lease.command_may_have_run)
-        {
+        if (missing_lease.error != arknet::redis::client_errc::not_connected || missing_lease.command_may_have_run) {
             throw std::runtime_error("A failed acquire with no lease was reported as command success");
         }
         arknet::redis::pool::acquire_result rejected;
@@ -40,8 +37,7 @@ int main() {
         if (failure.error != arknet::redis::client_errc::handshake_failed ||
             failure.transport_error != asio::error::connection_aborted || failure.replies.size() != 1 ||
             failure.replies[0].type != arknet::redis::value_type::error ||
-            failure.replies[0].text != "ERR authentication fixture" || failure.command_may_have_run)
-        {
+            failure.replies[0].text != "ERR authentication fixture" || failure.command_may_have_run) {
             throw std::runtime_error("Acquire failure lost its original error or owning replies");
         }
         arknet::redis::pool_options options;
@@ -54,23 +50,19 @@ int main() {
         auto capture = std::make_shared<release_service>();
         capture->owner = &service;
         capture->destroyed = &destroyed;
-        if (!service->submit({"PING"}, [capture, &callbacks](auto) { ++callbacks; }, std::chrono::seconds(1)))
-        {
+        if (!service->submit({"PING"}, [capture, &callbacks](auto) { ++callbacks; }, std::chrono::seconds(1))) {
             throw std::runtime_error("Stop-capture operation was not admitted");
         }
         capture.reset();
         // stop() removes the queued business capture. Its destructor releases
         // the service while that same stop() call is still active.
         service->stop();
-        if (service || !destroyed || callbacks)
-        {
+        if (service || !destroyed || callbacks) {
             throw std::runtime_error("Stop did not release its capture without invoking business code");
         }
         std::cout << "private Redis stop capture can destroy its service safely\n";
         return 0;
-    }
-    catch (const std::exception& error)
-    {
+    } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;
     }

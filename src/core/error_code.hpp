@@ -24,8 +24,7 @@
 
 namespace ark {
 
-enum class error_code : std::uint32_t
-{
+enum class error_code : std::uint32_t {
     success = 0,
 
     kcp_server_disconnect = 1000,   // kcp server disconnect when dtor
@@ -37,4 +36,4 @@ enum class error_code : std::uint32_t
     // will add error code
     logic_error_code_start = 10000,
 };
-}
+} // namespace ark

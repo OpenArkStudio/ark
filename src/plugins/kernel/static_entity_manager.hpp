@@ -25,8 +25,7 @@
 
 namespace ark {
 
-class static_entity_manager final
-{
+class static_entity_manager final {
 public:
     using static_object_list = shared_object_map<id_type, static_entity>;
 
@@ -43,8 +42,7 @@ public:
 
         // create new class
         auto object_ptr = std::make_shared<static_entity_impl>(class_meta_ptr, node_manager_ptr, config_id);
-        if (!static_object_list_.insert(config_id, object_ptr).second)
-        {
+        if (!static_object_list_.insert(config_id, object_ptr).second) {
             return nullptr;
         }
 

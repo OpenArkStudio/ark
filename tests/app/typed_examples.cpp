@@ -37,8 +37,7 @@ static_assert(std::same_as<decltype(&ark::entity_operations_module::update), dec
 
 namespace {
 
-struct timer_receiver
-{
+struct timer_receiver {
     void on_timer(uint64_t id, const ark::guid_t& entity) {
         ++calls;
         timer_id = id;
@@ -50,11 +49,9 @@ struct timer_receiver
     ark::guid_t entity_id{};
 };
 
-struct entity_receiver
-{
+struct entity_receiver {
     int on_event(const ark::guid_t&, const std::string&, ark::entity_event event, const ark::data_list&) {
-        if (event == ark::entity_event::entity_evt_destroy)
-        {
+        if (event == ark::entity_event::entity_evt_destroy) {
             ++destroyed;
         }
         return 0;
@@ -64,8 +61,7 @@ struct entity_receiver
 };
 
 void require(bool condition, const std::string& message) {
-    if (!condition)
-    {
+    if (!condition) {
         std::cerr << message << std::endl;
         // Preserve retained startup resources on a failing test process too.
         std::_Exit(1);
@@ -87,12 +83,10 @@ int main(int argc, char* argv[]) {
     log.set_log_func([&events](spdlog::level::level_enum, const std::string& text) { events << text << '\n'; });
     entity_receiver entity_events;
     ark::plugin_manager manager;
-    try
-    {
+    try {
         const bool started = manager.start(0, std::string(argv[2]) + "/", "conf/", manifest.plugins);
         require(started, "Sample startup failed: " + manager.get_startup_failure());
-        if (sample == "entity_operations")
-        {
+        if (sample == "entity_operations") {
             auto* kernel = manager.find_module<ark::kernel_module>();
             auto* maps = manager.find_module<ark::map_module>();
             require(
@@ -102,14 +96,12 @@ int main(int argc, char* argv[]) {
                 "Entity example must create four players");
             unsigned edited = 0;
             unsigned table_demo = 0;
-            for (std::size_t i = 0; i < ids.get_count(); ++i)
-            {
+            for (std::size_t i = 0; i < ids.get_count(); ++i) {
                 auto player = kernel->get_entity(ids.int64(i));
                 require(
                     player && player->get_string(ark::entity_meta_player::name()) == "Xiaoming", "Player name changed");
                 for (const auto& field : {ark::entity_meta_player::career(), ark::entity_meta_player::camp(),
-                         ark::entity_meta_player::last_map_id(), ark::entity_meta_player::level()})
-                {
+                         ark::entity_meta_player::last_map_id(), ark::entity_meta_player::level()}) {
                     require(player->get_int32(field) == 1, "Player initialization changed: " + field);
                 }
                 const auto gender = player->get_int32(ark::entity_meta_player::gender_index());
@@ -117,8 +109,7 @@ int main(int argc, char* argv[]) {
                 edited += gender == 11;
                 require(player->get_custom_int32("test") == 111, "Custom data initialization changed");
                 require(player->add_custom_u_int32("unsigned_sequence", 0), "Custom uint32 creation failed");
-                for (const auto value : {std::numeric_limits<std::uint32_t>::max(), std::uint32_t{0}})
-                {
+                for (const auto value : {std::numeric_limits<std::uint32_t>::max(), std::uint32_t{0}}) {
                     require(player->set_custom_u_int32("unsigned_sequence", value) &&
                                 player->get_custom_u_int32("unsigned_sequence") == value,
                         "Public entity custom uint32 update failed through the real Kernel DSO");
@@ -129,8 +120,7 @@ int main(int argc, char* argv[]) {
                 require(items && items->first() &&
                             items->first()->get_int64(ark::entity_meta_item_bag::guid_index()) == 1111,
                     "Initial item row GUID changed");
-                if (items->get_row_count() == 2)
-                {
+                if (items->get_row_count() == 2) {
                     auto* row = items->first();
                     row = items->next();
                     require(row && row->get_int32(ark::entity_meta_item_bag::count_index()) == 22,
@@ -166,8 +156,7 @@ int main(int argc, char* argv[]) {
         auto* schedules = manager.find_module<ark::schedule_module>();
         auto* compression = manager.find_module<ark::compress_module>();
         for (auto* service : {static_cast<ark::module*>(guids), static_cast<ark::module*>(timers),
-                 static_cast<ark::module*>(schedules), static_cast<ark::module*>(compression)})
-        {
+                 static_cast<ark::module*>(schedules), static_cast<ark::module*>(compression)}) {
             require(service && service->get_plugin_manager() == &manager, "Utility interface lost manager ownership");
         }
         require(guids->get_name() == typeid(ark::guid_module).name() &&
@@ -180,8 +169,7 @@ int main(int argc, char* argv[]) {
         require(first_id != ark::null_guid && second_id != first_id && !guids->parse_uid(first_id).empty(),
             "Utility GUID generation or parsing failed");
         const std::string input("utility binary\0round trip", 25);
-        for (auto algorithm : {ark::compress_type::compress_type_zlib, ark::compress_type::compress_type_zstd})
-        {
+        for (auto algorithm : {ark::compress_type::compress_type_zlib, ark::compress_type::compress_type_zstd}) {
             std::string packed;
             std::string unpacked;
             require(compression->compress(algorithm, input.data(), input.size(), packed), "Utility compression failed");
@@ -192,8 +180,7 @@ int main(int argc, char* argv[]) {
         const auto timer_id =
             timers->add_single_timer(first_id, std::chrono::milliseconds(20), 1, &timer, &timer_receiver::on_timer);
         require(timer_id != 0 && timer.calls == 0, "Utility timer fired without manager updates");
-        for (int i = 1; i <= 5; ++i)
-        {
+        for (int i = 1; i <= 5; ++i) {
             require(manager.update(i * 10), "Sample owner update failed");
         }
         require(timer.calls == 1 && timer.timer_id == timer_id && timer.entity_id == first_id,
@@ -202,15 +189,12 @@ int main(int argc, char* argv[]) {
         ark::test::drain_owner(
             manager, [&] { return ++tick; }, std::chrono::steady_clock::now() + std::chrono::seconds(5), sample);
         require(manager.stop(++tick), "Repeated stop must not unregister Utility modules twice");
-        if (sample == "entity_operations")
-        {
+        if (sample == "entity_operations") {
             require(entity_events.destroyed == 4, "Shutdown must destroy each demonstration player exactly once");
         }
         require(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopped,
             "Sample resources were retained instead of stopped");
-    }
-    catch (const std::exception& error)
-    {
+    } catch (const std::exception& error) {
         require(false,
             "Sample lifecycle exception: " + std::string(error.what()) + "; startup: " + manager.get_startup_failure());
     }
@@ -218,14 +202,11 @@ int main(int argc, char* argv[]) {
     const auto output = events.str();
     std::cout << output;
     std::size_t previous{};
-    for (const std::string event : {sample == "timers" ? "init" : "Init", "PostInit", "PreShut", "Shut"})
-    {
+    for (const std::string event : {sample == "timers" ? "init" : "Init", "PostInit", "PreShut", "Shut"}) {
         auto position = output.find(sample + "_module", previous);
-        while (position != std::string::npos)
-        {
+        while (position != std::string::npos) {
             const auto end = output.find('\n', position);
-            if (output.substr(position, end - position).find(", " + event) != std::string::npos)
-            {
+            if (output.substr(position, end - position).find(", " + event) != std::string::npos) {
                 break;
             }
             position = output.find(sample + "_module", end);

@@ -25,8 +25,7 @@
 
 namespace ark {
 
-class core_allocator
-{
+class core_allocator {
 public:
     core_allocator() = default;
     ~core_allocator() = default;
@@ -308,8 +307,7 @@ inline static unsigned int get_hash_value_no_case(const char* name) {
 
     unsigned int hash = 0;
 
-    for (; *name; name++)
-    {
+    for (; *name; name++) {
         hash = hash * 131 + convert_to_lower[(unsigned char)(*name)];
     }
 
@@ -321,8 +319,7 @@ inline unsigned int get_hash_value(const char* name) {
 
     unsigned int hash = 0;
 
-    for (; *name; name++)
-    {
+    for (; *name; name++) {
         hash = hash * 131 + *name;
     }
 

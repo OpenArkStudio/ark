@@ -35,8 +35,7 @@ namespace ark {
 class tcp_client final
     : public net
     , public noncopyable
-    , public std::enable_shared_from_this<tcp_client>
-{
+    , public std::enable_shared_from_this<tcp_client> {
 public:
     tcp_client(net_msg_functor message_callback, net_event_functor event_callback)
         : net_msg_cb_(std::move(message_callback))

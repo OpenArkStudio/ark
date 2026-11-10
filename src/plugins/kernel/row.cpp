@@ -289,8 +289,7 @@ std::shared_ptr<node_manager> row_impl::get_node_manager() const {
 }
 
 int row_impl::on_node_call_back(node* node_ptr, const data& old_data, const data& new_data) {
-    if (func_)
-    {
+    if (func_) {
         func_(row_, node_ptr, old_data, new_data);
     }
 

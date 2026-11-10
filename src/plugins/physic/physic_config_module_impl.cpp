@@ -39,13 +39,11 @@
 namespace ark {
 
 bool physic_config_module_impl::init() {
-    if (!load_config())
-    {
+    if (!load_config()) {
         return false;
     }
 
-    if (!load_scene())
-    {
+    if (!load_scene()) {
         return false;
     }
 
@@ -58,8 +56,7 @@ bool physic_config_module_impl::shut() {
 
 bool physic_config_module_impl::get_physic_scene(const std::string& scene_id, physic_scene& scene) const {
     auto iter = scene_list_.find(scene_id);
-    if (iter == scene_list_.end())
-    {
+    if (iter == scene_list_.end()) {
         ARK_LOG_ERROR("do not have this scene scene_id={}", scene_id);
         return false;
     }
@@ -80,45 +77,36 @@ bool physic_config_module_impl::load_scene() {
     std::string file_path = get_plugin_manager()->GetResPath() + physic_scene_path;
 
     std::multimap<std::string, std::string> sub_path_list;
-    if (!get_scene_file_list("", file_path, sub_path_list))
-    {
+    if (!get_scene_file_list("", file_path, sub_path_list)) {
         return false;
     }
 
     ///read scene
-    for (auto& iter : sub_path_list)
-    {
+    for (auto& iter : sub_path_list) {
         auto scene_id = iter.first;
         auto file_path = iter.second;
 
         ///find scene
         auto iter_scene = scene_list_.find(scene_id);
-        if (iter_scene == scene_list_.end())
-        {
+        if (iter_scene == scene_list_.end()) {
             physic_scene scene;
             scene.scene_id = scene_id;
             iter_scene = scene_list_.insert(std::make_pair(scene_id, scene)).first;
         }
 
-        if (iter_scene == scene_list_.end())
-        {
+        if (iter_scene == scene_list_.end()) {
             ARK_LOG_ERROR("do not have this scene scene_id={}", scene_id);
             return false;
         }
         auto& scene = iter_scene->second;
 
         ///load file
-        if (file_path.ends_with(physic_mesh_file_end))
-        {
-            if (!load_terrain(scene, file_path))
-            {
+        if (file_path.ends_with(physic_mesh_file_end)) {
+            if (!load_terrain(scene, file_path)) {
                 return false;
             }
-        }
-        else if (file_path.ends_with(physic_collider_file_end))
-        {
-            if (!load_collider(scene, file_path))
-            {
+        } else if (file_path.ends_with(physic_collider_file_end)) {
+            if (!load_collider(scene, file_path)) {
                 return false;
             }
         }
@@ -139,13 +127,10 @@ bool physic_config_module_impl::load_collider(physic_scene& scene, const std::st
     const auto native_vector = [](const std::array<float, 3>& value) {
         return physx::PxVec3(value[0], value[1], value[2]);
     };
-    for (const auto& resource : resources)
-    {
+    for (const auto& resource : resources) {
         std::unique_ptr<ark::collider> object;
-        switch (resource.type)
-        {
-        case physic_resources::collider_type::box:
-        {
+        switch (resource.type) {
+        case physic_resources::collider_type::box: {
             auto box = std::make_unique<box_collider>();
             box->position = native_vector(resource.position);
             box->center = native_vector(resource.center);
@@ -153,8 +138,7 @@ bool physic_config_module_impl::load_collider(physic_scene& scene, const std::st
             object = std::move(box);
             break;
         }
-        case physic_resources::collider_type::capsule:
-        {
+        case physic_resources::collider_type::capsule: {
             auto capsule = std::make_unique<capsule_collider>();
             capsule->position = native_vector(resource.position);
             capsule->center = native_vector(resource.center);
@@ -163,8 +147,7 @@ bool physic_config_module_impl::load_collider(physic_scene& scene, const std::st
             object = std::move(capsule);
             break;
         }
-        case physic_resources::collider_type::sphere:
-        {
+        case physic_resources::collider_type::sphere: {
             auto sphere = std::make_unique<sphere_collider>();
             sphere->position = native_vector(resource.position);
             sphere->center = native_vector(resource.center);
@@ -172,15 +155,13 @@ bool physic_config_module_impl::load_collider(physic_scene& scene, const std::st
             object = std::move(sphere);
             break;
         }
-        case physic_resources::collider_type::mesh:
-        {
+        case physic_resources::collider_type::mesh: {
             auto mesh = std::make_unique<mesh_collider>();
             mesh->position = native_vector(resource.position);
             mesh->convex = resource.convex;
             mesh->vertex_count = static_cast<std::uint32_t>(resource.vertices.size());
             mesh->vertices = new physx::PxVec3[mesh->vertex_count];
-            for (std::size_t i = 0; i < resource.vertices.size(); ++i)
-            {
+            for (std::size_t i = 0; i < resource.vertices.size(); ++i) {
                 mesh->vertices[i] = native_vector(resource.vertices[i]);
             }
             mesh->triangle_count = static_cast<std::uint32_t>(resource.triangles.size());
@@ -209,34 +190,26 @@ bool physic_config_module_impl::get_scene_file_list(
     _finddata_t find_data;
     handle = _findfirst(search_path.c_str(), &find_data);
 
-    if (handle == -1)
-    {
+    if (handle == -1) {
         ARK_LOG_ERROR("can not open path={}", path);
         return false;
     }
 
-    do
-    {
-        if (find_data.attrib & _A_SUBDIR)
-        {
+    do {
+        if (find_data.attrib & _A_SUBDIR) {
             /// is sub dir
-            if (strcmp(find_data.name, ".") == 0 || strcmp(find_data.name, "..") == 0)
-            {
+            if (strcmp(find_data.name, ".") == 0 || strcmp(find_data.name, "..") == 0) {
                 continue;
             }
 
             auto new_dir = path + physic_slash + find_data.name;
-            if (!get_scene_file_list(path, new_dir, sub_path_list))
-            {
+            if (!get_scene_file_list(path, new_dir, sub_path_list)) {
                 ARK_LOG_ERROR("read path failed path={}", new_dir);
                 return false;
             }
-        }
-        else
-        {
+        } else {
             /// not sub dir
-            if (father_path.empty())
-            {
+            if (father_path.empty()) {
                 ARK_LOG_ERROR("not in a scene path={} file = {}", path, find_data.name);
                 return false;
             }
@@ -254,35 +227,27 @@ bool physic_config_module_impl::get_scene_file_list(
 
 #elif defined(ARK_PLATFORM_LINUX) || defined(ARK_PLATFORM_DARWIN)
     DIR* dir = opendir(path.c_str());
-    if (dir == NULL)
-    {
+    if (dir == NULL) {
         ARK_LOG_ERROR("can not open path={}", path);
         return false;
     }
 
     struct dirent* entry;
-    while ((entry = readdir(dir)) != NULL)
-    {
-        if (entry->d_type == DT_DIR)
-        {
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_type == DT_DIR) {
             ///is sub dir
-            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-            {
+            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
                 continue;
             }
 
             string new_dir = path + physic_slash + entry->d_name;
-            if (!get_scene_file_list(path, new_dir, sub_path_list))
-            {
+            if (!get_scene_file_list(path, new_dir, sub_path_list)) {
                 ARK_LOG_ERROR("read path failed path={}", new_dir);
                 return false;
             }
-        }
-        else
-        {
+        } else {
             /// not sub dir
-            if (father_path.empty())
-            {
+            if (father_path.empty()) {
                 ARK_LOG_ERROR("not in a scene path={} file = {}", path, entry->d_name);
                 return false;
             }
@@ -328,38 +293,31 @@ void physic_config_module_impl::create_file_path(const std::string& file_path) {
 #ifdef ARK_PLATFORM_WIN
     int len = file_path.length();
     char temp_path[256] = {0};
-    for (int i = 0; i < len; i++)
-    {
+    for (int i = 0; i < len; i++) {
         temp_path[i] = file_path[i];
-        if (temp_path[i] != '/')
-        {
+        if (temp_path[i] != '/') {
             continue;
         }
 
-        if (_access(temp_path, 0) != -1)
-        {
+        if (_access(temp_path, 0) != -1) {
             continue;
         }
 
         int ret = _mkdir(temp_path);
-        if (ret == -1)
-        {
+        if (ret == -1) {
             return;
         }
     }
 #elif defined(ARK_PLATFORM_LINUX) || defined(ARK_PLATFORM_DARWIN)
     int len = file_path.length();
     char temp_path[256] = {0};
-    for (int i = 0; i < len; i++)
-    {
+    for (int i = 0; i < len; i++) {
         temp_path[i] = file_path[i];
-        if (temp_path[i] != '/')
-        {
+        if (temp_path[i] != '/') {
             continue;
         }
 
-        if (access(temp_path, F_OK) != -1)
-        {
+        if (access(temp_path, F_OK) != -1) {
             continue;
         }
 

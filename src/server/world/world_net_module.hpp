@@ -28,8 +28,7 @@ namespace ark {
 
 class net_server_service;
 
-class world_net_module : public module
-{
+class world_net_module : public module {
 public:
     virtual bool send_msg_to_game(const int game_id, const ark::protobuf::game_message_id msg_id,
         google::protobuf::Message& data_value, const guid_t player = guid_t()) = 0;

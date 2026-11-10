@@ -11,8 +11,7 @@
 
 namespace ark {
 
-class redis_module_impl final : public module_base<redis_module>
-{
+class redis_module_impl final : public module_base<redis_module> {
 public:
     redis_module_impl();
     ~redis_module_impl() override;
@@ -35,8 +34,7 @@ private:
     void ensure_state();
 };
 
-struct redis_module_impl::state
-{
+struct redis_module_impl::state {
     using service_type = std::variant<std::unique_ptr<detail::redis_service>
 #if defined(ARKNET_ENABLE_SSL)
         ,
@@ -44,28 +42,23 @@ struct redis_module_impl::state
 #endif
         >;
 
-    struct connection
-    {
+    struct connection {
         detail::database_awaitable<arknet::redis::result> bridge;
         service_type service;
 
         connection(std::shared_ptr<arknet::manual_runtime> runtime, redis_options options)
             : bridge(std::move(runtime), options.max_operations) {
-            if (!options.max_input_bytes)
-            {
+            if (!options.max_input_bytes) {
                 throw std::invalid_argument("Redis input byte limit must be positive");
             }
-            if (options.tls)
-            {
+            if (options.tls) {
 #if defined(ARKNET_ENABLE_SSL)
                 service = std::make_unique<detail::tls_redis_service>(
                     std::move(options.pool), options.max_operations, options.max_input_bytes);
 #else
                 throw std::invalid_argument("Redis TLS requires ARKNET_ENABLE_SSL");
 #endif
-            }
-            else
-            {
+            } else {
                 service = std::make_unique<detail::redis_service>(
                     std::move(options.pool), options.max_operations, options.max_input_bytes);
             }
@@ -82,8 +75,7 @@ struct redis_module_impl::state
     }
 
     void check_owner() const {
-        if (owner != std::this_thread::get_id())
-        {
+        if (owner != std::this_thread::get_id()) {
             throw std::logic_error("Redis module requires its owner thread");
         }
     }
@@ -97,8 +89,7 @@ struct redis_module_impl::state
 
     static task<arknet::redis::result> missing(std::shared_ptr<state> pinned) {
         const auto executor = co_await asio::this_coro::executor;
-        if (!detail::is_database_executor(executor, *pinned->runtime))
-        {
+        if (!detail::is_database_executor(executor, *pinned->runtime)) {
             throw std::logic_error("Redis operation requires its manager task executor");
         }
         pinned->check_owner();
@@ -117,11 +108,9 @@ redis_module_impl::redis_module_impl() = default;
 redis_module_impl::~redis_module_impl() = default;
 
 void redis_module_impl::ensure_state() {
-    if (!state_)
-    {
+    if (!state_) {
         auto* manager = get_plugin_manager();
-        if (!manager)
-        {
+        if (!manager) {
             throw std::logic_error("Redis module requires an installed plugin manager");
         }
         state_ = std::make_shared<state>(manager->get_task_runtime());
@@ -137,27 +126,21 @@ bool redis_module_impl::init() {
 bool redis_module_impl::configure(std::string name, redis_options options) {
     ensure_state();
     if (!state_->accepting || state_->connections.contains(name) ||
-        get_plugin_manager()->get_shutdown_state() != plugin_manager::shutdown_state::running)
-    {
+        get_plugin_manager()->get_shutdown_state() != plugin_manager::shutdown_state::running) {
         return false;
     }
-    if (name.empty())
-    {
+    if (name.empty()) {
         throw std::invalid_argument("Redis connection name must not be empty");
     }
     // Allocate the destination node and buckets before starting native IO.
     auto [entry, inserted] = state_->connections.try_emplace(std::move(name), nullptr);
-    if (!inserted)
-    {
+    if (!inserted) {
         return false;
     }
-    try
-    {
+    try {
         auto connection = std::make_shared<state::connection>(state_->runtime, std::move(options));
         entry->second = std::move(connection);
-    }
-    catch (...)
-    {
+    } catch (...) {
         // This unpublished entry is still empty; preserve same-name retry.
         state_->connections.erase(entry);
         throw;
@@ -169,8 +152,7 @@ task<arknet::redis::result> redis_module_impl::command(
     std::string name, arknet::redis::command command, std::chrono::milliseconds timeout) {
     ensure_state();
     const auto found = state_->connections.find(name);
-    if (found == state_->connections.end())
-    {
+    if (found == state_->connections.end()) {
         return state::missing(state_);
     }
     auto pinned = found->second;
@@ -183,8 +165,7 @@ task<arknet::redis::result> redis_module_impl::pipeline(
     std::string name, std::vector<arknet::redis::command> commands, std::chrono::milliseconds timeout) {
     ensure_state();
     const auto found = state_->connections.find(name);
-    if (found == state_->connections.end())
-    {
+    if (found == state_->connections.end()) {
         return state::missing(state_);
     }
     auto pinned = found->second;
@@ -194,11 +175,9 @@ task<arknet::redis::result> redis_module_impl::pipeline(
 }
 
 bool redis_module_impl::update() {
-    if (state_)
-    {
+    if (state_) {
         state_->check_owner();
-        for (const auto& [name, connection] : state_->connections)
-        {
+        for (const auto& [name, connection] : state_->connections) {
             connection->visit([](auto& service) { service.update(); });
             connection->bridge.dispatch();
         }
@@ -207,14 +186,11 @@ bool redis_module_impl::update() {
 }
 
 bool redis_module_impl::ready_to_shut() const {
-    if (state_)
-    {
+    if (state_) {
         state_->check_owner();
-        for (const auto& [name, connection] : state_->connections)
-        {
+        for (const auto& [name, connection] : state_->connections) {
             if (!connection->bridge.quiescent() ||
-                !connection->visit([](const auto& service) { return service.quiescent(); }))
-            {
+                !connection->visit([](const auto& service) { return service.quiescent(); })) {
                 return false;
             }
         }
@@ -223,22 +199,17 @@ bool redis_module_impl::ready_to_shut() const {
 }
 
 bool redis_module_impl::pre_shut() {
-    if (!ready_to_shut())
-    {
+    if (!ready_to_shut()) {
         return false;
     }
-    if (state_)
-    {
+    if (state_) {
         state_->accepting = false;
-        for (const auto& [name, connection] : state_->connections)
-        {
+        for (const auto& [name, connection] : state_->connections) {
             connection->bridge.stop_accepting();
             connection->visit([](auto& service) { service.stop_accepting(); });
         }
-        for (const auto& [name, connection] : state_->connections)
-        {
-            if (!connection->visit([](auto& service) { return service.retire_native(); }))
-            {
+        for (const auto& [name, connection] : state_->connections) {
+            if (!connection->visit([](auto& service) { return service.retire_native(); })) {
                 return false;
             }
         }
@@ -247,17 +218,13 @@ bool redis_module_impl::pre_shut() {
 }
 
 bool redis_module_impl::shut() {
-    if (state_)
-    {
+    if (state_) {
         state_->check_owner();
-        if (state_->accepting)
-        {
+        if (state_->accepting) {
             return false;
         }
-        for (const auto& [name, connection] : state_->connections)
-        {
-            if (!connection->visit([](const auto& service) { return service.native_retired(); }))
-            {
+        for (const auto& [name, connection] : state_->connections) {
+            if (!connection->visit([](const auto& service) { return service.native_retired(); })) {
                 return false;
             }
         }

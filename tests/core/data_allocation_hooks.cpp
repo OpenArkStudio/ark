@@ -16,18 +16,14 @@ std::size_t allocations{};
 std::size_t releases{};
 
 void* hook_allocate(std::size_t size) {
-    if (fail_next && successful_before_failure)
-    {
+    if (fail_next && successful_before_failure) {
         --successful_before_failure;
-    }
-    else if (fail_next)
-    {
+    } else if (fail_next) {
         fail_next = false;
         return nullptr;
     }
     auto* pointer = std::malloc(size ? size : 1);
-    if (!pointer)
-    {
+    if (!pointer) {
         throw std::bad_alloc{};
     }
     live.insert(pointer);
@@ -36,10 +32,8 @@ void* hook_allocate(std::size_t size) {
 }
 
 void hook_free(void*& pointer) {
-    if (pointer)
-    {
-        if (live.erase(pointer) != 1)
-        {
+    if (pointer) {
+        if (live.erase(pointer) != 1) {
             std::abort();
         }
         ++releases;
@@ -137,20 +131,15 @@ TEST_CASE("DataList array hooks release partial copies and preserve self assignm
         REQUIRE(source.add_string("a copied value longer than the inline buffer"));
         REQUIRE(source.add_int(18));
         const auto original = live;
-        for (bool through_interface : {false, true})
-        {
-            for (std::size_t position : {1u, 2u})
-            {
+        for (bool through_interface : {false, true}) {
+            for (std::size_t position : {1u, 2u}) {
                 fail_next = true;
                 successful_before_failure = position;
                 const auto copy = [&] {
-                    if (through_interface)
-                    {
+                    if (through_interface) {
                         const ark::data_list& interface = source;
                         list destination(interface);
-                    }
-                    else
-                    {
+                    } else {
                         list destination(source);
                     }
                 };
@@ -160,11 +149,9 @@ TEST_CASE("DataList array hooks release partial copies and preserve self assignm
                 successful_before_failure = 0;
                 CHECK(live == original);
                 // Recover only a red-regression constructor's unpublished buffers.
-                for (auto it = live.begin(); it != live.end();)
-                {
+                for (auto it = live.begin(); it != live.end();) {
                     void* pointer = *it++;
-                    if (!original.contains(pointer))
-                    {
+                    if (!original.contains(pointer)) {
                         hook_free(pointer);
                     }
                 }
@@ -192,8 +179,7 @@ TEST_CASE("DataList tokenizing constructor retains matching array hooks on failu
     constexpr char source[] = "abcdefghijklmnop,qrstuvwxyzabcdefgh,tail";
     const auto initial_allocations = allocations;
     const auto initial_releases = releases;
-    for (std::size_t position : {0u, 1u, 2u, 3u})
-    {
+    for (std::size_t position : {0u, 1u, 2u, 3u}) {
         fail_next = true;
         successful_before_failure = position;
         CHECK_THROWS_AS((ark::base_data_list<1, 16>(source, sizeof(source) - 1, ',')), std::bad_alloc);
@@ -202,8 +188,7 @@ TEST_CASE("DataList tokenizing constructor retains matching array hooks on failu
         successful_before_failure = 0;
         CHECK(live.empty());
         // Recover only unpublished storage left by the old constructor in a red run.
-        while (!live.empty())
-        {
+        while (!live.empty()) {
             void* pointer = *live.begin();
             hook_free(pointer);
         }

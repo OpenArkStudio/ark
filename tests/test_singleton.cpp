@@ -39,8 +39,7 @@
 namespace {
 
 // Flush independent progress before the process guard can terminate a hung case.
-class singleton_progress : public doctest::IReporter
-{
+class singleton_progress : public doctest::IReporter {
 public:
     explicit singleton_progress(const doctest::ContextOptions&) {
     }
@@ -89,8 +88,7 @@ public:
 
 DOCTEST_REGISTER_LISTENER("singleton-progress", 0, singleton_progress);
 
-class concurrent_singleton : public ark::singleton<concurrent_singleton>
-{
+class concurrent_singleton : public ark::singleton<concurrent_singleton> {
 public:
     inline static std::atomic<unsigned> constructions{};
 
@@ -100,8 +98,7 @@ public:
 };
 
 template<int identity>
-class test_singleton : public ark::singleton<test_singleton<identity>>
-{
+class test_singleton : public ark::singleton<test_singleton<identity>> {
 public:
     inline static int constructions = 0;
     inline static int destructions = 0;
@@ -116,15 +113,13 @@ public:
     }
 };
 
-class throwing_singleton : public ark::singleton<throwing_singleton>
-{
+class throwing_singleton : public ark::singleton<throwing_singleton> {
 public:
     inline static int attempts = 0;
     inline static int destructions = 0;
 
     throwing_singleton() {
-        if (++attempts == 1)
-        {
+        if (++attempts == 1) {
             throw std::runtime_error("singleton construction failed");
         }
     }
@@ -134,8 +129,7 @@ public:
     }
 };
 
-class allocation_failure_singleton : public ark::singleton<allocation_failure_singleton>
-{
+class allocation_failure_singleton : public ark::singleton<allocation_failure_singleton> {
 public:
     inline static int allocations = 0;
 
@@ -154,17 +148,15 @@ int probe_call_once() {
     unsigned calls{};
     bool caught{};
     std::cerr << "[call_once probe] first-begin" << std::endl;
-    try
-    {
+    try {
         std::call_once(flag, [&] {
             ++calls;
             throw std::runtime_error("expected call_once diagnostic exception");
         });
+    } catch (const std::runtime_error&) {
+        caught = true;
     }
-    catch (const std::runtime_error&)
-    { caught = true; }
-    if (!caught || calls != 1)
-    {
+    if (!caught || calls != 1) {
         std::cerr << "[call_once probe] unexpected first-call result" << std::endl;
         return 1;
     }
@@ -177,8 +169,7 @@ int probe_call_once() {
 } // namespace
 
 int main(int argc, char** argv) {
-    if (argc == 2 && std::string_view(argv[1]) == "--probe-call-once")
-    {
+    if (argc == 2 && std::string_view(argv[1]) == "--probe-call-once") {
         return probe_call_once();
     }
     return doctest::Context(argc, argv).run();
@@ -211,8 +202,7 @@ TEST_CASE("singleton shutdown borrows injected storage without deleting it") {
 
     single::shutdown();
     CHECK(single::destructions == 0);
-    if (single::destructions != 0)
-    {
+    if (single::destructions != 0) {
         // Keep the regression safe when run against the old deleting implementation.
         external.release();
     }
@@ -331,20 +321,17 @@ TEST_CASE("singleton synchronizes concurrent lazy initialization") {
     std::array<concurrent_singleton*, count> results{};
     std::array<std::thread, count> threads;
     std::cerr << "[singleton] starting concurrent instance calls and joining all callers" << std::endl;
-    for (std::size_t i = 0; i < count; ++i)
-    {
+    for (std::size_t i = 0; i < count; ++i) {
         threads[i] = std::thread([&, i] {
             start.arrive_and_wait();
             results[i] = concurrent_singleton::instance();
         });
     }
-    for (auto& thread : threads)
-    {
+    for (auto& thread : threads) {
         thread.join();
     }
     REQUIRE(results[0] != nullptr);
-    for (auto* result : results)
-    {
+    for (auto* result : results) {
         CHECK(result == results[0]);
     }
     CHECK(concurrent_singleton::constructions.load() == 1);

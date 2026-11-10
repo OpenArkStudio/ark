@@ -31,24 +31,20 @@ int main() {
         failure = std::move(error);
         completed = true;
     });
-    if (id == 0)
-    {
+    if (id == 0) {
         return 1;
     }
     tasks.stop_accepting();
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (!tasks.closed() && std::chrono::steady_clock::now() < deadline)
-    {
+    while (!tasks.closed() && std::chrono::steady_clock::now() < deadline) {
         tasks.poll(8);
     }
-    if (!tasks.closed())
-    {
+    if (!tasks.closed()) {
         // A sample failure guard, not an application drain/abandon policy.
         // Do not destroy an owner which still has suspended task frames.
         std::_Exit(2);
     }
-    if (failure || !completed || result != 42)
-    {
+    if (failure || !completed || result != 42) {
         return 1;
     }
     std::cout << "result=" << result << " completed=" << completed << '\n';

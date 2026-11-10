@@ -9,8 +9,7 @@ class plugin_manager;
 
 namespace {
 
-struct library_probe
-{
+struct library_probe {
     library_probe() {
         std::cerr << "app-startup-test:library_loaded\n";
     }

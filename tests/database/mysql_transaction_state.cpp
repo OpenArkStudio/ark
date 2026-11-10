@@ -58,9 +58,9 @@ TEST_CASE("Invalid transaction deadlines reject inline before acquiring a connec
     {
         mysql_transaction_service service(pool, {1, 1024});
         unsigned calls{};
-        for (const auto options : {mysql_transaction_options{0ms, 1s}, mysql_transaction_options{1s, 0ms},
-                 mysql_transaction_options{-1ms, 1s}, mysql_transaction_options{std::chrono::milliseconds::max(), 1s}})
-        {
+        for (const auto options :
+            {mysql_transaction_options{0ms, 1s}, mysql_transaction_options{1s, 0ms},
+                mysql_transaction_options{-1ms, 1s}, mysql_transaction_options{std::chrono::milliseconds::max(), 1s}}) {
             CHECK(service.start(options, [&](auto result) {
                 ++calls;
                 CHECK(result.result.status.code == arknet::mysql::connection_errc::invalid_options);
@@ -74,10 +74,11 @@ TEST_CASE("Invalid transaction deadlines reject inline before acquiring a connec
         CHECK(service.update() == 0);
         bool wrong_thread_rejected{};
         std::thread worker([&] {
-            try
-            { service.update(); }
-            catch (const std::logic_error&)
-            { wrong_thread_rejected = true; }
+            try {
+                service.update();
+            } catch (const std::logic_error&) {
+                wrong_thread_rejected = true;
+            }
         });
         worker.join();
         CHECK(wrong_thread_rejected);
@@ -116,15 +117,11 @@ TEST_CASE("Prepared transaction admission charges parameter vector and string ca
         state->deadline = std::chrono::steady_clock::now() + 1s;
         owner->states[0] = state;
         unsigned rejected{};
-        for (const bool vector_capacity : {false, true})
-        {
+        for (const bool vector_capacity : {false, true}) {
             std::vector<arknet::mysql::field_value> parameters;
-            if (vector_capacity)
-            {
+            if (vector_capacity) {
                 parameters.reserve(1024);
-            }
-            else
-            {
+            } else {
                 std::string binary("x\0y", 3);
                 binary.reserve(2048);
                 parameters.emplace_back(std::move(binary));
@@ -151,8 +148,7 @@ TEST_CASE("Prepared transaction admission charges parameter vector and string ca
 TEST_CASE("Statement cleanup preserves business results and uses the original transaction deadline") {
     using arknet::mysql::connection_errc;
     auto pool = std::make_shared<arknet::mysql::pool>(arknet::mysql::pool_options{});
-    for (const bool exception : {false, true})
-    {
+    for (const bool exception : {false, true}) {
         auto owner = std::make_shared<mysql_transaction_owner>(
             pool, mysql_transaction_limits{1, 1024}, arknet::mysql::query_options{});
         auto state = std::make_shared<mysql_transaction_state>();
@@ -165,12 +161,9 @@ TEST_CASE("Statement cleanup preserves business results and uses the original tr
         state->cleanup_deadline = std::chrono::steady_clock::now() + 1s;
         std::optional<mysql_transaction_reply> delivered;
         REQUIRE(owner->reserve(state, 0, [&](auto reply) { delivered = std::move(reply); }));
-        if (exception)
-        {
+        if (exception) {
             owner->advance(state, std::make_exception_ptr(std::runtime_error("Statement cleanup initiation")));
-        }
-        else
-        {
+        } else {
             owner->issue(state, {}, mysql_transaction_phase::closing_statement);
         }
         owner->update(1);
@@ -182,14 +175,11 @@ TEST_CASE("Statement cleanup preserves business results and uses the original tr
         CHECK_FALSE(delivered->rollback);
         CHECK(delivered->transaction_status.outcome == mysql_transaction_outcome::unconfirmed);
         CHECK(delivered->transaction_status.discard_requested);
-        if (exception)
-        {
+        if (exception) {
             REQUIRE(delivered->statement_close_exception);
             CHECK_THROWS_AS(std::rethrow_exception(delivered->statement_close_exception), std::runtime_error);
             CHECK_FALSE(delivered->statement_close);
-        }
-        else
-        {
+        } else {
             REQUIRE(delivered->statement_close);
             CHECK(delivered->statement_close->code == connection_errc::timeout);
             CHECK_FALSE(delivered->statement_close_exception);
@@ -206,8 +196,7 @@ TEST_CASE("Cancellation between prepared native completion and owner polling pre
         auto owner = std::make_shared<mysql_transaction_owner>(
             pool, mysql_transaction_limits{1, 1024}, arknet::mysql::query_options{});
         for (const auto phase : {mysql_transaction_phase::preparing, mysql_transaction_phase::executing,
-                 mysql_transaction_phase::closing_statement})
-        {
+                 mysql_transaction_phase::closing_statement}) {
             auto state = std::make_shared<mysql_transaction_state>();
             state->phase = phase;
             state->logical_id = 7;
@@ -225,8 +214,7 @@ TEST_CASE("Cancellation between prepared native completion and owner polling pre
 
 namespace ark::detail {
 
-struct database_service_test_access
-{
+struct database_service_test_access {
     static auto owner(mysql_transaction_service& service) {
         return service.owner_;
     }
@@ -236,8 +224,7 @@ struct database_service_test_access
 
 namespace {
 
-struct transaction_capture
-{
+struct transaction_capture {
     std::weak_ptr<mysql_transaction_owner> owner;
     unsigned& destroyed;
 
@@ -279,8 +266,7 @@ TEST_CASE("Transaction drain seals only BEGIN and never closes the borrowed pool
     std::atomic<bool> acquired{};
     CHECK(pool->async_acquire([&](auto) { acquired = true; }, 100ms) != 0);
     const auto deadline = std::chrono::steady_clock::now() + 2s;
-    while (!acquired && std::chrono::steady_clock::now() < deadline)
-    {
+    while (!acquired && std::chrono::steady_clock::now() < deadline) {
         std::this_thread::sleep_for(1ms);
     }
     CHECK(acquired);
@@ -290,8 +276,7 @@ TEST_CASE("Transaction drain seals only BEGIN and never closes the borrowed pool
 TEST_CASE("Accepted transaction commands remain admitted after new BEGIN is sealed") {
     auto pool = std::make_shared<arknet::mysql::pool>(arknet::mysql::pool_options{});
     for (const auto phase :
-        {mysql_transaction_phase::query, mysql_transaction_phase::committing, mysql_transaction_phase::rolling_back})
-    {
+        {mysql_transaction_phase::query, mysql_transaction_phase::committing, mysql_transaction_phase::rolling_back}) {
         auto owner = std::make_shared<mysql_transaction_owner>(
             pool, mysql_transaction_limits{1, 1024}, arknet::mysql::query_options{});
         auto state = std::make_shared<mysql_transaction_state>();
@@ -353,8 +338,7 @@ TEST_CASE("Idle transaction deadlines and undispatched native events prevent dra
 
 TEST_CASE("Transaction drain waits for terminal delivery and its callback captures") {
     auto pool = std::make_shared<arknet::mysql::pool>(arknet::mysql::pool_options{});
-    for (const bool throwing : {false, true})
-    {
+    for (const bool throwing : {false, true}) {
         auto owner = std::make_shared<mysql_transaction_owner>(
             pool, mysql_transaction_limits{1, 1024}, arknet::mysql::query_options{});
         auto state = std::make_shared<mysql_transaction_state>();
@@ -365,8 +349,7 @@ TEST_CASE("Transaction drain waits for terminal delivery and its callback captur
         REQUIRE(owner->reserve(state, 32, [&, capture = std::move(capture)](auto) {
             CHECK_FALSE(owner->quiescent());
             CHECK_FALSE(owner->logically_drained());
-            if (throwing)
-            {
+            if (throwing) {
                 throw std::runtime_error("expected transaction completion failure");
             }
         }));
@@ -374,14 +357,11 @@ TEST_CASE("Transaction drain waits for terminal delivery and its callback captur
         CHECK_FALSE(owner->logically_drained());
         owner->deliver(state);
         CHECK_FALSE(owner->logically_drained());
-        if (throwing)
-        {
+        if (throwing) {
             CHECK_THROWS_AS(owner->update(1), std::runtime_error);
             CHECK_FALSE(owner->logically_drained());
             CHECK(owner->update(1) == 0);
-        }
-        else
-        {
+        } else {
             CHECK(owner->update(1) == 1);
         }
         CHECK(destroyed == 1);
@@ -394,10 +374,8 @@ TEST_CASE("Transaction drain waits for terminal delivery and its callback captur
 
 TEST_CASE("Transaction activity survives facade destruction from inline and queued completions") {
     auto pool = std::make_shared<arknet::mysql::pool>(arknet::mysql::pool_options{});
-    for (const bool queued : {false, true})
-    {
-        for (const bool throwing : {false, true})
-        {
+    for (const bool queued : {false, true}) {
+        for (const bool throwing : {false, true}) {
             auto service = std::make_unique<mysql_transaction_service>(pool, mysql_transaction_limits{1, 1024});
             std::weak_ptr owner = database_service_test_access::owner(*service);
             unsigned destroyed{};
@@ -409,13 +387,11 @@ TEST_CASE("Transaction activity survives facade destruction from inline and queu
                 REQUIRE(active);
                 CHECK(active->activity->depth > 0);
                 CHECK_FALSE(active->logically_drained());
-                if (throwing)
-                {
+                if (throwing) {
                     throw std::runtime_error("expected self-destruction completion failure");
                 }
             };
-            if (queued)
-            {
+            if (queued) {
                 auto active = owner.lock();
                 auto state = std::make_shared<mysql_transaction_state>();
                 state->phase = mysql_transaction_phase::terminal;
@@ -424,13 +400,10 @@ TEST_CASE("Transaction activity survives facade destruction from inline and queu
                 active->deliver(state);
             }
             service->stop_accepting();
-            if (throwing)
-            {
+            if (throwing) {
                 CHECK_THROWS_AS(
                     queued ? service->update() : service->start({1s, 1s}, std::move(completion)), std::runtime_error);
-            }
-            else
-            {
+            } else {
                 CHECK(
                     (queued ? service->update() : service->start({1s, 1s}, std::move(completion))) == (queued ? 1 : 0));
             }

@@ -24,8 +24,7 @@
 
 namespace ark {
 
-class spin_lock
-{
+class spin_lock {
 public:
     spin_lock()
         : atomic_lock_(false) {

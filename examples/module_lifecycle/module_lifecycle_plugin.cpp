@@ -34,15 +34,13 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void module_lifecycle_plugin::install() {
-    if (!register_module(make_module_lifecycle_module(), module_update::disabled))
-    {
+    if (!register_module(make_module_lifecycle_module(), module_update::disabled)) {
         throw std::runtime_error("module_lifecycle module registration rejected");
     }
 }
 
 void module_lifecycle_plugin::uninstall() {
-    if (!unregister_module<module_lifecycle_module>())
-    {
+    if (!unregister_module<module_lifecycle_module>()) {
         throw std::runtime_error("module_lifecycle module unregistration rejected");
     }
 }

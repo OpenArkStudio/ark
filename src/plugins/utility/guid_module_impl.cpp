@@ -28,8 +28,7 @@
 
 namespace ark {
 
-class guid_module_impl final : public module_base<guid_module>
-{
+class guid_module_impl final : public module_base<guid_module> {
 public:
     bool init() override;
 

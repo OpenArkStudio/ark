@@ -30,8 +30,7 @@ namespace {
 #endif
 }
 
-class owner_module final : public ark::module
-{
+class owner_module final : public ark::module {
 public:
     const std::string& get_name() const override {
         return name_;
@@ -55,23 +54,20 @@ ark::task<> ready_task() {
 } // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 2)
-    {
+    if (argc != 2) {
         return 2;
     }
     std::set_terminate(contract_exit);
     const std::string_view mode(argv[1]);
     auto manager = std::make_unique<ark::plugin_manager>();
     owner_module module;
-    if (mode == "--pending-destruction")
-    {
+    if (mode == "--pending-destruction") {
         manager->add_module(module.get_name(), &module);
         manager->create_task_group(module).start(ready_task());
         manager.reset();
         return 3;
     }
-    if (mode == "--wrong-thread-destruction")
-    {
+    if (mode == "--wrong-thread-destruction") {
         std::thread worker([owned = std::move(manager)]() mutable {
             std::set_terminate(contract_exit);
             owned.reset();
@@ -79,20 +75,17 @@ int main(int argc, char** argv) {
         worker.join();
         return 3;
     }
-    if (mode == "--update-destruction")
-    {
+    if (mode == "--update-destruction") {
         manager->add_module(module.get_name(), &module);
         manager->add_update_module(&module);
         module.on_update = [&] { manager.reset(); };
         manager->update(1);
         return 3;
     }
-    if (mode == "--final-completion-destruction")
-    {
+    if (mode == "--final-completion-destruction") {
         manager->add_module(module.get_name(), &module);
         manager->create_task_group(module).start(ready_task(), [&](std::exception_ptr error) {
-            if (error || manager->pending_tasks())
-            {
+            if (error || manager->pending_tasks()) {
                 std::_Exit(4);
             }
             manager.reset();

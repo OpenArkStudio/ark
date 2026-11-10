@@ -25,8 +25,7 @@
 
 namespace ark {
 
-class mysql_sample_module final : public module_base<module>
-{
+class mysql_sample_module final : public module_base<module> {
 private:
     mysql_module* mysql_module_ptr_;
 

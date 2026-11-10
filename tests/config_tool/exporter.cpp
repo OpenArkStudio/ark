@@ -13,8 +13,7 @@
 
 namespace {
 
-struct temporary_directory
-{
+struct temporary_directory {
     std::filesystem::path path;
 
     temporary_directory() {
@@ -128,14 +127,11 @@ TEST_CASE("Real XLSX worksheets export through the same schema and typed-row val
     workbook.workbook().worksheet(1).setName("fields");
     workbook.workbook().addWorksheet("GuestPlayer");
     for (const auto& [name, source] :
-        std::map<std::string, std::string>{{"fields", "fields.csv"}, {"GuestPlayer", "GuestPlayer.csv"}})
-    {
+        std::map<std::string, std::string>{{"fields", "fields.csv"}, {"GuestPlayer", "GuestPlayer.csv"}}) {
         const auto table = read_table(std::filesystem::path(ARK_CONFIG_TOOL_FIXTURE_DIR) / source);
         auto sheet = workbook.workbook().worksheet(name);
-        for (std::size_t row = 0; row < table.rows.size(); ++row)
-        {
-            for (std::size_t column = 0; column < table.rows[row].size(); ++column)
-            {
+        for (std::size_t row = 0; row < table.rows.size(); ++row) {
+            for (std::size_t column = 0; column < table.rows[row].size(); ++column) {
                 sheet.cell(static_cast<std::uint32_t>(row + 1), static_cast<std::uint16_t>(column + 1)).value() =
                     table.rows[row][column].text;
             }
@@ -191,8 +187,7 @@ TEST_CASE("XLSX scalar types retain exact text integers and reject unsafe numeri
     workbook.create(file.string(), OpenXLSX::XLDoNotOverwrite);
     auto sheet = workbook.workbook().worksheet(1);
     const std::vector<std::string> names{"id", "value", "flag", "ratio", "label", "field_name"};
-    for (std::size_t i = 0; i < names.size(); ++i)
-    {
+    for (std::size_t i = 0; i < names.size(); ++i) {
         sheet.cell(1, static_cast<std::uint16_t>(i + 1)).value() = names[i];
     }
     sheet.cell("A2").value() = 1;

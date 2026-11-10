@@ -35,39 +35,31 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void kernel_plugin::install() {
-    if (!register_module(detail::make_class_meta_module(), module_update::disabled))
-    {
+    if (!register_module(detail::make_class_meta_module(), module_update::disabled)) {
         throw std::runtime_error("kernel class_meta_module registration rejected");
     }
-    if (!register_module(detail::make_config_module(), module_update::disabled))
-    {
+    if (!register_module(detail::make_config_module(), module_update::disabled)) {
         throw std::runtime_error("kernel config_module registration rejected");
     }
-    if (!register_module(detail::make_kernel_module(), module_update::enabled))
-    {
+    if (!register_module(detail::make_kernel_module(), module_update::enabled)) {
         throw std::runtime_error("kernel kernel_module registration rejected");
     }
-    if (!register_module(detail::make_map_module(), module_update::disabled))
-    {
+    if (!register_module(detail::make_map_module(), module_update::disabled)) {
         throw std::runtime_error("kernel map_module registration rejected");
     }
 }
 
 void kernel_plugin::uninstall() {
-    if (!unregister_module<map_module>())
-    {
+    if (!unregister_module<map_module>()) {
         throw std::runtime_error("kernel map_module unregistration rejected");
     }
-    if (!unregister_module<kernel_module>())
-    {
+    if (!unregister_module<kernel_module>()) {
         throw std::runtime_error("kernel kernel_module unregistration rejected");
     }
-    if (!unregister_module<config_module>())
-    {
+    if (!unregister_module<config_module>()) {
         throw std::runtime_error("kernel config_module unregistration rejected");
     }
-    if (!unregister_module<class_meta_module>())
-    {
+    if (!unregister_module<class_meta_module>()) {
         throw std::runtime_error("kernel class_meta_module unregistration rejected");
     }
 }

@@ -34,8 +34,7 @@ namespace entity_sync {
 class snapshot_access;
 }
 
-class row_impl final : public row
-{
+class row_impl final : public row {
 private:
     friend class kernel_module_impl;
     friend class table_impl;

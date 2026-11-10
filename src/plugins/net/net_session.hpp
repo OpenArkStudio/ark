@@ -42,8 +42,7 @@
 namespace ark {
 
 template<typename session_ptr_type, bool is_session>
-class net_session : public noncopyable
-{
+class net_session : public noncopyable {
 public:
     explicit net_session(std::shared_ptr<const msg_header> req_head, conv_id_t session_id,
         const session_ptr_type session_ptr = nullptr,
@@ -60,34 +59,28 @@ public:
 
     void release_queue_data() {
         net_event* event = nullptr;
-        while (pop_net_event(event))
-        {
+        while (pop_net_event(event)) {
             net_event::release(event);
         }
 
         net_msg* msg = nullptr;
-        while (pop_net_msg(msg))
-        {
+        while (pop_net_msg(msg)) {
             net_msg::release(msg);
         }
     }
 
     const session_ptr_type get_session() {
-        if constexpr (is_session)
-        {
+        if constexpr (is_session) {
             ARK_ASSERT_RET_VAL(session_ != nullptr, nullptr);
             return session_;
-        }
-        else
-        {
+        } else {
             ARK_ASSERT_NO_EFFECT(0);
             return nullptr;
         }
     }
 
     int add_buffer(const char* data, size_t len) {
-        if (!buffer_.write(data, len))
-        {
+        if (!buffer_.write(data, len)) {
             return -1;
         }
         const auto length = std::min(buffer_.get_length(), static_cast<size_t>(std::numeric_limits<int>::max()));
@@ -99,14 +92,12 @@ public:
     }
 
     size_t remove_buffer(size_t len) {
-        if (len > buffer_.get_length())
-        {
+        if (len > buffer_.get_length()) {
             return 0;
         }
 
         buffer_.remove_data(len);
-        if (len > 0)
-        {
+        if (len > 0) {
             pending_header_.reset();
         }
         return buffer_.get_length();
@@ -163,55 +154,45 @@ public:
     bool parse_buffer_to_msg() {
         size_t pos = 0;
         const size_t head_len = get_head_len();
-        if (head_len == 0)
-        {
+        if (head_len == 0) {
             return false;
         }
-        while (get_buffer_len() - pos >= head_len)
-        {
+        while (get_buffer_len() - pos >= head_len) {
             auto msg_head = std::move(pending_header_);
-            if (msg_head == nullptr)
-            {
+            if (msg_head == nullptr) {
                 msg_head.reset(req_header_->create());
-                if (!msg_head)
-                {
+                if (!msg_head) {
                     return false;
                 }
                 msg_head->parse_from_array(get_buffer() + pos);
             }
             const size_t msg_len = msg_head->message_length();
-            if (!req_header_->accepts_body_size(msg_len))
-            {
+            if (!req_header_->accepts_body_size(msg_len)) {
                 return false;
             }
-            if (get_buffer_len() - pos - head_len < msg_len)
-            {
+            if (get_buffer_len() - pos - head_len < msg_len) {
                 pending_header_ = std::move(msg_head);
                 break;
             }
 
             net_msg* msg = net_msg::alloc_msg(msg_head.release());
-            if (msg == nullptr)
-            {
+            if (msg == nullptr) {
                 return false;
             }
             pos += head_len;
-            if (msg_len > 0)
-            {
+            if (msg_len > 0) {
                 msg->copy_data(get_buffer() + pos, msg_len);
                 pos += msg_len;
             }
 
-            if (!add_net_msg(msg))
-            {
+            if (!add_net_msg(msg)) {
                 net_msg::release(msg);
                 return false;
             }
         }
 
         // remove [0, pos] buffers
-        if (pos > 0)
-        {
+        if (pos > 0) {
             remove_buffer(pos);
         }
         return true;

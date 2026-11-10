@@ -33,15 +33,13 @@ namespace {
 
 using namespace std::chrono_literals;
 
-class acceptance_failure : public std::runtime_error
-{
+class acceptance_failure : public std::runtime_error {
 public:
     using std::runtime_error::runtime_error;
 };
 
 void require(bool condition, const char* message) {
-    if (!condition)
-    {
+    if (!condition) {
         throw acceptance_failure(message);
     }
 }
@@ -61,16 +59,14 @@ std::uint16_t port(const char* name) {
     return static_cast<std::uint16_t>(number);
 }
 
-struct completion
-{
+struct completion {
     unsigned count{};
     bool on_owner{};
     std::exception_ptr error;
 };
 
 // Public interfaces only: no implementation/factory object is linked into this host.
-class plugin_host
-{
+class plugin_host {
 public:
     ark::plugin_manager manager;
     ark::task_group* tasks{};
@@ -85,12 +81,10 @@ public:
     }
 
     ~plugin_host() {
-        if (!stopped_)
-        {
-            try
-            { stop(); }
-            catch (...)
-            {
+        if (!stopped_) {
+            try {
+                stop();
+            } catch (...) {
                 std::cerr << "Database cancellation acceptance could not naturally drain\n" << std::flush;
                 std::_Exit(1);
             }
@@ -113,8 +107,7 @@ public:
     }
 
     static void check_completion(const completion& record) {
-        if (record.error)
-        {
+        if (record.error) {
             std::rethrow_exception(record.error);
         }
         require(record.count == 1 && record.on_owner, "DSO root completion repeated or escaped its owner");
@@ -122,8 +115,7 @@ public:
 
     void pump_until(const std::function<bool()>& done) {
         const auto deadline = std::chrono::steady_clock::now() + 25s;
-        while (!done())
-        {
+        while (!done()) {
             require(std::chrono::steady_clock::now() < deadline, "Database cancellation acceptance exceeded bound");
             require(manager.update(0), "Database cancellation owner update failed");
             // Throttling only; server-visible state establishes cancellation readiness.
@@ -141,8 +133,7 @@ public:
 
     void stop() {
         const auto deadline = std::chrono::steady_clock::now() + 30s;
-        while (!(stopped_ = manager.stop(0)))
-        {
+        while (!(stopped_ = manager.stop(0))) {
             require(manager.get_shutdown_state() != ark::plugin_manager::shutdown_state::failed &&
                         std::chrono::steady_clock::now() < deadline,
                 "Cancelled DSO requests did not naturally retire within the shutdown bound");
@@ -158,15 +149,13 @@ public:
     }
 
     bool stop_step() {
-        if (stopped_)
-        {
+        if (stopped_) {
             return true;
         }
         stopped_ = manager.stop(0);
         require(manager.get_shutdown_state() != ark::plugin_manager::shutdown_state::failed,
             "Observed-request resource shutdown failed");
-        if (stopped_)
-        {
+        if (stopped_) {
             require(tasks->closed() && tasks->pending() == 0 && manager.pending_tasks() == 0,
                 "Resource shutdown retained a managed request");
             require(manager.stop(0), "Observed-request resource stop was not idempotent");
@@ -189,8 +178,7 @@ ark::task<> observer_interval() {
     co_await timer.async_wait(asio::use_awaitable);
 }
 
-struct cancellation_state
-{
+struct cancellation_state {
     ark::task_group::task_id request_id{};
     completion request, observer;
     bool observed{};
@@ -207,8 +195,7 @@ void cancel_observed(plugin_host& host, cancellation_state& state) {
     state.cancelled = true;
 }
 
-struct stop_state
-{
+struct stop_state {
     completion request, observer;
     bool observed{};
     bool stop_requested{};
@@ -220,26 +207,21 @@ void drive_observed_stop(plugin_host& target, plugin_host& observer, stop_state&
     require(target.manager.get_task_runtime() != observer.manager.get_task_runtime(),
         "Stop observer must own an independent runtime");
     const auto deadline = std::chrono::steady_clock::now() + 25s;
-    while (!state.target_stopped || state.observer.count == 0)
-    {
+    while (!state.target_stopped || state.observer.count == 0) {
         require(std::chrono::steady_clock::now() < deadline && !state.request.error && !state.observer.error,
             "Observed-request shutdown failed or exceeded its bound");
         require(!target.manager.get_task_runtime()->get_executor().running_in_this_thread() &&
                     !observer.manager.get_task_runtime()->get_executor().running_in_this_thread(),
             "Target stop must originate on the outer owner frame");
-        if (state.observed && !state.stop_requested)
-        {
+        if (state.observed && !state.stop_requested) {
             require(state.request.count == 0 && target.manager.pending_tasks() == 1 && observer.tasks->pending() == 1,
                 "Target request or independent observer retired before stop");
             state.stop_requested = true;
             require(!target.stop_step(), "Pending target request was destroyed synchronously by stop");
-        }
-        else if (state.stop_requested && !state.target_stopped)
-        {
+        } else if (state.stop_requested && !state.target_stopped) {
             state.target_stopped = target.stop_step();
         }
-        if (!state.target_stopped)
-        {
+        if (!state.target_stopped) {
             require(target.manager.update(0), "Target resource-shutdown update failed");
         }
         require(observer.manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::running &&
@@ -259,16 +241,13 @@ void redis_success(const arknet::redis::result& result) {
 
 std::string client_field(std::string_view line, std::string_view name) {
     const auto marker = std::string(name) + "=";
-    for (std::size_t position{}; position < line.size();)
-    {
+    for (std::size_t position{}; position < line.size();) {
         const auto end = line.find(' ', position);
         const auto field = line.substr(position, end == std::string_view::npos ? end : end - position);
-        if (field.starts_with(marker))
-        {
+        if (field.starts_with(marker)) {
             return std::string(field.substr(marker.size()));
         }
-        if (end == std::string_view::npos)
-        {
+        if (end == std::string_view::npos) {
             break;
         }
         position = end + 1;
@@ -283,25 +262,21 @@ std::optional<std::string> blocked_client(const arknet::redis::result& listing, 
                 reply.type == arknet::redis::value_type::verbatim_string,
         "Redis CLIENT LIST result was not text");
     std::string_view remaining = reply.text;
-    if (reply.type == arknet::redis::value_type::verbatim_string)
-    {
+    if (reply.type == arknet::redis::value_type::verbatim_string) {
         require(remaining.starts_with("txt:"), "Redis CLIENT LIST verbatim result had an unexpected format");
         remaining.remove_prefix(4);
     }
     std::optional<std::string> found;
-    while (!remaining.empty())
-    {
+    while (!remaining.empty()) {
         const auto end = remaining.find('\n');
         const auto line = remaining.substr(0, end);
         if (client_field(line, "name") == tag && client_field(line, "cmd") == "blpop" &&
-            client_field(line, "flags").find('b') != std::string::npos)
-        {
+            client_field(line, "flags").find('b') != std::string::npos) {
             require(!found, "Redis observer saw concurrent replay of its tagged pipeline");
             found = client_field(line, "id");
             require(!found->empty(), "Redis observer could not identify the blocked client");
         }
-        if (end == std::string_view::npos)
-        {
+        if (end == std::string_view::npos) {
             break;
         }
         remaining.remove_prefix(end + 1);
@@ -316,8 +291,7 @@ ark::task<> redis_preflight(plugin_host& host, ark::redis_module& database, cons
     redis_success(removed);
     require(removed.replies[0].type == arknet::redis::value_type::integer && removed.replies[0].integer == 0,
         "Exclusive Redis cancellation keys already existed");
-    for (const auto* name : {"primary", "observer"})
-    {
+    for (const auto* name : {"primary", "observer"}) {
         arknet::redis::command ping_command{"PING"};
         auto ping = co_await database.command(name, std::move(ping_command), 5s);
         host.check_executor();
@@ -338,21 +312,18 @@ ark::task<> redis_observe(plugin_host& host, ark::redis_module& database, cancel
     std::optional<std::string> original;
     std::optional<std::chrono::steady_clock::time_point> quiet_until;
     const auto deadline = std::chrono::steady_clock::now() + 15s;
-    for (;;)
-    {
+    for (;;) {
         require(!state.request.error && std::chrono::steady_clock::now() < deadline,
             "Redis cancellation raised a coroutine exception or exceeded the observation bound");
         arknet::redis::command clients{"CLIENT", "LIST"};
         auto listing = co_await database.command("observer", std::move(clients), 3s);
         host.check_executor();
         const auto blocked = blocked_client(listing, tag);
-        if (blocked)
-        {
+        if (blocked) {
             require(!quiet_until && (!original || *original == *blocked), "Redis replayed its tagged pipeline");
             original = *blocked;
             state.observed = true;
-            if (!state.cancelled)
-            {
+            if (!state.cancelled) {
                 arknet::redis::command get_counter{"GET", tag + "_counter"};
                 auto counter = co_await database.command("observer", std::move(get_counter), 3s);
                 host.check_executor();
@@ -363,8 +334,7 @@ ark::task<> redis_observe(plugin_host& host, ark::redis_module& database, cancel
                 std::cout << "redis server-visible tagged BLPOP active; task cancellation requested\n";
             }
         }
-        if (result && !state.recovered)
-        {
+        if (result && !state.recovered) {
             std::cout << "redis native cancellation code=" << static_cast<int>(result->error)
                       << " may_have_run=" << result->command_may_have_run
                       << " transport=" << result->transport_error.value() << " partial=" << result->replies.size()
@@ -372,8 +342,7 @@ ark::task<> redis_observe(plugin_host& host, ark::redis_module& database, cancel
             require(state.observed && state.cancelled && result->error == arknet::redis::client_errc::cancelled &&
                         result->command_may_have_run && !result->transport_error && result->replies.size() <= 1,
                 "Redis cancellation lost its original sent/uncertain native result semantics");
-            if (!result->replies.empty())
-            {
+            if (!result->replies.empty()) {
                 require(
                     result->replies[0].type == arknet::redis::value_type::integer && result->replies[0].integer == 1,
                     "Redis cancellation changed its retained partial reply");
@@ -385,15 +354,12 @@ ark::task<> redis_observe(plugin_host& host, ark::redis_module& database, cancel
             require(recovered.replies[0].text == "PONG", "Redis explicit follow-up could not recover");
             state.recovered = true;
         }
-        if (!blocked && state.recovered)
-        {
+        if (!blocked && state.recovered) {
             state.retired_on_server = true;
-            if (!quiet_until)
-            {
+            if (!quiet_until) {
                 quiet_until = std::chrono::steady_clock::now() + 500ms;
             }
-            if (std::chrono::steady_clock::now() >= *quiet_until)
-            {
+            if (std::chrono::steady_clock::now() >= *quiet_until) {
                 break;
             }
         }
@@ -418,8 +384,7 @@ void check_redis() {
     require(options.pool.connection.host == "127.0.0.1", "Redis cancellation requires an owned IPv4 loopback service");
     options.pool.connection.port = std::to_string(port("ARK_DATABASE_REDIS_PORT"));
     options.pool.connection.password = environment("ARK_DATABASE_REDIS_PASSWORD");
-    if (const auto* user = std::getenv("ARK_DATABASE_REDIS_USER"))
-    {
+    if (const auto* user = std::getenv("ARK_DATABASE_REDIS_USER")) {
         options.pool.connection.username = user;
     }
     options.pool.max_connections = 1;
@@ -453,23 +418,19 @@ void check_redis() {
 bool redis_target_present(const arknet::redis::result& listing, const std::string& tag, const std::string& original) {
     redis_success(listing);
     std::string_view remaining = listing.replies[0].text;
-    if (remaining.starts_with("txt:"))
-    {
+    if (remaining.starts_with("txt:")) {
         remaining.remove_prefix(4);
     }
     bool present{};
-    while (!remaining.empty())
-    {
+    while (!remaining.empty()) {
         const auto end = remaining.find('\n');
         const auto line = remaining.substr(0, end);
         const auto id = client_field(line, "id");
-        if (client_field(line, "name") == tag || id == original)
-        {
+        if (client_field(line, "name") == tag || id == original) {
             require(!present && id == original, "Stopped Redis target reconnected or replayed its pipeline");
             present = true;
         }
-        if (end == std::string_view::npos)
-        {
+        if (end == std::string_view::npos) {
             break;
         }
         remaining.remove_prefix(end + 1);
@@ -482,15 +443,13 @@ ark::task<> redis_stop_observe(plugin_host& observer, ark::redis_module& databas
     std::optional<std::string> original;
     std::optional<std::chrono::steady_clock::time_point> quiet_until;
     const auto deadline = std::chrono::steady_clock::now() + 18s;
-    for (;;)
-    {
+    for (;;) {
         require(std::chrono::steady_clock::now() < deadline, "Stopped Redis target did not retire on the server");
         arknet::redis::command clients{"CLIENT", "LIST"};
         auto listing = co_await database.command("observer", std::move(clients), 3s);
         observer.check_executor();
         const auto blocked = blocked_client(listing, tag);
-        if (!state.observed && blocked)
-        {
+        if (!state.observed && blocked) {
             original = *blocked;
             arknet::redis::command get_counter{"GET", tag + "_counter"};
             auto counter = co_await database.command("observer", std::move(get_counter), 3s);
@@ -501,23 +460,17 @@ ark::task<> redis_stop_observe(plugin_host& observer, ark::redis_module& databas
             std::cout << "redis-stop server-visible tagged BLPOP and counter=1; outer-frame stop enabled\n";
         }
         const bool present = original && redis_target_present(listing, tag, *original);
-        if (state.target_stopped)
-        {
+        if (state.target_stopped) {
             state.observed_after_stop = true;
             require(result.has_value(), "Redis stop lost its owning native result");
-            if (!present)
-            {
-                if (!quiet_until)
-                {
+            if (!present) {
+                if (!quiet_until) {
                     quiet_until = std::chrono::steady_clock::now() + 500ms;
                 }
-                if (std::chrono::steady_clock::now() >= *quiet_until)
-                {
+                if (std::chrono::steady_clock::now() >= *quiet_until) {
                     break;
                 }
-            }
-            else
-            {
+            } else {
                 require(!quiet_until, "Retired Redis target returned during the no-replay window");
             }
         }
@@ -542,8 +495,7 @@ void check_redis_stop() {
     require(options.pool.connection.host == "127.0.0.1", "Redis stop acceptance requires owned IPv4 loopback");
     options.pool.connection.port = std::to_string(port("ARK_DATABASE_REDIS_PORT"));
     options.pool.connection.password = environment("ARK_DATABASE_REDIS_PASSWORD");
-    if (const auto* user = std::getenv("ARK_DATABASE_REDIS_USER"))
-    {
+    if (const auto* user = std::getenv("ARK_DATABASE_REDIS_USER")) {
         options.pool.connection.username = user;
     }
     options.pool.max_connections = 1;
@@ -573,8 +525,7 @@ void check_redis_stop() {
     require(result && result->error == arknet::redis::client_errc::cancelled && result->command_may_have_run &&
                 !result->transport_error && result->replies.size() <= 1,
         "Redis manager-stop result lost its owning cancelled/uncertain semantics");
-    if (!result->replies.empty())
-    {
+    if (!result->replies.empty()) {
         require(result->replies[0].type == arknet::redis::value_type::integer && result->replies[0].integer == 1,
             "Redis manager-stop partial reply changed after both hosts were destroyed");
     }
@@ -606,8 +557,7 @@ void check_redis_tls_stop() {
     require(options.pool.connection.host == "127.0.0.1", "Redis TLS stop requires an owned IPv4 loopback service");
     options.pool.connection.port = std::to_string(port("ARK_DATABASE_REDIS_PORT"));
     options.pool.connection.password = environment("ARK_DATABASE_REDIS_PASSWORD");
-    if (const auto* user = std::getenv("ARK_DATABASE_REDIS_USER"))
-    {
+    if (const auto* user = std::getenv("ARK_DATABASE_REDIS_USER")) {
         options.pool.connection.username = user;
     }
     options.pool.certificate_authority = environment("ARK_DATABASE_REDIS_CA");
@@ -642,8 +592,7 @@ void check_redis_tls_stop() {
     require(result && result->error == arknet::redis::client_errc::cancelled && result->command_may_have_run &&
                 !result->transport_error && result->replies.size() <= 1,
         "Redis TLS manager-stop result lost its owning cancelled/uncertain semantics");
-    if (!result->replies.empty())
-    {
+    if (!result->replies.empty()) {
         require(result->replies[0].type == arknet::redis::value_type::integer && result->replies[0].integer == 1,
             "Redis TLS manager-stop partial reply changed after both hosts were destroyed");
     }
@@ -685,31 +634,27 @@ ark::task<> mysql_observe(plugin_host& host, ark::mysql_module& database, cancel
     const auto sql = "SELECT CAST(ID AS SIGNED), STATE FROM information_schema.processlist "
                      "WHERE ID <> CONNECTION_ID() AND INFO LIKE '%" +
                      tag + "%'";
-    for (;;)
-    {
+    for (;;) {
         require(!state.request.error && std::chrono::steady_clock::now() < deadline,
             "MySQL cancellation raised a coroutine exception or exceeded the server-retirement bound");
         auto listing = co_await database.query("observer", sql, 3s);
         host.check_executor();
         mysql_success(listing);
         require(listing.result.rows.size() <= 1, "MySQL observer saw concurrent replay of its tagged UPDATE");
-        if (!listing.result.rows.empty())
-        {
+        if (!listing.result.rows.empty()) {
             require(listing.result.rows[0].size() == 2, "MySQL observer lost its ID/state fields");
             const auto id = std::get<std::int64_t>(listing.result.rows[0][0]);
             require(!quiet_until && (!original || *original == id), "MySQL replayed its tagged UPDATE");
             original = id;
             const auto* phase = std::get_if<std::string>(&listing.result.rows[0][1]);
-            if (!state.cancelled && phase && *phase == "User sleep")
-            {
+            if (!state.cancelled && phase && *phase == "User sleep") {
                 state.observed = true;
                 cancel_observed(host, state);
                 require(!result, "MySQL cancellation fabricated an immediate native result");
                 std::cout << "mysql server-visible tagged UPDATE active; task cancellation requested\n";
             }
         }
-        if (result && !state.recovered)
-        {
+        if (result && !state.recovered) {
             std::cout << "mysql native cancellation code=" << static_cast<int>(result->result.status.code)
                       << " outcome_unknown=" << result->result.status.outcome_unknown
                       << " transport=" << result->result.status.transport_error.value() << '\n';
@@ -725,15 +670,12 @@ ark::task<> mysql_observe(plugin_host& host, ark::mysql_module& database, cancel
                 "MySQL explicit follow-up could not recover");
             state.recovered = true;
         }
-        if (listing.result.rows.empty() && state.recovered)
-        {
+        if (listing.result.rows.empty() && state.recovered) {
             state.retired_on_server = true;
-            if (!quiet_until)
-            {
+            if (!quiet_until) {
                 quiet_until = std::chrono::steady_clock::now() + 500ms;
             }
-            if (std::chrono::steady_clock::now() >= *quiet_until)
-            {
+            if (std::chrono::steady_clock::now() >= *quiet_until) {
                 break;
             }
         }
@@ -811,8 +753,7 @@ ark::task<> mysql_stop_observe(plugin_host& observer, ark::mysql_module& databas
     std::optional<std::int64_t> original;
     std::optional<std::chrono::steady_clock::time_point> quiet_until;
     const auto deadline = std::chrono::steady_clock::now() + 18s;
-    for (;;)
-    {
+    for (;;) {
         require(std::chrono::steady_clock::now() < deadline, "Stopped MySQL target did not retire on the server");
         const auto sql =
             "SELECT CAST(ID AS SIGNED),STATE FROM information_schema.processlist WHERE ID <> CONNECTION_ID() AND (" +
@@ -821,32 +762,26 @@ ark::task<> mysql_stop_observe(plugin_host& observer, ark::mysql_module& databas
         observer.check_executor();
         mysql_success(listing);
         require(listing.result.rows.size() <= 1, "Manager stop replayed the tagged MySQL UPDATE concurrently");
-        if (!listing.result.rows.empty())
-        {
+        if (!listing.result.rows.empty()) {
             const auto& row = listing.result.rows[0];
             require(row.size() == 2, "MySQL stop observer lost its ID/state fields");
             const auto id = std::get<std::int64_t>(row[0]);
             require(!quiet_until && (!original || *original == id), "Stopped MySQL target reconnected or replayed");
             original = id;
             const auto* phase = std::get_if<std::string>(&row[1]);
-            if (!state.observed && phase && *phase == "User sleep")
-            {
+            if (!state.observed && phase && *phase == "User sleep") {
                 state.observed = true;
                 std::cout << "mysql-stop server-visible tagged UPDATE in User sleep; outer-frame stop enabled\n";
             }
         }
-        if (state.target_stopped)
-        {
+        if (state.target_stopped) {
             state.observed_after_stop = true;
             require(result.has_value(), "MySQL stop lost its owning native result");
-            if (listing.result.rows.empty())
-            {
-                if (!quiet_until)
-                {
+            if (listing.result.rows.empty()) {
+                if (!quiet_until) {
                     quiet_until = std::chrono::steady_clock::now() + 500ms;
                 }
-                if (std::chrono::steady_clock::now() >= *quiet_until)
-                {
+                if (std::chrono::steady_clock::now() >= *quiet_until) {
                     break;
                 }
             }
@@ -936,14 +871,11 @@ ark::task<> mysql_transaction_request(plugin_host& host, ark::mysql_module& data
     require(bool(*owned) && mysql_scalar(owned->result) == 1 &&
                 owned->transaction_status.outcome == ark::mysql_transaction_outcome::active,
         "MySQL cancellation transaction did not read its uncommitted pre-write");
-    if (prepared)
-    {
+    if (prepared) {
         std::vector<arknet::mysql::field_value> parameters{std::int64_t{10}, std::int64_t{1}};
         result = co_await database.execute(begun.transaction,
             "UPDATE `" + tag + "` SET n=n+? WHERE id=? AND SLEEP(10)=0 /*" + tag + "*/", std::move(parameters));
-    }
-    else
-    {
+    } else {
         result = co_await database.query(
             begun.transaction, "UPDATE `" + tag + "` SET n=n+10 WHERE id=1 AND SLEEP(10)=0 /*" + tag + "*/");
     }
@@ -959,8 +891,7 @@ ark::task<> mysql_transaction_observe(plugin_host& host, ark::mysql_module& data
     const auto observer_id = mysql_scalar(identity.result);
     std::optional<std::chrono::steady_clock::time_point> quiet_until;
     const auto deadline = std::chrono::steady_clock::now() + 18s;
-    for (;;)
-    {
+    for (;;) {
         require(!state.request.error && std::chrono::steady_clock::now() < deadline,
             "MySQL transaction cancellation failed or exceeded the server-session retirement bound");
         const auto sql = "SELECT CAST(ID AS SIGNED), STATE, INFO, COMMAND FROM information_schema.processlist "
@@ -970,16 +901,14 @@ ark::task<> mysql_transaction_observe(plugin_host& host, ark::mysql_module& data
         host.check_executor();
         mysql_success(listing);
         require(listing.result.rows.size() <= 1, "MySQL transaction cancellation observed concurrent replay");
-        if (!listing.result.rows.empty())
-        {
+        if (!listing.result.rows.empty()) {
             const auto& row = listing.result.rows[0];
             require(row.size() == 4 && original && original != observer_id &&
                         std::get<std::int64_t>(row[0]) == original && !quiet_until,
                 "MySQL transaction cancellation changed session or replayed after retirement");
             const auto* phase = std::get_if<std::string>(&row[1]);
             const auto* text = std::get_if<std::string>(&row[2]);
-            if (!state.cancelled && phase && *phase == "User sleep" && text && text->find(tag) != std::string::npos)
-            {
+            if (!state.cancelled && phase && *phase == "User sleep" && text && text->find(tag) != std::string::npos) {
                 const auto* command = std::get_if<std::string>(&row[3]);
                 require(!prepared || (command && *command == "Execute"),
                     "MySQL prepared cancellation did not observe statement execute on its exact session");
@@ -996,8 +925,7 @@ ark::task<> mysql_transaction_observe(plugin_host& host, ark::mysql_module& data
                           << "; task cancellation requested\n";
             }
         }
-        if (result && !state.recovered)
-        {
+        if (result && !state.recovered) {
             require(state.observed && state.cancelled, "MySQL transaction cancelled before server observation");
             mysql_cancelled_transaction(*result);
             auto recovered = co_await database.query("primary", "SELECT CAST(CONNECTION_ID() AS SIGNED), 9", 5s);
@@ -1009,14 +937,11 @@ ark::task<> mysql_transaction_observe(plugin_host& host, ark::mysql_module& data
                 "MySQL transaction cancellation did not recover through an explicit request on a fresh connection");
             state.recovered = true;
         }
-        if (listing.result.rows.empty() && state.recovered)
-        {
-            if (!quiet_until)
-            {
+        if (listing.result.rows.empty() && state.recovered) {
+            if (!quiet_until) {
                 quiet_until = std::chrono::steady_clock::now() + 500ms;
             }
-            if (std::chrono::steady_clock::now() >= *quiet_until)
-            {
+            if (std::chrono::steady_clock::now() >= *quiet_until) {
                 state.retired_on_server = true;
                 break;
             }
@@ -1097,8 +1022,7 @@ ark::task<> mysql_transaction_stop_observe(plugin_host& observer, ark::mysql_mod
     const auto observer_id = mysql_scalar(identity.result);
     std::optional<std::chrono::steady_clock::time_point> quiet_until;
     const auto deadline = std::chrono::steady_clock::now() + 18s;
-    for (;;)
-    {
+    for (;;) {
         require(std::chrono::steady_clock::now() < deadline,
             "Manager-stopped MySQL transaction did not retire on the server");
         const auto sql = "SELECT CAST(ID AS SIGNED),STATE,INFO,COMMAND FROM information_schema.processlist "
@@ -1108,16 +1032,14 @@ ark::task<> mysql_transaction_stop_observe(plugin_host& observer, ark::mysql_mod
         observer.check_executor();
         mysql_success(listing);
         require(listing.result.rows.size() <= 1, "Manager stop replayed the transaction request concurrently");
-        if (!listing.result.rows.empty())
-        {
+        if (!listing.result.rows.empty()) {
             const auto& row = listing.result.rows[0];
             require(row.size() == 4 && original && original != observer_id &&
                         std::get<std::int64_t>(row[0]) == original && !quiet_until,
                 "Manager-stopped transaction changed session or replayed after retirement");
             const auto* phase = std::get_if<std::string>(&row[1]);
             const auto* text = std::get_if<std::string>(&row[2]);
-            if (!state.observed && phase && *phase == "User sleep" && text && text->find(tag) != std::string::npos)
-            {
+            if (!state.observed && phase && *phase == "User sleep" && text && text->find(tag) != std::string::npos) {
                 const auto* command = std::get_if<std::string>(&row[3]);
                 require(!prepared || (command && *command == "Execute"),
                     "Manager stop preceded the transaction's actual prepared execute");
@@ -1133,19 +1055,15 @@ ark::task<> mysql_transaction_stop_observe(plugin_host& observer, ark::mysql_mod
                           << " observer=" << observer_id << "; own-read=1 external-read=0; outer-frame stop enabled\n";
             }
         }
-        if (state.target_stopped)
-        {
+        if (state.target_stopped) {
             state.observed_after_stop = true;
             require(result.has_value(), "Manager stop lost the owning transaction result");
             mysql_cancelled_transaction(*result);
-            if (listing.result.rows.empty())
-            {
-                if (!quiet_until)
-                {
+            if (listing.result.rows.empty()) {
+                if (!quiet_until) {
                     quiet_until = std::chrono::steady_clock::now() + 500ms;
                 }
-                if (std::chrono::steady_clock::now() >= *quiet_until)
-                {
+                if (std::chrono::steady_clock::now() >= *quiet_until) {
                     break;
                 }
             }
@@ -1214,70 +1132,49 @@ void check_mysql_transaction_stop(bool prepared = false) {
 } // namespace
 
 int main(int argc, char** argv) {
-    try
-    {
+    try {
         require(argc == 2, "Usage: ark_database_public_plugin_cancellation_tests "
                            "redis|redis-stop|mysql|mysql-stop|mysql-transaction|mysql-statement|mysql-transaction-stop|"
                            "mysql-statement-stop|redis-tls-stop");
         const std::string_view protocol(argv[1]);
-        if (protocol == "redis")
-        {
+        if (protocol == "redis") {
             check_redis();
-        }
-        else if (protocol == "redis-stop")
-        {
+        } else if (protocol == "redis-stop") {
             check_redis_stop();
         }
 #if defined(ARKNET_ENABLE_SSL)
-        else if (protocol == "redis-tls-stop")
-        {
+        else if (protocol == "redis-tls-stop") {
             check_redis_tls_stop();
-        }
-        else if (protocol == "mysql")
-        {
+        } else if (protocol == "mysql") {
             check_mysql();
-        }
-        else if (protocol == "mysql-stop")
-        {
+        } else if (protocol == "mysql-stop") {
             check_mysql_stop();
-        }
-        else if (protocol == "mysql-transaction")
-        {
+        } else if (protocol == "mysql-transaction") {
             check_mysql_transaction();
-        }
-        else if (protocol == "mysql-statement")
-        {
+        } else if (protocol == "mysql-statement") {
             check_mysql_transaction(true);
-        }
-        else if (protocol == "mysql-transaction-stop")
-        {
+        } else if (protocol == "mysql-transaction-stop") {
             check_mysql_transaction_stop();
-        }
-        else if (protocol == "mysql-statement-stop")
-        {
+        } else if (protocol == "mysql-statement-stop") {
             check_mysql_transaction_stop(true);
         }
 #endif
-        else
-        {
+        else {
             throw acceptance_failure("Requested database cancellation protocol is not enabled");
         }
         if (protocol == "redis-stop" || protocol == "mysql-stop" || protocol == "mysql-transaction-stop" ||
-            protocol == "mysql-statement-stop" || protocol == "redis-tls-stop")
-        {
+            protocol == "mysql-statement-stop" || protocol == "redis-tls-stop") {
             std::cout
                 << protocol
                 << " real DSO manager-stop cancellation, independent observation and resource retirement passed\n";
-        }
-        else
-        {
+        } else {
             std::cout << protocol << " real DSO request cancellation, owner completion and natural retirement passed\n";
         }
         return 0;
+    } catch (const acceptance_failure& error) {
+        std::cerr << error.what() << '\n';
+    } catch (...) {
+        std::cerr << "Database DSO cancellation acceptance raised an unexpected coroutine/native exception\n";
     }
-    catch (const acceptance_failure& error)
-    { std::cerr << error.what() << '\n'; }
-    catch (...)
-    { std::cerr << "Database DSO cancellation acceptance raised an unexpected coroutine/native exception\n"; }
     return 1;
 }

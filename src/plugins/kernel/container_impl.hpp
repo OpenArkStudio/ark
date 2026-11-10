@@ -32,8 +32,7 @@ class snapshot_access;
 
 class container_impl final
     : public container
-    , public std::enable_shared_from_this<container_impl>
-{
+    , public std::enable_shared_from_this<container_impl> {
 public:
     using entity_data_list = shared_object_map<uint32_t, entity>;
 

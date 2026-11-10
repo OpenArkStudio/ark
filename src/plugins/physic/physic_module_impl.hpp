@@ -29,32 +29,27 @@
 
 namespace ark {
 
-class simulation_event_callback final : public physx::PxSimulationEventCallback
-{
+class simulation_event_callback final : public physx::PxSimulationEventCallback {
 public:
     void onContact(const physx::PxContactPairHeader& pair_header, const physx::PxContactPair* pairs,
         physx::PxU32 nb_pairs) override {};
 
     void onTrigger(physx::PxTriggerPair* pairs, physx::PxU32 count) override {
-        for (physx::PxU32 i = 0; i < count; i++)
-        {
+        for (physx::PxU32 i = 0; i < count; i++) {
             // ignore pairs when shapes have been deleted
             auto& one_pair = pairs[i];
             if (one_pair.flags &
-                (physx::PxTriggerPairFlag::eREMOVED_SHAPE_TRIGGER | physx::PxTriggerPairFlag::eREMOVED_SHAPE_OTHER))
-            {
+                (physx::PxTriggerPairFlag::eREMOVED_SHAPE_TRIGGER | physx::PxTriggerPairFlag::eREMOVED_SHAPE_OTHER)) {
                 continue;
             }
 
             auto actor_trigger = one_pair.triggerActor;
-            if (!actor_trigger || !actor_trigger->userData)
-            {
+            if (!actor_trigger || !actor_trigger->userData) {
                 continue;
             }
 
             auto px_scene = actor_trigger->getScene();
-            if (!px_scene || !px_scene->userData)
-            {
+            if (!px_scene || !px_scene->userData) {
                 continue;
             }
 
@@ -62,13 +57,11 @@ public:
 
             physic_trigger_pair trigger_pair;
             trigger_pair.trigger_obj_id = reinterpret_cast<guid_t>(actor_trigger->userData);
-            if (one_pair.otherActor && one_pair.otherActor->userData)
-            {
+            if (one_pair.otherActor && one_pair.otherActor->userData) {
                 trigger_pair.other_obj_id = reinterpret_cast<guid_t>(one_pair.otherActor->userData);
             }
 
-            for (auto& iter : trigger_cb_list_)
-            {
+            for (auto& iter : trigger_cb_list_) {
                 iter(scene_obj_id, trigger_pair);
             }
         }
@@ -95,8 +88,7 @@ private:
     trigger_cb_list trigger_cb_list_;
 };
 
-class file_output_stream : public physx::PxOutputStream
-{
+class file_output_stream : public physx::PxOutputStream {
 public:
     file_output_stream(const std::string& name) {
         physic::open_file(&file_, name.c_str(), "wb");
@@ -115,8 +107,7 @@ public:
     }
 
     void release() {
-        if (file_)
-        {
+        if (file_) {
             fclose(file_);
             file_ = nullptr;
         }
@@ -127,8 +118,7 @@ private:
 };
 
 ///physic scene
-class physic_scene_cooked
-{
+class physic_scene_cooked {
 public:
     ~physic_scene_cooked() {
         scene = nullptr;
@@ -145,8 +135,7 @@ public:
     std::map<physx::PxConvexMesh*, physx::PxVec3> convex_colliders;
 };
 
-class physic_module_impl final : public physic_module
-{
+class physic_module_impl final : public physic_module {
     ARK_DECLARE_MODULE_FUNCTIONS
 public:
     bool init() override;

@@ -35,15 +35,13 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void oss_sdk_plugin::install() {
-    if (!register_module(detail::make_oss_sdk_module(), module_update::disabled))
-    {
+    if (!register_module(detail::make_oss_sdk_module(), module_update::disabled)) {
         throw std::runtime_error("OSS SDK module registration rejected");
     }
 }
 
 void oss_sdk_plugin::uninstall() {
-    if (!unregister_module<oss_sdk_module>())
-    {
+    if (!unregister_module<oss_sdk_module>()) {
         throw std::runtime_error("OSS SDK module unregistration rejected");
     }
 }

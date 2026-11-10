@@ -27,8 +27,7 @@
 
 namespace ark {
 
-class simulate_module : public module
-{
+class simulate_module : public module {
 public:
     virtual bool create_scene(const std::string& scene_id, const int32_t index) = 0;
     virtual bool destroy_scene(const std::string& scene_id, const int32_t index) = 0;

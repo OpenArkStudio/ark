@@ -10,8 +10,7 @@ unsigned created{};
 unsigned destroyed{};
 unsigned updated{};
 
-class entry_login final : public ark::module_base<ark::login_net_module>
-{
+class entry_login final : public ark::module_base<ark::login_net_module> {
 public:
     entry_login() {
         ++created;
@@ -38,8 +37,7 @@ std::unique_ptr<login_net_module> make_login_net_module() {
 } // namespace ark::detail
 
 ARK_EXPORT_FUNC unsigned server_entry_events(unsigned event) {
-    switch (event)
-    {
+    switch (event) {
     case 0:
         return created;
     case 1:

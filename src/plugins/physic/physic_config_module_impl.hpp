@@ -25,8 +25,7 @@
 
 namespace ark {
 
-class physic_config_module_impl final : public physic_config_module
-{
+class physic_config_module_impl final : public physic_config_module {
     ARK_DECLARE_MODULE_FUNCTIONS
 public:
     bool init() override;

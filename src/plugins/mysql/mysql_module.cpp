@@ -13,8 +13,7 @@
 
 namespace ark {
 
-class mysql_module_impl final : public module_base<mysql_module>
-{
+class mysql_module_impl final : public module_base<mysql_module> {
 public:
     mysql_module_impl();
     ~mysql_module_impl() override;
@@ -40,10 +39,8 @@ private:
     std::shared_ptr<state> state_;
 };
 
-struct mysql_module_impl::state
-{
-    struct connection
-    {
+struct mysql_module_impl::state {
+    struct connection {
         std::optional<detail::mysql_service> queries;
         detail::mysql_transaction_service transactions;
         detail::database_awaitable<detail::mysql_service_reply> query_bridge;
@@ -65,8 +62,7 @@ struct mysql_module_impl::state
         }
     };
 
-    struct transaction
-    {
+    struct transaction {
         std::shared_ptr<connection> owner;
         detail::mysql_transaction handle;
         bool busy{};
@@ -77,14 +73,12 @@ struct mysql_module_impl::state
         }
     };
 
-    struct operation_guard
-    {
+    struct operation_guard {
         transaction& value;
 
         explicit operation_guard(transaction& item)
             : value(item) {
-            if (value.busy)
-            {
+            if (value.busy) {
                 throw std::logic_error("A transaction already has an active operation");
             }
             value.busy = true;
@@ -103,16 +97,14 @@ struct mysql_module_impl::state
     bool closed{};
 
     void check_owner() const {
-        if (owner != std::this_thread::get_id())
-        {
+        if (owner != std::this_thread::get_id()) {
             throw std::logic_error("MySQL module requires its framework thread");
         }
     }
 
     void check_open() const {
         check_owner();
-        if (closed)
-        {
+        if (closed) {
             throw std::logic_error("MySQL module is retiring");
         }
     }
@@ -120,8 +112,7 @@ struct mysql_module_impl::state
     std::shared_ptr<connection> find(const std::string& name) const {
         check_open();
         const auto found = connections.find(name);
-        if (found == connections.end())
-        {
+        if (found == connections.end()) {
             throw std::invalid_argument("Unknown MySQL connection name");
         }
         return found->second;
@@ -130,8 +121,7 @@ struct mysql_module_impl::state
     std::shared_ptr<transaction> find(mysql_transaction_id id) const {
         check_open();
         const auto found = transactions.find(id);
-        if (!id || found == transactions.end())
-        {
+        if (!id || found == transactions.end()) {
             throw std::invalid_argument("Unknown MySQL transaction");
         }
         return found->second;
@@ -166,16 +156,14 @@ struct mysql_module_impl::state
     static task<mysql_transaction_reply> run_begin(
         std::shared_ptr<state> shared, std::shared_ptr<connection> node, mysql_transaction_options options) {
         shared->check_open();
-        if (shared->next_id == std::numeric_limits<mysql_transaction_id>::max())
-        {
+        if (shared->next_id == std::numeric_limits<mysql_transaction_id>::max()) {
             throw std::overflow_error("MySQL transaction identifiers exhausted");
         }
         const auto id = shared->next_id++;
         auto reply = co_await detail::mysql_transaction_begin(node->transactions, node->transaction_bridge,
             detail::mysql_transaction_options{options.timeout, options.cleanup_timeout});
         mysql_transaction_id admitted{};
-        if (reply.transaction)
-        {
+        if (reply.transaction) {
             // Allocation failure abandons the handle through its normal deadline
             // cleanup. No private transaction object escapes the plugin module.
             auto entry = std::make_shared<transaction>(node, std::move(*reply.transaction));
@@ -184,8 +172,7 @@ struct mysql_module_impl::state
         }
         co_return adapt(std::move(reply), admitted);
     }
-    enum class step
-    {
+    enum class step {
         query,
         execute,
         commit,
@@ -199,8 +186,7 @@ struct mysql_module_impl::state
         operation_guard active(*entry);
         auto& bridge = entry->owner->transaction_bridge;
         detail::mysql_transaction_reply reply;
-        switch (action)
-        {
+        switch (action) {
         case step::query:
             reply = co_await detail::mysql_transaction_query(entry->handle, bridge, std::move(sql));
             break;
@@ -227,8 +213,7 @@ mysql_module_impl::~mysql_module_impl() = default;
 
 bool mysql_module_impl::init() {
     state_->check_open();
-    if (!get_plugin_manager())
-    {
+    if (!get_plugin_manager()) {
         return false;
     }
     state_->runtime = get_plugin_manager()->get_task_runtime();
@@ -238,32 +223,25 @@ bool mysql_module_impl::init() {
 bool mysql_module_impl::configure(std::string name, mysql_options options) {
     auto shared = state_;
     shared->check_open();
-    if (!get_plugin_manager() || shared->connections.contains(name))
-    {
+    if (!get_plugin_manager() || shared->connections.contains(name)) {
         return false;
     }
-    if (name.empty() || !options.max_operations || !options.max_transactions || !options.max_input_bytes)
-    {
+    if (name.empty() || !options.max_operations || !options.max_transactions || !options.max_input_bytes) {
         throw std::invalid_argument("MySQL requires a connection name and positive limits");
     }
-    if (get_plugin_manager()->get_shutdown_state() != plugin_manager::shutdown_state::running)
-    {
+    if (get_plugin_manager()->get_shutdown_state() != plugin_manager::shutdown_state::running) {
         return false;
     }
     shared->runtime = get_plugin_manager()->get_task_runtime();
     // Allocate the destination node and buckets before starting native IO.
     auto [entry, inserted] = shared->connections.try_emplace(std::move(name), nullptr);
-    if (!inserted)
-    {
+    if (!inserted) {
         return false;
     }
-    try
-    {
+    try {
         auto node = std::make_shared<state::connection>(std::move(options), shared->runtime);
         entry->second = std::move(node);
-    }
-    catch (...)
-    {
+    } catch (...) {
         // This unpublished entry is still empty; preserve same-name retry.
         shared->connections.erase(entry);
         throw;
@@ -274,22 +252,17 @@ bool mysql_module_impl::configure(std::string name, mysql_options options) {
 bool mysql_module_impl::update() {
     auto shared = state_;
     shared->check_owner();
-    for (const auto& [name, node] : shared->connections)
-    {
+    for (const auto& [name, node] : shared->connections) {
         node->queries->update();
         node->transactions.update();
         node->query_bridge.dispatch();
         node->transaction_bridge.dispatch();
     }
-    for (auto iter = shared->transactions.begin(); iter != shared->transactions.end();)
-    {
+    for (auto iter = shared->transactions.begin(); iter != shared->transactions.end();) {
         const auto& entry = iter->second;
-        if (!entry->busy && entry->handle.snapshot().outcome != detail::mysql_transaction_outcome::active)
-        {
+        if (!entry->busy && entry->handle.snapshot().outcome != detail::mysql_transaction_outcome::active) {
             iter = shared->transactions.erase(iter);
-        }
-        else
-        {
+        } else {
             ++iter;
         }
     }
@@ -298,10 +271,8 @@ bool mysql_module_impl::update() {
 
 bool mysql_module_impl::ready_to_shut() const {
     state_->check_owner();
-    for (const auto& [name, node] : state_->connections)
-    {
-        if (!node->quiescent())
-        {
+    for (const auto& [name, node] : state_->connections) {
+        if (!node->quiescent()) {
             return false;
         }
     }
@@ -311,23 +282,19 @@ bool mysql_module_impl::ready_to_shut() const {
 bool mysql_module_impl::pre_shut() {
     auto shared = state_;
     shared->check_owner();
-    if (!ready_to_shut())
-    {
+    if (!ready_to_shut()) {
         return false;
     }
     shared->closed = true;
-    for (const auto& [name, node] : shared->connections)
-    {
+    for (const auto& [name, node] : shared->connections) {
         node->query_bridge.stop_accepting();
         node->transaction_bridge.stop_accepting();
         node->queries->stop_accepting();
         node->transactions.stop_accepting();
     }
-    for (const auto& [name, node] : shared->connections)
-    {
+    for (const auto& [name, node] : shared->connections) {
         if (!node->transactions.logically_drained() || !node->queries->logically_drained() ||
-            !node->queries->retire_native())
-        {
+            !node->queries->retire_native()) {
             return false;
         }
     }
@@ -337,14 +304,11 @@ bool mysql_module_impl::pre_shut() {
 bool mysql_module_impl::shut() {
     auto shared = state_;
     shared->check_owner();
-    if (!shared->closed)
-    {
+    if (!shared->closed) {
         return false;
     }
-    for (const auto& [name, node] : shared->connections)
-    {
-        if (!node->queries->native_retired())
-        {
+    for (const auto& [name, node] : shared->connections) {
+        if (!node->queries->native_retired()) {
             return false;
         }
     }

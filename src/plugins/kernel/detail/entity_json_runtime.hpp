@@ -19,8 +19,7 @@ inline std::string entity_json_file() {
 
 inline data_type entity_json_type(entity_json::value_type type) {
     using type_t = entity_json::value_type;
-    switch (type)
-    {
+    switch (type) {
     case type_t::boolean:
         return data_type::dt_boolean;
     case type_t::int32:
@@ -44,11 +43,9 @@ inline data_type entity_json_type(entity_json::value_type type) {
 }
 
 inline void entity_json_fields(const entity_json::class_definition& schema, const std::shared_ptr<class_meta>& meta) {
-    for (const auto& field : schema.fields)
-    {
+    for (const auto& field : schema.fields) {
         const auto member = meta->create_data_meta(field.name, field.index);
-        if (!member)
-        {
+        if (!member) {
             throw entity_json::error(entity_json_file(), "/classes/" + schema.name, "could not create field metadata");
         }
         member->set_type(entity_json_type(field.type));
@@ -57,23 +54,19 @@ inline void entity_json_fields(const entity_json::class_definition& schema, cons
 }
 
 inline void load_entity_json_metadata(class_meta_manager& manager, const entity_json::document& document) {
-    for (const auto& schema : document.classes)
-    {
+    for (const auto& schema : document.classes) {
         const auto meta = manager.create_meta(schema.name);
         entity_json_fields(schema, meta);
-        for (const auto& table : schema.tables)
-        {
+        for (const auto& table : schema.tables) {
             const auto member = meta->create_table_meta(table.name, table.index);
             member->set_type_name(table.class_name);
             member->set_mask(table.mask);
         }
-        for (const auto& container : schema.containers)
-        {
+        for (const auto& container : schema.containers) {
             meta->create_container_meta(container.name, container.index, container.class_name, container.mask);
         }
     }
-    for (std::size_t i = 0; const auto& config : document.configs)
-    {
+    for (std::size_t i = 0; const auto& config : document.configs) {
         const auto schema = std::find_if(document.classes.begin(), document.classes.end(),
             [&](const auto& schema) { return schema.name == config.class_name; });
         const auto meta = manager.create_static_meta(config.class_name);
@@ -81,15 +74,13 @@ inline void load_entity_json_metadata(class_meta_manager& manager, const entity_
         meta->set_json_config(
             std::make_shared<const entity_json::config_definition>(config), "/configs/" + std::to_string(i++));
     }
-    if (!manager.after_loaded())
-    {
+    if (!manager.after_loaded()) {
         throw entity_json::error(entity_json_file(), "/classes", "could not resolve table metadata");
     }
 }
 
 inline void assign_entity_json(node& node, const entity_json::value& value, const std::string& pointer) {
-    switch (node.get_type())
-    {
+    switch (node.get_type()) {
     case data_type::dt_boolean:
         node.set_bool(std::get<bool>(value));
         break;
@@ -114,13 +105,11 @@ inline void assign_entity_json(node& node, const entity_json::value& value, cons
     case data_type::dt_string:
         node.set_string(std::get<std::string>(value));
         break;
-    case data_type::dt_guid:
-    {
+    case data_type::dt_guid: {
         const auto& text = std::get<std::string>(value);
         guid_t guid{};
         const auto parsed = std::from_chars(text.data(), text.data() + text.size(), guid);
-        if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size())
-        {
+        if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size()) {
             throw entity_json::error(entity_json_file(), pointer, "GUID exceeds the configured runtime width");
         }
         node.set_object(guid);
@@ -133,16 +122,13 @@ inline void assign_entity_json(node& node, const entity_json::value& value, cons
 
 inline void load_entity_json_config(static_entity_manager& manager, const std::shared_ptr<class_meta>& meta,
     const entity_json::config_definition& config) {
-    for (std::size_t j = 0; const auto& row : config.rows)
-    {
+    for (std::size_t j = 0; const auto& row : config.rows) {
         const auto pointer = meta->get_json_config_pointer() + "/rows/" + std::to_string(j++);
         const auto nodes = std::make_shared<node_manager>(meta);
-        for (const auto& [name, value] : row)
-        {
+        for (const auto& [name, value] : row) {
             const auto index = meta->get_index(name);
             const auto field = meta->find_data_meta(index);
-            if (!field)
-            {
+            if (!field) {
                 throw entity_json::error(
                     entity_json_file(), pointer + "/" + name, "selected schema changed during startup");
             }
@@ -150,8 +136,7 @@ inline void load_entity_json_config(static_entity_manager& manager, const std::s
             assign_entity_json(*node, value, pointer + "/" + name);
         }
         const auto id = static_cast<id_type>(std::get<std::uint64_t>(row.at("id")));
-        if (!manager.create_static_entity(meta, nodes, id))
-        {
+        if (!manager.create_static_entity(meta, nodes, id)) {
             throw entity_json::error(
                 entity_json_file(), pointer + "/id", "could not create static configuration entity");
         }

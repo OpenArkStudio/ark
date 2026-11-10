@@ -10,8 +10,7 @@ namespace ark {
 class kafka_module_impl
     : public module_base<kafka_module>
     , public RdKafka::DeliveryReportCb
-    , public RdKafka::EventCb
-{
+    , public RdKafka::EventCb {
 public:
     bool init() override;
     bool update() override;

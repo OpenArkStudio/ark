@@ -30,8 +30,7 @@ static_assert(std::same_as<decltype(&sample_module::update), decltype(&ark::modu
 
 namespace {
 
-class rejecting_database : public ark::module_base<database_module>
-{
+class rejecting_database : public ark::module_base<database_module> {
 public:
 #ifdef ARK_DATABASE_SAMPLE_MYSQL
     bool configure(std::string name, ark::mysql_options) override {
@@ -91,8 +90,7 @@ public:
 };
 
 void require(bool condition, const std::string& message) {
-    if (!condition)
-    {
+    if (!condition) {
         std::cerr << message << '\n';
         std::_Exit(1);
     }

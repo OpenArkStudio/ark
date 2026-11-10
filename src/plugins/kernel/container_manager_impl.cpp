@@ -31,8 +31,7 @@ std::shared_ptr<container> container_manager_impl::create_container(
     std::shared_ptr<class_meta> class_meta_ptr, const uint32_t index, const guid_t& parent_id) {
     // return if found
     auto container_ptr = find_container(index);
-    if (nullptr != container_ptr)
-    {
+    if (nullptr != container_ptr) {
         return container_ptr;
     }
 

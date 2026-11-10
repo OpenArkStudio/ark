@@ -37,8 +37,7 @@ std::uint32_t verification_value(hash_function hash) {
     std::array<std::uint8_t, 256> key{};
     std::array<std::uint8_t, output_size * 256> hashes{};
     std::array<std::uint8_t, output_size> result{};
-    for (int length = 0; length < 256; ++length)
-    {
+    for (int length = 0; length < 256; ++length) {
         key[length] = static_cast<std::uint8_t>(length);
         hash(key.data(), length, 256 - length, hashes.data() + length * output_size);
     }
@@ -50,10 +49,8 @@ std::uint32_t verification_value(hash_function hash) {
 template<typename word_type, std::size_t word_count>
 std::array<word_type, word_count> little_words(const std::array<std::uint8_t, sizeof(word_type) * word_count>& bytes) {
     std::array<word_type, word_count> words{};
-    for (std::size_t word = 0; word < word_count; ++word)
-    {
-        for (std::size_t byte = 0; byte < sizeof(word_type); ++byte)
-        {
+    for (std::size_t word = 0; word < word_count; ++word) {
+        for (std::size_t byte = 0; byte < sizeof(word_type); ++byte) {
             words[word] |= static_cast<word_type>(bytes[word * sizeof(word_type) + byte]) << (byte * 8);
         }
     }
@@ -63,24 +60,19 @@ std::array<word_type, word_count> little_words(const std::array<std::uint8_t, si
 template<std::size_t output_size, typename hash_function>
 void check_byte_buffers(hash_function hash) {
     alignas(8) std::array<std::uint8_t, 257> key{};
-    for (std::size_t index = 0; index < key.size(); ++index)
-    {
+    for (std::size_t index = 0; index < key.size(); ++index) {
         key[index] = static_cast<std::uint8_t>(index * 37 + 0x80);
     }
     // Cover every tail path and both sides of several full-block boundaries.
-    for (int length = 0; length <= 257; ++length)
-    {
+    for (int length = 0; length <= 257; ++length) {
         if (length > 65 && length != 127 && length != 128 && length != 129 && length != 255 && length != 256 &&
-            length != 257)
-        {
+            length != 257) {
             continue;
         }
-        for (const auto seed : {0u, 1u, 0x80000000u, 0xffffffffu})
-        {
+        for (const auto seed : {0u, 1u, 0x80000000u, 0xffffffffu}) {
             alignas(8) std::array<std::uint8_t, output_size> expected{};
             hash(key.data(), length, seed, expected.data());
-            for (std::size_t offset = 0; offset < 8; ++offset)
-            {
+            for (std::size_t offset = 0; offset < 8; ++offset) {
                 CAPTURE(length);
                 CAPTURE(seed);
                 CAPTURE(offset);
@@ -120,13 +112,11 @@ TEST_CASE("Murmur3 retains upstream verification values and the legacy swapped-b
 
 TEST_CASE("Murmur3 rotations preserve full-width seeds and multi-block golden words") {
     std::array<std::uint8_t, 33> key{};
-    for (std::size_t index = 0; index < key.size(); ++index)
-    {
+    for (std::size_t index = 0; index < key.size(); ++index) {
         key[index] = static_cast<std::uint8_t>(index);
     }
 
-    struct golden_case
-    {
+    struct golden_case {
         int length;
         std::uint32_t seed;
         std::uint32_t x86_32;
@@ -152,18 +142,14 @@ TEST_CASE("Murmur3 rotations preserve full-width seeds and multi-block golden wo
         {33, 0xffffffffu, 0x74b4bba8u, {0xc8d61452u, 0x878dd688u, 0xad51e4b6u, 0x5b85edf7u},
             {0xcdcdff4c5a639071ull, 0x8332c8a91ba2cf3dull}},
     }};
-    for (std::size_t index = 0; index < little.size(); ++index)
-    {
+    for (std::size_t index = 0; index < little.size(); ++index) {
         CAPTURE(index);
-        if (index == 2)
-        {
-            for (std::size_t byte = 0; byte < key.size(); ++byte)
-            {
+        if (index == 2) {
+            for (std::size_t byte = 0; byte < key.size(); ++byte) {
                 key[byte] = static_cast<std::uint8_t>(byte * 37 + 0x80);
             }
         }
-        for (const bool legacy : {false, true})
-        {
+        for (const bool legacy : {false, true}) {
             CAPTURE(legacy);
             const auto& expected = legacy ? swapped[index] : little[index];
             std::array<std::uint8_t, 4> actual32{};
@@ -186,15 +172,13 @@ TEST_CASE("Murmur3 rotations preserve full-width seeds and multi-block golden wo
 
 TEST_CASE("Murmur2 retains seed-zero golden words around block boundaries") {
     std::array<std::uint8_t, 33> key{};
-    for (std::size_t index = 0; index < key.size(); ++index)
-    {
+    for (std::size_t index = 0; index < key.size(); ++index) {
         key[index] = static_cast<std::uint8_t>(index);
     }
     const std::array<std::pair<int, std::uint32_t>, 10> cases{
         {{0, 0}, {1, 0xe94e6ebdu}, {3, 0xe2558031u}, {4, 0xa4985988u}, {15, 0x8184d621u}, {16, 0x5f3c0743u},
             {17, 0xb1aad377u}, {31, 0x1d7d6ee1u}, {32, 0xf1bc6c23u}, {33, 0x915a6941u}}};
-    for (const auto& [length, expected] : cases)
-    {
+    for (const auto& [length, expected] : cases) {
         CAPTURE(length);
         std::array<std::uint8_t, 4> result{};
         ark::murmur_hash::murmur_hash2(key.data(), length, result.data());
@@ -207,8 +191,7 @@ TEST_CASE("Murmur3 default and legacy policies agree until a complete block is p
         0x80, 0xff, 0x00, 0x01, 0xa5, 0x5a, 0x81, 0xfe, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09};
     using hash_function = void (*)(const void*, int, std::uint32_t, void*);
 
-    struct policy_case
-    {
+    struct policy_case {
         hash_function standard;
         hash_function legacy;
         int block_size;
@@ -219,12 +202,9 @@ TEST_CASE("Murmur3 default and legacy policies agree until a complete block is p
         {hash_x86_128, hash_x86_128_legacy, 16},
         {ark::murmur_hash::murmur_hash3_x64_128, ark::murmur_hash::murmur_hash3_x64_128_legacy_msvc, 16},
     }};
-    for (const auto& policy : policies)
-    {
-        for (int length = 0; length < policy.block_size; ++length)
-        {
-            for (const auto seed : {0u, 0x80000000u, 0xffffffffu})
-            {
+    for (const auto& policy : policies) {
+        for (int length = 0; length < policy.block_size; ++length) {
+            for (const auto seed : {0u, 0x80000000u, 0xffffffffu}) {
                 CAPTURE(length);
                 CAPTURE(seed);
                 std::array<std::uint8_t, 16> standard{};

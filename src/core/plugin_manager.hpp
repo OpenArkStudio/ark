@@ -54,19 +54,16 @@ struct plugin_manager_test_access;
 template<typename derived_type>
 class plugin_base;
 
-class plugin_manager final : private noncopyable
-{
+class plugin_manager final : private noncopyable {
     using startup_modules = std::vector<std::pair<std::string, module*>>;
 
-    struct module_owner
-    {
+    struct module_owner {
         void* instance;
         bool (*destroy)(void*, const std::string&);
         std::weak_ptr<void> lifetime;
     };
 
-    enum class call_phase
-    {
+    enum class call_phase {
         idle,
         starting,
         installing,
@@ -76,8 +73,7 @@ class plugin_manager final : private noncopyable
         startup_cleanup
     };
 
-    class phase_guard
-    {
+    class phase_guard {
     public:
         phase_guard(plugin_manager& manager, call_phase phase)
             : manager_(manager)
@@ -95,8 +91,7 @@ class plugin_manager final : private noncopyable
     };
 
 public:
-    enum class shutdown_state
-    {
+    enum class shutdown_state {
         running,
         stopping,
         failed,
@@ -110,16 +105,14 @@ public:
     ~plugin_manager() {
         // Destruction cannot retire tasks or release code executing on this
         // stack. Keep the same visible contract as the task groups themselves.
-        if (owner_ != std::this_thread::get_id() || execution_active() || pending_tasks_unchecked())
-        {
+        if (owner_ != std::this_thread::get_id() || execution_active() || pending_tasks_unchecked()) {
             std::terminate();
         }
     }
 
     static auto instance() -> plugin_manager* {
         static plugin_manager* instance_ptr = nullptr;
-        if (instance_ptr == nullptr)
-        {
+        if (instance_ptr == nullptr) {
             instance_ptr = ARK_NEW plugin_manager();
         }
 
@@ -134,8 +127,7 @@ public:
         const std::shared_ptr<void>& context, startup_cleanup_action action) noexcept {
         if (owner_ != std::this_thread::get_id() || startup_finished_ ||
             (phase_ != call_phase::idle && phase_ != call_phase::installing && phase_ != call_phase::starting) ||
-            shutdown_state_ != shutdown_state::running || task_runtime_->get_executor().running_in_this_thread())
-        {
+            shutdown_state_ != shutdown_state::running || task_runtime_->get_executor().running_in_this_thread()) {
             return false;
         }
         return startup_cleanup_.prepare(owner, code_owner, context, action);
@@ -148,15 +140,13 @@ public:
     // Call only after failed start() returned/unwound. No poll/cancel, normal
     // shutdown, deletion or DSO unload. Caller must still terminate with exit 1.
     startup_cleanup_result cleanup_failed_startup() noexcept {
-        if (owner_ != std::this_thread::get_id() || execution_active() || !startup_finished_ || startup_succeeded_)
-        {
+        if (owner_ != std::this_thread::get_id() || execution_active() || !startup_finished_ || startup_succeeded_) {
             return startup_cleanup_result::unsafe;
         }
         startup_cleanup_started_ = true;
         shutdown_state_ = shutdown_state::failed;
         phase_guard active(*this, call_phase::startup_cleanup);
-        for (const auto& [owner, tasks] : task_groups_)
-        {
+        for (const auto& [owner, tasks] : task_groups_) {
             tasks->stop_accepting();
         }
         return startup_cleanup_.run();
@@ -165,20 +155,17 @@ public:
     auto start(int64_t const timestamp, std::string const& lib_dir, std::string const& conf_dir,
         std::unordered_map<std::string, std::string> const& plugins) -> bool {
         check_owner();
-        if (execution_active() || startup_finished_ || shutdown_state_ != shutdown_state::running)
-        {
+        if (execution_active() || startup_finished_ || shutdown_state_ != shutdown_state::running) {
             throw std::logic_error("Plugin manager cannot start during a lifecycle call or after shutdown begins");
         }
         phase_guard active(*this, call_phase::starting);
 
-        struct attempt_guard
-        {
+        struct attempt_guard {
             plugin_manager& manager;
 
             ~attempt_guard() {
                 manager.startup_finished_ = true;
-                if (!manager.startup_succeeded_ && manager.startup_call_.result == startup_call_result::entered)
-                {
+                if (!manager.startup_succeeded_ && manager.startup_call_.result == startup_call_result::entered) {
                     manager.startup_call_.result = startup_call_result::exception;
                 }
             }
@@ -192,20 +179,16 @@ public:
         plugin_conf_dir_ = conf_dir;
         plugins_ = plugins;
 
-        if (!init())
-        {
+        if (!init()) {
             return false;
         }
-        if (!post_init(lifecycle_order_))
-        {
+        if (!post_init(lifecycle_order_)) {
             return false;
         }
-        if (!check_config(lifecycle_order_))
-        {
+        if (!check_config(lifecycle_order_)) {
             return false;
         }
-        if (!pre_update(lifecycle_order_))
-        {
+        if (!pre_update(lifecycle_order_)) {
             return false;
         }
 
@@ -227,21 +210,18 @@ public:
 
     auto update(const int64_t timestamp, std::size_t maximum_handlers = 64) -> bool {
         check_owner();
-        if (execution_active())
-        {
+        if (execution_active()) {
             throw std::logic_error("Plugin manager update does not permit reentrant lifecycle calls");
         }
         if (shutdown_state_ == shutdown_state::failed || shutdown_state_ == shutdown_state::stopped ||
-            shutdown_state_ == shutdown_state::cleanup_timed_out)
-        {
+            shutdown_state_ == shutdown_state::cleanup_timed_out) {
             return false;
         }
         phase_guard active(*this, call_phase::updating);
         timestamp_ = timestamp;
 
         // Just loop the modules which have update function.
-        for (const auto& iter : module_updates_)
-        {
+        for (const auto& iter : module_updates_) {
             module* module_ptr = iter.second;
             ARK_ASSERT_CONTINUE(module_ptr != nullptr);
 
@@ -260,12 +240,10 @@ public:
 
     task_group& create_task_group(module& owner, std::size_t maximum = 64) {
         check_owner();
-        if (shutdown_state_ != shutdown_state::running || !registered_module(owner))
-        {
+        if (shutdown_state_ != shutdown_state::running || !registered_module(owner)) {
             throw std::logic_error("Task group requires a registered module before shutdown begins");
         }
-        if (task_groups_.contains(&owner))
-        {
+        if (task_groups_.contains(&owner)) {
             throw std::logic_error("Module already owns a task group");
         }
         auto tasks = std::make_unique<task_group>(task_runtime_, maximum);
@@ -277,8 +255,7 @@ public:
     task_group& get_tasks(module& owner) const {
         check_owner();
         const auto found = task_groups_.find(&owner);
-        if (!registered_module(owner) || found == task_groups_.end())
-        {
+        if (!registered_module(owner) || found == task_groups_.end()) {
             throw std::logic_error("Module has no managed task group");
         }
         return *found->second;
@@ -336,13 +313,10 @@ public:
         std::string runtime_plugin_name = GET_CLASS_NAME(plugin_type);
         startup_call_.enter(plugin_name, "constructor");
         plugin* new_plugin{};
-        try
-        {
+        try {
             new_plugin = ARK_NEW plugin_type();
             startup_call_.result = startup_call_result::passed;
-        }
-        catch (...)
-        {
+        } catch (...) {
             startup_call_.result = startup_call_result::exception;
             throw;
         }
@@ -357,15 +331,13 @@ public:
 
     auto add_module(const std::string& module_name, module* module_ptr) -> bool {
         check_registration();
-        if (!module_ptr || registered_module(*module_ptr))
-        {
+        if (!module_ptr || registered_module(*module_ptr)) {
             return false;
         }
         ARK_ASSERT_RET_VAL(!module_name.empty(), false);
         ARK_ASSERT_RET_VAL(find_module(module_name) == nullptr, false);
         const auto inserted = module_instances_.insert(std::make_pair(module_name, module_ptr)).second;
-        if (inserted)
-        {
+        if (inserted) {
             lifecycle_order_valid_ = false;
         }
         return inserted;
@@ -374,20 +346,17 @@ public:
     void remove_module(const std::string& module_name) {
         check_registry_mutation();
         auto iter = module_instances_.find(module_name);
-        if (iter == module_instances_.end())
-        {
+        if (iter == module_instances_.end()) {
             return;
         }
 
         // A task owned by another module can still borrow this provider.
         // Retire every managed group before removing any provider object.
-        if (pending_tasks_unchecked())
-        {
+        if (pending_tasks_unchecked()) {
             throw std::logic_error("Cannot remove modules while managed tasks are pending");
         }
         const auto tasks = task_groups_.find(iter->second);
-        if (tasks != task_groups_.end())
-        {
+        if (tasks != task_groups_.end()) {
             task_groups_.erase(tasks);
         }
         module_instances_.erase(iter);
@@ -455,8 +424,7 @@ protected:
         const auto destroy = [](ark::plugin* value) { ARK_DELETE(value); };
         std::unique_ptr<ark::plugin, decltype(destroy)> candidate(plugin, destroy);
         check_registration();
-        if (!candidate)
-        {
+        if (!candidate) {
             startup_failure_ = "allocate_plugin: " + plugin_name;
             return;
         }
@@ -476,13 +444,10 @@ protected:
         // Retain the existing process-exit policy once user installation begins.
         candidate.release();
         startup_call_.enter(plugin_name, "install");
-        try
-        {
+        try {
             plugin->install();
             startup_call_.result = startup_call_result::passed;
-        }
-        catch (...)
-        {
+        } catch (...) {
             startup_call_.result = startup_call_result::exception;
             throw;
         }
@@ -492,8 +457,7 @@ protected:
 
     void unregister_plugin(const std::string& plugin_name) {
         check_registry_mutation();
-        if (pending_tasks_unchecked())
-        {
+        if (pending_tasks_unchecked()) {
             throw std::logic_error("Cannot uninstall plugins with pending managed tasks");
         }
         ARK_ASSERT_RET_NONE(!plugin_name.empty());
@@ -508,12 +472,9 @@ protected:
 
     auto find_plugin(const std::string& plugin_name) -> plugin* {
         auto iter = plugin_instances_.find(plugin_name);
-        if (iter != plugin_instances_.end())
-        {
+        if (iter != plugin_instances_.end()) {
             return iter->second;
-        }
-        else
-        {
+        } else {
             return nullptr;
         }
     }
@@ -523,12 +484,9 @@ protected:
     auto find_plugin() -> plugin* {
         auto plugin_name = GET_CLASS_NAME(plugin_type);
         auto iter = plugin_instances_.find(plugin_name);
-        if (iter != plugin_instances_.end())
-        {
+        if (iter != plugin_instances_.end()) {
             return iter->second;
-        }
-        else
-        {
+        } else {
             return nullptr;
         }
     }
@@ -543,33 +501,26 @@ protected:
         // registry insertion and declaration order. Duplicate edges count once.
         std::map<std::string, std::size_t> pending;
         std::map<std::string, std::vector<std::string>> consumers;
-        for (const auto& [name, instance] : module_instances_)
-        {
+        for (const auto& [name, instance] : module_instances_) {
             pending.emplace(name, 0);
         }
-        for (auto& [name, count] : pending)
-        {
+        for (auto& [name, count] : pending) {
             const bool startup = std::string_view(phase) == "dependencies";
-            if (startup)
-            {
+            if (startup) {
                 startup_call_.enter(name, phase);
             }
             failure = std::string(phase) + ": " + name;
-            if (startup)
-            {
+            if (startup) {
                 startup_call_.diagnostic_ready = true;
             }
             auto dependencies = module_instances_.at(name)->get_dependencies();
-            if (startup)
-            {
+            if (startup) {
                 startup_call_.result = startup_call_result::passed;
             }
             std::sort(dependencies.begin(), dependencies.end());
             dependencies.erase(std::unique(dependencies.begin(), dependencies.end()), dependencies.end());
-            for (const auto& provider : dependencies)
-            {
-                if (!pending.contains(provider))
-                {
+            for (const auto& provider : dependencies) {
+                if (!pending.contains(provider)) {
                     failure += " requires missing module '" + provider + "'";
                     return false;
                 }
@@ -578,36 +529,28 @@ protected:
             }
         }
         std::set<std::string> ready;
-        for (const auto& [name, count] : pending)
-        {
-            if (count == 0)
-            {
+        for (const auto& [name, count] : pending) {
+            if (count == 0) {
                 ready.insert(name);
             }
         }
-        while (!ready.empty())
-        {
+        while (!ready.empty()) {
             auto name = *ready.begin();
             ready.erase(ready.begin());
             order.emplace_back(name, module_instances_.at(name));
-            for (const auto& consumer : consumers[name])
-            {
-                if (--pending.at(consumer) == 0)
-                {
+            for (const auto& consumer : consumers[name]) {
+                if (--pending.at(consumer) == 0) {
                     ready.insert(consumer);
                 }
             }
         }
-        if (order.size() != pending.size())
-        {
+        if (order.size() != pending.size()) {
             failure = std::string(phase) + (std::string(phase) == "dependencies"
                                                    ? ": cycle prevents startup; blocked modules: "
                                                    : ": cycle prevents shutdown; blocked modules: ");
             bool first = true;
-            for (const auto& [name, count] : pending)
-            {
-                if (count != 0)
-                {
+            for (const auto& [name, count] : pending) {
+                if (count != 0) {
                     failure += (first ? "" : ", ") + name;
                     first = false;
                 }
@@ -620,16 +563,13 @@ protected:
 
     bool call_startup(module& instance, const std::string& name, std::string_view phase, bool (module::*hook)()) {
         startup_call_.enter(name, phase);
-        try
-        {
+        try {
             startup_failure_ = std::string(phase) + ": " + name;
             startup_call_.diagnostic_ready = true;
             const bool result = (instance.*hook)();
             startup_call_.result = result ? startup_call_result::passed : startup_call_result::returned_false;
             return result;
-        }
-        catch (...)
-        {
+        } catch (...) {
             startup_call_.result = startup_call_result::exception;
             throw;
         }
@@ -637,14 +577,12 @@ protected:
 
     auto init() -> bool {
         // load plugin dynamic libraries
-        for (auto const& iter : plugins_)
-        {
+        for (auto const& iter : plugins_) {
             phase_guard installing(*this, call_phase::installing);
             startup_call_.enter(iter.first, "load_plugin");
             startup_failure_ = "load_plugin: " + iter.first;
             startup_call_.diagnostic_ready = true;
-            if (!load_plugin_library(iter.first))
-            {
+            if (!load_plugin_library(iter.first)) {
                 startup_call_.result = startup_call_result::returned_false;
                 return false;
             }
@@ -654,8 +592,7 @@ protected:
         startup_call_.enter("<registry>", "dependencies");
         // Count construction propagates MSVC Debug iterator-proxy allocation failures.
         startup_modules order(0);
-        if (!order_modules(order, startup_failure_, "dependencies"))
-        {
+        if (!order_modules(order, startup_failure_, "dependencies")) {
             startup_call_.result = startup_call_result::returned_false;
             return false;
         }
@@ -664,12 +601,10 @@ protected:
         lifecycle_order_valid_ = true;
 
         // Initialize providers before their declared consumers in every phase.
-        for (const auto& [name, module_ptr] : lifecycle_order_)
-        {
+        for (const auto& [name, module_ptr] : lifecycle_order_) {
             ARK_ASSERT_CONTINUE(module_ptr != nullptr);
 
-            if (!call_startup(*module_ptr, name, "init", &module::init))
-            {
+            if (!call_startup(*module_ptr, name, "init", &module::init)) {
                 return false;
             }
         }
@@ -679,12 +614,10 @@ protected:
     }
 
     auto post_init(const startup_modules& order) -> bool {
-        for (const auto& [name, module_ptr] : order)
-        {
+        for (const auto& [name, module_ptr] : order) {
             ARK_ASSERT_CONTINUE(module_ptr != nullptr);
 
-            if (!call_startup(*module_ptr, name, "post_init", &module::post_init))
-            {
+            if (!call_startup(*module_ptr, name, "post_init", &module::post_init)) {
                 return false;
             }
         }
@@ -694,12 +627,10 @@ protected:
     }
 
     auto check_config(const startup_modules& order) -> bool {
-        for (const auto& [name, module_ptr] : order)
-        {
+        for (const auto& [name, module_ptr] : order) {
             ARK_ASSERT_CONTINUE(module_ptr != nullptr);
 
-            if (!call_startup(*module_ptr, name, "check_config", &module::check_config))
-            {
+            if (!call_startup(*module_ptr, name, "check_config", &module::check_config)) {
                 return false;
             }
         }
@@ -709,12 +640,10 @@ protected:
     }
 
     auto pre_update(const startup_modules& order) -> bool {
-        for (const auto& [name, module_ptr] : order)
-        {
+        for (const auto& [name, module_ptr] : order) {
             ARK_ASSERT_CONTINUE(module_ptr != nullptr);
 
-            if (!call_startup(*module_ptr, name, "pre_update", &module::pre_update))
-            {
+            if (!call_startup(*module_ptr, name, "pre_update", &module::pre_update)) {
                 return false;
             }
         }
@@ -725,23 +654,19 @@ protected:
 
     auto ready_to_shut() -> bool {
         bool ready = true;
-        for (auto const& iter : module_instances_)
-        {
+        for (auto const& iter : module_instances_) {
             const module* module_ptr = iter.second;
             ARK_ASSERT_CONTINUE(module_ptr != nullptr);
 
             shutdown_failure_ = "ready_to_shut: " + iter.first;
-            if (shutdown_deadline_expired())
-            {
+            if (shutdown_deadline_expired()) {
                 return false;
             }
             const auto module_ready = module_ptr->ready_to_shut();
-            if (shutdown_deadline_expired())
-            {
+            if (shutdown_deadline_expired()) {
                 return false;
             }
-            if (!module_ready)
-            {
+            if (!module_ready) {
                 ready = false;
             }
         }
@@ -759,14 +684,12 @@ protected:
         ARK_ASSERT_RET_VAL(library != nullptr, false);
 
         bool load_ret = library->load(plugin_library_dir_);
-        if (load_ret)
-        {
+        if (load_ret) {
             auto* loaded_library = library.get();
             plugin_libs_.insert(std::make_pair(plugin_name, loaded_library));
             library.release();
             auto func = reinterpret_cast<dll_entry_plugin_func>(loaded_library->get_symbol("DllEntryPlugin"));
-            if (func == nullptr)
-            {
+            if (func == nullptr) {
                 ARK_LOG_ERROR("Shared library[{}] has no DllEntryPlugin entrypoint", loaded_library->get_name());
                 // Keep an already loaded handle until process exit. Static
                 // initializers may have started work before symbol validation.
@@ -776,9 +699,7 @@ protected:
 
             // The void entrypoint cannot return a nullable allocation failure.
             return !startup_failure_.starts_with("allocate_plugin: ");
-        }
-        else
-        {
+        } else {
 #ifdef ARK_PLATFORM_WIN
             auto error = GetLastError();
 #else
@@ -812,86 +733,67 @@ private:
         std::optional<std::chrono::steady_clock::time_point> deadline = std::nullopt) -> bool {
         check_owner();
         timestamp_ = timestamp;
-        if (shutdown_state_ == shutdown_state::stopped)
-        {
+        if (shutdown_state_ == shutdown_state::stopped) {
             return true;
         }
         if (shutdown_state_ == shutdown_state::failed || shutdown_state_ == shutdown_state::timed_out ||
-            shutdown_state_ == shutdown_state::cleanup_timed_out)
-        {
+            shutdown_state_ == shutdown_state::cleanup_timed_out) {
             return false;
         }
-        if (deadline && (!shutdown_deadline_ || *deadline < *shutdown_deadline_))
-        {
+        if (deadline && (!shutdown_deadline_ || *deadline < *shutdown_deadline_)) {
             shutdown_deadline_ = deadline;
         }
-        if (shutdown_state_ == shutdown_state::running)
-        {
+        if (shutdown_state_ == shutdown_state::running) {
             shutdown_state_ = shutdown_state::stopping;
-            for (const auto& [owner, tasks] : task_groups_)
-            {
+            for (const auto& [owner, tasks] : task_groups_) {
                 tasks->stop_accepting();
             }
         }
         // A completion removes its task before invoking user code. Never tear
         // down a module from that code's own active stack, even at zero tasks.
-        if (execution_active())
-        {
+        if (execution_active()) {
             return false;
         }
-        try
-        {
+        try {
             phase_guard active(*this, call_phase::tearing_down);
-            if (!lifecycle_order_valid_)
-            {
+            if (!lifecycle_order_valid_) {
                 startup_modules order(0);
-                if (!order_modules(order, shutdown_failure_, "shutdown"))
-                {
+                if (!order_modules(order, shutdown_failure_, "shutdown")) {
                     shutdown_state_ = shutdown_state::failed;
                     return false;
                 }
                 lifecycle_order_ = std::move(order);
                 lifecycle_order_valid_ = true;
             }
-            if (!shutdown_cancellation_requested_)
-            {
+            if (!shutdown_cancellation_requested_) {
                 shutdown_cancellation_requested_ = true;
                 shutdown_failure_ = "cancel_tasks";
-                for (const auto& [owner, tasks] : task_groups_)
-                {
+                for (const auto& [owner, tasks] : task_groups_) {
                     tasks->close();
                 }
             }
-            if (pending_tasks_unchecked())
-            {
+            if (pending_tasks_unchecked()) {
                 shutdown_failure_.clear();
-                if (shutdown_deadline_expired())
-                {
+                if (shutdown_deadline_expired()) {
                     shutdown_failure_ = "managed_tasks";
                 }
                 return false;
             }
-            if (!ready_to_shut())
-            {
+            if (!ready_to_shut()) {
                 return false;
             }
             // Readiness may be empty, or its final return may reach the limit.
             shutdown_failure_ = "ready_to_shut";
-            if (shutdown_deadline_expired())
-            {
+            if (shutdown_deadline_expired()) {
                 return false;
             }
-            if (!shut(unload))
-            {
-                if (shutdown_state_ != shutdown_state::cleanup_timed_out)
-                {
+            if (!shut(unload)) {
+                if (shutdown_state_ != shutdown_state::cleanup_timed_out) {
                     shutdown_state_ = shutdown_state::failed;
                 }
                 return false;
             }
-        }
-        catch (...)
-        {
+        } catch (...) {
             shutdown_exception_ = std::current_exception();
             shutdown_state_ = shutdown_state::failed;
             return false;
@@ -901,8 +803,7 @@ private:
     }
 
     bool shutdown_deadline_expired(bool cleanup_started = false) {
-        if (!shutdown_deadline_ || std::chrono::steady_clock::now() < *shutdown_deadline_)
-        {
+        if (!shutdown_deadline_ || std::chrono::steady_clock::now() < *shutdown_deadline_) {
             return false;
         }
         shutdown_state_ = cleanup_started ? shutdown_state::cleanup_timed_out : shutdown_state::timed_out;
@@ -913,57 +814,46 @@ private:
     auto shut(unload_type unload) -> bool {
         // Stop callback sources while every receiver object is still alive.
         // A provider must not deliver a new callback to a destroyed consumer.
-        for (auto iter = lifecycle_order_.rbegin(); iter != lifecycle_order_.rend(); ++iter)
-        {
+        for (auto iter = lifecycle_order_.rbegin(); iter != lifecycle_order_.rend(); ++iter) {
             const auto& [name, module_ptr] = *iter;
             shutdown_failure_ = "pre_shut: " + name;
-            if (!module_ptr->pre_shut() || shutdown_deadline_expired(true))
-            {
+            if (!module_ptr->pre_shut() || shutdown_deadline_expired(true)) {
                 return false;
             }
         }
         // Providers remain available through consumer shut hooks/destructors.
-        for (auto iter = lifecycle_order_.rbegin(); iter != lifecycle_order_.rend(); ++iter)
-        {
+        for (auto iter = lifecycle_order_.rbegin(); iter != lifecycle_order_.rend(); ++iter) {
             const auto& [name, module_ptr] = *iter;
             shutdown_failure_ = "shut: " + name;
-            if (!module_ptr->shut() || shutdown_deadline_expired(true))
-            {
+            if (!module_ptr->shut() || shutdown_deadline_expired(true)) {
                 return false;
             }
             const auto owner = module_owners_.find(name);
-            if (owner != module_owners_.end() && !owner->second.lifetime.expired())
-            {
+            if (owner != module_owners_.end() && !owner->second.lifetime.expired()) {
                 const auto release = owner->second;
                 phase_guard releasing(*this, call_phase::uninstalling);
                 shutdown_failure_ = "destroy: " + name;
-                if (!release.destroy(release.instance, name) || shutdown_deadline_expired(true))
-                {
+                if (!release.destroy(release.instance, name) || shutdown_deadline_expired(true)) {
                     return false;
                 }
             }
         }
 
         phase_guard uninstalling(*this, call_phase::uninstalling);
-        for (auto& it : plugins_)
-        {
+        for (auto& it : plugins_) {
             shutdown_failure_ = "uninstall: " + it.first;
-            if (!unload_plugin_library(it.first) || shutdown_deadline_expired(true))
-            {
+            if (!unload_plugin_library(it.first) || shutdown_deadline_expired(true)) {
                 return false;
             }
         }
 
-        for (auto& iter : plugin_libs_)
-        {
+        for (auto& iter : plugin_libs_) {
             shutdown_failure_ = "unload: " + iter.first;
-            if (!unload(*iter.second))
-            {
+            if (!unload(*iter.second)) {
                 return false;
             }
             ARK_DELETE(iter.second);
-            if (shutdown_deadline_expired(true))
-            {
+            if (shutdown_deadline_expired(true)) {
                 return false;
             }
         }
@@ -978,21 +868,16 @@ private:
     // Publish only registry bookkeeping; no user callbacks or lifecycle rollback.
     bool register_owned_module(const std::string& name, module& instance, bool update, module_owner owner) {
         check_registration();
-        if (module_instances_.contains(name) || module_updates_.contains(name) || registered_module(instance))
-        {
+        if (module_instances_.contains(name) || module_updates_.contains(name) || registered_module(instance)) {
             return false;
         }
         const auto entry = module_instances_.emplace(name, &instance).first;
-        try
-        {
+        try {
             module_owners_.emplace(name, owner);
-            if (update)
-            {
+            if (update) {
                 module_updates_.emplace(name, &instance);
             }
-        }
-        catch (...)
-        {
+        } catch (...) {
             module_owners_.erase(name);
             module_instances_.erase(entry);
             throw;
@@ -1007,35 +892,30 @@ private:
         const auto entry = module_instances_.find(name);
         const auto update = module_updates_.find(name);
         if (entry == module_instances_.end() || entry->second != &expected ||
-            (update != module_updates_.end() && update->second != &expected))
-        {
+            (update != module_updates_.end() && update->second != &expected)) {
             return false;
         }
-        if (pending_tasks_unchecked())
-        {
+        if (pending_tasks_unchecked()) {
             throw std::logic_error("Cannot remove modules while managed tasks are pending");
         }
         // A module may retain a direct task_group reference for its destructor.
         // Remove registry lookup now, but keep the facade alive through delete.
         const auto tasks = task_groups_.find(&expected);
-        if (tasks != task_groups_.end())
-        {
+        if (tasks != task_groups_.end()) {
             retired_tasks = std::move(tasks->second);
             task_groups_.erase(tasks);
         }
         module_instances_.erase(entry);
         module_owners_.erase(name);
         lifecycle_order_valid_ = false;
-        if (update != module_updates_.end())
-        {
+        if (update != module_updates_.end()) {
             module_updates_.erase(update);
         }
         return true;
     }
 
     void check_owner() const {
-        if (owner_ != std::this_thread::get_id())
-        {
+        if (owner_ != std::this_thread::get_id()) {
             throw std::logic_error("Plugin manager requires its constructing thread");
         }
     }
@@ -1048,25 +928,21 @@ private:
         check_owner();
         if (startup_cleanup_started_ ||
             (phase_ != call_phase::idle && phase_ != call_phase::installing && phase_ != call_phase::uninstalling) ||
-            task_runtime_->get_executor().running_in_this_thread())
-        {
+            task_runtime_->get_executor().running_in_this_thread()) {
             throw std::logic_error("Cannot mutate the module registry during update or shutdown hooks");
         }
     }
 
     void check_registration() const {
         check_registry_mutation();
-        if (shutdown_state_ != shutdown_state::running)
-        {
+        if (shutdown_state_ != shutdown_state::running) {
             throw std::logic_error("Cannot register modules or plugins after shutdown begins");
         }
     }
 
     bool registered_module(const module& owner) const {
-        for (const auto& [name, instance] : module_instances_)
-        {
-            if (instance == &owner)
-            {
+        for (const auto& [name, instance] : module_instances_) {
+            if (instance == &owner) {
                 return true;
             }
         }
@@ -1075,8 +951,7 @@ private:
 
     std::size_t pending_tasks_unchecked() const {
         std::size_t count{};
-        for (const auto& [owner, tasks] : task_groups_)
-        {
+        for (const auto& [owner, tasks] : task_groups_) {
             count += tasks->pending();
         }
         return count;

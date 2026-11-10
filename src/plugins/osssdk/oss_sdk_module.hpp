@@ -24,8 +24,7 @@
 
 namespace ark {
 
-class oss_sdk_module : public module
-{
+class oss_sdk_module : public module {
 public:
     //virtual method
 };

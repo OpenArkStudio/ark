@@ -26,8 +26,7 @@ namespace ark {
 
 class plugin_manager;
 
-class plugin
-{
+class plugin {
 public:
     virtual ~plugin() = default;
     virtual int get_plugin_version() = 0;

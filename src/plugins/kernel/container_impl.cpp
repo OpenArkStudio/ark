@@ -42,8 +42,7 @@ uint32_t container_impl::get_index() const {
 
 uint32_t container_impl::first() {
     iter_ = entity_data_list_.begin();
-    if (entity_data_list_.end() == iter_)
-    {
+    if (entity_data_list_.end() == iter_) {
         return null_int;
     }
 
@@ -51,14 +50,12 @@ uint32_t container_impl::first() {
 }
 
 uint32_t container_impl::next() {
-    if (entity_data_list_.end() == iter_)
-    {
+    if (entity_data_list_.end() == iter_) {
         return null_int;
     }
 
     ++iter_;
-    if (entity_data_list_.end() == iter_)
-    {
+    if (entity_data_list_.end() == iter_) {
         return null_int;
     }
 
@@ -70,10 +67,8 @@ std::shared_ptr<entity> container_impl::find(uint32_t index) const {
 }
 
 uint32_t container_impl::find(const guid_t& id) const {
-    for (auto iter : entity_data_list_)
-    {
-        if (id == iter.second->get_id())
-        {
+    for (auto iter : entity_data_list_) {
+        if (id == iter.second->get_id()) {
             return iter.first;
         }
     }
@@ -100,20 +95,17 @@ bool container_impl::place(std::shared_ptr<entity> entity_ptr) {
 
 bool container_impl::place(uint32_t index, std::shared_ptr<entity> entity_ptr) {
     // class should be same
-    if (!entity_ptr || !container_meta_ || entity_ptr->get_class_name() != container_meta_->get_class_name())
-    {
+    if (!entity_ptr || !container_meta_ || entity_ptr->get_class_name() != container_meta_->get_class_name()) {
         return false;
     }
 
     auto iter = entity_data_list_.find(index);
-    if (iter != entity_data_list_.end())
-    {
+    if (iter != entity_data_list_.end()) {
         // has exist other entity
         return false;
     }
 
-    if (!place_entity(index, entity_ptr))
-    {
+    if (!place_entity(index, entity_ptr)) {
         return false;
     }
 
@@ -125,8 +117,7 @@ bool container_impl::swap(const uint32_t src_index, const uint32_t dest_index) {
     ARK_ASSERT_RET_VAL(src_index > 0u && dest_index > 0u && src_index != dest_index, false);
 
     auto iter_src = entity_data_list_.find(src_index);
-    if (iter_src == entity_data_list_.end())
-    {
+    if (iter_src == entity_data_list_.end()) {
         // fail if source do not exist
         return false;
     }
@@ -135,18 +126,14 @@ bool container_impl::swap(const uint32_t src_index, const uint32_t dest_index) {
     ARK_ASSERT_RET_VAL(src_entity_ptr != nullptr, false);
 
     auto iter_dest = entity_data_list_.find(dest_index);
-    if (iter_dest == entity_data_list_.end())
-    {
+    if (iter_dest == entity_data_list_.end()) {
         entity_data_list_.erase(src_index);
-        if (!place_entity(dest_index, src_entity_ptr))
-        {
+        if (!place_entity(dest_index, src_entity_ptr)) {
             return false;
         }
 
         on_container_swap(src_index, dest_index);
-    }
-    else
-    {
+    } else {
         // exchange
         auto dest_entity_ptr = iter_dest->second;
         iter_src->second = dest_entity_ptr;
@@ -167,48 +154,38 @@ bool container_impl::swap(const guid_t& src_entity, const guid_t& dest_entity) {
 
 bool container_impl::swap(
     std::shared_ptr<container> src_container_ptr, const uint32_t src_index, const uint32_t dest_index) {
-    if (src_container_ptr == nullptr || src_index == 0 || dest_index == 0)
-    {
+    if (src_container_ptr == nullptr || src_index == 0 || dest_index == 0) {
         return false;
     }
 
     auto src_entity_ptr = src_container_ptr->find(src_index);
-    if (src_entity_ptr == nullptr)
-    {
+    if (src_entity_ptr == nullptr) {
         return false;
     }
 
     // class should be same
-    if (!container_meta_ || src_entity_ptr->get_class_name() != container_meta_->get_class_name())
-    {
+    if (!container_meta_ || src_entity_ptr->get_class_name() != container_meta_->get_class_name()) {
         return false;
     }
 
-    if (!src_container_ptr->remove(src_index))
-    {
+    if (!src_container_ptr->remove(src_index)) {
         return false;
     }
 
     auto iter_dest = entity_data_list_.find(dest_index);
-    if (iter_dest == entity_data_list_.end())
-    {
-        if (!place_entity(dest_index, src_entity_ptr))
-        {
+    if (iter_dest == entity_data_list_.end()) {
+        if (!place_entity(dest_index, src_entity_ptr)) {
             return false;
         }
 
         on_container_place(dest_index, src_entity_ptr);
-    }
-    else
-    {
+    } else {
         auto dest_src_entity_ptr = iter_dest->second;
-        if (!remove(dest_index))
-        {
+        if (!remove(dest_index)) {
             return false;
         }
 
-        if (!src_container_ptr->place(src_index, dest_src_entity_ptr) || !place_entity(dest_index, src_entity_ptr))
-        {
+        if (!src_container_ptr->place(src_index, dest_src_entity_ptr) || !place_entity(dest_index, src_entity_ptr)) {
             return false;
         }
 
@@ -220,8 +197,7 @@ bool container_impl::swap(
 
 bool container_impl::swap(
     std::shared_ptr<container> src_container_ptr, const guid_t& src_entity, const guid_t& dest_entity) {
-    if (src_container_ptr == nullptr)
-    {
+    if (src_container_ptr == nullptr) {
         return false;
     }
 
@@ -233,8 +209,7 @@ bool container_impl::swap(
 
 bool container_impl::remove(const uint32_t index) {
     auto entity_ptr = entity_data_list_.find_value(index);
-    if (nullptr == entity_ptr)
-    {
+    if (nullptr == entity_ptr) {
         return false;
     }
 
@@ -251,8 +226,7 @@ bool container_impl::remove(const guid_t& id) {
 
 bool container_impl::destroy(const uint32_t index) {
     auto entity_ptr = entity_data_list_.find_value(index);
-    if (nullptr == entity_ptr)
-    {
+    if (nullptr == entity_ptr) {
         return false;
     }
 
@@ -268,18 +242,13 @@ bool container_impl::destroy(const guid_t& id) {
 }
 
 uint32_t container_impl::select_index() const {
-    if (entity_data_list_.size() == current_index_)
-    {
+    if (entity_data_list_.size() == current_index_) {
         return current_index_ + 1;
-    }
-    else
-    {
+    } else {
         // index starts from 1
         uint32_t index = 1u;
-        for (auto iter : entity_data_list_)
-        {
-            if (iter.first != index)
-            {
+        for (auto iter : entity_data_list_) {
+            if (iter.first != index) {
                 break;
             }
 
@@ -291,13 +260,11 @@ uint32_t container_impl::select_index() const {
 }
 
 bool container_impl::place_entity(const uint32_t index, std::shared_ptr<entity> entity_ptr) {
-    if (!entity_data_list_.insert(index, entity_ptr).second)
-    {
+    if (!entity_data_list_.insert(index, entity_ptr).second) {
         return false;
     }
 
-    if (current_index_ < index)
-    {
+    if (current_index_ < index) {
         current_index_ = index;
     }
 

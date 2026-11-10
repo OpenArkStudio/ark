@@ -15,8 +15,7 @@ namespace ark {
 class rudp_server final
     : public net
     , public std::enable_shared_from_this<rudp_server>
-    , private noncopyable
-{
+    , private noncopyable {
     friend struct net_listener_startup_test_access;
 
     net_event_functor net_event_cb_;

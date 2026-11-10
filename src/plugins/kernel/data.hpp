@@ -31,8 +31,7 @@
 
 namespace ark {
 
-class data
-{
+class data {
 public:
     data& operator=(const data& rhs) = delete;
 
@@ -45,8 +44,7 @@ public:
     }
 
     inline static size_t get_raw_user_data_size(size_t size) {
-        if (size > std::numeric_limits<size_t>::max() - sizeof(size_t))
-        {
+        if (size > std::numeric_limits<size_t>::max() - sizeof(size_t)) {
             throw std::length_error("Kernel user data size exceeds its header storage");
         }
         return sizeof(size_t) + size;
@@ -58,14 +56,12 @@ public:
     }
 
     bool equal(const data& src) {
-        if (this->get_type() != src.get_type())
-        {
+        if (this->get_type() != src.get_type()) {
             return false;
         }
 
         bool success = false;
-        switch (this->get_type())
-        {
+        switch (this->get_type()) {
         case data_type::dt_boolean:
             success = (get_bool() == src.get_bool());
             break;
@@ -111,8 +107,7 @@ public:
     }
 
     bool equal(const bool value) {
-        if (this->get_type() != data_type::dt_boolean)
-        {
+        if (this->get_type() != data_type::dt_boolean) {
             return false;
         }
 
@@ -120,8 +115,7 @@ public:
     }
 
     bool equal(const int value) {
-        if (this->get_type() != data_type::dt_int32)
-        {
+        if (this->get_type() != data_type::dt_int32) {
             return false;
         }
 
@@ -129,8 +123,7 @@ public:
     }
 
     bool equal(const int64_t value) {
-        if (this->get_type() != data_type::dt_int64)
-        {
+        if (this->get_type() != data_type::dt_int64) {
             return false;
         }
 
@@ -138,8 +131,7 @@ public:
     }
 
     bool equal(const float value) {
-        if (this->get_type() != data_type::dt_float)
-        {
+        if (this->get_type() != data_type::dt_float) {
             return false;
         }
 
@@ -147,8 +139,7 @@ public:
     }
 
     bool equal(const double value) {
-        if (this->get_type() != data_type::dt_double)
-        {
+        if (this->get_type() != data_type::dt_double) {
             return false;
         }
 
@@ -156,8 +147,7 @@ public:
     }
 
     bool equal(const char* value) {
-        if (this->get_type() != data_type::dt_string)
-        {
+        if (this->get_type() != data_type::dt_string) {
             return false;
         }
 
@@ -166,8 +156,7 @@ public:
     }
 
     bool equal(const void* value) {
-        if (this->get_type() != data_type::dt_pointer)
-        {
+        if (this->get_type() != data_type::dt_pointer) {
             return false;
         }
 

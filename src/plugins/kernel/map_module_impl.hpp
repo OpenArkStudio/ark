@@ -27,8 +27,7 @@
 
 namespace ark {
 
-class map_module_impl final : public module_base<map_module>
-{
+class map_module_impl final : public module_base<map_module> {
 public:
     bool init() override;
     bool shut() override;

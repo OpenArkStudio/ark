@@ -35,15 +35,13 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void dir_plugin::install() {
-    if (!register_module(detail::make_dir_net_module(), module_update::disabled))
-    {
+    if (!register_module(detail::make_dir_net_module(), module_update::disabled)) {
         throw std::runtime_error("dir_net_module registration rejected");
     }
 }
 
 void dir_plugin::uninstall() {
-    if (!unregister_module<dir_net_module>())
-    {
+    if (!unregister_module<dir_net_module>()) {
         throw std::runtime_error("dir_net_module unregistration rejected");
     }
 }

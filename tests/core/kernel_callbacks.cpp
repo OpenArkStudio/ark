@@ -19,8 +19,7 @@ namespace {
 
 // Exercise registration against the real metadata/callback managers without
 // loading external metadata or installing process-wide sync callbacks.
-class callback_metadata final : public ark::class_meta_module
-{
+class callback_metadata final : public ark::class_meta_module {
 public:
     callback_metadata() {
         auto owner = std::make_shared<ark::class_meta>("Owner");
@@ -66,8 +65,7 @@ public:
     ark::class_meta_manager::class_meta_list classes, empty;
 };
 
-class callback_guid final : public ark::guid_module
-{
+class callback_guid final : public ark::guid_module {
 public:
     ark::guid_t create_guid() override {
         return 100;
@@ -78,8 +76,7 @@ public:
     }
 };
 
-class callback_world
-{
+class callback_world {
 public:
     callback_world() {
         ark::logger::init(&logger_);
@@ -115,8 +112,7 @@ private:
     callback_guid guid_;
 };
 
-class callback_receiver
-{
+class callback_receiver {
 public:
     callback_receiver() = default;
     callback_receiver(const callback_receiver&) = delete;
@@ -137,8 +133,7 @@ public:
         event_id = event;
         arguments = &args;
         ++calls;
-        if (throw_on_event)
-        {
+        if (throw_on_event) {
             throw std::runtime_error("receiver failure");
         }
         return 17;
@@ -151,8 +146,7 @@ public:
         node_index = index;
         old_value = old_data.get_int();
         new_value = new_data.get_int();
-        if (order)
-        {
+        if (order) {
             order->push_back(tag);
         }
         ++calls;
@@ -163,8 +157,7 @@ public:
         const ark::data& new_data) {
         id = self;
         table_event = event;
-        if (event.op_type == static_cast<size_t>(ark::table_op_type::table_update))
-        {
+        if (event.op_type == static_cast<size_t>(ark::table_op_type::table_update)) {
             old_value = old_data.get_int();
             new_value = new_data.get_int();
         }
@@ -216,8 +209,7 @@ public:
     bool throw_on_event{};
 };
 
-class cloned_component final : public ark::component
-{
+class cloned_component final : public ark::component {
 public:
     cloned_component()
         : component(0, "clone") {
@@ -283,8 +275,7 @@ TEST_CASE("Kernel member adapters preserve scalar and table callback routing by 
     ark::entity_impl entity(world.metadata.find_meta("Owner"), 77, 0, 1, 0, ark::data_list_impl{});
     REQUIRE(entity.set_int32(10, 13));
     REQUIRE(entity.set_int32(10, 21));
-    for (const auto* receiver : {&by_name, &by_index})
-    {
+    for (const auto* receiver : {&by_name, &by_index}) {
         CHECK(receiver->calls == 2);
         CHECK(receiver->id == 77);
         CHECK(receiver->node_name == "level");
@@ -299,8 +290,7 @@ TEST_CASE("Kernel member adapters preserve scalar and table callback routing by 
     REQUIRE(row != nullptr);
     REQUIRE(row->set_int32(1, 4));
     REQUIRE(row->set_int32(1, 9));
-    for (const auto* receiver : {&by_name, &by_index})
-    {
+    for (const auto* receiver : {&by_name, &by_index}) {
         CHECK(receiver->calls == 5);
         CHECK(receiver->id == 77);
         CHECK(receiver->table_event.table_index == 20);
@@ -327,8 +317,7 @@ TEST_CASE("Kernel member adapters preserve class scene move and copied container
     const std::string name = "Owner";
     ark::data_list_impl arguments;
     REQUIRE(callbacks->on_class_event(self, name, ark::entity_event::entity_evt_all_finished, arguments));
-    for (const auto* receiver : {&class_receiver, &common_class})
-    {
+    for (const auto* receiver : {&class_receiver, &common_class}) {
         CHECK(receiver->calls == 1);
         CHECK(receiver->id == self);
         CHECK(receiver->class_name == &name);
@@ -349,8 +338,7 @@ TEST_CASE("Kernel member adapters preserve class scene move and copied container
     CHECK(move.old_position == &previous);
     CHECK(move.new_position == &current);
     REQUIRE(callbacks->on_container_call_back(self, 30, {}, ark::container_op_type::op_swap, 2, 4));
-    for (const auto* receiver : {&container, &common_container})
-    {
+    for (const auto* receiver : {&container, &common_container}) {
         CHECK(receiver->calls == 1);
         CHECK(receiver->id == self);
         CHECK(receiver->container_index == 30);

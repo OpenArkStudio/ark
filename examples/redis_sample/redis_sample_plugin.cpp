@@ -34,15 +34,13 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void redis_sample_plugin::install() {
-    if (!register_module(make_redis_sample_module(), module_update::disabled))
-    {
+    if (!register_module(make_redis_sample_module(), module_update::disabled)) {
         throw std::runtime_error("redis sample module registration rejected");
     }
 }
 
 void redis_sample_plugin::uninstall() {
-    if (!unregister_module<redis_sample_module>())
-    {
+    if (!unregister_module<redis_sample_module>()) {
         throw std::runtime_error("redis sample module unregistration rejected");
     }
 }

@@ -9,8 +9,7 @@ namespace ark {
 /**
  * AFCEtcdClient is NOT thread-safe, please create an AFCEtcdClient object per thread, or use a lock mechanism.
  */
-class etcd_client_impl final : public etcd_client
-{
+class etcd_client_impl final : public etcd_client {
 public:
     /**
      * Constructor

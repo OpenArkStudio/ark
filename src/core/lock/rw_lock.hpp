@@ -27,8 +27,7 @@
 
 namespace ark {
 
-class reader_writer_lock : public noncopyable
-{
+class reader_writer_lock : public noncopyable {
     mutable std::shared_mutex mtx_;
 
 public:
@@ -49,8 +48,7 @@ public:
     }
 };
 
-class scope_r_lock : public noncopyable
-{
+class scope_r_lock : public noncopyable {
 public:
     explicit scope_r_lock(reader_writer_lock& lock)
         : rwlock_(lock) {
@@ -65,8 +63,7 @@ private:
     reader_writer_lock& rwlock_;
 };
 
-class scope_w_lock : public noncopyable
-{
+class scope_w_lock : public noncopyable {
 public:
     explicit scope_w_lock(reader_writer_lock& lock)
         : rwlock_(lock) {

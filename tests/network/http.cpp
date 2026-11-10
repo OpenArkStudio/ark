@@ -30,8 +30,7 @@ using http_request = arknet::http_request::request_type;
 using http_response = arknet::http_request::response_type;
 using http_result = std::pair<bool, std::string>;
 
-class http_plugin_configuration
-{
+class http_plugin_configuration {
 public:
     explicit http_plugin_configuration(const std::string& text)
         : previous_(ark::http_plugin::get_plugin_conf())
@@ -60,11 +59,9 @@ private:
 template<class predicate_type, class pump_type>
 bool wait_http(predicate_type predicate, pump_type pump, std::chrono::milliseconds timeout = 5s) {
     const auto deadline = std::chrono::steady_clock::now() + timeout;
-    do
-    {
+    do {
         pump();
-        if (predicate())
-        {
+        if (predicate()) {
             return true;
         }
         std::this_thread::sleep_for(1ms);
@@ -82,8 +79,7 @@ http_result await_http(std::future<http_result>& future) {
     return future.get();
 }
 
-class http_peer
-{
+class http_peer {
 public:
     explicit http_peer(bool reply = true)
         : reply_(reply) {
@@ -91,27 +87,21 @@ public:
             auto reply = [this, session, request] {
                 http_response response(arknet::http::status::ok, request.version());
                 response.keep_alive(request.keep_alive());
-                if (respond)
-                {
+                if (respond) {
                     respond(request, response);
-                }
-                else
-                {
+                } else {
                     response.body() = request.body();
                 }
                 response.prepare_payload();
                 session->async_send(std::move(response));
             };
-            if (reply_)
-            {
+            if (reply_) {
                 {
                     std::lock_guard lock(mutex_);
                     requests_.push_back(request);
                 }
                 reply();
-            }
-            else
-            {
+            } else {
                 std::lock_guard lock(mutex_);
                 replies_.push_back(std::move(reply));
                 requests_.push_back(request);
@@ -148,8 +138,7 @@ public:
             std::lock_guard lock(mutex_);
             replies.swap(replies_);
         }
-        for (auto& reply : replies)
-        {
+        for (auto& reply : replies) {
             reply();
         }
     }
@@ -164,11 +153,9 @@ private:
     arknet::http_server server_{1024, 16 * 1024 * 1024, 2};
 };
 
-struct http_callbacks
-{
+struct http_callbacks {
     void receive(http_result result) {
-        if (std::this_thread::get_id() != update_thread)
-        {
+        if (std::this_thread::get_id() != update_thread) {
             wrong_thread.store(true);
         }
         std::lock_guard lock(mutex);
@@ -217,23 +204,18 @@ TEST_CASE("HTTP concurrent futures keep each request and response independent") 
     auto& client = *owned_client;
     std::vector<std::future<http_result>> futures;
     std::vector<std::string> expected;
-    for (int index = 0; index < 48; ++index)
-    {
+    for (int index = 0; index < 48; ++index) {
         const auto target = "/request/" + std::to_string(index);
-        if (index % 2 == 0)
-        {
+        if (index % 2 == 0) {
             const auto body = "body-" + std::to_string(index);
             futures.push_back(client.post("localhost", peer.port(), target, nullptr, &body));
             expected.push_back("POST:" + target + ":" + body);
-        }
-        else
-        {
+        } else {
             futures.push_back(client.get("localhost", peer.port(), target));
             expected.push_back("GET:" + target + ":");
         }
     }
-    for (std::size_t index = 0; index < futures.size(); ++index)
-    {
+    for (std::size_t index = 0; index < futures.size(); ++index) {
         const auto result = await_http(futures[index]);
         CHECK(result.first);
         CHECK(result.second == expected[index]);
@@ -286,15 +268,11 @@ TEST_CASE("HTTP callbacks run once on the Update thread for both service overloa
     auto owned_client = ark::detail::make_http_client_module();
     auto& client = *owned_client;
     const std::string body = "callback-body";
-    for (int index = 0; index < 12; ++index)
-    {
+    for (int index = 0; index < 12; ++index) {
         auto callback = [&](http_result result) { callbacks.receive(std::move(result)); };
-        if (index % 2 == 0)
-        {
+        if (index % 2 == 0) {
             client.post(callback, "localhost", peer.port(), "/callback", nullptr, &body);
-        }
-        else
-        {
+        } else {
             client.post(callback, "localhost", std::to_string(peer.port()), "/callback", nullptr, &body);
         }
     }
@@ -302,14 +280,12 @@ TEST_CASE("HTTP callbacks run once on the Update thread for both service overloa
     std::this_thread::sleep_for(100ms);
     CHECK(callbacks.result_snapshot().empty());
     REQUIRE(wait_http([&] { return callbacks.result_snapshot().size() == 12; }, [&] { client.update(); }));
-    for (const auto& result : callbacks.result_snapshot())
-    {
+    for (const auto& result : callbacks.result_snapshot()) {
         CHECK(result.first);
         CHECK(result.second == body);
     }
     CHECK_FALSE(callbacks.wrong_thread.load());
-    for (int index = 0; index < 3; ++index)
-    {
+    for (int index = 0; index < 3; ++index) {
         client.update();
     }
     CHECK(callbacks.result_snapshot().size() == 12);
@@ -328,8 +304,7 @@ TEST_CASE("HTTP preserves non-200 failure reasons and arbitrary request verbs") 
     auto missing = client.get("127.0.0.1", peer.port(), "/missing");
     auto put = client.async_request(arknet::http::verb::put, "127.0.0.1", peer.port(), "/put");
     auto remove = client.async_request(arknet::http::verb::delete_, "127.0.0.1", peer.port(), "/delete");
-    for (auto* future : {&missing, &put, &remove})
-    {
+    for (auto* future : {&missing, &put, &remove}) {
         const auto result = await_http(*future);
         CHECK_FALSE(result.first);
         CHECK(result.second == "Missing business route");
@@ -369,12 +344,10 @@ TEST_CASE("HTTP shutdown cancels all pending requests and settles futures withou
     auto owned_client = ark::detail::make_http_client_module();
     auto& client = *owned_client;
     std::vector<std::future<http_result>> futures;
-    for (int index = 0; index < 24; ++index)
-    {
+    for (int index = 0; index < 24; ++index) {
         futures.push_back(client.get("127.0.0.1", peer.port(), "/pending"));
     }
-    for (int index = 0; index < 8; ++index)
-    {
+    for (int index = 0; index < 8; ++index) {
         client.post(
             [&](http_result result) { callbacks.receive(std::move(result)); }, "127.0.0.1", peer.port(), "/pending");
     }
@@ -384,8 +357,7 @@ TEST_CASE("HTTP shutdown cancels all pending requests and settles futures withou
     CHECK(std::chrono::steady_clock::now() - start < 2s);
     CHECK(callbacks.result_snapshot().empty());
     const auto aborted = arknet::error_code(asio::error::operation_aborted).message();
-    for (auto& future : futures)
-    {
+    for (auto& future : futures) {
         CHECK(future.wait_for(0ms) == std::future_status::ready);
         const auto result = await_http(future);
         CHECK_FALSE(result.first);
@@ -393,8 +365,7 @@ TEST_CASE("HTTP shutdown cancels all pending requests and settles futures withou
     }
     client.update();
     REQUIRE(callbacks.result_snapshot().size() == 8);
-    for (const auto& result : callbacks.result_snapshot())
-    {
+    for (const auto& result : callbacks.result_snapshot()) {
         CHECK_FALSE(result.first);
         CHECK(result.second == aborted);
     }
@@ -522,8 +493,7 @@ TEST_CASE("HTTP manager timeout retains requests and callback owners for later u
 }
 
 TEST_CASE("HTTP manager failure retains IO results and callback receivers without automatic dispatch") {
-    struct failed_readiness : ark::module
-    {
+    struct failed_readiness : ark::module {
         bool ready_to_shut() const override {
             throw std::runtime_error("readiness failure");
         }
@@ -631,10 +601,11 @@ TEST_CASE("HTTP callback exceptions release active ownership without sealing the
     bool caught = false;
     REQUIRE(wait_http([&] { return caught; },
         [&] {
-            try
-            { client.update(); }
-            catch (const std::runtime_error&)
-            { caught = true; }
+            try {
+                client.update();
+            } catch (const std::runtime_error&) {
+                caught = true;
+            }
         }));
     CHECK(delivered == 1);
     CHECK(retained.expired());
@@ -657,8 +628,7 @@ TEST_CASE("HTTP validates host headers target and timeout before network IO") {
     const std::string trace_body = "trace-body";
     auto trace =
         client.async_request(arknet::http::verb::trace, "127.0.0.1", peer.port(), "/", nullptr, nullptr, &trace_body);
-    for (auto* future : {&host, &header, &target, &timeout, &trace})
-    {
+    for (auto* future : {&host, &header, &target, &timeout, &trace}) {
         const auto result = await_http(*future);
         CHECK_FALSE(result.first);
         CHECK(result.second == arknet::error_code(asio::error::invalid_argument).message());

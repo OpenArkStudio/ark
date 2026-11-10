@@ -30,8 +30,7 @@
 
 namespace ark {
 
-class pod_array_allocator
-{
+class pod_array_allocator {
 public:
     pod_array_allocator() = default;
     ~pod_array_allocator() = default;
@@ -54,8 +53,7 @@ template<typename element_type, size_t inline_capacity, typename allocator_type 
 class pod_array;
 
 template<typename element_type, size_t inline_capacity, typename allocator_type>
-class pod_array
-{
+class pod_array {
 public:
     using self_t = pod_array<element_type, inline_capacity, allocator_type>;
 
@@ -68,13 +66,10 @@ public:
     pod_array(const self_t& src) {
         size_ = src.size_;
 
-        if (size_ <= inline_capacity)
-        {
+        if (size_ <= inline_capacity) {
             data_ = inline_buffer_;
             capacity_ = inline_capacity;
-        }
-        else
-        {
+        } else {
             capacity_ = src.capacity_;
             data_ = allocate(capacity_);
         }
@@ -83,8 +78,7 @@ public:
     }
 
     ~pod_array() {
-        if (capacity_ > inline_capacity)
-        {
+        if (capacity_ > inline_capacity) {
             allocator_.free(data_, capacity_ * sizeof(element_type));
         }
     }
@@ -101,21 +95,17 @@ public:
         element_type* tmp_data = src.data_;
         element_type tmp_stack[inline_capacity];
 
-        if (tmp_capacity <= inline_capacity)
-        {
+        if (tmp_capacity <= inline_capacity) {
             memcpy(tmp_stack, src.inline_buffer_, tmp_size * sizeof(element_type));
         }
 
         src.size_ = this->size_;
         src.capacity_ = this->capacity_;
 
-        if (this->capacity_ <= inline_capacity)
-        {
+        if (this->capacity_ <= inline_capacity) {
             memcpy(src.inline_buffer_, this->inline_buffer_, size_ * sizeof(element_type));
             src.data_ = src.inline_buffer_;
-        }
-        else
-        {
+        } else {
             src.data_ = this->data_;
         }
 
@@ -123,13 +113,10 @@ public:
         this->size_ = tmp_size;
         this->capacity_ = tmp_capacity;
 
-        if (tmp_capacity <= inline_capacity)
-        {
+        if (tmp_capacity <= inline_capacity) {
             memcpy(this->inline_buffer_, tmp_stack, tmp_size * sizeof(element_type));
             this->data_ = this->inline_buffer_;
-        }
-        else
-        {
+        } else {
             this->data_ = tmp_data;
         }
 
@@ -151,8 +138,7 @@ public:
     void push_back(const element_type& data) {
         const size_t new_size = incremented_size();
         const element_type value = data;
-        if (new_size > capacity_)
-        {
+        if (new_size > capacity_) {
             reserve(grown_capacity(new_size));
         }
 
@@ -186,13 +172,11 @@ public:
     }
 
     void reserve(size_t size) {
-        if (size > capacity_)
-        {
+        if (size > capacity_) {
             element_type* p = allocate(size);
             memcpy(p, data_, size_ * sizeof(element_type));
 
-            if (capacity_ > inline_capacity)
-            {
+            if (capacity_ > inline_capacity) {
                 allocator_.free(data_, capacity_ * sizeof(element_type));
             }
 
@@ -202,8 +186,7 @@ public:
     }
 
     void resize(size_t size) {
-        if (size > capacity_)
-        {
+        if (size > capacity_) {
             reserve(grown_capacity(size));
         }
 
@@ -211,16 +194,14 @@ public:
     }
 
     void resize(size_t size, const element_type& value) {
-        if (size <= size_)
-        {
+        if (size <= size_) {
             size_ = size;
             return;
         }
         const element_type saved_value = value;
         const size_t old_size = size_;
         resize(size);
-        for (size_t i = old_size; i < size; ++i)
-        {
+        for (size_t i = old_size; i < size; ++i) {
             data_[i] = saved_value;
         }
     }
@@ -258,8 +239,7 @@ public:
     size_t get_mem_usage() const {
         size_t size = sizeof(self_t);
 
-        if (capacity_ > size)
-        {
+        if (capacity_ > size) {
             size += capacity_ * sizeof(element_type);
         }
 
@@ -272,15 +252,13 @@ private:
     }
 
     static void check_capacity(size_t size) {
-        if (size > max_capacity())
-        {
+        if (size > max_capacity()) {
             throw std::length_error("pod_array capacity exceeds addressable storage");
         }
     }
 
     size_t incremented_size() const {
-        if (size_ == max_capacity())
-        {
+        if (size_ == max_capacity()) {
             throw std::length_error("pod_array size exceeds addressable storage");
         }
         return size_ + 1;
@@ -295,8 +273,7 @@ private:
     element_type* allocate(size_t size) {
         check_capacity(size);
         auto* result = static_cast<element_type*>(allocator_.alloc(size * sizeof(element_type)));
-        if (result == nullptr)
-        {
+        if (result == nullptr) {
             throw std::bad_alloc{};
         }
         return result;

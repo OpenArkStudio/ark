@@ -27,8 +27,7 @@
 
 namespace ark {
 
-class component : public module
-{
+class component : public module {
 public:
     component() = delete;
 
@@ -43,14 +42,11 @@ public:
     std::shared_ptr<value_type> create_new_instance() {
         std::shared_ptr<component> component_ptr = create_new_instance();
 
-        if (nullptr != component_ptr)
-        {
-            if constexpr (std::is_base_of_v<component, value_type>)
-            {
+        if (nullptr != component_ptr) {
+            if constexpr (std::is_base_of_v<component, value_type>) {
                 std::shared_ptr<value_type> value_ptr = std::dynamic_pointer_cast<value_type>(component_ptr);
 
-                if (nullptr != value_ptr)
-                {
+                if (nullptr != value_ptr) {
                     return value_ptr;
                 }
             }

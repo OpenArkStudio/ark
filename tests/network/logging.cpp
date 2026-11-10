@@ -16,8 +16,7 @@
 
 namespace {
 
-struct log_directory
-{
+struct log_directory {
     const std::filesystem::path path =
         std::filesystem::temp_directory_path() /
         ("ark-logging-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));

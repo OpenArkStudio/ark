@@ -31,15 +31,13 @@
 namespace ark {
 
 template<typename element_type, bool is_smart_ptr>
-class vector_value_type
-{
+class vector_value_type {
 public:
     using value_type = std::conditional_t<is_smart_ptr, std::shared_ptr<element_type>, element_type*>;
 };
 
 template<typename element_type, bool is_smart_ptr>
-class object_vector_base
-{
+class object_vector_base {
 public:
     using value_type = typename vector_value_type<element_type, is_smart_ptr>::value_type;
     using vector_type = std::vector<value_type>;
@@ -71,8 +69,7 @@ public:
     }
 
     object_vector_base& operator=(object_vector_base&& other) noexcept {
-        if (this != &other)
-        {
+        if (this != &other) {
             clear();
             datas_ = std::move(other.datas_);
             other.datas_.clear();
@@ -93,10 +90,8 @@ public:
     }
 
     void clear() {
-        if constexpr (!is_smart_ptr)
-        {
-            for (auto data : datas_)
-            {
+        if constexpr (!is_smart_ptr) {
+            for (auto data : datas_) {
                 delete data;
             }
         }
@@ -105,8 +100,7 @@ public:
     }
 
     value_type at(std::size_t index) {
-        if (index >= size())
-        {
+        if (index >= size()) {
             return nullptr;
         }
 
@@ -119,8 +113,7 @@ public:
     }
 
     void resize(std::size_t new_size) {
-        if (new_size <= size())
-        {
+        if (new_size <= size()) {
             return;
         }
 
@@ -130,10 +123,8 @@ public:
     std::size_t first_empty() {
         std::size_t index = 0;
         auto size = this->size();
-        for (; index < size; index++)
-        {
-            if (datas_[index] == nullptr)
-            {
+        for (; index < size; index++) {
+            if (datas_[index] == nullptr) {
                 return index;
             }
         }
@@ -143,8 +134,7 @@ public:
 
     void erase(std::size_t index) {
         ARK_ASSERT_RET_NONE(index < size());
-        if constexpr (!is_smart_ptr)
-        {
+        if constexpr (!is_smart_ptr) {
             delete datas_[index];
         }
         datas_[index] = nullptr;
@@ -156,20 +146,15 @@ public:
     }
 
     void push_back(std::size_t index, value_type value) {
-        if (index < size())
-        {
-            if constexpr (!is_smart_ptr)
-            {
-                if (datas_[index] != value)
-                {
+        if (index < size()) {
+            if constexpr (!is_smart_ptr) {
+                if (datas_[index] != value) {
                     delete datas_[index];
                     datas_[index] = nullptr;
                 }
             }
             datas_[index] = std::move(value);
-        }
-        else
-        {
+        } else {
             datas_.emplace_back(std::move(value));
         }
     }

@@ -15,15 +15,13 @@ void mark(const char* value) {
     std::fflush(stderr);
 }
 
-struct library_guard
-{
+struct library_guard {
     ~library_guard() {
         mark("forbidden_dso_destructor");
     }
 } guard;
 
-struct wheel_context
-{
+struct wheel_context {
     std::unique_ptr<ark::time_wheel_manager> wheel;
     std::string mode;
     std::string name{"isolated_wheel"};
@@ -36,35 +34,27 @@ struct wheel_context
 ark::startup_cleanup_result release(void* pointer) {
     auto& context = *static_cast<wheel_context*>(pointer);
     mark("release_enter");
-    if (context.mode.starts_with("multi:"))
-    {
+    if (context.mode.starts_with("multi:")) {
         mark(context.name.c_str());
-        if (context.name == "middle")
-        {
-            if (context.mode == "multi:unsafe")
-            {
+        if (context.name == "middle") {
+            if (context.mode == "multi:unsafe") {
                 return ark::startup_cleanup_result::unsafe;
             }
-            if (context.mode == "multi:failed")
-            {
+            if (context.mode == "multi:failed") {
                 return ark::startup_cleanup_result::failed;
             }
-            if (context.mode == "multi:throw")
-            {
+            if (context.mode == "multi:throw") {
                 throw 4;
             }
         }
     }
-    if (context.mode == "unsafe:init")
-    {
+    if (context.mode == "unsafe:init") {
         return ark::startup_cleanup_result::unsafe;
     }
-    if (context.mode == "cleanup_throw:init")
-    {
+    if (context.mode == "cleanup_throw:init") {
         throw 4;
     }
-    if (context.wheel)
-    {
+    if (context.wheel) {
         context.wheel->shut();
         context.wheel.reset();
     }
@@ -72,24 +62,20 @@ ark::startup_cleanup_result release(void* pointer) {
     return ark::startup_cleanup_result::done;
 }
 
-class isolated_wheel_module final : public ark::module
-{
+class isolated_wheel_module final : public ark::module {
 public:
     explicit isolated_wheel_module(std::shared_ptr<wheel_context> context)
         : context_(std::move(context)) {
-        if (context_->mode == "throw:before_acquire")
-        {
+        if (context_->mode == "throw:before_acquire") {
             throw std::runtime_error("constructor before acquire");
         }
         context_->wheel = std::make_unique<ark::time_wheel_manager>();
-        if (context_->mode == "throw:partial_acquire")
-        {
+        if (context_->mode == "throw:partial_acquire") {
             throw std::runtime_error("constructor partial acquire");
         }
         context_->wheel->init(1);
         mark("acquired");
-        if (context_->mode == "throw:after_acquire")
-        {
+        if (context_->mode == "throw:after_acquire") {
             throw std::runtime_error("constructor after acquire");
         }
     }
@@ -136,15 +122,12 @@ public:
 private:
     bool step(std::string_view phase) {
         mark(std::string(phase).c_str());
-        if (context_->mode.starts_with("multi:"))
-        {
+        if (context_->mode.starts_with("multi:")) {
             return phase != "init";
         }
         const auto separator = context_->mode.find(':');
-        if (std::string_view(context_->mode).substr(separator + 1) == phase)
-        {
-            if (context_->mode.starts_with("throw:"))
-            {
+        if (std::string_view(context_->mode).substr(separator + 1) == phase) {
+            if (context_->mode.starts_with("throw:")) {
                 throw std::runtime_error("wheel hook failure");
             }
             return false;
@@ -160,20 +143,16 @@ private:
 ARK_EXPORT_FUNC void DllEntryPlugin(ark::plugin_manager* manager, const std::string& name, ark::logger* shared_logger) {
     ark::logger::init(shared_logger);
     const auto& mode = manager->get_plugin_conf(name);
-    if (mode.starts_with("multi:"))
-    {
-        for (const char* owner : {"older", "middle", "newer"})
-        {
+    if (mode.starts_with("multi:")) {
+        for (const char* owner : {"older", "middle", "newer"}) {
             auto context = std::make_shared<wheel_context>();
             context->name = owner;
             context->mode = mode;
-            if (!manager->prepare_startup_cleanup(owner, name, context, release))
-            {
+            if (!manager->prepare_startup_cleanup(owner, name, context, release)) {
                 throw std::runtime_error("multi cleanup enrollment rejected before acquisition");
             }
             auto module = std::make_unique<isolated_wheel_module>(context);
-            if (!manager->add_module(module->get_name(), module.get()))
-            {
+            if (!manager->add_module(module->get_name(), module.get())) {
                 throw std::runtime_error("multi module registration failed");
             }
             module.release();
@@ -182,20 +161,17 @@ ARK_EXPORT_FUNC void DllEntryPlugin(ark::plugin_manager* manager, const std::str
     }
     auto context = std::make_shared<wheel_context>();
     context->mode = mode;
-    if (!manager->prepare_startup_cleanup("isolated_wheel", name, context, release))
-    {
+    if (!manager->prepare_startup_cleanup("isolated_wheel", name, context, release)) {
         throw std::runtime_error("cleanup enrollment rejected before acquisition");
     }
     // The host already holds a complete independent capsule if this constructor
     // throws. Only normal successful registration owns the complete module.
     auto module = std::make_unique<isolated_wheel_module>(context);
-    if (!manager->add_module(module->get_name(), module.get()))
-    {
+    if (!manager->add_module(module->get_name(), module.get())) {
         throw std::runtime_error("module registration failed");
     }
     module.release();
-    if (context->mode == "throw:install")
-    {
+    if (context->mode == "throw:install") {
         throw std::runtime_error("partially published installation");
     }
 }

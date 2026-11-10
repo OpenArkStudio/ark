@@ -29,8 +29,7 @@ namespace ark {
 
 std::unique_ptr<mysql_sample_module> make_mysql_sample_module();
 
-class mysql_sample_plugin final : public plugin_base<mysql_sample_plugin>
-{
+class mysql_sample_plugin final : public plugin_base<mysql_sample_plugin> {
 public:
     void install() override;
     void uninstall() override;

@@ -28,8 +28,7 @@
 
 namespace ark {
 
-class class_meta_module_impl final : public module_base<class_meta_module>
-{
+class class_meta_module_impl final : public module_base<class_meta_module> {
 public:
     class_meta_module_impl() = default;
     ~class_meta_module_impl() override = default;

@@ -24,8 +24,7 @@
 
 namespace ark {
 
-class oss_sdk_plugin final : public plugin_base<oss_sdk_plugin>
-{
+class oss_sdk_plugin final : public plugin_base<oss_sdk_plugin> {
 public:
     void install() override;
     void uninstall() override;

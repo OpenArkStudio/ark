@@ -8,13 +8,11 @@
 namespace ark::detail {
 
 // Owner-thread activity outlives a facade that its own callback may destroy.
-struct database_service_activity
-{
+struct database_service_activity {
     std::size_t depth{};
     bool native_retired{};
 
-    class guard
-    {
+    class guard {
     public:
         explicit guard(std::shared_ptr<database_service_activity> state) noexcept
             : state_(std::move(state)) {

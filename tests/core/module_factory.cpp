@@ -5,8 +5,7 @@
 namespace construction_test {
 namespace {
 
-class service_impl final : public ark::module_base<service>
-{
+class service_impl final : public ark::module_base<service> {
 public:
     explicit service_impl(counts& events)
         : events_(events) {

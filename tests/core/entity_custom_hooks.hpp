@@ -7,8 +7,7 @@ void record_delete_hook(const void* value) noexcept;
 
 template<typename value_type>
 void delete_value(value_type*& value) {
-    if (value != nullptr)
-    {
+    if (value != nullptr) {
         record_delete_hook(value);
         delete value;
         value = nullptr;
@@ -22,7 +21,6 @@ void delete_value(value_type*& value) {
 
 // A supported custom allocator can throw while constructing a string value.
 #define ARK_NEW_ARRAY_RET(element_type, size)                                                                          \
-    do                                                                                                                 \
-    {                                                                                                                  \
+    do {                                                                                                               \
         return new element_type[(size)];                                                                               \
     } while (false)

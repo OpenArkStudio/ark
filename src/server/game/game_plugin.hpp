@@ -24,8 +24,7 @@
 
 namespace ark {
 
-class game_plugin final : public plugin_base<game_plugin>
-{
+class game_plugin final : public plugin_base<game_plugin> {
 public:
     void install() override;
     void uninstall() override;

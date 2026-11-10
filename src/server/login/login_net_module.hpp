@@ -26,8 +26,6 @@
 
 namespace ark {
 
-class login_net_module : public module
-{
-};
+class login_net_module : public module {};
 
 } // namespace ark

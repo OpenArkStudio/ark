@@ -103,8 +103,7 @@ void physics_scene_module::init_base() {
 void physics_scene_module::init_move() {
     ///random direction
     auto step_count = sizeof(move_step_values) / sizeof(int);
-    for (size_t i = 0; i < step_count; i++)
-    {
+    for (size_t i = 0; i < step_count; i++) {
         ///ray cast distances
         auto step = move_step_values[i];
         init_move_step(step);
@@ -116,8 +115,7 @@ void physics_scene_module::init_move_step(const int step) {
     sample_move_step.move_step = float(step);
 
     auto move_count = sizeof(move_count_values) / sizeof(int);
-    for (size_t i = 0; i < move_count; i++)
-    {
+    for (size_t i = 0; i < move_count; i++) {
         ///move counts of each actor
         auto one_move_count = move_count_values[i];
         init_actor_direction(one_move_count, sample_move_step);
@@ -129,8 +127,7 @@ void physics_scene_module::init_move_step(const int step) {
 void physics_scene_module::init_actor_direction(const int move_count, sample_move_step& sample_move_step) {
     sample_actor_direction actor_direction;
     actor_direction.move_count = move_count;
-    for (int i = 0; i < actor_count; i++)
-    {
+    for (int i = 0; i < actor_count; i++) {
         ///actor move directions
         physic3_d direction = random_move_direction();
         actor_direction.direction_list.push_back(direction);
@@ -142,30 +139,23 @@ void physics_scene_module::init_actor_direction(const int move_count, sample_mov
 void physics_scene_module::create_scene() {
     ///first scene for test
     auto& scene_list = physic_config_module_->get_physic_scene_list();
-    for (auto& iter : scene_list)
-    {
+    for (auto& iter : scene_list) {
         sample_scene sample_scene;
 
         auto& scene_id = iter.first;
-        if (scene_id == "wfcy")
-        {
+        if (scene_id == "wfcy") {
             sample_scene.min_pos = physic3_d(-9372.780273, 700, -16475.042969);
             sample_scene.max_pos = physic3_d(12115.969727, 700, 9105.064453);
-        }
-        else if (scene_id == "fjcz")
-        {
+        } else if (scene_id == "fjcz") {
             sample_scene.min_pos = physic3_d(-6977.476563, 700, -4477.612305);
             sample_scene.max_pos = physic3_d(10624.397461, 700, 12644.917969);
-        }
-        else
-        {
+        } else {
             continue;
         }
 
         ///create a scene
         sample_scene.scene_obj_id = physic_module_->create_scene(scene_id);
-        if (sample_scene.scene_obj_id == null_guid)
-        {
+        if (sample_scene.scene_obj_id == null_guid) {
             ARK_ASSERT_RET_NONE("scene create failed");
             exit(0);
         }
@@ -176,15 +166,13 @@ void physics_scene_module::create_scene() {
 }
 
 void physics_scene_module::create_actor() {
-    for (auto& iter : sample_scene_list_)
-    {
+    for (auto& iter : sample_scene_list_) {
         auto& sample_scene = iter;
         auto scene_obj_id = sample_scene.scene_obj_id;
 
         //auto interval_x = (sample_scene.max_pos.x - sample_scene.min_pos.x) / ACTOR_X_COUNT;
         //auto interval_z = (sample_scene.max_pos.z - sample_scene.min_pos.z) / ACOTR_Z_COUNT;
-        for (int i = 0; i < actor_count; i++)
-        {
+        for (int i = 0; i < actor_count; i++) {
             //auto index_x = i / ACTOR_X_COUNT;
             //auto index_z = i % ACOTR_Z_COUNT;
 
@@ -206,13 +194,10 @@ void physics_scene_module::create_actor() {
             auto actor = physic_module_->create_dynamic_box_actor(scene_obj_id, pos, box_size);
 #endif
 
-            if (actor != null_guid)
-            {
+            if (actor != null_guid) {
                 sample_scene.actor_list.push_back(actor);
                 ARK_LOG_INFO("actor index = {} created at position x = {} y = {} z= {}", i, pos.x, pos.y, pos.z);
-            }
-            else
-            {
+            } else {
                 ARK_LOG_INFO("actor created faile index = ", i);
                 exit(0);
             }
@@ -229,19 +214,16 @@ void physics_scene_module::create_actor() {
 }
 
 void physics_scene_module::move_actor() {
-    for (auto& iter : sample_scene_list_)
-    {
+    for (auto& iter : sample_scene_list_) {
         auto& sample_scene = iter;
         move_actor(sample_scene);
     }
 }
 
 void physics_scene_module::move_actor(const sample_scene& scene) {
-    for (auto& iter_move : sample_move_list_)
-    {
+    for (auto& iter_move : sample_move_list_) {
         auto& move_step = iter_move.second;
-        for (auto& iter_actor_move : move_step.count_actor_move_list)
-        {
+        for (auto& iter_actor_move : move_step.count_actor_move_list) {
             auto& actor_move = iter_actor_move.second;
             move_actor(scene, actor_move, move_step.move_step);
         }
@@ -269,14 +251,11 @@ void physics_scene_module::move_actor(
     int missed = 0;
 
     date_time now;
-    for (int i = 0; i < move_count; i++)
-    {
-        for (size_t j = 0; j < actor_count; j++)
-        {
+    for (int i = 0; i < move_count; i++) {
+        for (size_t j = 0; j < actor_count; j++) {
             auto actor = actor_list[j];
             physic3_d pos;
-            if (!physic_module_->get_actor_position(actor, pos))
-            {
+            if (!physic_module_->get_actor_position(actor, pos)) {
                 ARK_LOG_ERROR("get actor position failed actor id = {}", actor);
                 continue;
             }
@@ -292,12 +271,10 @@ void physics_scene_module::move_actor(
             pos.z += (direction.z * distance);
 
             ///is out of range
-            if (scene.is_in_range(pos))
-            {
+            if (scene.is_in_range(pos)) {
                 physic_ray_hit ray_hit;
                 auto result = physic_module_->ray_cast(scene_obj_id, origin, direction, distance, ray_hit);
-                if (result)
-                {
+                if (result) {
                     pos = ray_hit.hit_pos;
 
                     ///a new direction
@@ -305,14 +282,10 @@ void physics_scene_module::move_actor(
 
                     hit += 1;
                     //LogRayCast(scene, hit, actor, rayHit.block.distance, rayHit.block.actor, pos);
-                }
-                else
-                {
+                } else {
                     missed += 1;
                 }
-            }
-            else
-            {
+            } else {
                 ///reverse direction
                 direction.x = -direction.x;
                 direction.z = -direction.z;
@@ -322,8 +295,7 @@ void physics_scene_module::move_actor(
 
                 physic_ray_hit ray_hit;
                 auto result = physic_module_->ray_cast(scene_obj_id, origin, direction, distance, ray_hit);
-                if (result)
-                {
+                if (result) {
                     pos = ray_hit.hit_pos;
 
                     ///a new direction
@@ -331,16 +303,13 @@ void physics_scene_module::move_actor(
 
                     hit += 1;
                     //LogRayCast(scene, hit, actor, rayHit.block.distance, rayHit.block.actor, pos);
-                }
-                else
-                {
+                } else {
                     missed += 1;
                 }
             }
 
             auto result = physic_module_->update_actor(actor, pos);
-            if (!result)
-            {
+            if (!result) {
                 ARK_LOG_INFO("actor move to origin failed");
             }
 
@@ -384,8 +353,7 @@ void physics_scene_module::log_ray_cast(
 
 void physics_scene_module::re_random_position(const sample_scene& scene) {
     auto& actor_list = scene.actor_list;
-    for (auto iter : actor_list)
-    {
+    for (auto iter : actor_list) {
         auto actor = iter;
         auto pos = random_position(scene);
         physic_module_->update_actor(actor, pos);
@@ -396,8 +364,7 @@ physic3_d physics_scene_module::random_position(const sample_scene& scene) {
     physic3_d pos;
 
     float mul = 1.0F;
-    if (scene.scene_id == "wfcy")
-    {
+    if (scene.scene_id == "wfcy") {
         mul = 0.5F;
     }
 
@@ -411,12 +378,10 @@ physic3_d physics_scene_module::random_position(const sample_scene& scene) {
 }
 
 void physics_scene_module::test_raycast() {
-    for (auto& iter : sample_scene_list_)
-    {
+    for (auto& iter : sample_scene_list_) {
         auto& sample_scene = iter;
         auto scene_obj_id = sample_scene.scene_obj_id;
-        if (sample_scene.scene_id == "wfcy")
-        {
+        if (sample_scene.scene_id == "wfcy") {
             //sample_scene.min_pos = AFPhysic3D(-9372.780273, 700, -16475.042969);
             //sample_scene.max_pos = AFPhysic3D(12115.969727, 700, 9105.064453);
 
@@ -437,28 +402,22 @@ void physics_scene_module::test_raycast() {
             float ray_dist = 500;
             physic_ray_hit ray_hit;
             bool result = physic_module_->ray_cast(scene_obj_id, origin, direction, ray_dist, ray_hit);
-            if (result)
-            {
+            if (result) {
                 auto hit_pos = ray_hit.hit_pos;
                 std::cout << "ray cast distance = " << ray_dist << " hit pos = (" << hit_pos.x << ", " << hit_pos.y
                           << ", " << hit_pos.z << ") hit distance = " << ray_hit.hit_distance << std::endl;
-            }
-            else
-            {
+            } else {
                 std::cout << "ray cast distance = " << ray_dist << " did not hit " << std::endl;
             }
 
             ray_dist = 5;
             physic_ray_hit ray_hit2;
             result = physic_module_->ray_cast(scene_obj_id, origin, direction, ray_dist, ray_hit2);
-            if (result)
-            {
+            if (result) {
                 auto hit_pos = ray_hit2.hit_pos;
                 std::cout << "ray cast distance = " << ray_dist << " hit pos = (" << hit_pos.x << ", " << hit_pos.y
                           << ", " << hit_pos.z << ") hit distance = " << ray_hit.hit_distance << std::endl;
-            }
-            else
-            {
+            } else {
                 std::cout << "ray cast distance = " << ray_dist << " did not hit " << std::endl;
             }
         }

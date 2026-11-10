@@ -23,8 +23,7 @@ std::string encrypt(const std::string& message, const void* key) {
     size_t length = 0;
     std::unique_ptr<void, decltype(&std::free)> value(
         ark::xxtea::xxtea_encrypt(message.data(), message.size(), key, &length), &std::free);
-    if (!value)
-    {
+    if (!value) {
         return {};
     }
     return {static_cast<const char*>(value.get()), length};
@@ -34,8 +33,7 @@ std::string encrypt(const std::string& message, const void* key) {
 
 DOCTEST_TEST_CASE("XXTEA reads short keys only through their terminating zero") {
     const std::string message("binary\0message", 14);
-    for (size_t length = 0; length < 16; ++length)
-    {
+    for (size_t length = 0; length < 16; ++length) {
         DOCTEST_CAPTURE(length);
         // Exact allocation makes reading beyond the terminator observable.
         auto short_key = std::make_unique<char[]>(length + 1);
@@ -74,8 +72,7 @@ DOCTEST_TEST_CASE("XXTEA preserves full-width and zero-terminated key normalizat
 TEST_CASE("XXTEA retains the established ciphertext byte order") {
     const auto to_hex = [](const std::string& bytes) {
         std::string result;
-        for (unsigned char value : bytes)
-        {
+        for (unsigned char value : bytes) {
             constexpr std::string_view digits = "0123456789abcdef";
             result.push_back(digits[value >> 4]);
             result.push_back(digits[value & 15]);
@@ -91,8 +88,7 @@ TEST_CASE("XXTEA retains the established ciphertext byte order") {
 TEST_CASE("XXTEA rejects invalid raw buffer arguments before reading them") {
     std::array<unsigned char, 8> bytes{};
     size_t length = 99;
-    for (size_t size : {size_t{1}, size_t{2}, size_t{3}, size_t{5}, size_t{6}, size_t{7}})
-    {
+    for (size_t size : {size_t{1}, size_t{2}, size_t{3}, size_t{5}, size_t{6}, size_t{7}}) {
         CAPTURE(size);
         CHECK(ark::xxtea::xxtea_decrypt(bytes.data(), size, "k", &length) == nullptr);
         CHECK(length == 99);
@@ -103,8 +99,7 @@ TEST_CASE("XXTEA rejects invalid raw buffer arguments before reading them") {
     CHECK(ark::xxtea::xxtea_decrypt(bytes.data(), 8, nullptr, &length) == nullptr);
     CHECK(ark::xxtea::xxtea_encrypt(bytes.data(), 1, "k", nullptr) == nullptr);
     CHECK(ark::xxtea::xxtea_decrypt(bytes.data(), 8, "k", nullptr) == nullptr);
-    if constexpr (sizeof(size_t) > sizeof(uint32_t))
-    {
+    if constexpr (sizeof(size_t) > sizeof(uint32_t)) {
         const size_t too_large = size_t{(std::numeric_limits<uint32_t>::max)()} + 1;
         CHECK(ark::xxtea::xxtea_encrypt(bytes.data(), too_large, "k", &length) == nullptr);
         CHECK(ark::xxtea::xxtea_decrypt(bytes.data(), too_large, "k", &length) == nullptr);

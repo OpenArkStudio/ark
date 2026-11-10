@@ -33,15 +33,11 @@ etcd_client_impl::etcd_client_impl(
     , connect_timeout_(connect_timeout)
     , io_timeout_(io_timeout) {
     std::vector<std::string> host_svc;
-    for (const auto& ep : endpoints)
-    {
+    for (const auto& ep : endpoints) {
         string_utils::split(host_svc, ep, ':');
-        if (host_svc.size() == 2)
-        {
+        if (host_svc.size() == 2) {
             endpoints_.emplace_back(std::make_pair(std::move(host_svc[0]), std::move(host_svc[1])));
-        }
-        else
-        {
+        } else {
             ARK_LOG_WARN("Invalid endpoint: {}", ep);
         }
         host_svc.clear();
@@ -59,23 +55,18 @@ void etcd_client_impl::post(std::function<void(std::pair<bool, std::string>)> cb
     const auto& ep = endpoints_[ep_idx];
     http_client_->post(
         [this, cb = std::move(cb), &api, body, ep_idx, tried_cnt](std::pair<bool, std::string> rsp) mutable {
-            if (rsp.first)
-            {
+            if (rsp.first) {
                 cb(std::move(rsp));
                 selected_endpoint_index_ = ep_idx;
                 return;
             }
 
-            if (tried_cnt < endpoints_.size())
-            {
-                if (++ep_idx >= endpoints_.size())
-                {
+            if (tried_cnt < endpoints_.size()) {
+                if (++ep_idx >= endpoints_.size()) {
                     ep_idx %= endpoints_.size();
                 }
                 post(std::move(cb), api, std::move(body), ep_idx, tried_cnt + 1);
-            }
-            else
-            {
+            } else {
                 cb(std::move(rsp));
             }
         },
@@ -85,45 +76,31 @@ void etcd_client_impl::post(std::function<void(std::pair<bool, std::string>)> cb
 void etcd_client_impl::grant(std::function<void(std::pair<int64_t, std::string>)> cb, int ttl) {
     post(
         [cb = std::move(cb)](std::pair<bool, std::string> rsp) {
-            if (rsp.first)
-            {
+            if (rsp.first) {
                 std::pair<int64_t, std::string> cb_rsp;
 
                 auto j = nlohmann::json::parse(rsp.second);
-                if (auto it = j.find("ID"); it != j.end())
-                {
-                    if (it->is_string())
-                    {
+                if (auto it = j.find("ID"); it != j.end()) {
+                    if (it->is_string()) {
                         cb_rsp.first = std::stoll(it->get<std::string>());
-                    }
-                    else
-                    {
+                    } else {
                         cb_rsp.first = -1;
                         cb_rsp.second = "Unknown error";
                     }
-                }
-                else if (it = j.find("error"); it != j.end())
-                {
+                } else if (it = j.find("error"); it != j.end()) {
                     cb_rsp.first = -1;
-                    if (it->is_string())
-                    {
+                    if (it->is_string()) {
                         cb_rsp.second = it->get<std::string>();
-                    }
-                    else
-                    {
+                    } else {
                         cb_rsp.second = "Unknown error";
                     }
-                }
-                else
-                {
+                } else {
                     cb_rsp.first = -1;
                     cb_rsp.second = "Unknown error";
                 }
 
                 cb(cb_rsp);
-            }
-            else
-            {
+            } else {
                 cb(std::make_pair(static_cast<int64_t>(-1), rsp.second));
             }
         },

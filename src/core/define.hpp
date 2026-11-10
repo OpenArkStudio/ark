@@ -53,8 +53,7 @@ using id_type = uint32_t;
 using mask_type = std::bitset<16>;
 
 /// Table callback data
-class table_event_data
-{
+class table_event_data {
 public:
     table_event_data() = default;
 

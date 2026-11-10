@@ -33,8 +33,7 @@
 
 namespace ark {
 
-class http_client_module_impl final : public module_base<http_client_module>
-{
+class http_client_module_impl final : public module_base<http_client_module> {
     friend struct http_client_startup_test_access;
 
 public:
@@ -112,16 +111,12 @@ using http_callback = std::function<void(http_result)>;
 std::string encode_parameter(const std::string& text) {
     constexpr char hex[] = "0123456789ABCDEF";
     std::string encoded;
-    for (unsigned char character : text)
-    {
+    for (unsigned char character : text) {
         if ((character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
             (character >= '0' && character <= '9') || character == '-' || character == '_' || character == '.' ||
-            character == '~')
-        {
+            character == '~') {
             encoded += static_cast<char>(character);
-        }
-        else
-        {
+        } else {
             encoded += '%';
             encoded += hex[character >> 4];
             encoded += hex[character & 15];
@@ -134,12 +129,9 @@ arknet::http_request::request_type make_request(arknet::http::verb method, const
     const std::map<std::string, std::string>* params, const std::vector<std::string>* cookies, const std::string* body,
     const std::string* content_type) {
     std::string url = target.empty() ? "/" : target;
-    if (params)
-    {
-        for (const auto& [key, value] : *params)
-        {
-            if (url.back() != '?' && url.back() != '&')
-            {
+    if (params) {
+        for (const auto& [key, value] : *params) {
+            if (url.back() != '?' && url.back() != '&') {
                 url += url.find('?') == std::string::npos ? '?' : '&';
             }
             url += encode_parameter(key) + "=" + encode_parameter(value);
@@ -147,37 +139,30 @@ arknet::http_request::request_type make_request(arknet::http::verb method, const
     }
     arknet::http_request::request_type request(method, url, 11);
     request.set(arknet::http::field::user_agent, "ARK");
-    if (cookies)
-    {
+    if (cookies) {
         std::string cookie;
-        for (const auto& value : *cookies)
-        {
-            if (!cookie.empty())
-            {
+        for (const auto& value : *cookies) {
+            if (!cookie.empty()) {
                 cookie += "; ";
             }
             cookie += value;
         }
         request.set(arknet::http::field::cookie, cookie);
     }
-    if (body)
-    {
+    if (body) {
         request.body() = *body;
     }
-    if (content_type)
-    {
+    if (content_type) {
         request.set(arknet::http::field::content_type, *content_type);
     }
     return request;
 }
 
 http_result make_result(arknet::error_code error, arknet::http_request::response_type response) {
-    if (error)
-    {
+    if (error) {
         return {false, error.message()};
     }
-    if (response.result() != arknet::http::status::ok)
-    {
+    if (response.result() != arknet::http::status::ok) {
         return {false, std::string(response.reason())};
     }
     return {true, std::move(response.body())};
@@ -185,10 +170,8 @@ http_result make_result(arknet::error_code error, arknet::http_request::response
 
 } // namespace
 
-struct http_client_module_impl::state : std::enable_shared_from_this<state>
-{
-    struct callback
-    {
+struct http_client_module_impl::state : std::enable_shared_from_this<state> {
+    struct callback {
         http_callback function;
         http_result result;
     };
@@ -210,8 +193,7 @@ struct http_client_module_impl::state : std::enable_shared_from_this<state>
         options.io_timeout = std::chrono::seconds(io_timeout);
         options.connect_timeout = std::chrono::seconds(connect_timeout);
         std::unique_lock<std::mutex> lock(mutex);
-        if (stopped)
-        {
+        if (stopped) {
             lock.unlock();
             completion(make_result(asio::error::operation_aborted, {}));
             return;
@@ -236,14 +218,12 @@ struct http_client_module_impl::state : std::enable_shared_from_this<state>
     }
 
     startup_cleanup_result cleanup_failed_startup() {
-        if (runtime.running_in_threads())
-        {
+        if (runtime.running_in_threads()) {
             return startup_cleanup_result::unsafe;
         }
         {
             std::lock_guard<std::mutex> lock(mutex);
-            if (!requests.empty() || !finished.empty() || active_callbacks != 0)
-            {
+            if (!requests.empty() || !finished.empty() || active_callbacks != 0) {
                 return startup_cleanup_result::unsafe;
             }
             stopped = true;
@@ -260,8 +240,7 @@ struct http_client_module_impl::state : std::enable_shared_from_this<state>
         {
             std::lock_guard<std::mutex> lock(mutex);
             stopped = true;
-            for (const auto& [id, operation] : requests)
-            {
+            for (const auto& [id, operation] : requests) {
                 operation->cancel();
             }
         }
@@ -269,8 +248,7 @@ struct http_client_module_impl::state : std::enable_shared_from_this<state>
     }
 };
 
-struct http_client_module_impl::startup_capsule
-{
+struct http_client_module_impl::startup_capsule {
     explicit startup_capsule(std::shared_ptr<state> resource)
         : resource(std::move(resource)) {
     }
@@ -282,19 +260,16 @@ http_client_module_impl::http_client_module_impl(plugin_manager* manager)
     : state_(std::make_shared<state>()) {
     // Keep complete state and its deleter alive even if construction or a later
     // install/startup hook fails. Enrollment precedes native worker acquisition.
-    if (manager)
-    {
+    if (manager) {
         auto capsule = std::make_shared<startup_capsule>(state_);
         if (!manager->prepare_startup_cleanup("NetHttpClient", "ark_net_plugin", capsule, [](void* context) {
                 return static_cast<startup_capsule*>(context)->resource->cleanup_failed_startup();
-            }))
-        {
+            })) {
             throw std::runtime_error("Net HTTP startup cleanup enrollment rejected");
         }
         startup_owner_ = capsule;
     }
-    if (!state_->runtime.start())
-    {
+    if (!state_->runtime.start()) {
         throw arknet::system_error(arknet::get_last_error());
     }
 }
@@ -303,8 +278,7 @@ http_client_module_impl::~http_client_module_impl() {
     // Failed construction/registration must reach the failure runner without
     // closing native IO from candidate unwinding. Successful startup disarms
     // the capsule, restoring ordinary ownership and destructor cleanup.
-    if (startup_owner_.expired())
-    {
+    if (startup_owner_.expired()) {
         pre_shut();
     }
 }
@@ -327,13 +301,11 @@ bool http_client_module_impl::update() {
         std::lock_guard<std::mutex> lock(shared->mutex);
         remaining = shared->finished.size();
     }
-    while (remaining--)
-    {
+    while (remaining--) {
         state::callback callback;
         {
             std::lock_guard<std::mutex> lock(shared->mutex);
-            if (shared->finished.empty())
-            {
+            if (shared->finished.empty()) {
                 break;
             }
             callback = std::move(shared->finished.front());
@@ -341,8 +313,7 @@ bool http_client_module_impl::update() {
             ++shared->active_callbacks;
         }
 
-        struct delivery_guard
-        {
+        struct delivery_guard {
             state& shared;
             state::callback& callback;
 
@@ -353,8 +324,7 @@ bool http_client_module_impl::update() {
             }
         } delivery{*shared, callback};
 
-        if (callback.function)
-        {
+        if (callback.function) {
             callback.function(std::move(callback.result));
         }
     }

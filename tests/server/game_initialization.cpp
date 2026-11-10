@@ -27,8 +27,7 @@ namespace {
 
 // Control only listener creation. Kernel and every metadata provider below are
 // production implementations; the separate DSO suite owns real loopback IO.
-class listener_probe final : public ark::module_base<ark::net_service_manager_module>
-{
+class listener_probe final : public ark::module_base<ark::net_service_manager_module> {
 public:
     unsigned create_calls{};
 
@@ -78,8 +77,7 @@ public:
 // These key-only providers isolate the real Game factory's own declarations.
 // They deliberately do not emulate provider interfaces or business behavior.
 // The ordering control consequently stops at Game init's existing type checks.
-class provider_hook_probe final : public ark::module
-{
+class provider_hook_probe final : public ark::module {
 public:
     bool init() override {
         ++init_calls;
@@ -110,8 +108,7 @@ std::vector<std::string> game_provider_keys() {
         typeid(ark::class_meta_module).name()};
 }
 
-class quiet_logger
-{
+class quiet_logger {
 public:
     quiet_logger()
         : previous_(ark::logger::instance()) {
@@ -128,8 +125,7 @@ private:
     ark::logger log_;
 };
 
-class game_world
-{
+class game_world {
 public:
     explicit game_world(bool with_player = true)
         : previous_directory_(std::filesystem::current_path())
@@ -164,8 +160,7 @@ public:
     }
 
     ~game_world() {
-        if (providers_initialized_)
-        {
+        if (providers_initialized_) {
             kernel_.pre_shut();
             maps_.shut();
             config_.shut();
@@ -186,8 +181,7 @@ public:
         REQUIRE(metadata.init());
         providers_initialized_ = true;
         REQUIRE(config_.post_init());
-        if (kernel_post_init_first)
-        {
+        if (kernel_post_init_first) {
             post_initialize_kernel();
         }
     }
@@ -233,8 +227,7 @@ private:
 } // namespace
 
 TEST_CASE("Game init precedes Kernel initialization without registering callbacks") {
-    for (const bool kernel_post_init_first : {false, true})
-    {
+    for (const bool kernel_post_init_first : {false, true}) {
         CAPTURE(kernel_post_init_first);
         game_world world;
         INFO("Fixture directory: " << world.runtime_directory().string());
@@ -248,8 +241,7 @@ TEST_CASE("Game init precedes Kernel initialization without registering callback
         CHECK(world.player_online_calls() == 0);
         CHECK_FALSE(world.game->post_init()); // Deliberate listener failure after registration.
         CHECK(world.network.create_calls == 1);
-        if (!kernel_post_init_first)
-        {
+        if (!kernel_post_init_first) {
             world.post_initialize_kernel();
         }
         REQUIRE(world.metadata.do_class_event(
@@ -271,8 +263,7 @@ TEST_CASE("Game missing Player metadata fails before registering callbacks or cr
 TEST_CASE("Game factory rejects each missing provider before any startup hook") {
     quiet_logger log;
     const auto keys = game_provider_keys();
-    for (const auto& missing : keys)
-    {
+    for (const auto& missing : keys) {
         CAPTURE(missing);
         ark::plugin_manager manager;
         auto game = ark::detail::make_game_net_module();
@@ -286,10 +277,8 @@ TEST_CASE("Game factory rejects each missing provider before any startup hook") 
         provider_hook_probe observer;
         REQUIRE(manager.add_module("!independent-startup-observer", &observer));
         std::vector<provider_hook_probe> providers(keys.size());
-        for (size_t i = 0; i < keys.size(); ++i)
-        {
-            if (keys[i] != missing)
-            {
+        for (size_t i = 0; i < keys.size(); ++i) {
+            if (keys[i] != missing) {
                 REQUIRE(manager.add_module(keys[i], &providers[i]));
             }
         }
@@ -299,8 +288,7 @@ TEST_CASE("Game factory rejects each missing provider before any startup hook") 
         CHECK(std::string(manager.get_startup_call().phase.data()) == "dependencies");
         CHECK(observer.init_calls == 0);
         CHECK(observer.later_calls == 0);
-        for (const auto& provider : providers)
-        {
+        for (const auto& provider : providers) {
             CHECK(provider.init_calls == 0);
             CHECK(provider.later_calls == 0);
         }
@@ -317,14 +305,12 @@ TEST_CASE("Game factory orders every declared provider before its init hook") {
     REQUIRE(manager.add_module("!game-consumer", game.get()));
     const auto keys = game_provider_keys();
     std::vector<provider_hook_probe> providers(keys.size());
-    for (size_t i = keys.size(); i-- > 0;)
-    {
+    for (size_t i = keys.size(); i-- > 0;) {
         REQUIRE(manager.add_module(keys[i], &providers[i]));
     }
     CHECK_FALSE(manager.start(0, {}, {}, {}));
     CHECK(manager.get_startup_failure() == "init: !game-consumer");
-    for (const auto& provider : providers)
-    {
+    for (const auto& provider : providers) {
         CHECK(provider.init_calls == 1);
         CHECK(provider.later_calls == 0);
     }

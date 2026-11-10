@@ -27,8 +27,7 @@
 
 namespace ark {
 
-class timer_module : public module
-{
+class timer_module : public module {
 public:
     template<typename receiver_type>
     uint64_t add_single_timer(const guid_t& entity_id, const std::chrono::milliseconds interval, const uint32_t count,

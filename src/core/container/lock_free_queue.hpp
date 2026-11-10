@@ -27,8 +27,7 @@
 namespace ark {
 
 template<typename element_type>
-class lock_free_queue
-{
+class lock_free_queue {
 public:
     lock_free_queue() = default;
     ~lock_free_queue() = default;

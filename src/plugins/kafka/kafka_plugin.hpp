@@ -4,8 +4,7 @@
 
 namespace ark {
 
-class kafka_plugin final : public plugin_base<kafka_plugin>
-{
+class kafka_plugin final : public plugin_base<kafka_plugin> {
 public:
     void install() override;
     void uninstall() override;

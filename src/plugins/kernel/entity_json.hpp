@@ -16,8 +16,7 @@ namespace ark::entity_json {
 inline constexpr std::array<std::string_view, 8> mask_names = {
     "sync_view", "sync_self", "real_time", "save", "sync_team", "sync_guild", "sync_map", "log"};
 
-enum class value_type
-{
+enum class value_type {
     boolean,
     int32,
     uint32,
@@ -32,8 +31,7 @@ enum class value_type
 // Integers retain their signedness and full width. GUIDs use canonical decimal strings.
 using value = std::variant<bool, std::int64_t, std::uint64_t, double, std::string>;
 
-struct field
-{
+struct field {
     std::string name;
     std::uint32_t index{0};
     value_type type{value_type::int32};
@@ -41,8 +39,7 @@ struct field
     std::string description;
 };
 
-struct relation
-{
+struct relation {
     std::string name;
     std::uint32_t index{0};
     std::string class_name;
@@ -50,8 +47,7 @@ struct relation
     std::string description;
 };
 
-struct class_definition
-{
+struct class_definition {
     std::string name;
     std::vector<field> fields;
     std::vector<relation> tables;
@@ -61,20 +57,17 @@ struct class_definition
 
 using row = std::map<std::string, value>;
 
-struct config_definition
-{
+struct config_definition {
     std::string class_name;
     std::vector<row> rows;
 };
 
-struct document
-{
+struct document {
     std::vector<class_definition> classes;
     std::vector<config_definition> configs;
 };
 
-class error : public std::runtime_error
-{
+class error : public std::runtime_error {
 public:
     error(std::string source, std::string pointer, std::string reason);
     const std::string& source() const noexcept;

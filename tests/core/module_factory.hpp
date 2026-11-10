@@ -7,14 +7,12 @@
 
 namespace construction_test {
 
-struct counts
-{
+struct counts {
     unsigned destroyed{};
     unsigned updates{};
 };
 
-class service : public ark::module
-{
+class service : public ark::module {
 public:
     virtual service* lookup_self() = 0;
 };

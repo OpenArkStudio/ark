@@ -35,16 +35,14 @@ static_assert(std::is_nothrow_move_assignable_v<ark::zstd_compress>);
 
 std::string payload(std::size_t size, uint32_t seed = 1) {
     std::string result(size, '\0');
-    for (char& byte : result)
-    {
+    for (char& byte : result) {
         seed = seed * 1664525u + 1013904223u;
         byte = static_cast<char>(seed >> 24);
     }
     return result;
 }
 
-struct dictionary_file
-{
+struct dictionary_file {
     std::filesystem::path path;
 
     dictionary_file()
@@ -55,8 +53,7 @@ struct dictionary_file
         const auto bytes = payload(4096);
         output.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
         output.close();
-        if (!output)
-        {
+        if (!output) {
             throw std::runtime_error("cannot write temporary dictionary");
         }
     }
@@ -100,8 +97,7 @@ std::string external_zstd(const std::string& input, bool content_size = true) {
 template<typename bound_type, typename compress_type>
 void check_compression_boundary(bound_type bound, compress_type compress) {
     std::size_t rejected = 0;
-    while (static_cast<std::size_t>(bound(rejected)) < capacity)
-    {
+    while (static_cast<std::size_t>(bound(rejected)) < capacity) {
         ++rejected;
     }
     REQUIRE(rejected > 0);
@@ -153,8 +149,7 @@ TEST_CASE("Zstandard moves retain populated contexts dictionaries and frame comp
     CHECK(destination.dict_compress(1, input.data(), input.size(), moved_frame));
     CHECK(moved_frame == frame);
 
-    for (auto* reused : {&source, &moved})
-    {
+    for (auto* reused : {&source, &moved}) {
         REQUIRE(reused->init_z_std_dict(1, dictionary.path.string(), 1));
         std::string reused_frame;
         REQUIRE(reused->dict_compress(1, input.data(), input.size(), reused_frame));
@@ -170,8 +165,7 @@ TEST_CASE("Zstandard moves retain populated contexts dictionaries and frame comp
 TEST_CASE("compression preserves binary bytes and appends successful results") {
     const auto input = payload(8192);
     ark::zstd_compress zstd;
-    for (int algorithm = 0; algorithm < 3; ++algorithm)
-    {
+    for (int algorithm = 0; algorithm < 3; ++algorithm) {
         std::string compressed = prefix;
         const bool packed = algorithm == 0   ? ark::zlib_compress::compress(input.data(), input.size(), 1, compressed)
                             : algorithm == 1 ? ark::lz4_compress::compress(input.data(), input.size(), 1, compressed)
@@ -214,8 +208,7 @@ TEST_CASE("compression retains strict compression bound and rejects unrepresenta
     const auto too_large = static_cast<std::size_t>((std::numeric_limits<int>::max)()) + 1;
     CHECK_FALSE(ark::lz4_compress::compress("x", static_cast<std::size_t>(LZ4_MAX_INPUT_SIZE) + 1, 1, output));
     CHECK_FALSE(ark::lz4_compress::decompress("x", too_large, output));
-    if constexpr (sizeof(std::size_t) > sizeof(uLong))
-    {
+    if constexpr (sizeof(std::size_t) > sizeof(uLong)) {
         const auto source_size = static_cast<std::size_t>((std::numeric_limits<uLong>::max)()) + 1;
         CHECK_FALSE(ark::zlib_compress::decompress("x", source_size, output));
     }
@@ -226,8 +219,7 @@ TEST_CASE("decompression accepts exactly one MiB and rejects larger outputs") {
     ark::zstd_compress zstd;
     dictionary_file dictionary;
     REQUIRE(zstd.init_z_std_dict(1, dictionary.path.string(), 1));
-    for (const std::size_t size : {capacity - 1, capacity, capacity + 1})
-    {
+    for (const std::size_t size : {capacity - 1, capacity, capacity + 1}) {
         const std::string input(size, 'a');
         const auto zlib_frame = external_zlib(input);
         const auto lz4_frame = external_lz4(input);
@@ -268,8 +260,7 @@ TEST_CASE("corrupt truncated and unknown-size frames preserve caller output") {
     REQUIRE(ZSTD_getDictID_fromFrame(different_dictionary.data(), different_dictionary.size()) == 1);
     CHECK_FALSE(zstd.dict_decompress(1, different_dictionary.data(), different_dictionary.size(), output));
     for (const auto& frame : {std::string("bad"), external_zstd(input, false),
-             std::string("\x28\xb5\x2f\xfd\xe0\x01\x00\x00\x00\x01\x00\x00\x00", 13)})
-    {
+             std::string("\x28\xb5\x2f\xfd\xe0\x01\x00\x00\x00\x01\x00\x00\x00", 13)}) {
         CHECK_FALSE(zstd.normal_decompress(frame.data(), frame.size(), output));
         CHECK_FALSE(zstd.dict_decompress(1, frame.data(), frame.size(), output));
     }
@@ -303,45 +294,38 @@ TEST_CASE("parallel compression calls own their output buffers") {
     std::barrier start(workers);
     std::atomic<bool> passed = true;
     std::vector<std::jthread> threads;
-    for (int worker = 0; worker < workers; ++worker)
-    {
+    for (int worker = 0; worker < workers; ++worker) {
         threads.emplace_back([&, worker] {
             // Dictionary contexts belong to one thread; sharing one instance is unsupported.
             ark::zstd_compress zstd;
-            if (!zstd.init_z_std_dict(1, dictionary.path.string(), 1))
-            {
+            if (!zstd.init_z_std_dict(1, dictionary.path.string(), 1)) {
                 passed = false;
             }
             start.arrive_and_wait();
-            for (int iteration = 0; iteration < 20; ++iteration)
-            {
+            for (int iteration = 0; iteration < 20; ++iteration) {
                 const auto input = payload(128 * 1024 + iteration, worker * 100 + iteration + 1);
                 std::string packed;
                 std::string output = prefix;
                 if (!ark::zlib_compress::compress(input.data(), input.size(), 1, packed) ||
-                    !ark::zlib_compress::decompress(packed.data(), packed.size(), output) || output != prefix + input)
-                {
+                    !ark::zlib_compress::decompress(packed.data(), packed.size(), output) || output != prefix + input) {
                     passed = false;
                 }
                 packed.clear();
                 output = prefix;
                 if (!ark::lz4_compress::compress(input.data(), input.size(), 1, packed) ||
-                    !ark::lz4_compress::decompress(packed.data(), packed.size(), output) || output != prefix + input)
-                {
+                    !ark::lz4_compress::decompress(packed.data(), packed.size(), output) || output != prefix + input) {
                     passed = false;
                 }
                 packed.clear();
                 output = prefix;
                 if (!normal_zstd.normal_compress(input.data(), input.size(), 1, packed) ||
-                    !normal_zstd.normal_decompress(packed.data(), packed.size(), output) || output != prefix + input)
-                {
+                    !normal_zstd.normal_decompress(packed.data(), packed.size(), output) || output != prefix + input) {
                     passed = false;
                 }
                 packed.clear();
                 output = prefix;
                 if (!zstd.dict_compress(1, input.data(), input.size(), packed) ||
-                    !zstd.dict_decompress(1, packed.data(), packed.size(), output) || output != prefix + input)
-                {
+                    !zstd.dict_decompress(1, packed.data(), packed.size(), output) || output != prefix + input) {
                     passed = false;
                 }
             }

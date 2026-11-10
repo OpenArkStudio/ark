@@ -25,8 +25,7 @@
 namespace ark {
 
 template<typename element_type>
-class list
-{
+class list {
 public:
     using list_type = std::list<element_type>;
     using reference = element_type&;
@@ -88,8 +87,7 @@ public:
     }
 
     bool get_value(const std::size_t index, reference value) {
-        if (index >= values_.size())
-        {
+        if (index >= values_.size()) {
             return false;
         }
 

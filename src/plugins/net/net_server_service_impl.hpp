@@ -28,11 +28,9 @@
 
 namespace ark {
 
-class connection
-{
+class connection {
 public:
-    enum class connect_state : uint8_t
-    {
+    enum class connect_state : uint8_t {
         disconnect = 0,
         connecting,
         connected,
@@ -54,8 +52,7 @@ public:
     connect_state state{connect_state::disconnect};
 };
 
-class net_server_service_impl final : public net_server_service
-{
+class net_server_service_impl final : public net_server_service {
 public:
     explicit net_server_service_impl(plugin_manager* p);
 
@@ -93,8 +90,7 @@ protected:
 
     inline void remove_client_connection(conv_id_t session_id) {
         auto iter = client_connection_list_.find(session_id);
-        if (iter == client_connection_list_.end())
-        {
+        if (iter == client_connection_list_.end()) {
             return;
         }
 

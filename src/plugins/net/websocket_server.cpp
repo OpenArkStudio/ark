@@ -39,8 +39,7 @@ void websocket_server::update() {
 bool websocket_server::start_server(std::shared_ptr<const msg_header> head, bus_id_t bus_id, const std::string& host,
     uint16_t port, uint8_t thread_num, uint32_t max_client, const size_t silent_timeout) {
     ARK_ASSERT_RET_VAL(head != nullptr, false);
-    if (server_ != nullptr)
-    {
+    if (server_ != nullptr) {
         shutdown();
     }
     server_ = std::make_shared<arknet::ws_server>(
@@ -53,16 +52,12 @@ bool websocket_server::start_server(std::shared_ptr<const msg_header> head, bus_
         ->bind_start([weak] {
             const auto ec = arknet::get_last_error();
             const auto self = weak.lock();
-            if (self == nullptr)
-            {
+            if (self == nullptr) {
                 return;
             }
-            if (ec)
-            {
+            if (ec) {
                 ARK_LOG_INFO("Server(WS) start failed, error={} errno={}", ec.message(), ec.value());
-            }
-            else
-            {
+            } else {
                 ARK_LOG_INFO("Server(WS) start success, listen_addr={} listen_port={}", self->server_->listen_address(),
                     self->server_->listen_port());
             }
@@ -77,8 +72,7 @@ bool websocket_server::start_server(std::shared_ptr<const msg_header> head, bus_
         })
         .bind_connect([weak, head, initial_buffer_size, max_client](std::shared_ptr<arknet::ws_session>& session_ptr) {
             const auto self = weak.lock();
-            if (self == nullptr)
-            {
+            if (self == nullptr) {
                 session_ptr->stop();
                 return;
             }
@@ -91,37 +85,32 @@ bool websocket_server::start_server(std::shared_ptr<const msg_header> head, bus_
             bool admitted = false;
             {
                 scope_w_lock guard(self->rw_lock_);
-                if (max_client == 0 || self->active_session_count_ < max_client)
-                {
+                if (max_client == 0 || self->active_session_count_ < max_client) {
                     session_ptr->set_user_data(cur_session_id);
                     ws_session_ptr session =
                         std::make_shared<ws_session>(head, cur_session_id, session_ptr, initial_buffer_size);
                     admitted = self->add_net_session(session);
-                    if (admitted)
-                    {
+                    if (admitted) {
                         ++self->active_session_count_;
                         net_event* net_connect_event = net_event::alloc_event();
                         net_connect_event->set_id(cur_session_id);
                         net_connect_event->set_type(net_event_type::connect);
                         net_connect_event->set_bus_id(self->bus_id_);
                         net_connect_event->set_ip(session_ptr->remote_address());
-                        if (!session->add_net_event(net_connect_event))
-                        {
+                        if (!session->add_net_event(net_connect_event)) {
                             net_event::release(net_connect_event);
                         }
                     }
                 }
             }
-            if (!admitted)
-            {
+            if (!admitted) {
                 session_ptr->stop();
             }
         })
         .bind_disconnect([weak](std::shared_ptr<arknet::ws_session>& session_ptr) {
             const auto ec = arknet::get_last_error();
             const auto self = weak.lock();
-            if (self == nullptr)
-            {
+            if (self == nullptr) {
                 return;
             }
             ARK_LOG_INFO("Client(WS) disconnected, client_addr={} client_port={} error={}",
@@ -131,8 +120,7 @@ bool websocket_server::start_server(std::shared_ptr<const msg_header> head, bus_
 
             scope_w_lock guard(self->rw_lock_);
             ws_session_ptr session = self->get_net_session(session_id);
-            if (session == nullptr || session->need_remove())
-            {
+            if (session == nullptr || session->need_remove()) {
                 return;
             }
 
@@ -143,8 +131,7 @@ bool websocket_server::start_server(std::shared_ptr<const msg_header> head, bus_
             net_disconnect_event->set_ip(session_ptr->remote_address());
             session->need_remove(true);
             --self->active_session_count_;
-            if (!session->add_net_event(net_disconnect_event))
-            {
+            if (!session->add_net_event(net_disconnect_event)) {
                 net_event::release(net_disconnect_event);
             }
         })
@@ -155,8 +142,7 @@ bool websocket_server::start_server(std::shared_ptr<const msg_header> head, bus_
         })
         .bind_recv([weak](std::shared_ptr<arknet::ws_session>& session_ptr, std::string_view s) {
             const auto self = weak.lock();
-            if (self == nullptr)
-            {
+            if (self == nullptr) {
                 return;
             }
             auto session_id = session_ptr->get_user_data<conv_id_t>();
@@ -166,15 +152,13 @@ bool websocket_server::start_server(std::shared_ptr<const msg_header> head, bus_
             {
                 scope_r_lock guard(self->rw_lock_);
                 const ws_session_ptr session = self->get_net_session(session_id);
-                if (session == nullptr || session->need_remove())
-                {
+                if (session == nullptr || session->need_remove()) {
                     return;
                 }
 
                 parsed = session->add_buffer(s.data(), s.length()) >= 0 && session->parse_buffer_to_msg();
             }
-            if (!parsed)
-            {
+            if (!parsed) {
                 session_ptr->stop();
             }
         });
@@ -189,18 +173,15 @@ void websocket_server::update_net_session() {
     {
         scope_r_lock guard(rw_lock_);
         sessions.reserve(sessions_.size());
-        for (const auto& iter : sessions_)
-        {
+        for (const auto& iter : sessions_) {
             sessions.push_back(iter.second);
         }
     }
-    for (const auto& session : sessions)
-    {
+    for (const auto& session : sessions) {
         ARK_ASSERT_CONTINUE(session != nullptr);
         const bool disconnected = update_net_event(session);
         update_net_msg(session);
-        if (disconnected)
-        {
+        if (disconnected) {
             scope_w_lock guard(rw_lock_);
             close_session(session);
         }
@@ -212,8 +193,7 @@ bool websocket_server::update_net_event(const ws_session_ptr& session) {
 
     bool disconnected = false;
     net_event* event{nullptr};
-    while (session->pop_net_event(event))
-    {
+    while (session->pop_net_event(event)) {
         disconnected = disconnected || event->get_type() == net_event_type::disconnect;
         net_event_cb_(event);
         net_event::release(event);
@@ -226,22 +206,19 @@ void websocket_server::update_net_msg(const ws_session_ptr& session) {
 
     net_msg* msg{nullptr};
     int msg_count = 0;
-    while (session->pop_net_msg(msg))
-    {
+    while (session->pop_net_msg(msg)) {
         net_msg_cb_(msg, session->get_session_id());
         net_msg::release(msg);
 
         ++msg_count;
-        if (msg_count >= ark_process_net_msg_count_once && !session->need_remove())
-        {
+        if (msg_count >= ark_process_net_msg_count_once && !session->need_remove()) {
             break;
         }
     }
 }
 
 void websocket_server::shutdown() {
-    if (server_ != nullptr)
-    {
+    if (server_ != nullptr) {
         server_->stop();
     }
     set_working(false);
@@ -264,8 +241,7 @@ void websocket_server::close_session(conv_id_t session_id) {
         scope_r_lock guard(rw_lock_);
         session = get_net_session(session_id);
     }
-    if (session != nullptr)
-    {
+    if (session != nullptr) {
         session->get_session()->stop();
     }
 }
@@ -274,13 +250,11 @@ void websocket_server::close_all_session() {
     std::vector<ws_session_ptr> sessions;
     {
         scope_r_lock guard(rw_lock_);
-        for (const auto& entry : sessions_)
-        {
+        for (const auto& entry : sessions_) {
             sessions.push_back(entry.second);
         }
     }
-    for (const auto& session : sessions)
-    {
+    for (const auto& session : sessions) {
         session->get_session()->stop();
     }
 }
@@ -293,8 +267,7 @@ ws_session_ptr websocket_server::get_net_session(conv_id_t session_id) {
 bool websocket_server::send_msg(const char* msg, const size_t msg_len, conv_id_t session_id) {
     scope_r_lock guard(rw_lock_);
     auto session = get_net_session(session_id);
-    if (session == nullptr || session->need_remove())
-    {
+    if (session == nullptr || session->need_remove()) {
         return false;
     }
 
@@ -303,23 +276,20 @@ bool websocket_server::send_msg(const char* msg, const size_t msg_len, conv_id_t
 
 bool websocket_server::send_msg(msg_header* head, const char* msg_data, conv_id_t session_id) {
     ARK_ASSERT_RET_VAL(head != nullptr && msg_data != nullptr, false);
-    if (!head->accepts_body_size(head->message_length()))
-    {
+    if (!head->accepts_body_size(head->message_length())) {
         return false;
     }
 
     scope_r_lock guard(rw_lock_);
     auto session = get_net_session(session_id);
-    if (session == nullptr || session->need_remove())
-    {
+    if (session == nullptr || session->need_remove()) {
         return false;
     }
 
     std::string buffer;
     head->serialize_to_string(buffer);
     const auto message_length = head->message_length();
-    if (buffer.empty() || !head->accepts_body_size(message_length))
-    {
+    if (buffer.empty() || !head->accepts_body_size(message_length)) {
         return false;
     }
 
@@ -329,11 +299,9 @@ bool websocket_server::send_msg(msg_header* head, const char* msg_data, conv_id_
 
 void websocket_server::send_msg_to_all_client(const char* msg, size_t msg_len) {
     scope_r_lock guard(rw_lock_);
-    for (const auto& it : sessions_)
-    {
+    for (const auto& it : sessions_) {
         auto& session = it.second;
-        if (session != nullptr && !session->need_remove())
-        {
+        if (session != nullptr && !session->need_remove()) {
             session->get_session()->async_send(msg, msg_len);
         }
     }
@@ -341,16 +309,14 @@ void websocket_server::send_msg_to_all_client(const char* msg, size_t msg_len) {
 
 void websocket_server::broadcast_msg(msg_header* head, const char* msg_data) {
     ARK_ASSERT_RET_NONE(head != nullptr && msg_data != nullptr);
-    if (!head->accepts_body_size(head->message_length()))
-    {
+    if (!head->accepts_body_size(head->message_length())) {
         return;
     }
 
     std::string buffer;
     head->serialize_to_string(buffer);
     const auto message_length = head->message_length();
-    if (buffer.empty() || !head->accepts_body_size(message_length))
-    {
+    if (buffer.empty() || !head->accepts_body_size(message_length)) {
         return;
     }
     buffer.append(msg_data, message_length);

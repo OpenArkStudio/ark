@@ -16,25 +16,20 @@ bool return_null{};
 bool throw_allocation{};
 
 char* allocate_bytes(size_t size) {
-    if (throw_allocation)
-    {
+    if (throw_allocation) {
         throw_allocation = false;
         throw std::bad_alloc{};
     }
-    if (return_null)
-    {
+    if (return_null) {
         return_null = false;
         return nullptr;
     }
     auto* result = static_cast<char*>(std::malloc(size ? size : 1));
-    if (!result)
-    {
+    if (!result) {
         throw std::bad_alloc{};
     }
-    for (auto& entry : live)
-    {
-        if (!entry)
-        {
+    for (auto& entry : live) {
+        if (!entry) {
             entry = result;
             ++allocations;
             return result;
@@ -44,10 +39,8 @@ char* allocate_bytes(size_t size) {
 }
 
 void release_bytes(char*& value) noexcept {
-    for (auto& entry : live)
-    {
-        if (entry == value)
-        {
+    for (auto& entry : live) {
+        if (entry == value) {
             entry = nullptr;
             std::free(value);
             value = nullptr;
@@ -90,8 +83,7 @@ TEST_CASE("Buffer uses matching custom hooks for growth replacement moves and de
     }
     CHECK(allocations - initial_allocations == 4);
     CHECK(releases - initial_releases == 4);
-    for (const auto* entry : live)
-    {
+    for (const auto* entry : live) {
         CHECK(entry == nullptr);
     }
 }

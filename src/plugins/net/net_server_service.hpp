@@ -50,8 +50,7 @@ namespace ark {
 //    std::string account_{};
 //};
 
-class net_server_service
-{
+class net_server_service {
 public:
     virtual ~net_server_service() = default;
 

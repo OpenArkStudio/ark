@@ -21,15 +21,13 @@
 
 namespace {
 void require(bool condition, const std::string& message) {
-    if (!condition)
-    {
+    if (!condition) {
         std::cerr << message << std::endl;
         std::_Exit(1);
     }
 }
 
-struct observations
-{
+struct observations {
     unsigned future_posts{};
     unsigned callback_posts{};
     unsigned callbacks{};
@@ -43,8 +41,7 @@ struct observations
     std::thread::id owner = std::this_thread::get_id();
 };
 
-class client_service final : public ark::module_base<ark::http_client_module>
-{
+class client_service final : public ark::module_base<ark::http_client_module> {
 public:
     explicit client_service(observations& events)
         : events_(events) {
@@ -97,8 +94,7 @@ public:
         ++events_.updates;
         auto pending = std::move(events_.pending);
         events_.pending.clear();
-        for (auto& callback : pending)
-        {
+        for (auto& callback : pending) {
             callback();
         }
         return true;
@@ -127,8 +123,7 @@ private:
     observations& events_;
 };
 
-class lease_client final : public ark::etcd_client
-{
+class lease_client final : public ark::etcd_client {
 public:
     explicit lease_client(observations& events)
         : events_(events) {
@@ -156,8 +151,7 @@ private:
     observations& events_;
 };
 
-class etcd_service final : public ark::module_base<ark::etcd_client_module>
-{
+class etcd_service final : public ark::module_base<ark::etcd_client_module> {
 public:
     explicit etcd_service(observations& events)
         : events_(events) {
@@ -174,8 +168,7 @@ private:
     observations& events_;
 };
 
-class server_service final : public ark::module_base<ark::http_server_module>
-{
+class server_service final : public ark::module_base<ark::http_server_module> {
 public:
     explicit server_service(observations& events)
         : events_(events) {
@@ -202,8 +195,7 @@ private:
     arknet::http_router router_;
 };
 
-class services final : public ark::plugin_base<services>
-{
+class services final : public ark::plugin_base<services> {
 public:
     explicit services(observations& events)
         : events_(events) {
@@ -246,8 +238,7 @@ int main(int argc, char* argv[]) {
     ark::logger log;
     ark::logger::init(&log);
     log.set_log_func([](spdlog::level::level_enum, const std::string&) {});
-    for (int run = 0; run < 2; ++run)
-    {
+    for (int run = 0; run < 2; ++run) {
         observations events;
         ark::plugin_manager manager;
         services fixtures(events);

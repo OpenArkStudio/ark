@@ -27,8 +27,7 @@
 
 namespace ark {
 
-class bad_cron_expression : public std::exception
-{
+class bad_cron_expression : public std::exception {
 public:
     explicit bad_cron_expression(const std::string&& msg)
         : msg_(std::move(msg)) {
@@ -64,8 +63,7 @@ inline std::tm scheduler_local_time(std::time_t time) {
 #else
     const bool converted = localtime_r(&time, &result) != nullptr;
 #endif
-    if (!converted)
-    {
+    if (!converted) {
         throw std::runtime_error("Cannot convert scheduler local time");
     }
     return result;
@@ -79,8 +77,7 @@ inline void add(std::tm& tm, std::chrono::system_clock::duration time) {
     tm = detail::scheduler_local_time(tm_adjusted);
 }
 
-class cron
-{
+class cron {
 public:
     using clock = std::chrono::system_clock;
 
@@ -88,8 +85,7 @@ public:
         std::istringstream iss(expression);
         std::vector<std::string> tokens{std::istream_iterator<std::string>{iss}, std::istream_iterator<std::string>{}};
 
-        if (tokens.size() != 5)
-        {
+        if (tokens.size() != 5) {
             throw bad_cron_expression("malformed cron string (must be 5 fields): " + expression);
         }
 
@@ -108,19 +104,14 @@ public:
         // it will always at least run the next minute
         next.tm_sec = 0;
         add(next, std::chrono::minutes(1));
-        while (true)
-        {
-            if (month != -1 && next.tm_mon != month)
-            {
+        while (true) {
+            if (month != -1 && next.tm_mon != month) {
                 // add a month
                 // if this will bring us over a year, increment the year instead and reset the month
-                if (next.tm_mon + 1 > 11)
-                {
+                if (next.tm_mon + 1 > 11) {
                     next.tm_mon = 0;
                     next.tm_year++;
-                }
-                else
-                {
+                } else {
                     next.tm_mon++;
                 }
 
@@ -130,31 +121,27 @@ public:
                 continue;
             }
 
-            if (day != -1 && next.tm_mday != day)
-            {
+            if (day != -1 && next.tm_mday != day) {
                 add(next, std::chrono::hours(24));
                 next.tm_hour = 0;
                 next.tm_min = 0;
                 continue;
             }
 
-            if (day_of_week != -1 && next.tm_wday != day_of_week)
-            {
+            if (day_of_week != -1 && next.tm_wday != day_of_week) {
                 add(next, std::chrono::hours(24));
                 next.tm_hour = 0;
                 next.tm_min = 0;
                 continue;
             }
 
-            if (hour != -1 && next.tm_hour != hour)
-            {
+            if (hour != -1 && next.tm_hour != hour) {
                 add(next, std::chrono::hours(1));
                 next.tm_min = 0;
                 continue;
             }
 
-            if (minute != -1 && next.tm_min != minute)
-            {
+            if (minute != -1 && next.tm_min != minute) {
                 add(next, std::chrono::minutes(1));
                 continue;
             }
@@ -176,32 +163,26 @@ public:
 private:
     inline void verify_and_set(const std::string& token, const std::string& expression, int& field,
         const int lower_bound, const int upper_bound, const bool adjust = false) {
-        if (token == "*")
-        {
+        if (token == "*") {
             field = -1;
-        }
-        else
-        {
-            try
-            { field = std::stoi(token); }
-            catch (const std::invalid_argument&)
-            { throw bad_cron_expression("malformed cron string (`" + token + "` not an integer or *): " + expression); }
-            catch (const std::out_of_range&)
-            {
+        } else {
+            try {
+                field = std::stoi(token);
+            } catch (const std::invalid_argument&) {
+                throw bad_cron_expression("malformed cron string (`" + token + "` not an integer or *): " + expression);
+            } catch (const std::out_of_range&) {
                 throw bad_cron_expression(
                     "malformed cron string (`" + token + "` not convertable to int): " + expression);
             }
 
-            if (field < lower_bound || field > upper_bound)
-            {
+            if (field < lower_bound || field > upper_bound) {
                 std::ostringstream oss;
                 oss << "malformed cron string ('" << token << "' must be <= " << upper_bound
                     << " and >= " << lower_bound << "): " << expression;
                 throw bad_cron_expression(oss.str());
             }
 
-            if (adjust)
-            {
+            if (adjust) {
                 field--;
             }
         }

@@ -28,8 +28,7 @@
 
 namespace ark {
 
-class class_meta_module : public module
-{
+class class_meta_module : public module {
 public:
     virtual bool load() = 0;
 

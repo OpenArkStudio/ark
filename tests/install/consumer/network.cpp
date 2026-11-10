@@ -36,8 +36,7 @@
 namespace {
 
 void require(bool condition, const std::string& reason) {
-    if (!condition)
-    {
+    if (!condition) {
         std::cerr << reason << std::endl;
         // A failed acceptance must retain live callback/DSO owners until exit.
         std::_Exit(1);
@@ -170,8 +169,7 @@ int main(int argc, char** argv) {
     header.serialize_to_string(frame);
     frame += body;
     std::size_t sent{};
-    while (sent != frame.size())
-    {
+    while (sent != frame.size()) {
         const auto count = ::send(client, frame.data() + sent, frame.size() - sent, 0);
         require(count > 0, "TCP frame send failed");
         sent += static_cast<std::size_t>(count);
@@ -179,16 +177,14 @@ int main(int argc, char** argv) {
     require(!received, "Net callback ran before owner update");
     std::string response;
     const auto request_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (response.size() < frame.size())
-    {
+    while (response.size() < frame.size()) {
         require(std::chrono::steady_clock::now() < request_deadline && manager.update(ark::date_time::get_now_time()),
             "TCP request exceeded its owner observation or update failed");
         char bytes[4096];
         const auto count = ::recv(client, bytes, sizeof(bytes), MSG_DONTWAIT);
         require(count > 0 || (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)),
             "TCP reply receive failed");
-        if (count > 0)
-        {
+        if (count > 0) {
             response.append(bytes, static_cast<std::size_t>(count));
             require(response.size() <= frame.size(), "TCP reply exceeded the fixture bound");
         }
@@ -215,16 +211,14 @@ int main(int argc, char** argv) {
     std::thread peer([client] {
         char byte{};
         ssize_t count{};
-        do
-        {
+        do {
             count = ::recv(client, &byte, 1, 0);
         } while (count < 0 && errno == EINTR);
         require(count == 0, "Net shutdown did not send EOF to the accepted TCP peer");
         ::close(client);
     });
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (!manager.stop_until(ark::date_time::get_now_time(), deadline))
-    {
+    while (!manager.stop_until(ark::date_time::get_now_time(), deadline)) {
         require(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopping &&
                     manager.get_shutdown_failure().empty() && !manager.get_shutdown_exception() &&
                     std::chrono::steady_clock::now() < deadline,

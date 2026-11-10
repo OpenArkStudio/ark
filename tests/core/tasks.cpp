@@ -32,12 +32,10 @@ ark::task<> receive_value(std::string& result, unsigned& resumed) {
 }
 
 ark::task<> wait_for_cancel(asio::steady_timer& timer, unsigned& cancelled) {
-    try
-    { co_await timer.async_wait(asio::use_awaitable); }
-    catch (const asio::system_error& error)
-    {
-        if (error.code() != asio::error::operation_aborted)
-        {
+    try {
+        co_await timer.async_wait(asio::use_awaitable);
+    } catch (const asio::system_error& error) {
+        if (error.code() != asio::error::operation_aborted) {
             throw;
         }
         ++cancelled;
@@ -63,8 +61,7 @@ TEST_CASE("Public task SDK returns owning values after admission stops") {
     CHECK_FALSE(tasks.closed());
     CHECK(tasks.poll(0) == 0);
     CHECK(result.empty());
-    for (unsigned step = 0; step < 32 && !tasks.closed(); ++step)
-    {
+    for (unsigned step = 0; step < 32 && !tasks.closed(); ++step) {
         tasks.poll(1);
     }
     CHECK(tasks.closed());
@@ -97,8 +94,7 @@ TEST_CASE("Public task SDK cancellation remains explicit and owner polled") {
     tasks.stop_accepting();
     CHECK(completed == 0);
     CHECK_FALSE(tasks.closed());
-    for (unsigned step = 0; step < 32 && !tasks.closed(); ++step)
-    {
+    for (unsigned step = 0; step < 32 && !tasks.closed(); ++step) {
         tasks.poll(1);
     }
     CHECK(tasks.closed());
@@ -114,14 +110,16 @@ TEST_CASE("Public task SDK rejects invalid owners and construction limits") {
     ark::task_group tasks(runtime);
     unsigned rejected{};
     std::thread worker([&] {
-        try
-        { tasks.poll(); }
-        catch (const std::logic_error&)
-        { ++rejected; }
-        try
-        { tasks.cancel_all(); }
-        catch (const std::logic_error&)
-        { ++rejected; }
+        try {
+            tasks.poll();
+        } catch (const std::logic_error&) {
+            ++rejected;
+        }
+        try {
+            tasks.cancel_all();
+        } catch (const std::logic_error&) {
+            ++rejected;
+        }
     });
     worker.join();
     CHECK(rejected == 2);

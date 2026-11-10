@@ -17,22 +17,19 @@ using redis_service = ark::detail::redis_service;
 using service_result = ark::detail::redis_service_result;
 
 void check(bool condition, const char* message) {
-    if (!condition)
-    {
+    if (!condition) {
         throw std::runtime_error(message);
     }
 }
 
 arknet::redis::result await_result(redis_service& service, std::optional<service_result>& completion) {
     const auto expires = std::chrono::steady_clock::now() + 5s;
-    while (!completion && std::chrono::steady_clock::now() < expires)
-    {
+    while (!completion && std::chrono::steady_clock::now() < expires) {
         service.update();
         std::this_thread::sleep_for(1ms);
     }
     check(bool(completion), "Cancelled Redis operation did not deliver a terminal continuation");
-    if (auto* failure = std::get_if<std::exception_ptr>(&*completion))
-    {
+    if (auto* failure = std::get_if<std::exception_ptr>(&*completion)) {
         std::rethrow_exception(*failure);
     }
     auto result = std::get<arknet::redis::result>(std::move(*completion));
@@ -53,18 +50,15 @@ arknet::redis::result command(redis_service& service, arknet::redis::command arg
 void wait_for_block(redis_service& observer, std::int64_t client_id) {
     const auto expires = std::chrono::steady_clock::now() + 4s;
     const auto marker = "id=" + std::to_string(client_id) + " ";
-    while (std::chrono::steady_clock::now() < expires)
-    {
+    while (std::chrono::steady_clock::now() < expires) {
         const auto clients = command(observer, {"CLIENT", "LIST"});
         check(clients.replies.size() == 1, "Redis CLIENT LIST response shape changed");
         const auto& listing = clients.replies.front().text;
         const auto start = listing.find(marker);
-        if (start != std::string::npos)
-        {
+        if (start != std::string::npos) {
             const auto end = listing.find('\n', start);
             const auto blocked = listing.find("cmd=blpop", start);
-            if (blocked != std::string::npos && (end == std::string::npos || blocked < end))
-            {
+            if (blocked != std::string::npos && (end == std::string::npos || blocked < end)) {
                 return;
             }
         }
@@ -114,11 +108,9 @@ void check_cancellation(const arknet::redis::pool_options& options, const std::s
     command(observer, {"LPUSH", blocking_key, "after-cancel"});
     const auto consumed_deadline = std::chrono::steady_clock::now() + 4s;
     bool consumed{};
-    while (std::chrono::steady_clock::now() < consumed_deadline)
-    {
+    while (std::chrono::steady_clock::now() < consumed_deadline) {
         consumed = command(observer, {"LLEN", blocking_key}).replies.front().integer == 0;
-        if (consumed)
-        {
+        if (consumed) {
             break;
         }
     }
@@ -132,8 +124,7 @@ void check_cancellation(const arknet::redis::pool_options& options, const std::s
         ready.start({"ECHO", "native-success"}, [&](auto result) { ready_result = std::move(result); }, 4s);
     check(ready_id != 0, "Ready-result request was not admitted");
     const auto ready_deadline = std::chrono::steady_clock::now() + 5s;
-    while (ready.is_pending(ready_id) && std::chrono::steady_clock::now() < ready_deadline)
-    {
+    while (ready.is_pending(ready_id) && std::chrono::steady_clock::now() < ready_deadline) {
         std::this_thread::sleep_for(1ms);
     }
     check(!ready.is_pending(ready_id) && !ready_result && !ready.cancel(ready_id),
@@ -193,24 +184,20 @@ void check_cancellation(const arknet::redis::pool_options& options, const std::s
 } // namespace
 
 int main() {
-    try
-    {
+    try {
         const auto* host = std::getenv("ARK_DATABASE_REDIS_HOST");
         const auto* port = std::getenv("ARK_DATABASE_REDIS_PORT");
-        if (!host || !*host || !port || !*port)
-        {
+        if (!host || !*host || !port || !*port) {
             throw std::invalid_argument(
                 "Set ARK_DATABASE_REDIS_HOST and ARK_DATABASE_REDIS_PORT for an isolated test server");
         }
         arknet::redis::pool_options options;
         options.connection.host = host;
         options.connection.port = port;
-        if (const auto* username = std::getenv("ARK_DATABASE_REDIS_USER"))
-        {
+        if (const auto* username = std::getenv("ARK_DATABASE_REDIS_USER")) {
             options.connection.username = username;
         }
-        if (const auto* password = std::getenv("ARK_DATABASE_REDIS_PASSWORD"))
-        {
+        if (const auto* password = std::getenv("ARK_DATABASE_REDIS_PASSWORD")) {
             options.connection.password = password;
         }
         options.connection.client_name = "ark-database-service-test";
@@ -223,8 +210,7 @@ int main() {
         unsigned callbacks{};
         const auto owner = std::this_thread::get_id();
         auto handler = [&](ark::detail::redis_service_result result) {
-            if (std::this_thread::get_id() != owner)
-            {
+            if (std::this_thread::get_id() != owner) {
                 throw std::runtime_error("Business callback escaped the module thread");
             }
             ++callbacks;
@@ -234,60 +220,49 @@ int main() {
         const auto key = "ark-private-service-" + std::to_string(unique);
         const std::string expected("binary\0value", 12);
         std::string input = expected;
-        if (!service.submit_pipeline({{"SET", key, input}, {"GET", key}}, handler, 2s))
-        {
+        if (!service.submit_pipeline({{"SET", key, input}, {"GET", key}}, handler, 2s)) {
             throw std::runtime_error("First operation was not admitted");
         }
         input.assign("modified caller storage");
-        if (service.submit({"PING"}, handler, 2s))
-        {
+        if (service.submit({"PING"}, handler, 2s)) {
             throw std::runtime_error("Completed/active operations bypassed module admission limit");
         }
         auto await = [&] {
             const auto expires = std::chrono::steady_clock::now() + 4s;
-            while (!completed && std::chrono::steady_clock::now() < expires)
-            {
+            while (!completed && std::chrono::steady_clock::now() < expires) {
                 service.update();
                 std::this_thread::sleep_for(1ms);
             }
-            if (!completed)
-            {
+            if (!completed) {
                 throw std::runtime_error("No module completion before timeout");
             }
-            if (auto failure = std::get_if<std::exception_ptr>(&*completed))
-            {
+            if (auto failure = std::get_if<std::exception_ptr>(&*completed)) {
                 std::rethrow_exception(*failure);
             }
             auto result = std::get<arknet::redis::result>(std::move(*completed));
             completed.reset();
-            if (!result)
-            {
+            if (!result) {
                 throw std::runtime_error("Native Redis failed: " + std::to_string(static_cast<int>(result.error)));
             }
             return result;
         };
         auto owned = await();
         if (owned.replies.size() != 2 || owned.replies[1].type != arknet::redis::value_type::bulk_string ||
-            owned.replies[1].text != expected)
-        {
+            owned.replies[1].text != expected) {
             throw std::runtime_error("Pipeline/binary result did not preserve ownership");
         }
-        if (!service.submit({"DEL", key}, handler, 2s))
-        {
+        if (!service.submit({"DEL", key}, handler, 2s)) {
             throw std::runtime_error("Module admission did not recover after dispatch");
         }
         auto removed = await();
-        if (removed.replies.size() != 1 || removed.replies[0].integer != 1 || owned.replies[1].text != expected)
-        {
+        if (removed.replies.size() != 1 || removed.replies[0].integer != 1 || owned.replies[1].text != expected) {
             throw std::runtime_error("A later command invalidated an owning result");
         }
-        if (!service.submit({"PING"}, handler, 2s))
-        {
+        if (!service.submit({"PING"}, handler, 2s)) {
             throw std::runtime_error("Stop test was not admitted");
         }
         service.stop();
-        if (service.update() != 0 || callbacks != 2 || service.submit({"PING"}, handler, 2s))
-        {
+        if (service.update() != 0 || callbacks != 2 || service.submit({"PING"}, handler, 2s)) {
             throw std::runtime_error("Stop delivered business code or accepted new work");
         }
         auto ephemeral = std::make_unique<ark::detail::redis_service>(options);
@@ -295,38 +270,31 @@ int main() {
         if (!ephemeral->submit(
                 {"PING"},
                 [&](ark::detail::redis_service_result result) {
-                    if (auto failure = std::get_if<std::exception_ptr>(&result))
-                    {
+                    if (auto failure = std::get_if<std::exception_ptr>(&result)) {
                         std::rethrow_exception(*failure);
                     }
-                    if (!std::get<arknet::redis::result>(result))
-                    {
+                    if (!std::get<arknet::redis::result>(result)) {
                         throw std::runtime_error("Callback-destruction PING failed");
                     }
                     ephemeral.reset();
                     destroyed_from_callback = true;
                 },
-                2s))
-        {
+                2s)) {
             throw std::runtime_error("Callback-destruction operation was not admitted");
         }
         const auto destruction_deadline = std::chrono::steady_clock::now() + 4s;
-        while (!destroyed_from_callback && std::chrono::steady_clock::now() < destruction_deadline)
-        {
+        while (!destroyed_from_callback && std::chrono::steady_clock::now() < destruction_deadline) {
             ephemeral->update();
             std::this_thread::sleep_for(1ms);
         }
-        if (!destroyed_from_callback)
-        {
+        if (!destroyed_from_callback) {
             throw std::runtime_error("Callback-destruction completion timed out");
         }
         check_cancellation(options, key);
         std::cout
             << "private Redis service: owning binary pipeline, admission, module-thread dispatch and stop passed\n";
         return 0;
-    }
-    catch (const std::exception& error)
-    {
+    } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;
     }

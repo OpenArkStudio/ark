@@ -35,8 +35,7 @@
 
 namespace ark {
 
-class http_server_module_impl final : public module_base<http_server_module>
-{
+class http_server_module_impl final : public module_base<http_server_module> {
     friend struct http_server_startup_test_access;
 
 public:
@@ -81,8 +80,7 @@ bool reserve_endpoint(const std::string& key) {
 }
 
 void release_endpoint(std::string& key) {
-    if (key.empty())
-    {
+    if (key.empty()) {
         return;
     }
     std::lock_guard lock(http_endpoint_mutex);
@@ -90,8 +88,7 @@ void release_endpoint(std::string& key) {
     key.clear();
 }
 
-class endpoint_reservation final
-{
+class endpoint_reservation final {
 public:
     explicit endpoint_reservation(std::string key)
         : key_(std::move(key))
@@ -99,8 +96,7 @@ public:
     }
 
     ~endpoint_reservation() {
-        if (reserved_)
-        {
+        if (reserved_) {
             release_endpoint(key_);
         }
     }
@@ -124,23 +120,19 @@ private:
 
 } // namespace
 
-struct http_server_module_impl::callback_state
-{
-    struct request_lease
-    {
+struct http_server_module_impl::callback_state {
+    struct request_lease {
         explicit request_lease(std::shared_ptr<callback_state> owner)
             : owner_(std::move(owner)) {
             std::lock_guard lock(owner_->mutex);
-            if (!owner_->closing)
-            {
+            if (!owner_->closing) {
                 ++owner_->pending;
                 acquired = true;
             }
         }
 
         ~request_lease() {
-            if (acquired)
-            {
+            if (acquired) {
                 std::lock_guard lock(owner_->mutex);
                 --owner_->pending;
             }
@@ -163,12 +155,10 @@ struct http_server_module_impl::callback_state
     arknet::http_router router;
 };
 
-struct http_server_module_impl::state
-{
+struct http_server_module_impl::state {
     std::shared_ptr<callback_state> callbacks = std::make_shared<callback_state>();
 
-    struct native_owner
-    {
+    struct native_owner {
         std::unique_ptr<arknet::http_server> server;
         std::string listen_key;
         std::unique_ptr<native_owner> next;
@@ -181,15 +171,12 @@ struct http_server_module_impl::state
         std::lock_guard lock(callbacks->mutex);
         // Even a stopped or never-started native endpoint can allocate in its
         // destructor. Its existence is not proof of safe retirement here.
-        for (auto* owner = owners.get(); owner; owner = owner->next.get())
-        {
-            if (owner->server)
-            {
+        for (auto* owner = owners.get(); owner; owner = owner->next.get()) {
+            if (owner->server) {
                 return startup_cleanup_result::unsafe;
             }
         }
-        if (callbacks->exposed || callbacks->pending != 0)
-        {
+        if (callbacks->exposed || callbacks->pending != 0) {
             return startup_cleanup_result::unsafe;
         }
         callbacks->sealed = true;
@@ -198,20 +185,17 @@ struct http_server_module_impl::state
     }
 };
 
-struct http_server_module_impl::startup_capsule
-{
+struct http_server_module_impl::startup_capsule {
     std::shared_ptr<state> resource;
 };
 
 http_server_module_impl::http_server_module_impl(plugin_manager* manager)
     : state_(std::make_shared<state>()) {
-    if (manager)
-    {
+    if (manager) {
         auto capsule = std::make_shared<startup_capsule>(startup_capsule{state_});
         if (!manager->prepare_startup_cleanup("HTTPServer", "ark_http_plugin", capsule, [](void* context) {
                 return static_cast<startup_capsule*>(context)->resource->cleanup_failed_startup();
-            }))
-        {
+            })) {
             throw std::runtime_error("HTTP server startup ownership enrollment rejected");
         }
         startup_owner_ = capsule;
@@ -221,8 +205,7 @@ http_server_module_impl::http_server_module_impl(plugin_manager* manager)
 http_server_module_impl::~http_server_module_impl() {
     // Failed registration/startup leaves the complete owner with the host.
     // Successful startup disarms enrollment and restores ordinary destruction.
-    if (startup_owner_.expired())
-    {
+    if (startup_owner_.expired()) {
         pre_shut();
     }
 }
@@ -255,10 +238,8 @@ bool http_server_module_impl::pre_shut() {
         std::lock_guard lock(state_->callbacks->mutex);
         state_->callbacks->closing = true;
     }
-    for (auto* owner = state_->owners.get(); owner; owner = owner->next.get())
-    {
-        if (owner->server)
-        {
+    for (auto* owner = state_->owners.get(); owner; owner = owner->next.get()) {
+        if (owner->server) {
             owner->server->stop();
             owner->server.reset();
         }
@@ -279,28 +260,23 @@ bool http_server_module_impl::start_server(
     std::string const& ip /* = "0.0.0.0"*/, uint16_t port /* = 8080 */, uint8_t thread_num /* = 1*/) {
     {
         std::lock_guard lock(state_->callbacks->mutex);
-        if (state_->callbacks->sealed)
-        {
+        if (state_->callbacks->sealed) {
             return false;
         }
-        if (state_->callbacks->closing)
-        {
-            if (state_->active || state_->callbacks->pending != 0)
-            {
+        if (state_->callbacks->closing) {
+            if (state_->active || state_->callbacks->pending != 0) {
                 return false;
             }
             // An explicit restart after pre_shut uses the caller's new router.
             state_->callbacks->closing = false;
         }
     }
-    if (state_->active)
-    {
+    if (state_->active) {
         return false;
     }
     auto candidate = std::make_unique<state::native_owner>();
     endpoint_reservation reservation(port == 0 ? std::string{} : endpoint_key(ip, port));
-    if (!reservation.is_reserved())
-    {
+    if (!reservation.is_reserved()) {
         return false;
     }
     candidate->next = std::move(state_->owners);
@@ -313,8 +289,7 @@ bool http_server_module_impl::start_server(
     owner.server->bind_recv([callbacks = state_->callbacks](
                                 std::shared_ptr<arknet::http_session>& session, arknet::http_route_request& request) {
         auto lease = std::make_shared<callback_state::request_lease>(callbacks);
-        if (!lease->acquired)
-        {
+        if (!lease->acquired) {
             session->stop();
             return;
         }
@@ -322,16 +297,14 @@ bool http_server_module_impl::start_server(
         response.set(arknet::http::field::server, "ARK");
         session->async_send(std::move(response), [lease](const arknet::error_code&, std::size_t) {});
     });
-    if (!owner.server->start(ip, port))
-    {
+    if (!owner.server->start(ip, port)) {
         // Preserve the existing ordinary start-false stop and endpoint reuse.
         // If native stop throws, the complete attempt stays enrolled. Retain
         // even stopped native allocations rather than invoking their destructors
         // while an allocation failure may still be active.
         owner.server->stop();
         release_endpoint(owner.listen_key);
-        if (startup_owner_.expired())
-        {
+        if (startup_owner_.expired()) {
             // Standalone use and completed startup retain the original ordinary
             // destruction path; failed attempts must not accumulate forever.
             owner.server.reset();

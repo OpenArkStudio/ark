@@ -27,8 +27,7 @@
 
 namespace ark {
 
-class mysql_plugin final : public plugin_base<mysql_plugin>
-{
+class mysql_plugin final : public plugin_base<mysql_plugin> {
 public:
     void install() override;
     void uninstall() override;

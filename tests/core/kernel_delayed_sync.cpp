@@ -22,8 +22,7 @@ namespace ark {
 
 // Test-only access to the existing delivery callback. The actual serializer and
 // send_sync_msg path remain intact; this does not implement a transport.
-class kernel_delayed_sync_test_access
-{
+class kernel_delayed_sync_test_access {
 public:
     static auto& delivery_callbacks(kernel_module_impl& kernel) {
         return kernel.sync_functors_;
@@ -34,8 +33,7 @@ public:
 
 namespace {
 
-class delayed_sync_files
-{
+class delayed_sync_files {
 public:
     delayed_sync_files()
         : previous_(std::filesystem::current_path())
@@ -66,8 +64,7 @@ private:
     std::filesystem::path previous_, directory_;
 };
 
-class sync_guid_sequence final : public ark::guid_module
-{
+class sync_guid_sequence final : public ark::guid_module {
 public:
     ark::guid_t create_guid() override {
         return next_++;
@@ -81,21 +78,18 @@ private:
     ark::guid_t next_{1000};
 };
 
-struct delivery
-{
+struct delivery {
     ark::data_mask mask;
     ark::guid_t target;
     ark::protobuf::protobuf_delay_entity message;
 };
 
-class delayed_sync_world
-{
+class delayed_sync_world {
 public:
     delayed_sync_world() {
         ark::logger::init(&logger_);
         logger_.set_log_func([this](spdlog::level::level_enum level, const std::string& message) {
-            if (level >= spdlog::level::err)
-            {
+            if (level >= spdlog::level::err) {
                 errors.push_back(message);
             }
         });
@@ -111,15 +105,13 @@ public:
         REQUIRE(config_.post_init());
         REQUIRE(kernel.post_init());
         REQUIRE(maps_.create_map(1));
-        for (const auto mask : {ark::data_mask::pf_sync_view, ark::data_mask::pf_sync_self})
-        {
+        for (const auto mask : {ark::data_mask::pf_sync_view, ark::data_mask::pf_sync_self}) {
             ark::kernel_delayed_sync_test_access::delivery_callbacks(
                 kernel)[mask] = [this, mask](const ark::guid_t& target, const google::protobuf::Message& message) {
                 const auto* delayed = dynamic_cast<const ark::protobuf::protobuf_delay_entity*>(&message);
                 REQUIRE(delayed != nullptr);
                 deliveries.push_back({mask, target, *delayed});
-                if (on_delivery)
-                {
+                if (on_delivery) {
                     on_delivery(mask);
                 }
                 return true;
@@ -133,10 +125,8 @@ public:
         on_delivery = {};
         // Retire pending raw-node batches before destroying their entities.
         kernel.update();
-        for (const auto id : children_)
-        {
-            if (kernel.get_entity(id))
-            {
+        for (const auto id : children_) {
+            if (kernel.get_entity(id)) {
                 kernel.destroy_entity(id);
             }
         }
@@ -158,13 +148,11 @@ public:
         CHECK(deliveries.empty());
         REQUIRE(kernel.update());
         REQUIRE(deliveries.size() == count);
-        for (const auto& event : deliveries)
-        {
+        for (const auto& event : deliveries) {
             CHECK(event.target == owner->get_id());
             CHECK(event.message.id() == owner->get_id());
         }
-        if (count == 2)
-        {
+        if (count == 2) {
             CHECK(deliveries[0].mask == ark::data_mask::pf_sync_view);
             CHECK(deliveries[1].mask == ark::data_mask::pf_sync_self);
         }
@@ -196,15 +184,13 @@ private:
 } // namespace
 
 TEST_CASE("Kernel retirement cancels queued updates while preserving live entities and destroy events") {
-    struct destroy_observer
-    {
+    struct destroy_observer {
         std::vector<ark::entity_event> events;
         std::shared_ptr<ark::entity> owner;
 
         int on_event(const ark::guid_t& id, const std::string&, ark::entity_event event, const ark::data_list&) {
-            if (id == 10 &&
-                (event == ark::entity_event::entity_evt_pre_destroy || event == ark::entity_event::entity_evt_destroy))
-            {
+            if (id == 10 && (event == ark::entity_event::entity_evt_pre_destroy ||
+                                event == ark::entity_event::entity_evt_destroy)) {
                 events.push_back(event);
                 // Destruction callbacks may collect one final old-object change.
                 REQUIRE(owner->set_u_int32(100, 80 + static_cast<std::uint32_t>(events.size())));
@@ -231,8 +217,7 @@ TEST_CASE("Kernel retirement cancels queued updates while preserving live entiti
     REQUIRE(world.kernel.update());
     CHECK(world.errors.empty());
     REQUIRE(world.deliveries.size() == 2);
-    for (const auto& event : world.deliveries)
-    {
+    for (const auto& event : world.deliveries) {
         CHECK(event.target == 20);
         CHECK(event.message.data().datas_uint32().at(100) == 29);
     }
@@ -250,14 +235,12 @@ TEST_CASE("Kernel retirement during delivery skips later masks of the active ent
         recreate = true;
     }
     world.on_delivery = [&](ark::data_mask) {
-        if (retired)
-        {
+        if (retired) {
             return;
         }
         retired = true;
         REQUIRE(world.kernel.destroy_entity(10));
-        if (recreate)
-        {
+        if (recreate) {
             world.owner = world.kernel.create_entity(10, 1, 0, "Owner", 0, ark::data_list_impl{});
             REQUIRE(world.owner != nullptr);
             REQUIRE(world.owner != old_owner);
@@ -272,16 +255,12 @@ TEST_CASE("Kernel retirement during delivery skips later masks of the active ent
     CHECK(world.deliveries.front().message.data().datas_uint32().at(100) == 7);
     world.on_delivery = {};
     world.deliveries.clear();
-    if (recreate)
-    {
+    if (recreate) {
         world.flush();
-        for (const auto& event : world.deliveries)
-        {
+        for (const auto& event : world.deliveries) {
             CHECK(event.message.data().datas_uint32().at(100) == 99);
         }
-    }
-    else
-    {
+    } else {
         REQUIRE(world.kernel.update());
         CHECK(world.deliveries.empty());
     }
@@ -300,8 +279,7 @@ TEST_CASE("Kernel retirement during delivery removes another queued lifetime wit
     const std::weak_ptr<ark::entity> retired_lifetime = victim;
     bool retired = false;
     world.on_delivery = [&](ark::data_mask) {
-        if (!retired)
-        {
+        if (!retired) {
             retired = true;
             REQUIRE(world.kernel.destroy_entity(20));
             victim.reset();
@@ -312,8 +290,7 @@ TEST_CASE("Kernel retirement during delivery removes another queued lifetime wit
     CHECK(world.errors.empty());
     REQUIRE(world.deliveries.size() == 4);
     std::map<ark::guid_t, unsigned> counts;
-    for (const auto& event : world.deliveries)
-    {
+    for (const auto& event : world.deliveries) {
         ++counts[event.target];
         CHECK(event.message.data().datas_uint32().at(100) == (event.target == 10 ? 7 : 27));
     }
@@ -330,8 +307,7 @@ TEST_CASE("Kernel delayed container-only changes reach existing mask delivery ca
         REQUIRE(child->set_u_int32(1, 7));
         const auto slot = bag->find(child->get_id());
         world.flush();
-        for (const auto& event : world.deliveries)
-        {
+        for (const auto& event : world.deliveries) {
             const auto& payload = event.message.data().datas_container().at(201).datas_value().at(slot);
             CHECK(payload.id() == child->get_id());
             CHECK(payload.data().datas_uint32().at(1) == 7);
@@ -344,8 +320,7 @@ TEST_CASE("Kernel delayed container-only changes reach existing mask delivery ca
         const auto child = world.create_child();
         const auto slot = bag->find(child->get_id());
         world.flush();
-        for (const auto& event : world.deliveries)
-        {
+        for (const auto& event : world.deliveries) {
             CHECK(event.message.container_entity().at(201).entity_list().at(slot) == child->get_id());
             CHECK(event.message.data().datas_container().empty());
         }
@@ -358,8 +333,7 @@ TEST_CASE("Kernel delayed container-only changes reach existing mask delivery ca
         world.deliveries.clear();
         REQUIRE(bag->remove(slot));
         world.flush();
-        for (const auto& event : world.deliveries)
-        {
+        for (const auto& event : world.deliveries) {
             CHECK(event.message.container_entity().at(201).entity_list().at(slot) == ark::null_guid);
             CHECK(event.message.destroy_entity().at(201).entity_list().empty());
         }
@@ -373,8 +347,7 @@ TEST_CASE("Kernel delayed container-only changes reach existing mask delivery ca
         child->update_sent();
         REQUIRE(bag->destroy(slot));
         world.flush();
-        for (const auto& event : world.deliveries)
-        {
+        for (const auto& event : world.deliveries) {
             CHECK(event.message.container_entity().at(201).entity_list().at(slot) == ark::null_guid);
             CHECK(event.message.destroy_entity().at(201).entity_list().at(slot) == ark::null_guid);
         }
@@ -409,31 +382,25 @@ TEST_CASE("Kernel delayed scalar table mixed and empty controls retain existing 
         scalar = table = container = true;
     }
 
-    if (scalar)
-    {
+    if (scalar) {
         REQUIRE(world.owner->set_u_int32(100, 9));
     }
-    if (table)
-    {
+    if (table) {
         const auto inventory = world.owner->find_table(200);
         REQUIRE(inventory != nullptr);
         inventory->clear();
     }
-    if (container)
-    {
+    if (container) {
         world.create_child();
     }
     world.flush(scalar || table || container ? 2 : 0);
-    for (const auto& event : world.deliveries)
-    {
+    for (const auto& event : world.deliveries) {
         CHECK(event.message.data().datas_uint32().count(100) == (scalar ? 1 : 0));
-        if (scalar)
-        {
+        if (scalar) {
             CHECK(event.message.data().datas_uint32().at(100) == 9);
         }
         CHECK(event.message.clear_tables_size() == (table ? 1 : 0));
-        if (table)
-        {
+        if (table) {
             CHECK(event.message.clear_tables(0) == 200);
         }
         CHECK(event.message.data().datas_container().count(201) == (container ? 1 : 0));
@@ -445,8 +412,7 @@ TEST_CASE("Kernel delayed callback mutations remain pending until the next flush
     world.create_child();
     bool changed = false;
     world.on_delivery = [&](ark::data_mask) {
-        if (changed)
-        {
+        if (changed) {
             return;
         }
         changed = true;
@@ -459,8 +425,7 @@ TEST_CASE("Kernel delayed callback mutations remain pending until the next flush
 
     world.flush();
     CHECK(changed);
-    for (const auto& event : world.deliveries)
-    {
+    for (const auto& event : world.deliveries) {
         CHECK(event.message.data().datas_container().count(201) == 1);
         CHECK(event.message.data().datas_container().count(202) == 0);
         CHECK(event.message.data().datas_uint32().empty());
@@ -469,8 +434,7 @@ TEST_CASE("Kernel delayed callback mutations remain pending until the next flush
     world.on_delivery = {};
     world.deliveries.clear();
     world.flush();
-    for (const auto& event : world.deliveries)
-    {
+    for (const auto& event : world.deliveries) {
         CHECK(event.message.data().datas_uint32().at(100) == 42);
         REQUIRE(event.message.clear_tables_size() == 1);
         CHECK(event.message.clear_tables(0) == 200);
@@ -488,8 +452,7 @@ TEST_CASE("Kernel rejects recursive delayed flushes and retains their new change
     world.create_child();
     bool attempted = false;
     world.on_delivery = [&](ark::data_mask) {
-        if (attempted)
-        {
+        if (attempted) {
             return;
         }
         attempted = true;
@@ -504,8 +467,7 @@ TEST_CASE("Kernel rejects recursive delayed flushes and retains their new change
     world.on_delivery = {};
     world.deliveries.clear();
     world.flush();
-    for (const auto& event : world.deliveries)
-    {
+    for (const auto& event : world.deliveries) {
         CHECK(event.message.data().datas_uint32().at(100) == 27);
     }
 }
@@ -522,8 +484,7 @@ TEST_CASE("Kernel delayed flush guard resets after callback exceptions") {
     world.on_delivery = {};
     world.deliveries.clear();
     world.flush();
-    for (const auto& event : world.deliveries)
-    {
+    for (const auto& event : world.deliveries) {
         CHECK(event.message.data().datas_uint32().at(100) == 63);
         CHECK(event.message.data().datas_container().empty());
     }
@@ -536,8 +497,7 @@ TEST_CASE("Kernel container swaps preserve child ownership parent bindings and c
     using operation = ark::container_op_type;
     using record = std::tuple<std::uint32_t, operation, std::uint32_t, std::uint32_t>;
 
-    struct observer
-    {
+    struct observer {
         std::vector<record> events;
 
         int on_event(const ark::guid_t&, std::uint32_t container, operation op, std::uint32_t from, std::uint32_t to) {
@@ -557,8 +517,7 @@ TEST_CASE("Kernel container swaps preserve child ownership parent bindings and c
     const auto first_slot = source->find(first->get_id());
     REQUIRE(first_slot == 1);
     const std::weak_ptr<ark::entity> first_lifetime = first;
-    for (const auto index : {201u, 202u})
-    {
+    for (const auto index : {201u, 202u}) {
         REQUIRE(static_cast<ark::kernel_module&>(world.kernel)
                     .add_container_call_back("Owner", index, &observed, &observer::on_event, 100));
     }
@@ -689,8 +648,7 @@ TEST_CASE("Real Kernel captures converge through trusted nested streams across r
     }
     nested_replica replay(trusted);
     REQUIRE(replay.apply(*retained) == nested_apply_result::applied);
-    for (const auto& packet : packets)
-    {
+    for (const auto& packet : packets) {
         REQUIRE(replay.apply(*packet) == nested_apply_result::applied);
     }
     CHECK(*replay.state() == final_state);

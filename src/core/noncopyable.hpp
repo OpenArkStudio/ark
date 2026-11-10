@@ -22,8 +22,7 @@
 
 namespace ark {
 
-class noncopyable
-{
+class noncopyable {
 protected:
     noncopyable() = default;
     ~noncopyable() = default;

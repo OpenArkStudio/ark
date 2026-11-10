@@ -32,23 +32,20 @@ namespace {
 
 using namespace std::chrono_literals;
 
-class acceptance_failure : public std::runtime_error
-{
+class acceptance_failure : public std::runtime_error {
 public:
     using std::runtime_error::runtime_error;
 };
 
 void require(bool condition, const char* message) {
-    if (!condition)
-    {
+    if (!condition) {
         throw acceptance_failure(message);
     }
 }
 
 std::string environment(const char* name, bool allow_empty = false) {
     const auto* value = std::getenv(name);
-    if (!value || (!allow_empty && !*value))
-    {
+    if (!value || (!allow_empty && !*value)) {
         throw acceptance_failure(std::string("Required test environment variable: ") + name);
     }
     return value;
@@ -65,8 +62,7 @@ std::uint16_t port(const char* name) {
 
 // The executable only knows public interfaces. The actual module allocation,
 // implementation and deletion belong to the hidden-symbol plugin's DLL API.
-class plugin_host
-{
+class plugin_host {
 public:
     ark::plugin_manager manager;
 
@@ -80,12 +76,10 @@ public:
     }
 
     ~plugin_host() {
-        if (!stopped_)
-        {
-            try
-            { drain(); }
-            catch (...)
-            {
+        if (!stopped_) {
+            try {
+                drain();
+            } catch (...) {
                 std::cerr << "Database plugin acceptance could not drain\n" << std::flush;
                 std::_Exit(1);
             }
@@ -109,15 +103,13 @@ public:
         require(tasks_->pending() == 1, "DSO workflow was not pending before application completion");
         // Application operations complete their business workflow before framework cleanup.
         const auto deadline = std::chrono::steady_clock::now() + 30s;
-        while (tasks_->pending())
-        {
+        while (tasks_->pending()) {
             require(std::chrono::steady_clock::now() < deadline, "DSO workflow did not complete");
             require(manager.update(0), "DSO workflow owner update failed");
             std::this_thread::sleep_for(1ms);
         }
         drain();
-        if (failure_)
-        {
+        if (failure_) {
             std::rethrow_exception(failure_);
         }
         require(completions_ == 1 && completion_on_owner_ && tasks_->pending() == 0 && tasks_->closed() &&
@@ -130,8 +122,7 @@ public:
 private:
     void drain() {
         const auto deadline = std::chrono::steady_clock::now() + 30s;
-        while (!(stopped_ = manager.stop(0)))
-        {
+        while (!(stopped_ = manager.stop(0))) {
             require(manager.get_shutdown_state() != ark::plugin_manager::shutdown_state::failed &&
                         std::chrono::steady_clock::now() < deadline,
                 "Database plugin did not finish managed/native retirement");
@@ -172,12 +163,10 @@ void check_redis() {
     ark::redis_options options;
     options.pool.connection.host = environment("ARK_DATABASE_REDIS_HOST");
     options.pool.connection.port = std::to_string(port("ARK_DATABASE_REDIS_PORT"));
-    if (const auto* user = std::getenv("ARK_DATABASE_REDIS_USER"))
-    {
+    if (const auto* user = std::getenv("ARK_DATABASE_REDIS_USER")) {
         options.pool.connection.username = user;
     }
-    if (const auto* password = std::getenv("ARK_DATABASE_REDIS_PASSWORD"))
-    {
+    if (const auto* password = std::getenv("ARK_DATABASE_REDIS_PASSWORD")) {
         options.pool.connection.password = password;
     }
     options.pool.max_connections = 1;
@@ -238,8 +227,7 @@ void check_redis_tls(std::string_view mode) {
         environment(mode == "redis-tls-wrong-host" ? "ARK_DATABASE_REDIS_WRONG_HOST" : "ARK_DATABASE_REDIS_HOST");
     options.pool.connection.port = std::to_string(port("ARK_DATABASE_REDIS_PORT"));
     options.pool.connection.password = environment("ARK_DATABASE_REDIS_PASSWORD");
-    if (const auto* user = std::getenv("ARK_DATABASE_REDIS_USER"))
-    {
+    if (const auto* user = std::getenv("ARK_DATABASE_REDIS_USER")) {
         options.pool.connection.username = user;
     }
     options.pool.certificate_authority =
@@ -256,24 +244,18 @@ void check_redis_tls(std::string_view mode) {
         options.pool.connection.host = "invalid.invalid";
         options.pool.connection.password = "changed";
         options.pool.certificate_authority = "missing-certificate.pem";
-        if (mode == "redis-tls")
-        {
+        if (mode == "redis-tls") {
             host.run(redis_tls_workflow(host, *database, binary, command, pipeline));
-        }
-        else
-        {
+        } else {
             host.run(redis_tls_rejection_workflow(host, *database, rejected));
         }
     }
-    if (mode == "redis-tls")
-    {
+    if (mode == "redis-tls") {
         require(command && pipeline && bool(*command) && bool(*pipeline) && command->replies[0].text == binary &&
                     pipeline->replies[0].text == binary && pipeline->replies[1].text.empty() &&
                     pipeline->replies[2].text == "PONG",
             "Redis TLS owning command/pipeline results did not survive host destruction");
-    }
-    else
-    {
+    } else {
         require(rejected && certificate_verification_failed(*rejected),
             "Redis TLS owning verification error did not survive host destruction");
         std::cout << "Native connection_failed / TLS certificate verification failed; command_may_have_run=false; "
@@ -298,8 +280,7 @@ ark::task<> mysql_workflow(plugin_host& host, ark::mysql_module& database, std::
                 std::get<std::string>(prepared->result.rows[0][1]) == binary && prepared->statement_close &&
                 bool(*prepared->statement_close) && !prepared->statement_close_exception,
         "MySQL DSO prepared binary result or statement cleanup failed");
-    for (const bool commit : {true, false})
-    {
+    for (const bool commit : {true, false}) {
         auto begun = co_await database.begin("service", {10s, 3s});
         host.check_executor();
         require(bool(begun) && begun.transaction &&
@@ -358,8 +339,7 @@ void mysql_success(plugin_host& host, const reply_type& reply) {
 std::uint64_t mysql_integer(const arknet::mysql::query_result& result) {
     require(result.rows.size() == 1 && result.rows[0].size() == 1, "MySQL DSO scalar result has wrong shape");
     const auto& field = result.rows[0][0];
-    if (const auto* value = std::get_if<std::uint64_t>(&field))
-    {
+    if (const auto* value = std::get_if<std::uint64_t>(&field)) {
         return *value;
     }
     const auto* value = std::get_if<std::int64_t>(&field);
@@ -391,8 +371,7 @@ ark::task<> mysql_write_checks(plugin_host& host, ark::mysql_module& database, s
                 std::get<std::string>(retained->result.rows[0][0]) == binary,
         "MySQL DSO observer did not see the parameterized autocommit write");
 
-    for (const bool commit : {true, false})
-    {
+    for (const bool commit : {true, false}) {
         auto begun = co_await database.begin("service", {15s, 3s});
         mysql_success(host, begun);
         require(begun.transaction && begun.transaction_status.outcome == ark::mysql_transaction_outcome::active,
@@ -401,8 +380,7 @@ ark::task<> mysql_write_checks(plugin_host& host, ark::mysql_module& database, s
         const auto predicate = " WHERE id=" + std::to_string(id);
         std::exception_ptr failure;
         bool ended{};
-        try
-        {
+        try {
             std::vector<arknet::mysql::field_value> values{std::int64_t{id}, binary};
             auto inserted = co_await database.execute(
                 begun.transaction, "INSERT INTO " + table + " (id, payload) VALUES (?, ?)", std::move(values));
@@ -431,13 +409,11 @@ ark::task<> mysql_write_checks(plugin_host& host, ark::mysql_module& database, s
             mysql_success(host, visible);
             require(mysql_integer(visible.result) == (commit ? 1 : 0),
                 "MySQL DSO observer did not see confirmed commit/rollback visibility");
+        } catch (...) {
+            failure = std::current_exception();
         }
-        catch (...)
-        { failure = std::current_exception(); }
-        if (failure)
-        {
-            if (!ended)
-            {
+        if (failure) {
+            if (!ended) {
                 // Explicit cleanup only; cancellation is not rollback evidence.
                 co_await database.rollback(begun.transaction);
                 host.check_executor();
@@ -460,14 +436,14 @@ ark::task<> mysql_write_workflow(plugin_host& host, ark::mysql_module& database,
         "service", "CREATE TABLE " + table + " (id BIGINT PRIMARY KEY, payload VARBINARY(128)) ENGINE=InnoDB", 5s);
     mysql_success(host, created);
     std::exception_ptr failure;
-    try
-    { co_await mysql_write_checks(host, database, table, std::move(binary), retained, retained_transaction); }
-    catch (...)
-    { failure = std::current_exception(); }
+    try {
+        co_await mysql_write_checks(host, database, table, std::move(binary), retained, retained_transaction);
+    } catch (...) {
+        failure = std::current_exception();
+    }
     auto dropped = co_await database.query("observer", "DROP TABLE " + table, 5s);
     mysql_success(host, dropped);
-    if (failure)
-    {
+    if (failure) {
         std::rethrow_exception(failure);
     }
 }
@@ -508,40 +484,31 @@ void check_mysql_transactions() {
 } // namespace
 
 int main(int argc, char** argv) {
-    try
-    {
+    try {
         require(argc == 2, "Usage: ark_database_public_plugin_service_tests "
                            "redis|mysql|mysql-transactions|redis-tls|redis-tls-untrusted-ca|redis-tls-wrong-host");
         const std::string_view protocol(argv[1]);
-        if (protocol == "redis")
-        {
+        if (protocol == "redis") {
             check_redis();
         }
 #if defined(ARKNET_ENABLE_SSL)
-        else if (protocol == "redis-tls" || protocol == "redis-tls-untrusted-ca" || protocol == "redis-tls-wrong-host")
-        {
+        else if (protocol == "redis-tls" || protocol == "redis-tls-untrusted-ca" ||
+                 protocol == "redis-tls-wrong-host") {
             check_redis_tls(protocol);
-        }
-        else if (protocol == "mysql")
-        {
+        } else if (protocol == "mysql") {
             check_mysql();
-        }
-        else if (protocol == "mysql-transactions")
-        {
+        } else if (protocol == "mysql-transactions") {
             check_mysql_transactions();
         }
 #endif
-        else
-        {
+        else {
             throw acceptance_failure("Requested database plugin protocol is not enabled");
         }
         std::cout << protocol << " real DSO/service, owner delivery, drain and owning-result checks passed\n";
         return 0;
-    }
-    catch (const acceptance_failure& error)
-    { std::cerr << error.what() << '\n'; }
-    catch (...)
-    {
+    } catch (const acceptance_failure& error) {
+        std::cerr << error.what() << '\n';
+    } catch (...) {
         // Do not print credentials or server-controlled native exception text.
         std::cerr << "Database plugin service acceptance raised an unexpected exception\n";
     }

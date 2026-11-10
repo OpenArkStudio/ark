@@ -22,23 +22,20 @@ namespace {
 
 using namespace std::chrono_literals;
 
-class acceptance_failure : public std::runtime_error
-{
+class acceptance_failure : public std::runtime_error {
 public:
     using std::runtime_error::runtime_error;
 };
 
 void require(bool condition, const char* message) {
-    if (!condition)
-    {
+    if (!condition) {
         throw acceptance_failure(message);
     }
 }
 
 std::string environment(const char* name, bool allow_empty = false) {
     const auto* value = std::getenv(name);
-    if (!value || (!allow_empty && !*value))
-    {
+    if (!value || (!allow_empty && !*value)) {
         throw acceptance_failure(std::string("Required test environment variable: ") + name);
     }
     return value;
@@ -55,8 +52,7 @@ std::uint16_t port(const char* name) {
 
 // The executable only knows public interfaces. The actual module allocation,
 // implementation and deletion belong to the hidden-symbol plugin's DLL API.
-class plugin_host
-{
+class plugin_host {
 public:
     ark::plugin_manager manager;
 
@@ -70,12 +66,10 @@ public:
     }
 
     ~plugin_host() {
-        if (!stopped_)
-        {
-            try
-            { drain(); }
-            catch (...)
-            {
+        if (!stopped_) {
+            try {
+                drain();
+            } catch (...) {
                 std::cerr << "Database plugin acceptance could not drain\n" << std::flush;
                 std::_Exit(1);
             }
@@ -99,15 +93,13 @@ public:
         require(tasks_->pending() == 1, "DSO workflow was not pending before application completion");
         // Application operations complete their business workflow before framework cleanup.
         const auto deadline = std::chrono::steady_clock::now() + 30s;
-        while (tasks_->pending())
-        {
+        while (tasks_->pending()) {
             require(std::chrono::steady_clock::now() < deadline, "DSO workflow did not complete");
             require(manager.update(0), "DSO workflow owner update failed");
             std::this_thread::sleep_for(1ms);
         }
         drain();
-        if (failure_)
-        {
+        if (failure_) {
             std::rethrow_exception(failure_);
         }
         require(completions_ == 1 && completion_on_owner_ && tasks_->pending() == 0 && tasks_->closed() &&
@@ -120,8 +112,7 @@ public:
 private:
     void drain() {
         const auto deadline = std::chrono::steady_clock::now() + 30s;
-        while (!(stopped_ = manager.stop(0)))
-        {
+        while (!(stopped_ = manager.stop(0))) {
             require(manager.get_shutdown_state() != ark::plugin_manager::shutdown_state::failed &&
                         std::chrono::steady_clock::now() < deadline,
                 "Database plugin did not finish managed/native retirement");
@@ -150,8 +141,7 @@ void mysql_success(plugin_host& host, const reply_type& reply) {
 }
 
 std::uint64_t integer(const arknet::mysql::field_value& field) {
-    if (const auto* value = std::get_if<std::uint64_t>(&field))
-    {
+    if (const auto* value = std::get_if<std::uint64_t>(&field)) {
         return *value;
     }
     const auto* value = std::get_if<std::int64_t>(&field);
@@ -166,8 +156,7 @@ std::uint64_t connection_id(const arknet::mysql::query_result& result) {
 
 void rows(const arknet::mysql::query_result& result, std::uint64_t reader_id, bool changed) {
     require(result.rows.size() == (changed ? 2 : 1), "Isolation read returned an unexpected row count");
-    for (std::size_t index = 0; index < result.rows.size(); ++index)
-    {
+    for (std::size_t index = 0; index < result.rows.size(); ++index) {
         const auto& row = result.rows[index];
         require(row.size() == 3 && integer(row[0]) == index + 1 && integer(row[2]) == reader_id,
             "Isolation read lost its row order or pinned server connection");
@@ -217,8 +206,7 @@ ark::task<> isolation_case(plugin_host& host, ark::mysql_module& database, std::
     bool writer_ended{};
     std::exception_ptr failure;
     const auto select = "SELECT id, payload, CONNECTION_ID() FROM " + table + " ORDER BY id";
-    try
-    {
+    try {
         const std::string inspect =
             "SELECT CONNECTION_ID(), @@SESSION.transaction_isolation, @@GLOBAL.transaction_isolation";
         auto level = co_await database.query(reader.transaction, inspect);
@@ -264,18 +252,15 @@ ark::task<> isolation_case(plugin_host& host, ark::mysql_module& database, std::
         retained_after.push_back(std::move(after));
         std::cout << (repeatable ? "REPEATABLE READ" : "READ COMMITTED") << ": independent reader=" << reader_id
                   << " writer=" << writer_id << ", uncommitted data hidden, committed visibility verified\n";
+    } catch (...) {
+        failure = std::current_exception();
     }
-    catch (...)
-    { failure = std::current_exception(); }
-    if (failure)
-    {
-        if (writer && !writer_ended)
-        {
+    if (failure) {
+        if (writer && !writer_ended) {
             co_await database.rollback(writer);
             host.check_executor();
         }
-        if (!reader_ended)
-        {
+        if (!reader_ended) {
             co_await database.rollback(reader.transaction);
             host.check_executor();
         }
@@ -289,18 +274,16 @@ ark::task<> isolation_workflow(plugin_host& host, ark::mysql_module& database, s
         "writer", "CREATE TABLE " + table + " (id BIGINT PRIMARY KEY, payload VARCHAR(32)) ENGINE=InnoDB", 5s);
     mysql_success(host, created);
     std::exception_ptr failure;
-    try
-    {
+    try {
         auto initial = co_await database.query("writer", "INSERT INTO " + table + " VALUES (1, 'original')", 5s);
         mysql_success(host, initial);
         co_await isolation_case(host, database, table, repeatable, retained_snapshots, retained_after);
+    } catch (...) {
+        failure = std::current_exception();
     }
-    catch (...)
-    { failure = std::current_exception(); }
     auto dropped = co_await database.query("writer", "DROP TABLE " + table, 5s);
     mysql_success(host, dropped);
-    if (failure)
-    {
+    if (failure) {
         std::rethrow_exception(failure);
     }
 }
@@ -330,8 +313,7 @@ void check_isolation(bool repeatable) {
     }
     require(retained_snapshots.size() == 1 && retained_after.size() == 1,
         "Isolation owning results did not survive module/manager/runtime destruction");
-    for (std::size_t index = 0; index < 1; ++index)
-    {
+    for (std::size_t index = 0; index < 1; ++index) {
         require(bool(retained_snapshots[index]) && bool(retained_after[index]), "Isolation retained result failed");
         const auto reader_id = integer(retained_snapshots[index].result.rows.at(0).at(2));
         rows(retained_snapshots[index].result, reader_id, false);
@@ -342,8 +324,7 @@ void check_isolation(bool repeatable) {
 } // namespace
 
 int main(int argc, char** argv) {
-    try
-    {
+    try {
         require(argc == 2, "Usage: ark_database_public_plugin_isolation_tests repeatable-read|read-committed");
         const std::string_view expected(argv[1]);
         require(expected == "repeatable-read" || expected == "read-committed", "Unknown expected isolation level");
@@ -351,10 +332,10 @@ int main(int argc, char** argv) {
         std::cout
             << "MySQL isolation real DSO/service, owner delivery, natural drain and owning-result checks passed\n";
         return 0;
+    } catch (const acceptance_failure& error) {
+        std::cerr << error.what() << '\n';
+    } catch (...) {
+        std::cerr << "MySQL isolation acceptance raised an unexpected exception\n";
     }
-    catch (const acceptance_failure& error)
-    { std::cerr << error.what() << '\n'; }
-    catch (...)
-    { std::cerr << "MySQL isolation acceptance raised an unexpected exception\n"; }
     return 1;
 }

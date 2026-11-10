@@ -36,10 +36,8 @@ thread_local bool fail_allocations{};
 } // namespace
 
 void* operator new(std::size_t size) {
-    if (!fail_allocations)
-    {
-        if (auto* pointer = std::malloc(size ? size : 1))
-        {
+    if (!fail_allocations) {
+        if (auto* pointer = std::malloc(size ? size : 1)) {
             return pointer;
         }
     }
@@ -67,17 +65,19 @@ void operator delete[](void* pointer, std::size_t) noexcept {
 }
 
 void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
-    try
-    { return ::operator new(size); }
-    catch (...)
-    { return nullptr; }
+    try {
+        return ::operator new(size);
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
-    try
-    { return ::operator new[](size); }
-    catch (...)
-    { return nullptr; }
+    try {
+        return ::operator new[](size);
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void operator delete(void* pointer, const std::nothrow_t&) noexcept {
@@ -104,19 +104,16 @@ using access = ark::http_client_startup_test_access;
 #endif
 }
 
-struct failing_module : ark::module
-{
+struct failing_module : ark::module {
     unsigned phase{};
     bool throws{};
     unsigned ordinary_cleanup{};
 
     bool step(unsigned current) const {
-        if (phase != current)
-        {
+        if (phase != current) {
             return true;
         }
-        if (throws)
-        {
+        if (throws) {
             throw std::runtime_error("controlled later HTTP startup failure");
         }
         return false;
@@ -157,10 +154,8 @@ ark::startup_cleanup_result release_older(void* pointer) {
 template<typename predicate>
 bool eventually(predicate&& ready) {
     const auto deadline = std::chrono::steady_clock::now() + 5s;
-    while (!ready())
-    {
-        if (std::chrono::steady_clock::now() >= deadline)
-        {
+    while (!ready()) {
+        if (std::chrono::steady_clock::now() >= deadline) {
             return false;
         }
         std::this_thread::yield();
@@ -168,8 +163,7 @@ bool eventually(predicate&& ready) {
     return true;
 }
 
-class http_peer
-{
+class http_peer {
 public:
     http_peer() {
         server_.bind_recv([this](auto& session, auto&) {
@@ -197,8 +191,7 @@ public:
             std::lock_guard lock(mutex_);
             pending.swap(pending_);
         }
-        for (const auto& session : pending)
-        {
+        for (const auto& session : pending) {
             arknet::http_request::response_type response(arknet::http::status::ok, 11);
             response.body() = "accepted";
             response.prepare_payload();
@@ -217,10 +210,8 @@ private:
 } // namespace
 
 TEST_CASE("Failed startup retires the idle constructor-started Net HTTP runtime") {
-    for (unsigned phase{}; phase < 4; ++phase)
-    {
-        for (bool throws : {false, true})
-        {
+    for (unsigned phase{}; phase < 4; ++phase) {
+        for (bool throws : {false, true}) {
             ark::plugin_manager manager;
             auto older = std::make_shared<unsigned>(0);
             REQUIRE(manager.prepare_startup_cleanup("older", "test", older, release_older));
@@ -231,12 +222,9 @@ TEST_CASE("Failed startup retires the idle constructor-started Net HTTP runtime"
             REQUIRE(access::runtime(*client).started());
             REQUIRE(manager.add_module("http", client.get()));
             REQUIRE(manager.add_module("failure", &failure));
-            if (throws)
-            {
+            if (throws) {
                 CHECK_THROWS_AS(manager.start(0, {}, {}, {}), std::runtime_error);
-            }
-            else
-            {
+            } else {
                 CHECK_FALSE(manager.start(0, {}, {}, {}));
             }
             CHECK(manager.cleanup_failed_startup() == ark::startup_cleanup_result::done);
@@ -272,10 +260,11 @@ TEST_CASE("Net HTTP factory allocation failure acquires no worker") {
     REQUIRE(manager.prepare_startup_cleanup("older", "test", older, release_older));
     bool rejected{};
     fail_allocations = true;
-    try
-    { auto client = ark::detail::make_http_client_module(&manager); }
-    catch (const std::bad_alloc&)
-    { rejected = true; }
+    try {
+        auto client = ark::detail::make_http_client_module(&manager);
+    } catch (const std::bad_alloc&) {
+        rejected = true;
+    }
     fail_allocations = false;
     CHECK(rejected);
     failing_module failure;
@@ -401,12 +390,10 @@ TEST_CASE("Executing startup HTTP callbacks retain their active frame") {
 }
 
 int main(int argc, char** argv) {
-    if (argc == 2 && std::string_view(argv[1]) == "--allocation-failure")
-    {
+    if (argc == 2 && std::string_view(argv[1]) == "--allocation-failure") {
         ark::plugin_manager manager;
         auto older = std::make_shared<unsigned>(0);
-        if (!manager.prepare_startup_cleanup("older", "test", older, release_older))
-        {
+        if (!manager.prepare_startup_cleanup("older", "test", older, release_older)) {
             exit_startup_probe(2);
         }
         auto client = ark::detail::make_http_client_module(&manager);
@@ -414,21 +401,18 @@ int main(int argc, char** argv) {
         auto* runtime = &access::runtime(*client);
         failing_module failure;
         manager.add_module("failure", &failure);
-        if (manager.start(0, {}, {}, {}))
-        {
+        if (manager.start(0, {}, {}, {})) {
             exit_startup_probe(2);
         }
         fail_allocations = true;
         client.reset(); // Candidate unwinding must leave the enrolled owner intact.
-        if (capsule.expired() || !runtime->started())
-        {
+        if (capsule.expired() || !runtime->started()) {
             exit_startup_probe(2);
         }
         const auto result = manager.cleanup_failed_startup();
         const auto repeated = manager.cleanup_failed_startup();
         if (result != ark::startup_cleanup_result::done || repeated != result || !runtime->stopped() || *older != 1 ||
-            capsule.expired())
-        {
+            capsule.expired()) {
             std::fprintf(stderr, "HTTP allocation probe: result=%d repeated=%d stopped=%d older=%u\n",
                 static_cast<int>(result), static_cast<int>(repeated), runtime->stopped(), *older);
             exit_startup_probe(2);
@@ -436,8 +420,7 @@ int main(int argc, char** argv) {
         std::fputs("HTTP startup allocation failure: idle runtime joined; candidate gone; exit 1\n", stderr);
         exit_startup_probe(1); // Failure cleanup never becomes same-process recovery.
     }
-    if (argc == 3 && std::string_view(argv[1]) == "--install-failure")
-    {
+    if (argc == 3 && std::string_view(argv[1]) == "--install-failure") {
         ark::logger log;
         log.set_log_func([](spdlog::level::level_enum, const std::string& message) {
             std::fprintf(stderr, "%s\n", message.c_str());
@@ -447,22 +430,21 @@ int main(int argc, char** argv) {
         const std::string directory = std::string(argv[2]) + "/";
         constexpr auto name = "ark_http_startup_install_fixture";
         bool failed{};
-        try
-        { manager.start(0, directory, {}, {{name, ""}}); }
-        catch (const std::runtime_error&)
-        { failed = true; }
+        try {
+            manager.start(0, directory, {}, {{name, ""}});
+        } catch (const std::runtime_error&) {
+            failed = true;
+        }
         ark::dynamic_library library(name);
         if (!failed || std::string_view(manager.get_startup_call().phase.data()) != "install" ||
-            !library.load(directory))
-        {
+            !library.load(directory)) {
             exit_startup_probe(2);
         }
         const auto started = reinterpret_cast<bool (*)()>(library.get_symbol("http_fixture_runtime_started"));
         const auto stopped = reinterpret_cast<bool (*)()>(library.get_symbol("http_fixture_runtime_stopped"));
         if (!started || !stopped || !started() ||
             manager.cleanup_failed_startup() != ark::startup_cleanup_result::done || !stopped() ||
-            manager.cleanup_failed_startup() != ark::startup_cleanup_result::done)
-        {
+            manager.cleanup_failed_startup() != ark::startup_cleanup_result::done) {
             exit_startup_probe(2);
         }
         std::fputs("HTTP install failure: idle runtime joined once; retained DSO and owners; exit 1\n", stderr);

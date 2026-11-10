@@ -37,8 +37,7 @@ namespace ark {
 /**
  * @brief 协议头部接口类，通过它支持任意类型协议头部格式
  */
-class msg_header
-{
+class msg_header {
 public:
     virtual ~msg_header() {
     }
@@ -105,8 +104,7 @@ public:
 };
 
 // CS通信默认包头
-class s_msg_header : public msg_header
-{
+class s_msg_header : public msg_header {
 public:
     // 返回包头大小
     virtual uint32_t header_length() const override {
@@ -162,8 +160,7 @@ public:
 private:
 #pragma pack(push, 1)
 
-    struct header_impl
-    {
+    struct header_impl {
         msg_id_t id{0};      // Msg id
         uint32_t length{0};  // Msg length(without header length)
         uint8_t compress{0}; // Msg data compressed
@@ -176,8 +173,7 @@ private:
 };
 
 // SS通信默认包头
-class ss_msg_header : public msg_header
-{
+class ss_msg_header : public msg_header {
 public:
     // 返回包头大小
     virtual uint32_t header_length() const override {
@@ -255,8 +251,7 @@ public:
 private:
 #pragma pack(push, 1)
 
-    struct header_impl
-    {
+    struct header_impl {
         msg_id_t id{0};      // Msg id
         uint32_t length{0};  // Msg length(without header length)
         uint8_t compress{0}; // Msg data compressed
@@ -271,8 +266,7 @@ private:
     header_impl header_;
 };
 
-class net_msg final : private noncopyable
-{
+class net_msg final : private noncopyable {
 protected:
     net_msg(msg_header* head)
         : head_(head) {
@@ -291,21 +285,18 @@ public:
     // Consumes head, including when allocation fails.
     static net_msg* alloc_msg(msg_header* head) {
         std::unique_ptr<msg_header> owner(head);
-        if (!owner)
-        {
+        if (!owner) {
             return nullptr;
         }
-        try
-        {
+        try {
             auto* msg = new (std::nothrow) net_msg(head);
-            if (msg != nullptr)
-            {
+            if (msg != nullptr) {
                 owner.release();
             }
             return msg;
+        } catch (const std::bad_alloc&) {
+            return nullptr;
         }
-        catch (const std::bad_alloc&)
-        { return nullptr; }
     }
 
     static void release(net_msg*& msg) {
@@ -314,23 +305,18 @@ public:
     }
 
     void copy_data(const char* data, const uint32_t len) {
-        if (data == nullptr && len != 0)
-        {
+        if (data == nullptr && len != 0) {
             throw std::invalid_argument("net_msg body is null");
         }
-        if (len > capacity_)
-        {
+        if (len > capacity_) {
             auto replacement = allocate_data(len);
             std::memcpy(replacement.get(), data, len);
             head_->set_message_length(len);
             delete[] msg_data_;
             msg_data_ = replacement.release();
             capacity_ = len;
-        }
-        else
-        {
-            if (len != 0)
-            {
+        } else {
+            if (len != 0) {
                 std::memmove(msg_data_, data, len);
             }
             head_->set_message_length(len);
@@ -338,27 +324,22 @@ public:
     }
 
     void copy_from(net_msg* msg) {
-        if (msg == nullptr)
-        {
+        if (msg == nullptr) {
             throw std::invalid_argument("net_msg source is null");
         }
-        if (msg == this)
-        {
+        if (msg == this) {
             return;
         }
         const auto length = msg->get_msg_length();
-        if (length > msg->capacity_)
-        {
+        if (length > msg->capacity_) {
             throw std::length_error("net_msg source body exceeds its allocation");
         }
         std::unique_ptr<msg_header> head(msg->head_->clone());
-        if (!head)
-        {
+        if (!head) {
             throw std::bad_alloc{};
         }
         auto data = allocate_data(length);
-        if (length != 0)
-        {
+        if (length != 0) {
             std::memcpy(data.get(), msg->msg_data_, length);
         }
         delete head_;
@@ -397,21 +378,17 @@ public:
     }
 
     void set_msg_length(uint32_t value) {
-        if (value > capacity_)
-        {
+        if (value > capacity_) {
             auto data = allocate_data(value);
             const auto preserved = std::min(get_msg_length(), capacity_);
-            if (preserved != 0)
-            {
+            if (preserved != 0) {
                 std::memcpy(data.get(), msg_data_, preserved);
             }
             head_->set_message_length(value);
             delete[] msg_data_;
             msg_data_ = data.release();
             capacity_ = value;
-        }
-        else
-        {
+        } else {
             head_->set_message_length(value);
         }
     }

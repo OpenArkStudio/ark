@@ -20,10 +20,8 @@ bool observe{}, return_null{}, fail_after_candidate{};
 bool fail_next_heap{};
 
 void record_release(void* value) noexcept {
-    for (auto& entry : live)
-    {
-        if (value != nullptr && entry == value)
-        {
+    for (auto& entry : live) {
+        if (value != nullptr && entry == value) {
             entry = nullptr;
             ++releases;
             break;
@@ -32,8 +30,7 @@ void record_release(void* value) noexcept {
 }
 
 void reset() {
-    for (auto* entry : live)
-    {
+    for (auto* entry : live) {
         REQUIRE(entry == nullptr);
     }
     allocations = releases = hook_deletes = injected_failures = 0;
@@ -41,8 +38,7 @@ void reset() {
 }
 
 void release_unpublished() {
-    for (auto* entry : live)
-    {
+    for (auto* entry : live) {
         // Recover a baseline leak after recording the failing ownership checks.
         delete static_cast<ark::data*>(entry);
     }
@@ -65,14 +61,12 @@ std::shared_ptr<ark::class_meta> schema() {
 } // namespace
 
 void* operator new(std::size_t size) {
-    if (fail_next_heap)
-    {
+    if (fail_next_heap) {
         fail_next_heap = false;
         ++injected_failures;
         throw std::bad_alloc{};
     }
-    if (auto* value = std::malloc(size ? size : 1))
-    {
+    if (auto* value = std::malloc(size ? size : 1)) {
         return value;
     }
     throw std::bad_alloc{};
@@ -100,23 +94,20 @@ void operator delete[](void* value, std::size_t) noexcept {
 }
 
 void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
-    if (observe && return_null)
-    {
+    if (observe && return_null) {
         return_null = false;
         ++injected_failures;
         return nullptr;
     }
     void* value{};
-    try
-    { value = ::operator new(size); }
-    catch (...)
-    { return nullptr; }
-    if (observe)
-    {
-        for (auto& entry : live)
-        {
-            if (entry == nullptr)
-            {
+    try {
+        value = ::operator new(size);
+    } catch (...) {
+        return nullptr;
+    }
+    if (observe) {
+        for (auto& entry : live) {
+            if (entry == nullptr) {
                 entry = value;
                 ++allocations;
                 fail_next_heap = fail_after_candidate;
@@ -133,10 +124,8 @@ void operator delete(void* value, const std::nothrow_t&) noexcept {
 }
 
 void entity_custom_test::record_delete_hook(const void* value) noexcept {
-    for (const auto* entry : live)
-    {
-        if (entry == value)
-        {
+    for (const auto* entry : live) {
+        if (entry == value) {
             ++hook_deletes;
             return;
         }
@@ -144,8 +133,7 @@ void entity_custom_test::record_delete_hook(const void* value) noexcept {
 }
 
 TEST_CASE("Entity custom scalar insertion exceptions release unpublished candidates through the delete hook") {
-    for (std::size_t index = 0; index < adders.size(); ++index)
-    {
+    for (std::size_t index = 0; index < adders.size(); ++index) {
         CAPTURE(index);
         reset();
         ark::entity_impl object(schema(), 1, 0, 1, 0, ark::data_list_impl{});
@@ -184,8 +172,7 @@ TEST_CASE("Entity custom string value allocation exceptions release the unpublis
 }
 
 TEST_CASE("Entity custom candidates preserve null duplicate and successful owning map behavior") {
-    for (const auto add : adders)
-    {
+    for (const auto add : adders) {
         reset();
         {
             ark::entity_impl object(schema(), 1, 0, 1, 0, ark::data_list_impl{});

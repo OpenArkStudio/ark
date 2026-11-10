@@ -47,13 +47,11 @@ using namespace ark;
 #ifdef ARK_PLATFORM_WIN
 static bool utf16_text(const std::string& text, std::wstring& native) {
     const auto count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.c_str(), -1, nullptr, 0);
-    if (count == 0)
-    {
+    if (count == 0) {
         return false;
     }
     native.resize(count);
-    if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.c_str(), -1, native.data(), count) == 0)
-    {
+    if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.c_str(), -1, native.data(), count) == 0) {
         return false;
     }
     native.resize(count - 1);
@@ -66,8 +64,7 @@ std::thread g_cmd_thread;
 // mini-dump
 void create_dump_file(const std::string& dump_file_path_name, EXCEPTION_POINTERS* exception_ptr) {
     std::wstring native_path;
-    if (!utf16_text(dump_file_path_name, native_path))
-    {
+    if (!utf16_text(dump_file_path_name, native_path)) {
         return;
     }
     HANDLE h_dump_file =
@@ -99,8 +96,7 @@ long application_crash_handler(EXCEPTION_POINTERS* exception_ptr) {
 void disable_close_button() {
     HWND h_wnd = GetConsoleWindow();
 
-    if (h_wnd)
-    {
+    if (h_wnd) {
         HMENU h_menu = GetSystemMenu(h_wnd, FALSE);
         EnableMenuItem(h_menu, SC_CLOSE, MF_DISABLED | MF_BYCOMMAND);
     }
@@ -152,15 +148,13 @@ Copyright 2020 © X.D. NetWork Inc.
 #ifdef ARK_PLATFORM_WIN
 void create_back_thread() {
     auto thread_func = []() {
-        while (app_detail::requested_stop_reason() == 0)
-        {
+        while (app_detail::requested_stop_reason() == 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
             std::string s;
             std::cin >> s;
             string_utils::to_lower(s);
-            if (s == "exit")
-            {
+            if (s == "exit") {
                 app_detail::request_stop(app_detail::command_stop_reason);
             }
         }
@@ -220,26 +214,20 @@ bool parse_args(int argc, char* argv[], std::chrono::milliseconds& shutdown_time
         args::Options::Single);
 
     // start parse argument list
-    try
-    { parser.ParseCLI(argc, argv); }
-    catch (args::Help& h)
-    {
+    try {
+        parser.ParseCLI(argc, argv);
+    } catch (args::Help& h) {
         std::cout << parser << ", error = " << h.what() << std::endl;
         return false;
-    }
-    catch (args::ParseError& e)
-    {
+    } catch (args::ParseError& e) {
         std::cout << parser << ", error = " << e.what() << std::endl;
         return false;
-    }
-    catch (args::ValidationError& e)
-    {
+    } catch (args::ValidationError& e) {
         std::cout << parser << ", error = " << e.what() << std::endl;
         return false;
     }
 
-    if (log_conf)
-    {
+    if (log_conf) {
         std::cerr << "--log_conf/-l has been removed; move logger settings into [logging] in --app_conf" << std::endl;
         configuration_error = true;
         return false;
@@ -248,20 +236,17 @@ bool parse_args(int argc, char* argv[], std::chrono::milliseconds& shutdown_time
     std::int64_t timeout_ms{};
     const auto& value = shutdown_wait.Get();
     const auto parsed = std::from_chars(value.data(), value.data() + value.size(), timeout_ms);
-    if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size() || timeout_ms < 0)
-    {
+    if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size() || timeout_ms < 0) {
         std::cout << "Shutdown timeout must be a non-negative integer in milliseconds within int64 range" << std::endl;
         return false;
     }
     shutdown_timeout = std::chrono::milliseconds(timeout_ms);
 
     // Set bus id
-    if (busid)
-    {
+    if (busid) {
         std::vector<std::string> slices;
         string_utils::split(slices, busid.Get(), '.');
-        if (slices.size() != 4)
-        {
+        if (slices.size() != 4) {
             std::cout << "Bus id is invalid, it likes 8.8.8.8" << std::endl;
             return false;
         }
@@ -269,15 +254,12 @@ bool parse_args(int argc, char* argv[], std::chrono::milliseconds& shutdown_time
         bus_addr bus_addr;
         bus_addr.from_string(busid.Get());
         plugin_manager::instance()->set_bus_id(bus_addr.bus_id);
-    }
-    else
-    {
+    } else {
         return false;
     }
 
     // Set app name
-    if (name)
-    {
+    if (name) {
         plugin_manager::instance()->set_app_name(name.Get());
 
         std::string process_name =
@@ -285,8 +267,7 @@ bool parse_args(int argc, char* argv[], std::chrono::milliseconds& shutdown_time
         // Set process name
 #ifdef ARK_PLATFORM_WIN
         std::wstring title;
-        if (!utf16_text(process_name, title))
-        {
+        if (!utf16_text(process_name, title)) {
             std::cerr << "Application name could not be converted to UTF-16" << std::endl;
             configuration_error = true;
             return false;
@@ -295,19 +276,14 @@ bool parse_args(int argc, char* argv[], std::chrono::milliseconds& shutdown_time
 #elif defined(ARK_PLATFORM_LINUX)
         // Do not need to change process name
 #endif
-    }
-    else
-    {
+    } else {
         return false;
     }
 
     // Set plugin file
-    if (app_conf)
-    {
+    if (app_conf) {
         plugin_manager::instance()->set_app_conf(app_conf.Get());
-    }
-    else
-    {
+    } else {
         return false;
     }
 
@@ -315,10 +291,9 @@ bool parse_args(int argc, char* argv[], std::chrono::milliseconds& shutdown_time
 }
 
 bool capture_update_exception(std::exception_ptr& error) noexcept {
-    try
-    { return plugin_manager::instance()->update(date_time::get_now_time()); }
-    catch (...)
-    {
+    try {
+        return plugin_manager::instance()->update(date_time::get_now_time());
+    } catch (...) {
         error = std::current_exception();
         return false;
     }
@@ -326,14 +301,13 @@ bool capture_update_exception(std::exception_ptr& error) noexcept {
 
 bool main_loop(std::exception_ptr* error = nullptr) {
 #ifdef ARK_PLATFORM_WIN
-    __try
-    {
+    __try {
         // Catch C++ exceptions before the outer SEH filter sees them. The
         // shutdown owner rethrows only after this guarded frame returns.
         return error ? capture_update_exception(*error) : plugin_manager::instance()->update(date_time::get_now_time());
+    } __except (application_crash_handler(GetExceptionInformation())) {
+        return false;
     }
-    __except (application_crash_handler(GetExceptionInformation()))
-    { return false; }
 #else
     return error ? capture_update_exception(*error) : plugin_manager::instance()->update(date_time::get_now_time());
 #endif
@@ -342,65 +316,54 @@ bool main_loop(std::exception_ptr* error = nullptr) {
 static int run_application(int argc, char* argv[]) {
     std::chrono::milliseconds shutdown_timeout{};
     bool configuration_error = false;
-    if (!parse_args(argc, argv, shutdown_timeout, configuration_error))
-    {
+    if (!parse_args(argc, argv, shutdown_timeout, configuration_error)) {
         std::cout << "Application parameter is invalid, please check it..." << std::endl;
         return configuration_error ? 1 : 0;
     }
 
     const auto& app_conf_path = plugin_manager::instance()->get_app_conf();
     application_manifest manifest;
-    try
-    { manifest = load_application_manifest(app_conf_path); }
-    catch (const application_manifest_error& error)
-    {
+    try {
+        manifest = load_application_manifest(app_conf_path);
+    } catch (const application_manifest_error& error) {
         std::cerr << "Application manifest loading failed: " << error.what() << std::endl;
         return 1;
     }
 
-    try
-    {
+    try {
         const auto filename = ARK_FORMAT("{}_{}.log", plugin_manager::instance()->get_app_name(),
             misc::bus2_str(plugin_manager::instance()->get_bus_id()));
         logger::init(nullptr);
-        if (!logger::instance()->init_logger(manifest.logging, filename))
-        {
+        if (!logger::instance()->init_logger(manifest.logging, filename)) {
             std::cerr << "Application logging initialization failed: logger already initialized" << std::endl;
             return 1;
         }
-    }
-    catch (const std::exception& error)
-    {
+    } catch (const std::exception& error) {
         std::cerr << "Application logging initialization failed (" << app_conf_path << "): " << error.what()
                   << std::endl;
         return 1;
     }
     print_logo();
 
-    try
-    {
+    try {
         if (!plugin_manager::instance()->start(
-                date_time::get_now_time(), manifest.plugin_library_dir, manifest.plugin_config_dir, manifest.plugins))
-        {
+                date_time::get_now_time(), manifest.plugin_library_dir, manifest.plugin_config_dir, manifest.plugins)) {
             app_detail::exit_startup_failure(*plugin_manager::instance(), "returned false");
         }
+    } catch (const std::exception& error) {
+        app_detail::exit_startup_failure(*plugin_manager::instance(), error.what());
+    } catch (...) {
+        app_detail::exit_startup_failure(*plugin_manager::instance(), "unknown exception");
     }
-    catch (const std::exception& error)
-    { app_detail::exit_startup_failure(*plugin_manager::instance(), error.what()); }
-    catch (...)
-    { app_detail::exit_startup_failure(*plugin_manager::instance(), "unknown exception"); }
 
 #ifdef ARK_PLATFORM_WIN
     create_back_thread();
 #endif
 
-    for (;; std::this_thread::sleep_for(std::chrono::milliseconds(1)))
-    {
+    for (;; std::this_thread::sleep_for(std::chrono::milliseconds(1))) {
         const auto stop_reason = app_detail::requested_stop_reason();
-        if (stop_reason != 0)
-        {
-            if (stop_reason > 0)
-            {
+        if (stop_reason != 0) {
+            if (stop_reason > 0) {
                 ARK_LOG_INFO("Server stop requested by signal {}", stop_reason);
             }
             break;
@@ -416,33 +379,27 @@ static int run_application(int argc, char* argv[]) {
     const auto shutdown_started = std::chrono::steady_clock::now();
     auto shutdown_deadline = std::chrono::steady_clock::time_point::max();
     if (shutdown_timeout.count() > 0 && shutdown_timeout < std::chrono::duration_cast<std::chrono::milliseconds>(
-                                                               std::chrono::steady_clock::duration::max()))
-    {
+                                                               std::chrono::steady_clock::duration::max())) {
         const auto delay = std::chrono::duration_cast<std::chrono::steady_clock::duration>(shutdown_timeout);
-        if (shutdown_started <= shutdown_deadline - delay)
-        {
+        if (shutdown_started <= shutdown_deadline - delay) {
             shutdown_deadline = shutdown_started + delay;
         }
     }
     bool shutdown_retained = false;
     bool shutdown_failure_reported = false;
     bool shutdown_update_error_reported = false;
-    for (;;)
-    {
-        if (!shutdown_retained)
-        {
+    for (;;) {
+        if (!shutdown_retained) {
             const auto stopped =
                 shutdown_timeout.count() > 0
                     ? plugin_manager::instance()->stop_until(date_time::get_now_time(), shutdown_deadline)
                     : plugin_manager::instance()->stop(date_time::get_now_time());
-            if (stopped)
-            {
+            if (stopped) {
                 break;
             }
             const auto state = plugin_manager::instance()->get_shutdown_state();
             if (state == plugin_manager::shutdown_state::timed_out ||
-                state == plugin_manager::shutdown_state::cleanup_timed_out)
-            {
+                state == plugin_manager::shutdown_state::cleanup_timed_out) {
                 shutdown_retained = true;
                 const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - shutdown_started);
@@ -452,67 +409,48 @@ static int run_application(int argc, char* argv[]) {
                     plugin_manager::instance()->get_shutdown_failure());
             }
         }
-        if (plugin_manager::instance()->get_shutdown_state() == plugin_manager::shutdown_state::failed)
-        {
-            if (!shutdown_failure_reported)
-            {
-                try
-                {
-                    if (const auto error = plugin_manager::instance()->get_shutdown_exception())
-                    {
+        if (plugin_manager::instance()->get_shutdown_state() == plugin_manager::shutdown_state::failed) {
+            if (!shutdown_failure_reported) {
+                try {
+                    if (const auto error = plugin_manager::instance()->get_shutdown_exception()) {
                         std::rethrow_exception(error);
                     }
                     ARK_LOG_ERROR("Shutdown failed at {}; process and resources are retained",
                         plugin_manager::instance()->get_shutdown_failure());
-                }
-                catch (const std::exception& error)
-                {
+                } catch (const std::exception& error) {
                     ARK_LOG_ERROR("Shutdown failed at {}: {}; process and resources are retained",
                         plugin_manager::instance()->get_shutdown_failure(), error.what());
-                }
-                catch (...)
-                {
+                } catch (...) {
                     ARK_LOG_ERROR("Shutdown failed at {} with an unknown exception; process and resources are retained",
                         plugin_manager::instance()->get_shutdown_failure());
                 }
                 shutdown_failure_reported = true;
             }
-        }
-        else if (plugin_manager::instance()->get_shutdown_state() != plugin_manager::shutdown_state::cleanup_timed_out)
-        {
-            try
-            {
+        } else if (plugin_manager::instance()->get_shutdown_state() !=
+                   plugin_manager::shutdown_state::cleanup_timed_out) {
+            try {
                 std::exception_ptr update_error;
                 const auto updated = main_loop(&update_error);
-                if (update_error)
-                {
+                if (update_error) {
                     std::rethrow_exception(update_error);
                 }
-                if (!updated)
-                {
+                if (!updated) {
                     shutdown_retained = true;
-                    if (!shutdown_update_error_reported)
-                    {
+                    if (!shutdown_update_error_reported) {
                         ARK_LOG_ERROR(
                             "{}", "Shutdown update failed: update returned false; process and resources are retained");
                         shutdown_update_error_reported = true;
                     }
                 }
-            }
-            catch (const std::exception& error)
-            {
+            } catch (const std::exception& error) {
                 shutdown_retained = true;
-                if (!shutdown_update_error_reported)
-                {
+                if (!shutdown_update_error_reported) {
                     ARK_LOG_ERROR("Shutdown update failed: {}; process and resources are retained", error.what());
                     shutdown_update_error_reported = true;
                 }
-            }
-            catch (...)
-            {
+            } catch (...) {
                 shutdown_retained = true;
-                if (!shutdown_update_error_reported)
-                {
+                if (!shutdown_update_error_reported) {
                     ARK_LOG_ERROR(
                         "{}", "Shutdown update failed with an unknown exception; process and resources are retained");
                     shutdown_update_error_reported = true;
@@ -538,37 +476,30 @@ static int run_application(int argc, char* argv[]) {
 int wmain(int argc, wchar_t* argv[]) {
     std::vector<std::string> arguments;
     std::vector<char*> utf8_argv;
-    try
-    {
+    try {
         arguments.reserve(argc);
         utf8_argv.reserve(argc + 1);
-        for (int index = 0; index < argc; ++index)
-        {
+        for (int index = 0; index < argc; ++index) {
             const auto count =
                 WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, argv[index], -1, nullptr, 0, nullptr, nullptr);
-            if (count == 0)
-            {
+            if (count == 0) {
                 std::fputs("Application arguments contain invalid UTF-16\n", stderr);
                 return 1;
             }
             std::string argument(count, '\0');
             if (WideCharToMultiByte(
-                    CP_UTF8, WC_ERR_INVALID_CHARS, argv[index], -1, argument.data(), count, nullptr, nullptr) == 0)
-            {
+                    CP_UTF8, WC_ERR_INVALID_CHARS, argv[index], -1, argument.data(), count, nullptr, nullptr) == 0) {
                 std::fputs("Application arguments could not be converted to UTF-8\n", stderr);
                 return 1;
             }
             argument.resize(count - 1);
             arguments.push_back(std::move(argument));
         }
-        for (auto& argument : arguments)
-        {
+        for (auto& argument : arguments) {
             utf8_argv.push_back(argument.data());
         }
         utf8_argv.push_back(nullptr);
-    }
-    catch (const std::exception&)
-    {
+    } catch (const std::exception&) {
         std::fputs("Application arguments could not be prepared as UTF-8\n", stderr);
         return 1;
     }

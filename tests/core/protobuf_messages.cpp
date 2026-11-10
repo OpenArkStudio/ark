@@ -207,8 +207,7 @@ DOCTEST_TEST_CASE("Protocol descriptors and textual enum values use the new publ
 
 DOCTEST_TEST_CASE("Guest-room snake-case enum symbols preserve numeric wire values") {
     namespace wire = ark::protobuf::guest_room;
-    for (const auto kind : {wire::action_unspecified, wire::action_damage, wire::action_skill, wire::action_rest})
-    {
+    for (const auto kind : {wire::action_unspecified, wire::action_damage, wire::action_skill, wire::action_rest}) {
         const auto numeric = static_cast<int>(kind);
         wire::action_request request;
         const auto original =

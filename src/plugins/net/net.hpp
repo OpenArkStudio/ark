@@ -36,8 +36,7 @@ using net_msg_functor = std::function<void(const net_msg*, conv_id_t)>;
 using net_msg_session_functor = std::function<void(net_msg const*, conv_id_t)>;
 using net_event_functor = std::function<void(net_event const*)>;
 
-class net
-{
+class net {
 public:
     virtual ~net() = default;
 
@@ -65,8 +64,7 @@ public:
 
     // Configure before start_client/start_server. Existing sessions keep their capacity.
     bool set_initial_receive_buffer_size(size_t bytes) {
-        if (bytes == 0 || is_working())
-        {
+        if (bytes == 0 || is_working()) {
             return false;
         }
         initial_receive_buffer_size_ = bytes;

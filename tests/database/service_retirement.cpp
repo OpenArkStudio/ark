@@ -21,8 +21,7 @@
 
 namespace ark::detail {
 
-struct database_service_test_access
-{
+struct database_service_test_access {
     template<class service_type>
     static auto activity(service_type& service) {
         return service.activity_;
@@ -71,8 +70,7 @@ using service_types = std::tuple<ark::detail::redis_service>;
 #endif
 
 template<class service_type>
-struct service_traits
-{
+struct service_traits {
     using reply_type = arknet::redis::result;
 
     static auto options() {
@@ -97,8 +95,7 @@ struct service_traits
 
 #if defined(ARKNET_ENABLE_SSL)
 template<>
-struct service_traits<ark::detail::mysql_service>
-{
+struct service_traits<ark::detail::mysql_service> {
     using reply_type = ark::detail::mysql_service_reply;
 
     static auto options() {
@@ -122,8 +119,7 @@ struct service_traits<ark::detail::mysql_service>
 };
 #endif
 
-struct finalizer_failure : std::runtime_error
-{
+struct finalizer_failure : std::runtime_error {
     std::shared_ptr<int> origin;
 
     explicit finalizer_failure(std::shared_ptr<int> value)
@@ -132,8 +128,7 @@ struct finalizer_failure : std::runtime_error
     }
 };
 
-struct callback_capture
-{
+struct callback_capture {
     std::weak_ptr<activity_type> activity;
     unsigned& destroyed;
 
@@ -145,21 +140,18 @@ struct callback_capture
     ~callback_capture() {
         auto retained = activity.lock();
         CHECK(retained);
-        if (retained)
-        {
+        if (retained) {
             CHECK(retained->depth > 0);
         }
         ++destroyed;
     }
 };
 
-struct worker_exit_probe
-{
+struct worker_exit_probe {
     std::shared_ptr<std::atomic<bool>> exited;
 
     ~worker_exit_probe() {
-        if (exited)
-        {
+        if (exited) {
             *exited = true;
         }
     }
@@ -170,16 +162,14 @@ void observe_worker_exit(std::shared_ptr<std::atomic<bool>> exited) {
     probe.exited = std::move(exited);
 }
 
-struct native_observation
-{
+struct native_observation {
     std::promise<void> completed;
     std::atomic<unsigned> callbacks{};
     std::atomic<unsigned> captures_destroyed{};
     std::shared_ptr<std::atomic<bool>> worker_exited = std::make_shared<std::atomic<bool>>(false);
 };
 
-struct native_capture
-{
+struct native_capture {
     std::shared_ptr<native_observation> observation;
 
     explicit native_capture(std::shared_ptr<native_observation> state)
@@ -242,8 +232,7 @@ TEST_CASE_TEMPLATE_DEFINE("Inline refusal may destroy its facade before captures
         owner.reset();
         auto retained = activity.lock();
         CHECK(retained);
-        if (retained)
-        {
+        if (retained) {
             CHECK(retained->depth > 0);
         }
     };
@@ -280,8 +269,7 @@ TEST_CASE_TEMPLATE_DEFINE("Dispatch may destroy its facade while its shared acti
         owner.reset();
         auto retained = activity.lock();
         CHECK(retained);
-        if (retained)
-        {
+        if (retained) {
             CHECK(retained->depth > 0);
         }
     });
@@ -342,18 +330,15 @@ TEST_CASE_TEMPLATE_DEFINE("Failed native finalization preserves the exact pool o
     auto origin = std::make_shared<int>(42);
     auto failure = std::make_exception_ptr(finalizer_failure(origin));
     bool observed{};
-    try
-    {
+    try {
         test_access::retire(service, [&](auto&) -> bool { std::rethrow_exception(failure); });
-    }
-    catch (const finalizer_failure& error)
-    {
+    } catch (const finalizer_failure& error) {
         observed = true;
         CHECK(error.origin == origin);
         CHECK(std::string(error.what()) == "injected native finalizer failure");
+    } catch (...) {
+        FAIL("Native finalization changed the exception type");
     }
-    catch (...)
-    { FAIL("Native finalization changed the exception type"); }
     CHECK(observed);
     CHECK_FALSE(pool.expired());
     CHECK_FALSE(service.native_retired());
@@ -423,8 +408,7 @@ TEST_CASE_TEMPLATE_DEFINE("Accepted coroutine A then B survives root admission s
     tasks.poll();
     tasks.stop_accepting();
     const auto deadline = std::chrono::steady_clock::now() + 5s;
-    while (tasks.pending() && std::chrono::steady_clock::now() < deadline)
-    {
+    while (tasks.pending() && std::chrono::steady_clock::now() < deadline) {
         service.update();
         bridge.dispatch();
         tasks.poll();

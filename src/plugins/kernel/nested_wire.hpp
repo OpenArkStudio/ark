@@ -35,8 +35,7 @@ namespace ark::entity_sync::nested_wire {
 
 namespace proto = protobuf::entity_sync;
 
-struct limits
-{
+struct limits {
     nested_stream_limits stream;
     // Independent of native state/patch budgets and transport pending budgets.
     std::size_t max_message_bytes{4 * 1024 * 1024};
@@ -48,10 +47,8 @@ namespace detail {
 
 template<typename guid_type>
 inline std::int64_t encode_guid(guid_type input) {
-    if constexpr (std::numeric_limits<guid_type>::digits > std::numeric_limits<std::int64_t>::digits)
-    {
-        if (input < std::numeric_limits<std::int64_t>::min() || input > std::numeric_limits<std::int64_t>::max())
-        {
+    if constexpr (std::numeric_limits<guid_type>::digits > std::numeric_limits<std::int64_t>::digits) {
+        if (input < std::numeric_limits<std::int64_t>::min() || input > std::numeric_limits<std::int64_t>::max()) {
             throw std::invalid_argument("Nested GUID exceeds signed 64-bit wire width");
         }
     }
@@ -59,8 +56,7 @@ inline std::int64_t encode_guid(guid_type input) {
 }
 
 inline guid_t decode_guid(std::int64_t input) {
-    if (input < std::numeric_limits<guid_t>::min() || input > std::numeric_limits<guid_t>::max())
-    {
+    if (input < std::numeric_limits<guid_t>::min() || input > std::numeric_limits<guid_t>::max()) {
         throw std::invalid_argument("Nested GUID exceeds native width");
     }
     return static_cast<guid_t>(input);
@@ -69,28 +65,23 @@ inline guid_t decode_guid(std::int64_t input) {
 inline void check_limits(const limits& budget) {
     if (!budget.max_message_bytes ||
         budget.max_message_bytes > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
-        budget.max_recursion_depth <= 0)
-    {
+        budget.max_recursion_depth <= 0) {
         throw std::invalid_argument("Invalid nested wire byte or recursion limit");
     }
 }
 
 inline void check_unknown(
     const google::protobuf::UnknownFieldSet& input, int depth, const limits& budget, std::size_t& records) {
-    if (depth > budget.max_recursion_depth)
-    {
+    if (depth > budget.max_recursion_depth) {
         throw std::length_error("Nested wire unknown-group recursion limit exceeded");
     }
-    for (int index = 0; index < input.field_count(); ++index)
-    {
-        if (!records)
-        {
+    for (int index = 0; index < input.field_count(); ++index) {
+        if (!records) {
             throw std::length_error("Nested wire record limit exceeded");
         }
         --records;
         const auto& field = input.field(index);
-        if (field.type() == google::protobuf::UnknownField::TYPE_GROUP)
-        {
+        if (field.type() == google::protobuf::UnknownField::TYPE_GROUP) {
             check_unknown(field.group(), depth + 1, budget, records);
         }
     }
@@ -100,8 +91,7 @@ inline void check_unknown(
 // size or constructing native maps. Unknown fields remain forward compatible;
 // their size and any unknown groups still obey the independent wire budgets.
 inline void check_depth(const google::protobuf::Message& input, int depth, const limits& budget, std::size_t& records) {
-    if (depth > budget.max_recursion_depth || !records)
-    {
+    if (depth > budget.max_recursion_depth || !records) {
         throw std::length_error("Nested wire recursion or record limit exceeded");
     }
     --records;
@@ -109,22 +99,16 @@ inline void check_depth(const google::protobuf::Message& input, int depth, const
     check_unknown(reflection->GetUnknownFields(input), depth, budget, records);
     std::vector<const google::protobuf::FieldDescriptor*> fields;
     reflection->ListFields(input, &fields);
-    for (const auto* field : fields)
-    {
-        if (field->cpp_type() != google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE)
-        {
+    for (const auto* field : fields) {
+        if (field->cpp_type() != google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE) {
             continue;
         }
-        if (field->is_repeated())
-        {
+        if (field->is_repeated()) {
             const auto count = reflection->FieldSize(input, field);
-            for (int index = 0; index < count; ++index)
-            {
+            for (int index = 0; index < count; ++index) {
                 check_depth(reflection->GetRepeatedMessage(input, field, index), depth + 1, budget, records);
             }
-        }
-        else
-        {
+        } else {
             check_depth(reflection->GetMessage(input, field), depth + 1, budget, records);
         }
     }
@@ -135,8 +119,7 @@ inline void check_message(const google::protobuf::Message& input, const limits& 
     // Each nested record needs at least a tag and a length byte on the wire.
     auto records = budget.max_message_bytes;
     check_depth(input, 0, budget, records);
-    if (input.ByteSizeLong() > budget.max_message_bytes)
-    {
+    if (input.ByteSizeLong() > budget.max_message_bytes) {
         throw std::length_error("Nested wire message byte limit exceeded");
     }
 }
@@ -156,47 +139,29 @@ inline void validate(const nested_delta& input, const nested_stream_binding& tru
 
 inline void encode_fields(const std::map<std::uint32_t, scalar_value>& input,
     google::protobuf::RepeatedPtrField<proto::scalar_field>& output) {
-    for (const auto& [index, value] : input)
-    {
+    for (const auto& [index, value] : input) {
         auto& field = *output.Add();
         field.set_index(index);
         std::visit(
             [&](const auto& item) {
                 using type = std::decay_t<decltype(item)>;
-                if constexpr (std::is_same_v<type, bool>)
-                {
+                if constexpr (std::is_same_v<type, bool>) {
                     field.set_bool_value(item);
-                }
-                else if constexpr (std::is_same_v<type, std::int32_t>)
-                {
+                } else if constexpr (std::is_same_v<type, std::int32_t>) {
                     field.set_int32_value(item);
-                }
-                else if constexpr (std::is_same_v<type, std::uint32_t>)
-                {
+                } else if constexpr (std::is_same_v<type, std::uint32_t>) {
                     field.set_uint32_value(item);
-                }
-                else if constexpr (std::is_same_v<type, std::int64_t>)
-                {
+                } else if constexpr (std::is_same_v<type, std::int64_t>) {
                     field.set_int64_value(item);
-                }
-                else if constexpr (std::is_same_v<type, std::uint64_t>)
-                {
+                } else if constexpr (std::is_same_v<type, std::uint64_t>) {
                     field.set_uint64_value(item);
-                }
-                else if constexpr (std::is_same_v<type, float>)
-                {
+                } else if constexpr (std::is_same_v<type, float>) {
                     field.set_float_value(item);
-                }
-                else if constexpr (std::is_same_v<type, double>)
-                {
+                } else if constexpr (std::is_same_v<type, double>) {
                     field.set_double_value(item);
-                }
-                else if constexpr (std::is_same_v<type, std::string>)
-                {
+                } else if constexpr (std::is_same_v<type, std::string>) {
                     field.set_string_value(item);
-                }
-                else if constexpr (std::is_same_v<type, guid_value>)
-                {
+                } else if constexpr (std::is_same_v<type, guid_value>) {
                     field.set_guid_value(encode_guid(item.value));
                 }
             },
@@ -205,8 +170,7 @@ inline void encode_fields(const std::map<std::uint32_t, scalar_value>& input,
 }
 
 inline scalar_value decode_field(const proto::scalar_field& input) {
-    switch (input.value_case())
-    {
+    switch (input.value_case()) {
     case proto::scalar_field::kBoolValue:
         return input.bool_value();
     case proto::scalar_field::kInt32Value:
@@ -233,8 +197,7 @@ inline scalar_value decode_field(const proto::scalar_field& input) {
 inline std::map<std::uint32_t, scalar_value> decode_fields(
     const google::protobuf::RepeatedPtrField<proto::scalar_field>& input) {
     std::map<std::uint32_t, scalar_value> output;
-    for (const auto& field : input)
-    {
+    for (const auto& field : input) {
         nested_detail::require(
             field.index() &&
             output.emplace(field.index(), entity_sync::detail::direct_value{[&] { return decode_field(field); }})
@@ -248,25 +211,21 @@ inline void encode_entity(const nested_entity_snapshot& input, proto::entity_sna
     output.set_incarnation(input.incarnation);
     output.set_class_name(input.scalars.class_name);
     encode_fields(input.scalars.fields, *output.mutable_fields());
-    for (const auto& [index, table] : input.tables)
-    {
+    for (const auto& [index, table] : input.tables) {
         auto& result = *output.add_tables();
         result.set_index(index);
         result.set_class_name(table.class_name);
-        for (const auto& [number, row] : table.rows)
-        {
+        for (const auto& [number, row] : table.rows) {
             auto& record = *result.add_rows();
             record.set_number(number);
             record.set_incarnation(row.incarnation);
             encode_fields(row.fields, *record.mutable_fields());
         }
     }
-    for (const auto& [index, children] : input.containers)
-    {
+    for (const auto& [index, children] : input.containers) {
         auto& result = *output.add_containers();
         result.set_index(index);
-        for (const auto& [slot, child] : children)
-        {
+        for (const auto& [slot, child] : children) {
             auto& record = *result.add_slots();
             record.set_slot(slot);
             encode_entity(child, *record.mutable_state());
@@ -276,11 +235,9 @@ inline void encode_entity(const nested_entity_snapshot& input, proto::entity_sna
 
 inline nested_entity_snapshot decode_entity(const proto::entity_snapshot& input) {
     std::map<std::uint32_t, nested_table_snapshot> tables;
-    for (const auto& table : input.tables())
-    {
+    for (const auto& table : input.tables()) {
         std::map<std::uint32_t, nested_row_snapshot> rows;
-        for (const auto& row : table.rows())
-        {
+        for (const auto& row : table.rows()) {
             nested_detail::require(row.number() && rows.emplace(row.number(), entity_sync::detail::direct_value{[&] {
                                                            return nested_row_snapshot{
                                                                row.incarnation(), decode_fields(row.fields())};
@@ -295,11 +252,9 @@ inline nested_entity_snapshot decode_entity(const proto::entity_snapshot& input)
                                                     .second);
     }
     std::map<std::uint32_t, std::map<std::uint32_t, nested_entity_snapshot>> containers;
-    for (const auto& container : input.containers())
-    {
+    for (const auto& container : input.containers()) {
         std::map<std::uint32_t, nested_entity_snapshot> children;
-        for (const auto& slot : container.slots())
-        {
+        for (const auto& slot : container.slots()) {
             nested_detail::require(slot.slot() && slot.has_state() &&
                                    children
                                        .emplace(slot.slot(), entity_sync::detail::direct_value{[&] {
@@ -317,12 +272,10 @@ inline void encode_change(const nested_entity_delta& input, proto::entity_delta&
     output.set_entity_id(encode_guid(input.entity_id));
     output.set_incarnation(input.incarnation);
     encode_fields(input.fields, *output.mutable_fields());
-    for (const auto& [index, rows] : input.tables)
-    {
+    for (const auto& [index, rows] : input.tables) {
         auto& result = *output.add_tables();
         result.set_index(index);
-        for (const auto& [number, row] : rows)
-        {
+        for (const auto& [number, row] : rows) {
             auto& record = *result.add_rows();
             record.set_number(number);
             record.set_required_incarnation(row.required_incarnation);
@@ -330,25 +283,19 @@ inline void encode_change(const nested_entity_delta& input, proto::entity_delta&
             encode_fields(row.fields, *record.mutable_fields());
         }
     }
-    for (const auto& [index, change] : input.containers)
-    {
+    for (const auto& [index, change] : input.containers) {
         auto& result = *output.add_containers();
         result.set_index(index);
-        if (change.replace)
-        {
+        if (change.replace) {
             auto& replacement = *result.mutable_replacement();
-            for (const auto& [slot, child] : change.slots)
-            {
+            for (const auto& [slot, child] : change.slots) {
                 auto& record = *replacement.add_slots();
                 record.set_slot(slot);
                 encode_entity(child, *record.mutable_state());
             }
-        }
-        else
-        {
+        } else {
             auto& patch = *result.mutable_patch();
-            for (const auto& [slot, child] : change.changed)
-            {
+            for (const auto& [slot, child] : change.changed) {
                 auto& record = *patch.add_changed();
                 record.set_slot(slot);
                 encode_change(child, *record.mutable_change());
@@ -359,11 +306,9 @@ inline void encode_change(const nested_entity_delta& input, proto::entity_delta&
 
 inline nested_entity_delta decode_change(const proto::entity_delta& input) {
     std::map<std::uint32_t, std::map<std::uint32_t, nested_row_delta>> tables;
-    for (const auto& table : input.tables())
-    {
+    for (const auto& table : input.tables()) {
         std::map<std::uint32_t, nested_row_delta> rows;
-        for (const auto& row : table.rows())
-        {
+        for (const auto& row : table.rows()) {
             nested_detail::require(row.number() && rows.emplace(row.number(), entity_sync::detail::direct_value{[&] {
                                                            return nested_row_delta{row.required_incarnation(),
                                                                row.incarnation(), decode_fields(row.fields())};
@@ -373,14 +318,11 @@ inline nested_entity_delta decode_change(const proto::entity_delta& input) {
         nested_detail::require(table.index() && tables.emplace(table.index(), std::move(rows)).second);
     }
     std::map<std::uint32_t, nested_container_delta> containers;
-    for (const auto& container : input.containers())
-    {
+    for (const auto& container : input.containers()) {
         nested_container_delta change;
-        if (container.has_replacement())
-        {
+        if (container.has_replacement()) {
             change.replace = true;
-            for (const auto& slot : container.replacement().slots())
-            {
+            for (const auto& slot : container.replacement().slots()) {
                 nested_detail::require(slot.slot() && slot.has_state() &&
                                        change.slots
                                            .emplace(slot.slot(), entity_sync::detail::direct_value{[&] {
@@ -388,12 +330,9 @@ inline nested_entity_delta decode_change(const proto::entity_delta& input) {
                                            }})
                                            .second);
             }
-        }
-        else
-        {
+        } else {
             nested_detail::require(container.has_patch());
-            for (const auto& slot : container.patch().changed())
-            {
+            for (const auto& slot : container.patch().changed()) {
                 nested_detail::require(slot.slot() && slot.has_change() &&
                                        change.changed
                                            .emplace(slot.slot(), entity_sync::detail::direct_value{[&] {
@@ -411,16 +350,14 @@ inline nested_entity_delta decode_change(const proto::entity_delta& input) {
 template<typename message_type>
 inline void parse(std::string_view input, message_type& output, const limits& budget) {
     check_limits(budget);
-    if (input.size() > budget.max_message_bytes)
-    {
+    if (input.size() > budget.max_message_bytes) {
         throw std::length_error("Nested wire message byte limit exceeded");
     }
     google::protobuf::io::CodedInputStream stream(
         reinterpret_cast<const std::uint8_t*>(input.data()), static_cast<int>(input.size()));
     stream.SetTotalBytesLimit(static_cast<int>(budget.max_message_bytes));
     stream.SetRecursionLimit(budget.max_recursion_depth);
-    if (!output.ParseFromCodedStream(&stream) || !stream.ConsumedEntireMessage())
-    {
+    if (!output.ParseFromCodedStream(&stream) || !stream.ConsumedEntireMessage()) {
         throw std::invalid_argument("Malformed or excessively nested Entity message");
     }
 }
@@ -494,8 +431,7 @@ inline std::string encode(
     message_type message;
     encode(input, message, trusted, budget);
     std::string output;
-    if (!message.SerializeToString(&output))
-    {
+    if (!message.SerializeToString(&output)) {
         throw std::invalid_argument("Cannot serialize nested Entity message");
     }
     return output;

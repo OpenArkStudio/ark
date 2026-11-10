@@ -14,8 +14,7 @@
 namespace {
 
 void require_startup(bool condition, const char* message) {
-    if (!condition)
-    {
+    if (!condition) {
         throw std::runtime_error(message);
     }
 }
@@ -23,8 +22,7 @@ void require_startup(bool condition, const char* message) {
 // These providers control only startup outcomes. The role factory, public
 // assembly and manager lifecycle under test are the production implementations.
 template<typename interface_type>
-class startup_provider : public ark::module_base<interface_type>
-{
+class startup_provider : public ark::module_base<interface_type> {
 public:
     std::vector<std::string> get_dependencies() const override {
         return dependencies;
@@ -60,8 +58,7 @@ public:
     const bool* dependent_stopped{};
 };
 
-class startup_bus final : public startup_provider<ark::bus_module>
-{
+class startup_bus final : public startup_provider<ark::bus_module> {
 public:
     const std::string get_app_whole_name(ark::bus_id_t) override {
         return "startup-test";
@@ -117,8 +114,7 @@ private:
     ark::reg_center registry_{};
 };
 
-class startup_service final : public ark::net_server_service
-{
+class startup_service final : public ark::net_server_service {
 public:
     bool start(std::shared_ptr<const ark::msg_header>, ark::bus_id_t, const ark::endpoint&, uint8_t, uint32_t,
         const size_t) override {
@@ -153,8 +149,7 @@ public:
     }
 };
 
-class startup_net final : public startup_provider<ark::net_service_manager_module>
-{
+class startup_net final : public startup_provider<ark::net_service_manager_module> {
 public:
     bool created = true;
     unsigned create_calls{};
@@ -219,16 +214,13 @@ void check_startup(bool with_bus, bool with_net, bool created, bool has_service,
     startup_bus bus;
     startup_net net;
     net.created = created;
-    if (!has_service)
-    {
+    if (!has_service) {
         net.service.reset();
     }
-    if (with_bus)
-    {
+    if (with_bus) {
         require_startup(manager.add_module(typeid(ark::bus_module).name(), &bus), "Bus fixture registration failed");
     }
-    if (with_net)
-    {
+    if (with_net) {
         require_startup(manager.add_module(typeid(ark::net_service_manager_module).name(), &net),
             "Net fixture registration failed");
     }
@@ -246,8 +238,7 @@ void check_startup(bool with_bus, bool with_net, bool created, bool has_service,
     const bool expected_start = expected_init && created && has_service;
     require_startup(manager.start(42, {}, {}, {}) == expected_start, "Real role startup result was lost");
     const auto failure = manager.get_startup_failure();
-    if (rejected_dependencies)
-    {
+    if (rejected_dependencies) {
         require_startup(failure == std::string("dependencies: ") + typeid(server_module).name() +
                                        " requires missing module '" + *missing + "'",
             "Manager did not reject the missing declared role provider");
@@ -265,18 +256,15 @@ void check_startup(bool with_bus, bool with_net, bool created, bool has_service,
     require_startup(
         net.late_calls == (expected_start ? 1u : 0u), "Manager continued to pre_update after startup failure");
     owner.uninstall();
-    if (with_bus)
-    {
+    if (with_bus) {
         manager.remove_module(typeid(ark::bus_module).name());
     }
-    if (with_net)
-    {
+    if (with_net) {
         manager.remove_module(typeid(ark::net_service_manager_module).name());
     }
 }
 
-class startup_dependent final : public ark::module
-{
+class startup_dependent final : public ark::module {
 public:
     startup_dependent(startup_bus& bus, startup_net& net)
         : bus_(bus)
@@ -361,8 +349,7 @@ void check_role_startup(const std::string& role) {
     const bool game = role == "ark_game_plugin";
     const bool declared = role == "ark_login_plugin" || role == "ark_master_plugin" || role == "ark_proxy_plugin" ||
                           role == "ark_world_plugin" || role == "ark_dir_plugin" || role == "ark_router_plugin";
-    if (declared)
-    {
+    if (declared) {
         check_declared_role_order();
         require_startup(
             make_server_module()->get_dependencies() == std::vector<std::string>{typeid(ark::bus_module).name(),
@@ -372,14 +359,11 @@ void check_role_startup(const std::string& role) {
     check_startup(false, false, true, true, game);
     check_startup(false, true, true, true, game);
     check_startup(true, false, true, true, game);
-    if (game)
-    {
+    if (game) {
         // Game validates Kernel in init and registers its callbacks in post_init.
         // This dependency fixture does not simulate Kernel.
         check_startup(true, true, true, true, true);
-    }
-    else
-    {
+    } else {
         check_startup(true, true, false, true, false);
         check_startup(true, true, true, false, false);
         check_startup(true, true, true, true, false);

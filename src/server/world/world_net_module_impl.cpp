@@ -35,8 +35,7 @@ bool world_net_module_impl::init() {
     msg_module_ = get_plugin_manager()->try_find_module<msg_module>();
     net_service_manager_module_ = get_plugin_manager()->try_find_module<net_service_manager_module>();
 
-    if (bus_module_ == nullptr || net_service_manager_module_ == nullptr)
-    {
+    if (bus_module_ == nullptr || net_service_manager_module_ == nullptr) {
         ARK_LOG_ERROR("world network startup requires Bus and Net modules");
         return false;
     }
@@ -50,15 +49,13 @@ bool world_net_module_impl::post_init() {
 
 bool world_net_module_impl::start_server() {
     auto ret = net_service_manager_module_->create_server();
-    if (!ret)
-    {
+    if (!ret) {
         ARK_LOG_ERROR("Cannot start server net, busid = {}", bus_module_->get_self_bus_name());
         return false;
     }
 
     net_server_ = net_service_manager_module_->get_inter_net_server();
-    if (net_server_ == nullptr)
-    {
+    if (net_server_ == nullptr) {
         ARK_LOG_ERROR("Cannot find server net, busid = {}", bus_module_->get_self_bus_name());
         return false;
     }
@@ -170,13 +167,11 @@ bool world_net_module_impl::send_msg_to_game(const int game_id, const ark::proto
 
 bool world_net_module_impl::send_msg_to_game(const data_list& arg_object_var, const data_list& arg_game_id,
     const ark::protobuf::game_message_id msg_id, google::protobuf::Message& data_value) {
-    if (arg_game_id.get_count() != arg_object_var.get_count())
-    {
+    if (arg_game_id.get_count() != arg_object_var.get_count()) {
         return false;
     }
 
-    for (size_t i = 0; i < arg_object_var.get_count(); i++)
-    {
+    for (size_t i = 0; i < arg_object_var.get_count(); i++) {
         guid_t ident_other = arg_object_var.int64(i);
         int game_id = arg_game_id.get_int(i);
 
@@ -190,8 +185,7 @@ bool world_net_module_impl::send_msg_to_player(
     const ark::protobuf::game_message_id msg_id, google::protobuf::Message& data_value, const guid_t player) {
     int game_id = get_player_game_id(player);
 
-    if (game_id < 0)
-    {
+    if (game_id < 0) {
         return false;
     }
 
@@ -206,8 +200,7 @@ bool world_net_module_impl::send_msg_to_player(
 std::shared_ptr<connection_data> world_net_module_impl::get_suit_proxy_for_enter() {
     // return mProxyMap.begin()->second;
     auto client_service_ptr = net_service_manager_module_->get_client_service(ark::app_type::ark_app_proxy);
-    if (client_service_ptr == nullptr)
-    {
+    if (client_service_ptr == nullptr) {
         ARK_LOG_INFO("Connection data not found connection");
         return nullptr;
     }

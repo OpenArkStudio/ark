@@ -42,8 +42,7 @@ using ark::detail::database_awaitable;
 using ark::detail::module_task;
 using ark::detail::module_task_group;
 
-struct options
-{
+struct options {
     std::string_view protocol{"redis"};
     std::string_view mode{"callback"};
     std::size_t concurrency{4};
@@ -60,8 +59,7 @@ struct options
 std::size_t number(std::string_view text, std::size_t minimum, std::size_t maximum) {
     std::size_t value{};
     const auto parsed = std::from_chars(text.data(), text.data() + text.size(), value);
-    if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size() || value < minimum || value > maximum)
-    {
+    if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size() || value < minimum || value > maximum) {
         throw std::invalid_argument("Numeric argument is invalid or outside its documented bound");
     }
     return value;
@@ -69,66 +67,40 @@ std::size_t number(std::string_view text, std::size_t minimum, std::size_t maxim
 
 options parse(int argc, char** argv) {
     options result;
-    for (int index = 1; index < argc; index += 2)
-    {
-        if (index + 1 == argc)
-        {
+    for (int index = 1; index < argc; index += 2) {
+        if (index + 1 == argc) {
             throw std::invalid_argument("Each option requires a value; see --help");
         }
         const std::string_view key(argv[index]), value(argv[index + 1]);
-        if (key == "--protocol")
-        {
+        if (key == "--protocol") {
             result.protocol = value;
-        }
-        else if (key == "--mode")
-        {
+        } else if (key == "--mode") {
             result.mode = value;
-        }
-        else if (key == "--concurrency")
-        {
+        } else if (key == "--concurrency") {
             result.concurrency = number(value, 1, 64);
-        }
-        else if (key == "--window")
-        {
+        } else if (key == "--window") {
             result.window = number(value, 1, 256);
-        }
-        else if (key == "--payload")
-        {
+        } else if (key == "--payload") {
             result.payload = number(value, 1, 65536);
-        }
-        else if (key == "--operations")
-        {
+        } else if (key == "--operations") {
             result.operations = number(value, 1, 1000000);
-        }
-        else if (key == "--warmup-operations")
-        {
+        } else if (key == "--warmup-operations") {
             result.warmup = number(value, 1, 100000);
-        }
-        else if (key == "--update-us")
-        {
+        } else if (key == "--update-us") {
             result.update_us = number(value, 0, 1000000);
-        }
-        else if (key == "--update-budget")
-        {
+        } else if (key == "--update-budget") {
             result.update_budget = number(value, 1, 4096);
-        }
-        else if (key == "--timeout-ms")
-        {
+        } else if (key == "--timeout-ms") {
             result.timeout_ms = number(value, 1, 30000);
-        }
-        else if (key == "--deadline-seconds")
-        {
+        } else if (key == "--deadline-seconds") {
             result.deadline_seconds = number(value, 1, 300);
-        }
-        else
-        {
+        } else {
             throw std::invalid_argument("Unknown option; credentials must be supplied through environment variables");
         }
     }
     if ((result.protocol != "redis" && result.protocol != "mysql") ||
         (result.mode != "callback" && result.mode != "coroutine") || result.concurrency > result.window ||
-        result.operations < result.window || result.warmup < result.window)
-    {
+        result.operations < result.window || result.warmup < result.window) {
         throw std::invalid_argument(
             "Use redis|mysql, callback|coroutine and concurrency <= window <= warmup/operations");
     }
@@ -137,8 +109,7 @@ options parse(int argc, char** argv) {
 
 std::string environment(const char* name, bool allow_empty = false) {
     const auto* value = std::getenv(name);
-    if (!value || (!allow_empty && !*value))
-    {
+    if (!value || (!allow_empty && !*value)) {
         throw std::invalid_argument(std::string("Required environment variable: ") + name);
     }
     return value;
@@ -146,8 +117,7 @@ std::string environment(const char* name, bool allow_empty = false) {
 
 std::string binary_payload(std::size_t size) {
     std::string value(size, '\0');
-    for (std::size_t index = 0; index < size; ++index)
-    {
+    for (std::size_t index = 0; index < size; ++index) {
         value[index] = static_cast<char>(index % 256);
     }
     return value;
@@ -156,8 +126,7 @@ std::string binary_payload(std::size_t size) {
 double cpu_seconds() {
 #if defined(_WIN32)
     FILETIME created{}, exited{}, kernel{}, user{};
-    if (!GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user))
-    {
+    if (!GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user)) {
         throw std::runtime_error("Cannot read process CPU time");
     }
     const auto ticks = [](FILETIME value) {
@@ -166,8 +135,7 @@ double cpu_seconds() {
     return static_cast<double>(ticks(kernel) + ticks(user)) / 10000000.0;
 #else
     rusage usage{};
-    if (getrusage(RUSAGE_SELF, &usage))
-    {
+    if (getrusage(RUSAGE_SELF, &usage)) {
         throw std::runtime_error("Cannot read process CPU time");
     }
     return static_cast<double>(usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) +
@@ -178,15 +146,13 @@ double cpu_seconds() {
 std::uint64_t peak_rss_bytes() {
 #if defined(_WIN32)
     PROCESS_MEMORY_COUNTERS memory{};
-    if (!GetProcessMemoryInfo(GetCurrentProcess(), &memory, sizeof(memory)))
-    {
+    if (!GetProcessMemoryInfo(GetCurrentProcess(), &memory, sizeof(memory))) {
         throw std::runtime_error("Cannot read process resident memory");
     }
     return memory.PeakWorkingSetSize;
 #else
     rusage usage{};
-    if (getrusage(RUSAGE_SELF, &usage))
-    {
+    if (getrusage(RUSAGE_SELF, &usage)) {
         throw std::runtime_error("Cannot read process resident memory");
     }
 #if defined(__APPLE__)
@@ -198,16 +164,14 @@ std::uint64_t peak_rss_bytes() {
 }
 
 double percentile(const std::vector<double>& sorted, std::size_t percent) {
-    if (sorted.empty())
-    {
+    if (sorted.empty()) {
         return 0;
     }
     const auto rank = (sorted.size() * percent + 99) / 100;
     return sorted[rank - 1];
 }
 
-struct errors
-{
+struct errors {
     std::size_t native{}, exception{}, validation{}, admission{}, task{}, deadline{};
 
     bool any() const {
@@ -220,8 +184,7 @@ std::size_t input_budget(const options& config) {
     return config.window * (config.payload * 2 + 4096);
 }
 
-struct redis_workload
-{
+struct redis_workload {
     using result_type = arknet::redis::result;
     using service_type = ark::detail::redis_service;
     const std::string payload;
@@ -231,12 +194,10 @@ struct redis_workload
         arknet::redis::pool_options pool;
         pool.connection.host = environment("ARK_DATABASE_REDIS_HOST");
         pool.connection.port = std::to_string(number(environment("ARK_DATABASE_REDIS_PORT"), 1, 65535));
-        if (const auto* user = std::getenv("ARK_DATABASE_REDIS_USER"))
-        {
+        if (const auto* user = std::getenv("ARK_DATABASE_REDIS_USER")) {
             pool.connection.username = user;
         }
-        if (const auto* password = std::getenv("ARK_DATABASE_REDIS_PASSWORD"))
-        {
+        if (const auto* password = std::getenv("ARK_DATABASE_REDIS_PASSWORD")) {
             pool.connection.password = password;
         }
         pool.max_connections = config.concurrency;
@@ -255,12 +216,9 @@ struct redis_workload
         return service.start(
             {"ECHO", payload},
             [completion = std::move(completion)](ark::detail::redis_service_result result) mutable {
-                if (auto* failure = std::get_if<std::exception_ptr>(&result))
-                {
+                if (auto* failure = std::get_if<std::exception_ptr>(&result)) {
                     completion(*failure, {});
-                }
-                else
-                {
+                } else {
                     completion({}, std::get<result_type>(std::move(result)));
                 }
             },
@@ -278,8 +236,7 @@ struct redis_workload
 };
 
 #if defined(ARKNET_ENABLE_SSL)
-struct mysql_workload
-{
+struct mysql_workload {
     using result_type = ark::detail::mysql_service_reply;
     using service_type = ark::detail::mysql_service;
     const std::string payload;
@@ -304,8 +261,7 @@ struct mysql_workload
         constexpr std::string_view digits = "0123456789abcdef";
         std::string sql = "SELECT X'";
         sql.reserve(payload.size() * 2 + 10);
-        for (const unsigned char byte : payload)
-        {
+        for (const unsigned char byte : payload) {
             sql += digits[byte >> 4];
             sql += digits[byte & 15];
         }
@@ -323,12 +279,9 @@ struct mysql_workload
         return service.start_query(
             query,
             [completion = std::move(completion)](ark::detail::mysql_service_result result) mutable {
-                if (auto* failure = std::get_if<std::exception_ptr>(&result))
-                {
+                if (auto* failure = std::get_if<std::exception_ptr>(&result)) {
                     completion(*failure, {});
-                }
-                else
-                {
+                } else {
                     completion({}, std::get<result_type>(std::move(result)));
                 }
             },
@@ -340,8 +293,7 @@ struct mysql_workload
     }
 
     bool valid(const result_type& result) const {
-        if (result.result.columns.size() != 1 || result.result.rows.size() != 1 || result.result.rows[0].size() != 1)
-        {
+        if (result.result.columns.size() != 1 || result.result.rows.size() != 1 || result.result.rows[0].size() != 1) {
             return false;
         }
         const auto* value = std::get_if<std::string>(&result.result.rows[0][0]);
@@ -351,12 +303,10 @@ struct mysql_workload
 #endif
 
 template<class Workload>
-class benchmark
-{
+class benchmark {
     using result_type = typename Workload::result_type;
 
-    struct slot
-    {
+    struct slot {
         std::optional<result_type> previous;
         clock_type::time_point submitted;
         bool active{};
@@ -375,8 +325,7 @@ class benchmark
     bool measured_{}, stopping_{};
 
     bool begin(std::size_t index) {
-        if (stopping_ || errors_.any() || started_ == target_)
-        {
+        if (stopping_ || errors_.any() || started_ == target_) {
             return false;
         }
         ++started_;
@@ -390,36 +339,26 @@ class benchmark
         auto& current = slots_[index];
         // Timestamping and owning-result checks are identical in both modes.
         const auto delivered = clock_type::now();
-        if (!current.active)
-        {
+        if (!current.active) {
             ++errors_.validation;
             return;
         }
         current.active = false;
         --active_;
         ++completed_;
-        if (measured_)
-        {
+        if (measured_) {
             latencies_.push_back(std::chrono::duration<double, std::micro>(delivered - current.submitted).count());
         }
-        if (current.previous && !workload_.valid(*current.previous))
-        {
+        if (current.previous && !workload_.valid(*current.previous)) {
             ++errors_.validation;
         }
-        if (failure)
-        {
+        if (failure) {
             ++errors_.exception;
-        }
-        else if (!workload_.success(result))
-        {
+        } else if (!workload_.success(result)) {
             ++errors_.native;
-        }
-        else if (!workload_.valid(result))
-        {
+        } else if (!workload_.valid(result)) {
             ++errors_.validation;
-        }
-        else
-        {
+        } else {
             ++successful_;
             current.previous = std::move(result);
         }
@@ -428,54 +367,45 @@ class benchmark
     template<class Handler>
     std::uint64_t start(Handler handler) {
         const auto id = workload_.start(std::move(handler), std::chrono::milliseconds(config_.timeout_ms));
-        if (!id)
-        {
+        if (!id) {
             ++errors_.admission;
         }
         return id;
     }
 
     void refill() {
-        for (std::size_t index = 0; index < slots_.size(); ++index)
-        {
-            if (!slots_[index].active && begin(index))
-            {
-                try
-                {
+        for (std::size_t index = 0; index < slots_.size(); ++index) {
+            if (!slots_[index].active && begin(index)) {
+                try {
                     start([this, index](std::exception_ptr error, result_type result) {
                         receive(index, std::move(error), std::move(result));
                     });
+                } catch (...) {
+                    receive(index, std::current_exception(), {});
                 }
-                catch (...)
-                { receive(index, std::current_exception(), {}); }
             }
         }
     }
 
     module_task<> sequence(std::size_t index) {
-        while (begin(index))
-        {
-            try
-            {
+        while (begin(index)) {
+            try {
                 auto result =
                     co_await bridge_.wait([this](auto completion) { return this->start(std::move(completion)); },
                         [this](std::uint64_t id) { workload_.service.cancel(id); });
                 receive(index, {}, std::move(result));
+            } catch (...) {
+                receive(index, std::current_exception(), {});
             }
-            catch (...)
-            { receive(index, std::current_exception(), {}); }
         }
     }
 
     void tick() {
         workload_.service.update(config_.update_budget);
-        if (config_.mode == "coroutine")
-        {
+        if (config_.mode == "coroutine") {
             bridge_.dispatch(config_.update_budget);
             tasks_.poll(config_.update_budget);
-        }
-        else if (!stopping_)
-        {
+        } else if (!stopping_) {
             // The service retires its reservation after returning from its
             // callback. Refill outside update(), without an extra request queue.
             refill();
@@ -483,34 +413,28 @@ class benchmark
     }
 
     void pause(clock_type::time_point& next) const {
-        if (config_.update_us)
-        {
+        if (config_.update_us) {
             next = std::max(next + std::chrono::microseconds(config_.update_us), clock_type::now());
             std::this_thread::sleep_until(next);
         }
     }
 
     void cancel_and_drain() noexcept {
-        try
-        {
+        try {
             stopping_ = true;
             workload_.service.stop_accepting();
             bridge_.stop_accepting();
             tasks_.close();
             workload_.service.cancel_all();
             const auto deadline = clock_type::now() + std::chrono::milliseconds(config_.timeout_ms) + 10s;
-            while (active_ || tasks_.pending() || bridge_.pending())
-            {
+            while (active_ || tasks_.pending() || bridge_.pending()) {
                 tick();
-                if (clock_type::now() >= deadline)
-                {
+                if (clock_type::now() >= deadline) {
                     throw std::runtime_error("drain deadline");
                 }
                 std::this_thread::sleep_for(100us);
             }
-        }
-        catch (...)
-        {
+        } catch (...) {
             // Never destroy suspended frames or report a fictitious drain.
             std::cerr << "Database benchmark failed to drain real terminal completions\n" << std::flush;
             std::_Exit(2);
@@ -521,50 +445,37 @@ class benchmark
         started_ = completed_ = successful_ = 0;
         target_ = count;
         measured_ = measured;
-        try
-        {
-            if (config_.mode == "coroutine")
-            {
-                for (std::size_t index = 0; index < slots_.size(); ++index)
-                {
+        try {
+            if (config_.mode == "coroutine") {
+                for (std::size_t index = 0; index < slots_.size(); ++index) {
                     if (!tasks_.start(sequence(index), [this](std::exception_ptr error) {
-                            if (error)
-                            {
+                            if (error) {
                                 ++errors_.task;
                             }
-                        }))
-                    {
+                        })) {
                         ++errors_.admission;
                         break;
                     }
                 }
-            }
-            else
-            {
+            } else {
                 refill();
             }
             const auto deadline = clock_type::now() + std::chrono::seconds(config_.deadline_seconds);
             auto next = clock_type::now();
-            while (active_ || tasks_.pending() || (!errors_.any() && completed_ < target_))
-            {
+            while (active_ || tasks_.pending() || (!errors_.any() && completed_ < target_)) {
                 tick();
-                if (clock_type::now() >= deadline)
-                {
+                if (clock_type::now() >= deadline) {
                     ++errors_.deadline;
                 }
-                if (errors_.any())
-                {
+                if (errors_.any()) {
                     cancel_and_drain();
                     return;
                 }
-                if (active_ || tasks_.pending() || completed_ < target_)
-                {
+                if (active_ || tasks_.pending() || completed_ < target_) {
                     pause(next);
                 }
             }
-        }
-        catch (...)
-        {
+        } catch (...) {
             ++errors_.exception;
             cancel_and_drain();
         }
@@ -588,8 +499,7 @@ public:
         // the measured interval. Sorting, RSS inspection and shutdown follow it.
         const auto cpu_start = cpu_seconds();
         const auto wall_start = clock_type::now();
-        if (warmup_ok)
-        {
+        if (warmup_ok) {
             phase(config_.operations, true);
         }
         const double seconds = std::chrono::duration<double>(clock_type::now() - wall_start).count();
@@ -600,8 +510,7 @@ public:
         tasks_.close();
         workload_.service.stop();
         const auto diagnostics = workload_.service.diagnostics();
-        if (diagnostics.cancellation_submission || diagnostics.lease_return || bridge_.cancellation_exception())
-        {
+        if (diagnostics.cancellation_submission || diagnostics.lease_return || bridge_.cancellation_exception()) {
             ++errors_.exception;
         }
         const bool valid =
@@ -642,20 +551,17 @@ public:
 void self_test() {
     const auto bytes = binary_payload(513);
     if (bytes.size() != 513 || bytes[0] != '\0' || static_cast<unsigned char>(bytes[255]) != 255 ||
-        bytes[256] != '\0' || percentile({1, 2, 3, 4}, 50) != 2 || percentile({1, 2, 3, 4}, 99) != 4)
-    {
+        bytes[256] != '\0' || percentile({1, 2, 3, 4}, 50) != 2 || percentile({1, 2, 3, 4}, 99) != 4) {
         throw std::runtime_error("Binary payload or nearest-rank percentile self-test failed");
     }
     const std::vector<double> hundred = [] {
         std::vector<double> result;
-        for (unsigned value = 1; value <= 100; ++value)
-        {
+        for (unsigned value = 1; value <= 100; ++value) {
             result.push_back(value);
         }
         return result;
     }();
-    if (percentile(hundred, 50) != 50 || percentile(hundred, 99) != 99 || !peak_rss_bytes() || cpu_seconds() < 0)
-    {
+    if (percentile(hundred, 50) != 50 || percentile(hundred, 99) != 99 || !peak_rss_bytes() || cpu_seconds() < 0) {
         throw std::runtime_error("Resource/percentile self-test failed");
     }
     std::cout << "Database benchmark local self-tests passed\n";
@@ -664,15 +570,12 @@ void self_test() {
 } // namespace
 
 int main(int argc, char** argv) {
-    try
-    {
-        if (argc == 2 && std::string_view(argv[1]) == "--self-test")
-        {
+    try {
+        if (argc == 2 && std::string_view(argv[1]) == "--self-test") {
             self_test();
             return 0;
         }
-        if (argc == 2 && std::string_view(argv[1]) == "--help")
-        {
+        if (argc == 2 && std::string_view(argv[1]) == "--help") {
             std::cout << "ark_database_benchmark --protocol redis|mysql --mode callback|coroutine\n"
                          "  --concurrency 1..64 --window 1..256 --payload 1..65536\n"
                          "  --operations 1..1000000 --warmup-operations 1..100000\n"
@@ -684,8 +587,7 @@ int main(int argc, char** argv) {
             return 0;
         }
         const auto config = parse(argc, argv);
-        if (config.protocol == "redis")
-        {
+        if (config.protocol == "redis") {
             return benchmark<redis_workload>(config).run();
         }
 #if defined(ARKNET_ENABLE_SSL)
@@ -693,9 +595,7 @@ int main(int argc, char** argv) {
 #else
         throw std::invalid_argument("MySQL benchmark requires ARKNET_ENABLE_SSL=ON");
 #endif
-    }
-    catch (const std::exception& error)
-    {
+    } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;
     }

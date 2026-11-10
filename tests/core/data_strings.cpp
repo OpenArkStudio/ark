@@ -16,8 +16,7 @@ const std::array<std::string, 5> string_values{"", "a", "1234567", "12345678", s
 } // namespace
 
 DOCTEST_TEST_CASE("Kernel string data compare content in independent inline and allocated storage") {
-    for (const auto& value : string_values)
-    {
+    for (const auto& value : string_values) {
         DOCTEST_CAPTURE(value);
         string_data left(ark::data_type::dt_string, value.c_str());
         string_data right(ark::data_type::dt_string, value.c_str());
@@ -70,10 +69,8 @@ DOCTEST_TEST_CASE("Kernel string comparisons preserve null pointer distinctions 
 }
 
 DOCTEST_TEST_CASE("Kernel string swap preserves both values across inline boundaries and repeated swaps") {
-    for (const auto& first : string_values)
-    {
-        for (const auto& second : string_values)
-        {
+    for (const auto& first : string_values) {
+        for (const auto& second : string_values) {
             DOCTEST_CAPTURE(first);
             DOCTEST_CAPTURE(second);
             string_data left(ark::data_type::dt_string, first.c_str());
@@ -100,8 +97,7 @@ DOCTEST_TEST_CASE("Kernel string swap preserves both values across inline bounda
 }
 
 DOCTEST_TEST_CASE("Kernel string self swaps and copy assignment retain independent owning values") {
-    for (const auto& value : string_values)
-    {
+    for (const auto& value : string_values) {
         DOCTEST_CAPTURE(value);
         string_data original(ark::data_type::dt_string, value.c_str());
         original.swap(original);
@@ -112,8 +108,7 @@ DOCTEST_TEST_CASE("Kernel string self swaps and copy assignment retain independe
         const auto& self = copy;
         copy = self;
         DOCTEST_CHECK(std::string(copy.get_string()) == value);
-        for (const auto& before : string_values)
-        {
+        for (const auto& before : string_values) {
             DOCTEST_CAPTURE(before);
             string_data assigned(ark::data_type::dt_string, before.c_str());
             assigned = copy;

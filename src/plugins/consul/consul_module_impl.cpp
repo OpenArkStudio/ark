@@ -46,8 +46,7 @@ bool consul_module_impl::load_config() {
 
 std::future<std::pair<bool, std::string>> consul_module_impl::register_service(const consul::service_data& service) {
     std::string body;
-    if (!google::protobuf::util::MessageToJsonString(service, &body).ok())
-    {
+    if (!google::protobuf::util::MessageToJsonString(service, &body).ok()) {
         return failed_request();
     }
     const std::string content_type = "application/json";
@@ -56,8 +55,7 @@ std::future<std::pair<bool, std::string>> consul_module_impl::register_service(c
 }
 
 std::future<std::pair<bool, std::string>> consul_module_impl::deregister_service(const std::string& service_id) {
-    if (service_id.empty())
-    {
+    if (service_id.empty()) {
         return failed_request();
     }
 
@@ -66,8 +64,7 @@ std::future<std::pair<bool, std::string>> consul_module_impl::deregister_service
 }
 
 std::future<std::pair<bool, std::string>> consul_module_impl::get_key_value(const std::string& key) {
-    if (key.empty())
-    {
+    if (key.empty()) {
         return failed_request();
     }
 
@@ -77,8 +74,7 @@ std::future<std::pair<bool, std::string>> consul_module_impl::get_key_value(cons
 
 std::future<std::pair<bool, std::string>> consul_module_impl::set_key_value(
     const std::string& key, const std::string& value) {
-    if (key.empty())
-    {
+    if (key.empty()) {
         return failed_request();
     }
 
@@ -87,8 +83,7 @@ std::future<std::pair<bool, std::string>> consul_module_impl::set_key_value(
 }
 
 std::future<std::pair<bool, std::string>> consul_module_impl::del_key_value(const std::string& key) {
-    if (key.empty())
-    {
+    if (key.empty()) {
         return failed_request();
     }
 
@@ -98,8 +93,7 @@ std::future<std::pair<bool, std::string>> consul_module_impl::del_key_value(cons
 
 std::future<std::pair<bool, std::string>> consul_module_impl::get_health_services(
     const std::string& service_name, const std::string& tag_filter) {
-    if (service_name.empty())
-    {
+    if (service_name.empty()) {
         return failed_request();
     }
 

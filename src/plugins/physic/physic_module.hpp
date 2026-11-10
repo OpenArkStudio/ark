@@ -25,8 +25,7 @@
 namespace ark {
 
 ///3d position
-class base_vec3_d
-{
+class base_vec3_d {
 public:
     float x{0.0f};
     float y{0.0f};
@@ -47,8 +46,7 @@ public:
     }
 
     const base_vec3_d& operator=(const base_vec3_d& rhs) {
-        if (this != &rhs)
-        {
+        if (this != &rhs) {
             x = rhs.x;
             y = rhs.y;
             z = rhs.z;
@@ -60,8 +58,7 @@ public:
 using physic3_d = base_vec3_d;
 
 ///physic ray hit
-struct physic_ray_hit
-{
+struct physic_ray_hit {
     bool is_hit{false};
     float hit_distance{0.0F};
     guid_t hit_obj_id{0U};
@@ -69,8 +66,7 @@ struct physic_ray_hit
 };
 
 ///physic trigger pair
-struct physic_trigger_pair
-{
+struct physic_trigger_pair {
     guid_t trigger_obj_id{0U};
     guid_t other_obj_id{0U};
 };
@@ -78,8 +74,7 @@ struct physic_trigger_pair
 ///call back function
 using trigger_call_back_function = std::function<void(const guid_t&, const physic_trigger_pair&)>;
 
-class physic_module : public module
-{
+class physic_module : public module {
 public:
     ///create a new scene
     virtual guid_t create_scene(const std::string& scene_id) = 0;

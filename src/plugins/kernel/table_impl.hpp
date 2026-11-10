@@ -32,8 +32,7 @@ namespace entity_sync {
 class snapshot_access;
 }
 
-class table_impl final : public table
-{
+class table_impl final : public table {
 public:
     using table_data = object_map<uint32_t, row>;
     using table_callback_functor =

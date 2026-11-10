@@ -25,16 +25,14 @@ namespace {
 using namespace std::chrono_literals;
 unsigned checks{};
 
-class acceptance_failure : public std::runtime_error
-{
+class acceptance_failure : public std::runtime_error {
 public:
     using std::runtime_error::runtime_error;
 };
 
 void require(bool condition, const std::string& message) {
     ++checks;
-    if (!condition)
-    {
+    if (!condition) {
         throw acceptance_failure(message);
     }
 }
@@ -54,20 +52,16 @@ std::uint16_t port(const char* name) {
     return static_cast<std::uint16_t>(number);
 }
 
-struct workflow_result
-{
+struct workflow_result {
     std::exception_ptr failure;
     unsigned completions{};
     bool completion_on_owner{};
 };
 
-struct unwind_workflow
-{
-};
+struct unwind_workflow {};
 
 void verify_workflow(const workflow_result& result) {
-    if (result.failure)
-    {
+    if (result.failure) {
         std::rethrow_exception(result.failure);
     }
     require(result.completions == 1 && result.completion_on_owner,
@@ -77,8 +71,7 @@ void verify_workflow(const workflow_result& result) {
 // Register the real implementation exactly as a plugin does, with a consumer's
 // manager-owned task group sharing the module's manual_runtime.
 template<class module_type>
-struct module_owner
-{
+struct module_owner {
     ark::plugin_manager manager;
     std::unique_ptr<module_type> database_owner;
     module_type& database;
@@ -104,14 +97,12 @@ struct module_owner
     }
 
     ~module_owner() {
-        if (!stopped)
-        {
+        if (!stopped) {
             // Never destroy business captures or a group with suspended tasks.
             // Failure paths keep pumping accepted work before unwinding.
-            try
-            { finish(); }
-            catch (...)
-            {
+            try {
+                finish();
+            } catch (...) {
                 std::cerr << "Public database cleanup could not drain\n" << std::flush;
                 std::_Exit(1);
             }
@@ -139,17 +130,14 @@ struct module_owner
     void finish() {
         const auto deadline = std::chrono::steady_clock::now() + 30s;
         // Explicit application completion precedes resource cleanup, including host unwinding.
-        while (tasks->pending())
-        {
+        while (tasks->pending()) {
             require(std::chrono::steady_clock::now() < deadline, "Public database workflow did not complete");
             require(manager.update(0), "Public database workflow owner update failed");
             std::this_thread::sleep_for(1ms);
         }
-        while (!(stopped = manager.stop(0)))
-        {
+        while (!(stopped = manager.stop(0))) {
             if (manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::failed ||
-                std::chrono::steady_clock::now() >= deadline)
-            {
+                std::chrono::steady_clock::now() >= deadline) {
                 throw acceptance_failure("Public database manager did not drain/stop successfully");
             }
             require(manager.update(0), "Public database manager update failed during drain");
@@ -185,12 +173,10 @@ void check_redis(bool unwind) {
     ark::redis_options options;
     options.pool.connection.host = environment("ARK_DATABASE_REDIS_HOST");
     options.pool.connection.port = std::to_string(port("ARK_DATABASE_REDIS_PORT"));
-    if (const auto* user = std::getenv("ARK_DATABASE_REDIS_USER"))
-    {
+    if (const auto* user = std::getenv("ARK_DATABASE_REDIS_USER")) {
         options.pool.connection.username = user;
     }
-    if (const auto* password = std::getenv("ARK_DATABASE_REDIS_PASSWORD"))
-    {
+    if (const auto* password = std::getenv("ARK_DATABASE_REDIS_PASSWORD")) {
         options.pool.connection.password = password;
     }
     options.pool.max_connections = 1;
@@ -199,8 +185,7 @@ void check_redis(bool unwind) {
     std::optional<arknet::redis::result> retained;
     workflow_result report;
     bool unwound{};
-    try
-    {
+    try {
         module_owner<ark::redis_module> owner(report, ark::detail::make_redis_module());
         ark::redis_module& database = owner.database;
         require(database.configure("primary", options), "Cannot configure public Redis module");
@@ -213,14 +198,13 @@ void check_redis(bool unwind) {
         commands[0][1] = "changed";
         commands.clear();
         owner.start(redis_workflow(owner, std::move(pending), binary, retained));
-        if (unwind)
-        {
+        if (unwind) {
             throw unwind_workflow{};
         }
         owner.verify();
+    } catch (const unwind_workflow&) {
+        unwound = true;
     }
-    catch (const unwind_workflow&)
-    { unwound = true; }
     require(unwound == unwind, "Redis host stack did not unwind as requested");
     verify_workflow(report);
     require(retained && retained->replies[0].text == binary,
@@ -268,8 +252,7 @@ ark::task<> mysql_checks(module_owner<ark::mysql_module>& owner, ark::task<ark::
         "Public MySQL prepared query lost owning inputs/binary results");
     require(retained_prepared->statement_close && bool(*retained_prepared->statement_close),
         "Public MySQL prepared statement close was not reported");
-    for (const bool commit : {true, false})
-    {
+    for (const bool commit : {true, false}) {
         auto begun = co_await database.begin("primary", {10s, 3s});
         owner.check_executor();
         success(begun);
@@ -315,15 +298,15 @@ ark::task<> mysql_workflow(module_owner<ark::mysql_module>& owner, ark::task<ark
     owner.check_executor();
     success(created);
     std::exception_ptr error;
-    try
-    { co_await mysql_checks(owner, std::move(prepared), table, std::move(binary), retained_text, retained_prepared); }
-    catch (...)
-    { error = std::current_exception(); }
+    try {
+        co_await mysql_checks(owner, std::move(prepared), table, std::move(binary), retained_text, retained_prepared);
+    } catch (...) {
+        error = std::current_exception();
+    }
     auto removed = co_await database.query("primary", "DROP TABLE " + table, 5s);
     owner.check_executor();
     success(removed);
-    if (error)
-    {
+    if (error) {
         std::rethrow_exception(error);
     }
 }
@@ -345,8 +328,7 @@ void check_mysql(bool unwind) {
     std::optional<ark::mysql_reply> retained_text, retained_prepared;
     workflow_result report;
     bool unwound{};
-    try
-    {
+    try {
         module_owner<ark::mysql_module> owner(report, ark::detail::make_mysql_module());
         ark::mysql_module& database = owner.database;
         require(database.configure("primary", options), "Cannot configure public MySQL module");
@@ -359,14 +341,13 @@ void check_mysql(bool unwind) {
         parameters[0] = std::int64_t{123};
         parameters[1] = std::string("changed");
         owner.start(mysql_workflow(owner, std::move(prepared), table, binary, retained_text, retained_prepared));
-        if (unwind)
-        {
+        if (unwind) {
             throw unwind_workflow{};
         }
         owner.verify();
+    } catch (const unwind_workflow&) {
+        unwound = true;
     }
-    catch (const unwind_workflow&)
-    { unwound = true; }
     require(unwound == unwind, "MySQL host stack did not unwind as requested");
     verify_workflow(report);
     require(retained_text && std::get<std::string>(retained_text->result.rows[0][1]) == "owned text" &&
@@ -378,33 +359,27 @@ void check_mysql(bool unwind) {
 } // namespace
 
 int main(int argc, char** argv) {
-    try
-    {
+    try {
         require(argc == 2, "Usage: ark_database_public_service_tests redis|mysql");
         const std::string_view protocol(argv[1]);
-        if (protocol == "redis")
-        {
+        if (protocol == "redis") {
             check_redis(false);
             check_redis(true);
         }
 #if defined(ARKNET_ENABLE_SSL)
-        else if (protocol == "mysql")
-        {
+        else if (protocol == "mysql") {
             check_mysql(false);
             check_mysql(true);
         }
 #endif
-        else
-        {
+        else {
             throw acceptance_failure("Requested public database protocol is not enabled");
         }
         std::cout << protocol << " public module real-service checks passed: " << checks << '\n';
         return 0;
-    }
-    catch (const acceptance_failure& error)
-    { std::cerr << error.what() << '\n'; }
-    catch (...)
-    {
+    } catch (const acceptance_failure& error) {
+        std::cerr << error.what() << '\n';
+    } catch (...) {
         // Native diagnostics can contain server-controlled text. Do not emit
         // endpoint/authentication configuration or arbitrary exception messages.
         std::cerr << "Public database service acceptance raised an unexpected exception\n";

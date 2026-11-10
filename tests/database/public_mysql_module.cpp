@@ -16,14 +16,12 @@ namespace {
 using namespace std::chrono_literals;
 using namespace mysql_test;
 
-struct observed_commands
-{
+struct observed_commands {
     std::atomic<unsigned> queries{}, prepares{}, executes{}, closes{}, commits{}, rollbacks{};
     std::atomic<bool> allow_rollback{true};
 };
 
-struct rollback_guard
-{
+struct rollback_guard {
     observed_commands& seen;
 
     ~rollback_guard() {
@@ -32,85 +30,61 @@ struct rollback_guard
 };
 
 asio::awaitable<void> serve(mysql_peer& server, observed_commands& seen, bool tls = false) {
-    if (tls)
-    {
+    if (tls) {
         co_await server.send(greeting("mysql_native_password", true));
         co_await server.receive();
         co_await server.upgrade();
         co_await server.receive();
         co_await server.send(ok_packet);
-    }
-    else
-    {
+    } else {
         co_await authenticate(server);
     }
     bool active{};
-    try
-    {
-        while (true)
-        {
+    try {
+        while (true) {
             const auto command = co_await receive_command(server);
             REQUIRE_FALSE(command.empty());
             const auto kind = static_cast<unsigned char>(command[0]);
-            if (kind == 0x1f)
-            {
+            if (kind == 0x1f) {
                 active = false;
                 co_await server.send(ok_packet);
-            }
-            else if (kind == 0x03)
-            {
+            } else if (kind == 0x03) {
                 const auto sql = command.substr(1);
-                if (sql.starts_with("USE "))
-                {
+                if (sql.starts_with("USE ")) {
                     co_await server.send(ok_packet);
-                }
-                else if (sql == "START TRANSACTION")
-                {
+                } else if (sql == "START TRANSACTION") {
                     active = true;
                     auto ok = ok_packet;
                     ok[3] = 3;
                     co_await server.send(std::move(ok));
-                }
-                else if (sql.starts_with("COMMIT"))
-                {
+                } else if (sql.starts_with("COMMIT")) {
                     ++seen.commits;
                     active = false;
                     co_await server.send(ok_packet);
-                }
-                else if (sql.starts_with("ROLLBACK"))
-                {
+                } else if (sql.starts_with("ROLLBACK")) {
                     ++seen.rollbacks;
                     asio::steady_timer pause(co_await asio::this_coro::executor);
-                    while (!seen.allow_rollback)
-                    {
+                    while (!seen.allow_rollback) {
                         pause.expires_after(1ms);
                         co_await pause.async_wait(asio::use_awaitable);
                     }
                     active = false;
                     co_await server.send(ok_packet);
-                }
-                else
-                {
+                } else {
                     ++seen.queries;
-                    if (sql == "slow")
-                    {
+                    if (sql == "slow") {
                         co_await server.wait_for_eof();
                         co_return;
                     }
-                    if (active)
-                    {
+                    if (active) {
                         auto ok = ok_packet;
                         ok[3] = 3;
                         co_await server.send(std::move(ok));
-                    }
-                    else
-                    {
+                    } else {
                         co_await one_integer(server, "42", true);
                     }
                 }
-            }
-            else if (kind == 0x16)
-            {
+            } else if (kind == 0x16) {
                 ++seen.prepares;
                 std::string response(12, '\0');
                 response[1] = 7;
@@ -118,39 +92,29 @@ asio::awaitable<void> serve(mysql_peer& server, observed_commands& seen, bool tl
                 co_await server.send(std::move(response));
                 co_await server.send(column_packet("parameter"));
                 co_await server.send(eof_packet);
-            }
-            else if (kind == 0x17)
-            {
+            } else if (kind == 0x17) {
                 ++seen.executes;
                 REQUIRE(command.size() >= 22);
                 CHECK(static_cast<unsigned char>(command[1]) == 7);
                 auto ok = ok_packet;
-                if (active)
-                {
+                if (active) {
                     ok[3] = 3;
                 }
                 co_await server.send(std::move(ok));
-            }
-            else if (kind == 0x19)
-            {
+            } else if (kind == 0x19) {
                 ++seen.closes;
-            }
-            else
-            {
+            } else {
                 FAIL("Unexpected public MySQL command");
                 co_return;
             }
         }
-    }
-    catch (const arknet::system_error& error)
-    {
+    } catch (const arknet::system_error& error) {
         CHECK((error.code() == asio::error::eof || error.code() == asio::error::connection_reset ||
                error.code() == asio::ssl::error::stream_truncated));
     }
 }
 
-struct module_owner
-{
+struct module_owner {
     ark::plugin_manager manager;
     std::unique_ptr<ark::mysql_module> database_owner{ark::detail::make_mysql_module()};
     ark::mysql_module& database{*database_owner};
@@ -174,8 +138,7 @@ struct module_owner
 
     void drain() {
         const auto deadline = std::chrono::steady_clock::now() + 5s;
-        while (manager.pending_tasks() && std::chrono::steady_clock::now() < deadline)
-        {
+        while (manager.pending_tasks() && std::chrono::steady_clock::now() < deadline) {
             REQUIRE(manager.update(0));
             std::this_thread::sleep_for(1ms);
         }
@@ -184,8 +147,7 @@ struct module_owner
 
     void stop() {
         const auto deadline = std::chrono::steady_clock::now() + 5s;
-        while (!manager.stop(0) && std::chrono::steady_clock::now() < deadline)
-        {
+        while (!manager.stop(0) && std::chrono::steady_clock::now() < deadline) {
             REQUIRE(manager.get_shutdown_state() != ark::plugin_manager::shutdown_state::failed);
             REQUIRE(manager.update(0));
             std::this_thread::sleep_for(1ms);
@@ -218,8 +180,7 @@ ark::task<> abandon_transaction(ark::mysql_module& database, std::optional<ark::
     reply.emplace(co_await database.begin("primary", {40ms, 1s}));
 }
 
-struct queued_query_report
-{
+struct queued_query_report {
     std::optional<ark::mysql_reply> reply;
     std::exception_ptr failure;
     unsigned completions{};
@@ -254,8 +215,7 @@ ark::task<> reuse_after_queued_cancellation(
 } // namespace
 
 TEST_CASE("Public MySQL coroutines own native query results and prepared cleanup diagnostics") {
-    for (const bool tls : {false, true})
-    {
+    for (const bool tls : {false, true}) {
         observed_commands seen;
         mysql_peer peer([&seen, tls](mysql_peer& server) { return serve(server, seen, tls); });
         module_owner owner;
@@ -285,8 +245,7 @@ TEST_CASE("Public MySQL coroutines own native query results and prepared cleanup
 }
 
 TEST_CASE("Public MySQL transactions retain a lease across query and terminal steps") {
-    for (const bool commit : {false, true})
-    {
+    for (const bool commit : {false, true}) {
         observed_commands seen;
         mysql_peer peer([&seen](mysql_peer& server) { return serve(server, seen); });
         module_owner owner;
@@ -305,8 +264,7 @@ TEST_CASE("Public MySQL transactions retain a lease across query and terminal st
 }
 
 TEST_CASE("Public MySQL abandoned transactions drain deadline rollback before shutdown") {
-    for (const bool hold_rollback : {false, true})
-    {
+    for (const bool hold_rollback : {false, true}) {
         CAPTURE(hold_rollback);
         observed_commands seen;
         seen.allow_rollback = !hold_rollback;
@@ -316,8 +274,7 @@ TEST_CASE("Public MySQL abandoned transactions drain deadline rollback before sh
         std::optional<ark::mysql_transaction_reply> begun;
         std::exception_ptr failure;
 
-        struct drain_guard
-        {
+        struct drain_guard {
             observed_commands& seen;
             module_owner& owner;
 
@@ -330,14 +287,12 @@ TEST_CASE("Public MySQL abandoned transactions drain deadline rollback before sh
         auto& tasks = owner.manager.create_task_group(owner.database);
         REQUIRE(tasks.start(abandon_transaction(owner.database, begun), [&](auto error) { failure = error; }));
         const auto deadline = std::chrono::steady_clock::now() + 5s;
-        while (!seen.rollbacks && std::chrono::steady_clock::now() < deadline)
-        {
+        while (!seen.rollbacks && std::chrono::steady_clock::now() < deadline) {
             REQUIRE(owner.manager.update(0));
             std::this_thread::sleep_for(1ms);
         }
         REQUIRE(seen.rollbacks == 1);
-        if (hold_rollback)
-        {
+        if (hold_rollback) {
             // The peer has received ROLLBACK but cannot complete it yet.
             CHECK_FALSE(owner.manager.stop(0));
             CHECK(owner.manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopping);
@@ -347,12 +302,9 @@ TEST_CASE("Public MySQL abandoned transactions drain deadline rollback before sh
         REQUIRE_FALSE(failure);
         REQUIRE(begun);
         REQUIRE(*begun);
-        if (begun->transaction)
-        {
+        if (begun->transaction) {
             CHECK(begun->transaction_status.outcome == ark::mysql_transaction_outcome::active);
-        }
-        else
-        {
+        } else {
             CHECK(begun->transaction_status.outcome == ark::mysql_transaction_outcome::rolled_back);
             REQUIRE(begun->rollback);
             CHECK(*begun->rollback);
@@ -367,8 +319,7 @@ TEST_CASE("Public MySQL abandoned transactions drain deadline rollback before sh
 
 TEST_CASE("MySQL owner delivery preserves successful BEGIN results across transaction expiry") {
     using namespace ark::detail;
-    for (const bool expire_before_delivery : {false, true})
-    {
+    for (const bool expire_before_delivery : {false, true}) {
         CAPTURE(expire_before_delivery);
         observed_commands seen;
         seen.allow_rollback = false;
@@ -390,8 +341,7 @@ TEST_CASE("MySQL owner delivery preserves successful BEGIN results across transa
         REQUIRE(state);
         const auto wait_until = [](auto ready) {
             const auto deadline = std::chrono::steady_clock::now() + 5s;
-            while (!ready())
-            {
+            while (!ready()) {
                 REQUIRE(std::chrono::steady_clock::now() < deadline);
                 std::this_thread::sleep_for(1ms);
             }
@@ -413,8 +363,7 @@ TEST_CASE("MySQL owner delivery preserves successful BEGIN results across transa
             REQUIRE(*begun);
             REQUIRE((begun->status_flags & 1u) != 0);
         }
-        if (!expire_before_delivery)
-        {
+        if (!expire_before_delivery) {
             state->deadline = std::chrono::steady_clock::time_point::max();
             REQUIRE(owner->update(1) == 1);
             REQUIRE(reply);
@@ -438,16 +387,13 @@ TEST_CASE("MySQL owner delivery preserves successful BEGIN results across transa
         REQUIRE(reply);
         REQUIRE(*reply);
         CHECK(calls == 1);
-        if (expire_before_delivery)
-        {
+        if (expire_before_delivery) {
             // bool reports the business result, not a live transaction token.
             CHECK_FALSE(reply->transaction);
             CHECK(reply->transaction_status.outcome == mysql_transaction_outcome::rolled_back);
             REQUIRE(reply->rollback);
             CHECK(*reply->rollback);
-        }
-        else
-        {
+        } else {
             CHECK(reply->transaction->snapshot().outcome == mysql_transaction_outcome::rolled_back);
         }
         CHECK_FALSE(state->status.discard_requested);
@@ -495,8 +441,7 @@ TEST_CASE("Manager stop cancels sent MySQL work and retires unknown outcomes wit
     const auto id = tasks.start(slow(owner.database, replies), [&](auto error) { failure = error; });
     REQUIRE(id);
     const auto deadline = std::chrono::steady_clock::now() + 3s;
-    while (!seen.queries && std::chrono::steady_clock::now() < deadline)
-    {
+    while (!seen.queries && std::chrono::steady_clock::now() < deadline) {
         REQUIRE(owner.manager.update(0));
         std::this_thread::sleep_for(1ms);
     }
@@ -527,8 +472,7 @@ TEST_CASE("Public MySQL cancels a queued acquire without losing its transaction 
 
     // Drain before destroying reports captured by pending completions, including
     // when an assertion below unwinds the host stack.
-    struct drain_guard
-    {
+    struct drain_guard {
         module_owner& owner;
         ark::task_group& tasks;
 
@@ -557,8 +501,7 @@ TEST_CASE("Public MySQL cancels a queued acquire without losing its transaction 
         CHECK(std::this_thread::get_id() == thread);
     }));
     const auto deadline = std::chrono::steady_clock::now() + 3s;
-    while (!overflow.completions && std::chrono::steady_clock::now() < deadline)
-    {
+    while (!overflow.completions && std::chrono::steady_clock::now() < deadline) {
         REQUIRE(owner.manager.update(0));
         std::this_thread::sleep_for(1ms);
     }

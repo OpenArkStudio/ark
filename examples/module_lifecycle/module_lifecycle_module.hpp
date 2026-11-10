@@ -25,8 +25,7 @@
 
 namespace ark {
 
-class module_lifecycle_module final : public module_base<module>
-{
+class module_lifecycle_module final : public module_base<module> {
 public:
     explicit module_lifecycle_module() = default;
 

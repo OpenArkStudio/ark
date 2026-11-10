@@ -12,15 +12,13 @@
 
 namespace {
 
-enum class failure_mode
-{
+enum class failure_mode {
     none,
     null_result,
     exception
 };
 
-struct controlled_allocator
-{
+struct controlled_allocator {
     static inline failure_mode failure{};
     static inline size_t allocations{};
     static inline size_t releases{};
@@ -31,17 +29,14 @@ struct controlled_allocator
         last_bytes = bytes;
         const auto mode = failure;
         failure = failure_mode::none;
-        if (mode == failure_mode::null_result)
-        {
+        if (mode == failure_mode::null_result) {
             return nullptr;
         }
-        if (mode == failure_mode::exception)
-        {
+        if (mode == failure_mode::exception) {
             throw std::bad_alloc{};
         }
         auto* result = std::malloc(bytes);
-        if (!result)
-        {
+        if (!result) {
             throw std::bad_alloc{};
         }
         ++allocations;
@@ -146,10 +141,8 @@ TEST_CASE("POD array null and throwing allocations retain storage size and value
     REQUIRE(controlled_allocator::live == 0);
     const auto initial_allocations = controlled_allocator::allocations;
     const auto initial_releases = controlled_allocator::releases;
-    for (const auto failure : {failure_mode::null_result, failure_mode::exception})
-    {
-        for (int operation = 0; operation != 7; ++operation)
-        {
+    for (const auto failure : {failure_mode::null_result, failure_mode::exception}) {
+        for (int operation = 0; operation != 7; ++operation) {
             INFO("failure=", static_cast<int>(failure), " operation=", operation);
             controlled_array values;
             values.push_back(11);
@@ -162,8 +155,7 @@ TEST_CASE("POD array null and throwing allocations retain storage size and value
             const auto releases = controlled_allocator::releases;
             controlled_allocator::failure = failure;
             const auto fail_operation = [&] {
-                switch (operation)
-                {
+                switch (operation) {
                 case 0:
                     values.push_back(values[0]);
                     break;
@@ -179,8 +171,7 @@ TEST_CASE("POD array null and throwing allocations retain storage size and value
                 case 4:
                     values.insert(0, values[1]);
                     break;
-                case 5:
-                {
+                case 5: {
                     controlled_array copy(values);
                     break;
                 }

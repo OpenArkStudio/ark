@@ -18,8 +18,7 @@ static_assert(std::same_as<decltype(&server_implementation::update), decltype(&a
 namespace {
 
 void require(bool condition, const std::string& message) {
-    if (!condition)
-    {
+    if (!condition) {
         std::cerr << message << std::endl;
         std::_Exit(1);
     }
@@ -57,10 +56,11 @@ int main(int argc, char* argv[]) {
     require(manager.add_update_module(instance), "Server module was unexpectedly admitted to updates");
     manager.remove_update_module(instance->get_name());
     bool rejected = false;
-    try
-    { owner.install(); }
-    catch (const std::runtime_error&)
-    { rejected = true; }
+    try {
+        owner.install();
+    } catch (const std::runtime_error&) {
+        rejected = true;
+    }
     require(
         rejected && manager.find_module<server_module>() == instance, "Duplicate install replaced the owned module");
     owner.uninstall();

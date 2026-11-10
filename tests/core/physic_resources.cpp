@@ -12,18 +12,15 @@
 
 namespace {
 
-struct resource_directory
-{
+struct resource_directory {
     std::filesystem::path path;
 
     resource_directory() {
         const auto prefix =
             "ark-physic-resources-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
-        for (unsigned i = 0;; ++i)
-        {
+        for (unsigned i = 0;; ++i) {
             path = std::filesystem::temp_directory_path() / (prefix + "-" + std::to_string(i));
-            if (std::filesystem::create_directory(path))
-            {
+            if (std::filesystem::create_directory(path)) {
                 break;
             }
         }
@@ -78,13 +75,12 @@ TEST_CASE("Physic resources reject invalid TOML values and XML contents") {
         document = "<root><node SimulateOn='1'/></root>";
     }
     const auto path = files.write("physic.toml", document);
-    try
-    {
+    try {
         (void)ark::physic_resources::read_settings(path);
         FAIL("Invalid physics settings must not load");
+    } catch (const std::runtime_error& error) {
+        CHECK(std::string(error.what()).find("physic.toml") != std::string::npos);
     }
-    catch (const std::runtime_error& error)
-    { CHECK(std::string(error.what()).find("physic.toml") != std::string::npos); }
 }
 
 TEST_CASE("Physic resources load all shipped collider types with zero-based mesh indices") {
@@ -109,8 +105,7 @@ TEST_CASE("Physic resources load all shipped collider types with zero-based mesh
     CHECK(colliders[2].convex);
     CHECK_FALSE(colliders[4].convex);
     CHECK(colliders[5].radius == 2);
-    for (const auto index : {2U, 4U})
-    {
+    for (const auto index : {2U, 4U}) {
         const auto& mesh = colliders[index];
         REQUIRE(mesh.vertices.size() == 88);
         REQUIRE(mesh.triangles.size() == 240);
@@ -149,11 +144,10 @@ TEST_CASE("Physic resources reject malformed collider geometry before creating S
         document["version"] = 2;
     }
     const auto path = files.write("colliders.json", document.dump());
-    try
-    {
+    try {
         (void)ark::physic_resources::read_colliders(path);
         FAIL("Invalid collider data must not load");
+    } catch (const std::runtime_error& error) {
+        CHECK(std::string(error.what()).find("colliders.json") != std::string::npos);
     }
-    catch (const std::runtime_error& error)
-    { CHECK(std::string(error.what()).find("colliders.json") != std::string::npos); }
 }

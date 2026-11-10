@@ -24,8 +24,7 @@
 
 namespace ark {
 
-class world_plugin final : public plugin_base<world_plugin>
-{
+class world_plugin final : public plugin_base<world_plugin> {
 public:
     void install() override;
     void uninstall() override;

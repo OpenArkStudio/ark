@@ -29,8 +29,7 @@ namespace ark {
 
 std::unique_ptr<module_lifecycle_module> make_module_lifecycle_module();
 
-class module_lifecycle_plugin final : public plugin_base<module_lifecycle_plugin>
-{
+class module_lifecycle_plugin final : public plugin_base<module_lifecycle_plugin> {
 public:
     void install() override;
     void uninstall() override;

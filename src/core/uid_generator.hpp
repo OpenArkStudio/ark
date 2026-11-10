@@ -31,8 +31,7 @@ namespace ark {
 
 #if defined(ARK_USE_GUID_32)
 
-class uid_generator
-{
+class uid_generator {
     guid_t last_sequence_{1000};
 
 public:
@@ -48,8 +47,7 @@ public:
 
 protected:
     guid_t next_id() {
-        if (last_sequence_ >= pow(2, 22))
-        {
+        if (last_sequence_ >= pow(2, 22)) {
             last_sequence_ = 1000;
         }
 
@@ -57,8 +55,7 @@ protected:
     }
 };
 
-class uid_generator_thread_safe : public uid_generator
-{
+class uid_generator_thread_safe : public uid_generator {
 public:
     guid_t get_uid() override {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -75,8 +72,7 @@ private:
 
 #else
 
-class bits_allocator
-{
+class bits_allocator {
 public:
     static const int total_bits = 1 << 6;
 
@@ -87,8 +83,7 @@ public:
         , sequence_bits_{seq_bits} {
         constexpr int payload_bits = total_bits - 1;
         if (ts_bits < 0 || ts_bits > payload_bits || worker_bits < 0 || worker_bits > payload_bits - ts_bits ||
-            seq_bits < 0 || seq_bits != payload_bits - ts_bits - worker_bits)
-        {
+            seq_bits < 0 || seq_bits != payload_bits - ts_bits - worker_bits) {
             throw std::invalid_argument("UID field widths must be nonnegative and total 63 bits");
         }
 
@@ -102,8 +97,7 @@ public:
 
     constexpr int64_t alloc(int64_t delta_seconds, int64_t worker_id, int64_t seq) {
         if (delta_seconds < 0 || delta_seconds > max_delta_seconds_ || worker_id < 0 || worker_id > max_worker_id_ ||
-            seq < 0 || seq > max_sequence_)
-        {
+            seq < 0 || seq > max_sequence_) {
             throw std::out_of_range("UID field value exceeds its allocated width");
         }
         return static_cast<int64_t>((static_cast<uint64_t>(delta_seconds) << timestamp_shift_) |
@@ -167,8 +161,7 @@ static constexpr int64_t uid_epoch = 1542643200L; // 2018/11/20 00:00:00
 
 // TODO:remove sign and use uint64_t
 // then seq_bits is 12 bits, mean 2048/s
-class uid_generator
-{
+class uid_generator {
 public:
     uid_generator() {
 
@@ -203,16 +196,12 @@ protected:
         int64_t cur_second = get_current_second();
         ARK_ASSERT_RET_VAL(cur_second >= last_second_, 0);
 
-        if (cur_second == last_second_)
-        {
+        if (cur_second == last_second_) {
             sequence_ = (sequence_ + 1) & bits_alloc_->get_max_sequence();
-            if (sequence_ == 0)
-            {
+            if (sequence_ == 0) {
                 cur_second = get_next_second(last_second_);
             }
-        }
-        else
-        {
+        } else {
             sequence_ = 0;
         }
 
@@ -229,8 +218,7 @@ protected:
 
     int64_t get_next_second(int64_t last_ts) {
         int64_t ts = get_current_second();
-        while (ts <= last_ts)
-        {
+        while (ts <= last_ts) {
             ts = get_current_second();
         }
 
@@ -244,8 +232,7 @@ private:
     std::unique_ptr<bits_allocator> bits_alloc_{nullptr};
 };
 
-class uid_generator_thread_safe : public uid_generator
-{
+class uid_generator_thread_safe : public uid_generator {
 public:
     int64_t get_uid(const int64_t worker_id) override {
         std::lock_guard<std::mutex> lock(mutex_);

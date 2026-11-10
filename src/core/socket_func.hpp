@@ -47,8 +47,7 @@ namespace ark {
 static std::atomic_bool winsock_initialized = false;
 #endif
 
-enum class proto_type
-{
+enum class proto_type {
     unknown,
     tcp,
     udp,
@@ -59,11 +58,9 @@ enum class proto_type
     zk,
 };
 
-class endpoint final
-{
+class endpoint final {
 public:
-    class socket final
-    {
+    class socket final {
     public:
         static std::string make_url(const std::string& protocol, const std::string& hostname, const uint16_t& port) {
             std::string domain = protocol + "://" + hostname + ":" + std::to_string(port);
@@ -83,10 +80,8 @@ public:
             };
 
             static int n = std::size(proto_type_s);
-            for (int i = 0; i < n; ++i)
-            {
-                if (ARK_STRICMP(s.c_str(), proto_type_s[i]) == 0)
-                {
+            for (int i = 0; i < n; ++i) {
+                if (ARK_STRICMP(s.c_str(), proto_type_s[i]) == 0) {
                     return proto_type(i);
                 }
             }
@@ -107,8 +102,7 @@ public:
             };
 
             static int n = std::size(proto_type_s);
-            if ((int)proto >= n)
-            {
+            if ((int)proto >= n) {
                 return proto_type_s[0];
             }
 
@@ -116,8 +110,7 @@ public:
         }
     };
 
-    struct ext_t
-    {
+    struct ext_t {
         proto_type proto;
         std::string ip;
         uint16_t port;
@@ -157,8 +150,7 @@ public:
     }
 
     static endpoint from_string(std::string const& url, std::error_code& ec) {
-        if (url.empty())
-        {
+        if (url.empty()) {
             ec = error_category::make_error_code(-1);
             return endpoint();
         }
@@ -166,8 +158,7 @@ public:
         static std::regex re("((.*)://)?([^:/]+)(:(\\d+))?(/.*)?");
         std::smatch result;
         bool ok = std::regex_match(url, result, re);
-        if (!ok)
-        {
+        if (!ok) {
             ec = error_category::make_error_code(-2);
             return endpoint();
         }
@@ -183,8 +174,7 @@ public:
 
     std::string to_string() const {
         std::string url;
-        if (proto() != proto_type::unknown)
-        {
+        if (proto() != proto_type::unknown) {
             url += socket::proto2str(proto()) + "://";
         }
 

@@ -202,8 +202,7 @@ TEST_CASE("Nested wire retains unknown-field compatibility within byte and recur
     message.GetReflection()->MutableUnknownFields(&message)->AddVarint(999, 1);
     CHECK(wire::decode(message, nested_test::binding()).snapshot == nested_test::initial().snapshot);
     auto* group = message.GetReflection()->MutableUnknownFields(&message)->AddGroup(998);
-    for (int depth = 0; depth < 10; ++depth)
-    {
+    for (int depth = 0; depth < 10; ++depth) {
         group = group->AddGroup(998);
     }
     wire::limits budget;

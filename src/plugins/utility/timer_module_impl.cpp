@@ -27,19 +27,16 @@ namespace ark {
 
 namespace {
 
-struct startup_timer_capsule
-{
+struct startup_timer_capsule {
     std::unique_ptr<time_wheel_manager> wheel;
 };
 
 startup_cleanup_result release_startup_timer(void* context) {
     auto& capsule = *static_cast<startup_timer_capsule*>(context);
-    if (capsule.wheel && capsule.wheel->has_retained_callbacks())
-    {
+    if (capsule.wheel && capsule.wheel->has_retained_callbacks()) {
         return startup_cleanup_result::unsafe;
     }
-    if (capsule.wheel)
-    {
+    if (capsule.wheel) {
         capsule.wheel->shut();
         capsule.wheel.reset();
     }
@@ -48,8 +45,7 @@ startup_cleanup_result release_startup_timer(void* context) {
 
 } // namespace
 
-class timer_module_impl final : public module_base<timer_module>
-{
+class timer_module_impl final : public module_base<timer_module> {
 public:
     bool init() override;
     bool update() override;
@@ -71,8 +67,7 @@ bool timer_module_impl::init() {
     // The manager owns this capsule independently of the module. Enroll before
     // acquiring wheel storage; cleanup never captures an incomplete module.
     auto capsule = std::make_shared<startup_timer_capsule>();
-    if (!get_plugin_manager()->prepare_startup_cleanup("Timer", "ark_utility_plugin", capsule, release_startup_timer))
-    {
+    if (!get_plugin_manager()->prepare_startup_cleanup("Timer", "ark_utility_plugin", capsule, release_startup_timer)) {
         return false;
     }
     timer_capsule_ = std::move(capsule);
@@ -83,8 +78,7 @@ bool timer_module_impl::init() {
 }
 
 bool timer_module_impl::pre_shut() {
-    if (timer_capsule_ && timer_capsule_->wheel)
-    {
+    if (timer_capsule_ && timer_capsule_->wheel) {
         timer_capsule_->wheel->shut();
     }
     return true;

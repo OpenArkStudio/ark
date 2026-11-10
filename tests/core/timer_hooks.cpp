@@ -8,8 +8,7 @@
 
 namespace {
 
-struct allocation_tag
-{
+struct allocation_tag {
     ~allocation_tag();
     mutable bool allocated{};
 };
@@ -22,30 +21,24 @@ bool fail_standard_allocation{};
 std::size_t fail_container_after{std::numeric_limits<std::size_t>::max()};
 
 allocation_tag::~allocation_tag() {
-    if (!allocated)
-    {
+    if (!allocated) {
         return;
     }
     // A placement argument outlives construction through the full new-expression.
     // Arm after construction so MSVC's noexcept Debug iterator proxies cannot fail.
-    if (fail_container_after == 0)
-    {
+    if (fail_container_after == 0) {
         fail_container_after = std::numeric_limits<std::size_t>::max();
         fail_standard_allocation = true;
-    }
-    else if (fail_container_after != std::numeric_limits<std::size_t>::max())
-    {
+    } else if (fail_container_after != std::numeric_limits<std::size_t>::max()) {
         --fail_container_after;
     }
 }
 
 bool should_fail() {
-    if (fail_after == std::numeric_limits<std::size_t>::max())
-    {
+    if (fail_after == std::numeric_limits<std::size_t>::max()) {
         return false;
     }
-    if (fail_after > 0)
-    {
+    if (fail_after > 0) {
         --fail_after;
         return false;
     }
@@ -55,12 +48,10 @@ bool should_fail() {
 
 template<typename T>
 void release(T*& value) noexcept {
-    if (!value)
-    {
+    if (!value) {
         return;
     }
-    if (live.erase(value) != 1)
-    {
+    if (live.erase(value) != 1) {
         std::abort();
     }
     ++releases;
@@ -71,13 +62,11 @@ void release(T*& value) noexcept {
 } // namespace
 
 void* operator new(std::size_t size) {
-    if (fail_standard_allocation)
-    {
+    if (fail_standard_allocation) {
         fail_standard_allocation = false;
         throw std::bad_alloc{};
     }
-    if (auto* value = std::malloc(size ? size : 1))
-    {
+    if (auto* value = std::malloc(size ? size : 1)) {
         return value;
     }
     throw std::bad_alloc{};
@@ -92,8 +81,7 @@ void operator delete(void* value, std::size_t) noexcept {
 }
 
 void* operator new(std::size_t size, const allocation_tag& tag) noexcept {
-    if (should_fail())
-    {
+    if (should_fail()) {
         return nullptr;
     }
     auto* value = ::operator new(size);
@@ -129,8 +117,7 @@ TEST_CASE("Time wheel owns cancelled timers until shutdown") {
 }
 
 TEST_CASE("Time wheel partial initialization null failures release every allocation") {
-    for (const std::size_t position : {0u, 17u, ark::free_timer_size, ark::free_timer_size + ark::tv_num - 1})
-    {
+    for (const std::size_t position : {0u, 17u, ark::free_timer_size, ark::free_timer_size + ark::tv_num - 1}) {
         REQUIRE(live.empty());
         ark::time_wheel_manager manager;
         fail_after = position;
@@ -145,8 +132,7 @@ TEST_CASE("Time wheel partial initialization null failures release every allocat
 }
 
 TEST_CASE("Time wheel container allocation exceptions unwind initialization without leaking") {
-    for (const std::size_t position : {0u, 17u, ark::free_timer_size, ark::free_timer_size + ark::tv_num - 1})
-    {
+    for (const std::size_t position : {0u, 17u, ark::free_timer_size, ark::free_timer_size + ark::tv_num - 1}) {
         REQUIRE(live.empty());
         ark::time_wheel_manager manager;
         fail_container_after = position;
@@ -160,8 +146,7 @@ TEST_CASE("Time wheel pool exhaustion returns zero for a null allocation and rec
     REQUIRE(live.empty());
     ark::time_wheel_manager manager;
     manager.init(0);
-    for (std::size_t i = 0; i < ark::free_timer_size; ++i)
-    {
+    for (std::size_t i = 0; i < ark::free_timer_size; ++i) {
         CHECK(manager.add_timer(ark::null_guid, 1, 1h, [](auto, const auto&) {}) != 0);
     }
     fail_after = 0;
@@ -195,8 +180,7 @@ TEST_CASE("Time wheel growth container exception releases the uncommitted timer"
     REQUIRE(live.empty());
     ark::time_wheel_manager manager;
     manager.init(0);
-    for (std::size_t i = 0; i < ark::free_timer_size; ++i)
-    {
+    for (std::size_t i = 0; i < ark::free_timer_size; ++i) {
         manager.add_timer(ark::null_guid, 1, 1h, [](auto, const auto&) {});
     }
     const auto initial_live = live.size();
@@ -226,8 +210,7 @@ TEST_CASE("Time wheel destructor releases active completed and cancelled entries
 }
 
 TEST_CASE("Timer container failure injection starts after noexcept object construction") {
-    class proxy_probe
-    {
+    class proxy_probe {
     public:
         proxy_probe() noexcept
             : proxy_(::operator new(1)) {
@@ -247,13 +230,12 @@ TEST_CASE("Timer container failure injection starts after noexcept object constr
     fail_container_after = 0;
     auto* value = ARK_NEW proxy_probe;
     bool threw{};
-    try
-    {
+    try {
         auto* storage = ::operator new(1);
         ::operator delete(storage);
+    } catch (const std::bad_alloc&) {
+        threw = true;
     }
-    catch (const std::bad_alloc&)
-    { threw = true; }
     CHECK(threw);
     CHECK_FALSE(fail_standard_allocation);
     release(value);
@@ -262,8 +244,7 @@ TEST_CASE("Timer container failure injection starts after noexcept object constr
 }
 
 TEST_CASE("Timer hook constructor failure releases storage without arming a later allocation") {
-    class throwing_probe
-    {
+    class throwing_probe {
     public:
         throwing_probe() {
             throw std::bad_alloc{};

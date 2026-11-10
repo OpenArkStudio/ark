@@ -36,10 +36,8 @@ thread_local bool reject_allocations{};
 } // namespace
 
 void* operator new(std::size_t size) {
-    if (!reject_allocations)
-    {
-        if (auto* pointer = std::malloc(size ? size : 1))
-        {
+    if (!reject_allocations) {
+        if (auto* pointer = std::malloc(size ? size : 1)) {
             return pointer;
         }
     }
@@ -67,17 +65,19 @@ void operator delete[](void* pointer, std::size_t) noexcept {
 }
 
 void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
-    try
-    { return ::operator new(size); }
-    catch (...)
-    { return nullptr; }
+    try {
+        return ::operator new(size);
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
-    try
-    { return ::operator new[](size); }
-    catch (...)
-    { return nullptr; }
+    try {
+        return ::operator new[](size);
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void operator delete(void* pointer, const std::nothrow_t&) noexcept {
@@ -90,8 +90,7 @@ void operator delete[](void* pointer, const std::nothrow_t&) noexcept {
 
 namespace ark {
 
-struct schedule_startup_test_access
-{
+struct schedule_startup_test_access {
     static auto state(schedule_module& module) {
         return static_cast<schedule_module_impl&>(module).startup_;
     }
@@ -118,19 +117,16 @@ using access = ark::schedule_startup_test_access;
 #endif
 }
 
-struct failing_module final : ark::module
-{
+struct failing_module final : ark::module {
     unsigned phase{};
     bool throws{};
     unsigned ordinary_cleanup{};
 
     bool step(unsigned current) const {
-        if (phase != current)
-        {
+        if (phase != current) {
             return true;
         }
-        if (throws)
-        {
+        if (throws) {
             throw std::runtime_error("controlled later Schedule startup failure");
         }
         return false;
@@ -178,10 +174,8 @@ auto make_schedule(ark::plugin_manager& manager) {
 template<typename Predicate>
 bool eventually(Predicate&& ready) {
     const auto deadline = std::chrono::steady_clock::now() + 5s;
-    while (!ready())
-    {
-        if (std::chrono::steady_clock::now() >= deadline)
-        {
+    while (!ready()) {
+        if (std::chrono::steady_clock::now() >= deadline) {
             return false;
         }
         std::this_thread::yield();
@@ -198,8 +192,7 @@ template<typename State>
 void retire_test_owner(const State& state) {
     // Explicit fixture teardown after retention assertions. The failed manager
     // must never perform this ordinary cancellation or retry its cleanup action.
-    if (state->worker)
-    {
+    if (state->worker) {
         state->worker->close();
         REQUIRE(eventually([&] { return state->worker->ready_to_shut(); }));
         REQUIRE(state->worker->pre_shut());
@@ -215,10 +208,8 @@ TEST_CASE("Scheduler rejects overflowing worker counts before creating threads")
 }
 
 TEST_CASE("Schedule failed startup retires its unexposed workers after every failed phase") {
-    for (unsigned phase{}; phase < 4; ++phase)
-    {
-        for (bool throws : {false, true})
-        {
+    for (unsigned phase{}; phase < 4; ++phase) {
+        for (bool throws : {false, true}) {
             CAPTURE(phase);
             CAPTURE(throws);
             ark::plugin_manager manager;
@@ -230,12 +221,9 @@ TEST_CASE("Schedule failed startup retires its unexposed workers after every fai
             failure.throws = throws;
             REQUIRE(manager.add_module("Schedule", schedule.get()));
             REQUIRE(manager.add_module("failure", &failure));
-            if (throws)
-            {
+            if (throws) {
                 CHECK_THROWS_AS(manager.start(0, {}, {}, {}), std::runtime_error);
-            }
-            else
-            {
+            } else {
                 CHECK_FALSE(manager.start(0, {}, {}, {}));
             }
             auto state = access::state(*schedule);
@@ -278,8 +266,7 @@ TEST_CASE("Schedule successful startup disarms failure cleanup and keeps normal 
 TEST_CASE("Schedule full cleanup registry rejects init before acquiring a scheduler") {
     ark::plugin_manager manager;
     auto older = std::make_shared<unsigned>(0);
-    for (std::size_t index{}; index < ark::startup_cleanup_capacity; ++index)
-    {
+    for (std::size_t index{}; index < ark::startup_cleanup_capacity; ++index) {
         REQUIRE(manager.prepare_startup_cleanup("owner-" + std::to_string(index), "test", older, release_older));
     }
     auto schedule = make_schedule(manager);
@@ -349,12 +336,10 @@ TEST_CASE("Schedule attempted invalid registration remains unsafe even without a
 }
 
 int main(int argc, char** argv) {
-    if (argc == 2 && std::string_view(argv[1]) == "--allocation-failure")
-    {
+    if (argc == 2 && std::string_view(argv[1]) == "--allocation-failure") {
         ark::plugin_manager manager;
         auto older = std::make_shared<unsigned>(0);
-        if (!manager.prepare_startup_cleanup("older", "test", older, release_older))
-        {
+        if (!manager.prepare_startup_cleanup("older", "test", older, release_older)) {
             exit_probe(2);
         }
         auto schedule = make_schedule(manager);
@@ -364,22 +349,19 @@ int main(int argc, char** argv) {
         failing_module failure;
         manager.add_module("failure", &failure);
         // Prepare all owning call arguments before arming persistent rejection.
-        if (manager.start(0, {}, {}, {}))
-        {
+        if (manager.start(0, {}, {}, {})) {
             exit_probe(2);
         }
         reject_allocations = true;
         state.reset();
         schedule.reset();
         state = retained.lock();
-        if (!state || !state->worker)
-        {
+        if (!state || !state->worker) {
             exit_probe(2);
         }
         const auto result = manager.cleanup_failed_startup();
         if (result != ark::startup_cleanup_result::done || manager.cleanup_failed_startup() != result ||
-            state->worker || !dispatcher_retired(state) || *older != 1 || retained.expired())
-        {
+            state->worker || !dispatcher_retired(state) || *older != 1 || retained.expired()) {
             exit_probe(2);
         }
         std::fputs("Schedule startup allocation failure: dispatcher retired; workers joined; candidate gone; exit 1\n",

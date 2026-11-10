@@ -133,8 +133,7 @@ TEST_CASE("Native header factories preserve CS and SS serialization sizes") {
     ark::ss_msg_header ss;
     CHECK(cs.header_length() == sizeof(ark::msg_id_t) + sizeof(uint32_t) + sizeof(uint8_t));
     CHECK(ss.header_length() == cs.header_length() + sizeof(ark::guid_t) + 2 * sizeof(ark::bus_id_t));
-    for (ark::msg_header* header : {static_cast<ark::msg_header*>(&cs), static_cast<ark::msg_header*>(&ss)})
-    {
+    for (ark::msg_header* header : {static_cast<ark::msg_header*>(&cs), static_cast<ark::msg_header*>(&ss)}) {
         header->set_message_id(3);
         header->set_message_length(5);
         std::unique_ptr<ark::msg_header> created(header->create());

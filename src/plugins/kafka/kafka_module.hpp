@@ -4,8 +4,7 @@
 
 namespace ark {
 
-class kafka_module : public module
-{
+class kafka_module : public module {
 public:
     // single producer
     virtual bool init_producer(std::string const& brokers, std::string const& topic) = 0;

@@ -30,8 +30,7 @@
 
 namespace ark {
 
-class proxy_net_module_impl final : public module_base<proxy_net_module, bus_module, net_service_manager_module>
-{
+class proxy_net_module_impl final : public module_base<proxy_net_module, bus_module, net_service_manager_module> {
 public:
     bool init() override;
     bool post_init() override;
@@ -67,8 +66,7 @@ protected:
 
     bool check_session_state(const int game_id, const guid_t& client_id_value, const std::string& account);
 
-    class client_connect_data
-    {
+    class client_connect_data {
     public:
         client_connect_data() {
         }

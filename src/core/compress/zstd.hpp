@@ -45,11 +45,9 @@ namespace ark {
  * TODO: 3. add streaming compress for some situations.
  */
 
-class zstd_compress final
-{
+class zstd_compress final {
 private:
-    struct resource_deleter
-    {
+    struct resource_deleter {
         void operator()(ZSTD_CCtx* value) const noexcept {
             ZSTD_freeCCtx(value);
         }
@@ -71,8 +69,7 @@ private:
         }
     };
 
-    struct dictionary
-    {
+    struct dictionary {
         std::unique_ptr<ZSTD_CDict, resource_deleter> compress;
         std::unique_ptr<ZSTD_DDict, resource_deleter> decompress;
     };
@@ -91,8 +88,7 @@ public:
 
     zstd_compress& operator=(zstd_compress&& other) noexcept {
         static_assert(noexcept(dictionaries_ = std::move(other.dictionaries_)));
-        if (this != &other)
-        {
+        if (this != &other) {
             compress_ctx_ = std::move(other.compress_ctx_);
             decompress_ctx_ = std::move(other.decompress_ctx_);
             dictionaries_ = std::move(other.dictionaries_);
@@ -103,22 +99,19 @@ public:
     /// simple compress and decompress
     bool normal_compress(
         IN const char* in_data, IN std::size_t in_size, IN uint8_t compress_level, OUT std::string& compressed_buff) {
-        if (in_size >= PRE_ALLOCATED_ZSTD_BUFF_SIZE)
-        {
+        if (in_size >= PRE_ALLOCATED_ZSTD_BUFF_SIZE) {
             return false;
         }
 
         size_t const pre_buff_size = ZSTD_compressBound(in_size); // calc needed size
-        if (pre_buff_size >= PRE_ALLOCATED_ZSTD_BUFF_SIZE)
-        {
+        if (pre_buff_size >= PRE_ALLOCATED_ZSTD_BUFF_SIZE) {
             return false;
         }
 
         std::vector<char> pre_buffer(pre_buff_size);
         std::size_t const compressed_size =
             ZSTD_compress(pre_buffer.data(), pre_buff_size, in_data, in_size, compress_level);
-        if (ZSTD_isError(compressed_size))
-        {
+        if (ZSTD_isError(compressed_size)) {
             return false;
         }
 
@@ -130,8 +123,7 @@ public:
     bool normal_decompress(IN const char* in_data, IN std::size_t in_size, OUT std::string& decompressed_buff) {
         unsigned long long const r_size = ZSTD_getFrameContentSize(in_data, in_size);
         if (r_size == ZSTD_CONTENTSIZE_ERROR || r_size == ZSTD_CONTENTSIZE_UNKNOWN ||
-            r_size > PRE_ALLOCATED_ZSTD_BUFF_SIZE)
-        {
+            r_size > PRE_ALLOCATED_ZSTD_BUFF_SIZE) {
             return false;
         }
 
@@ -139,8 +131,7 @@ public:
         size_t const decompressed_size =
             ZSTD_decompress(pre_buffer.data(), static_cast<size_t>(r_size), in_data, in_size);
         // When zstd knows the content size, it will error if it doesn't match.
-        if (ZSTD_isError(decompressed_size) || decompressed_size != r_size)
-        {
+        if (ZSTD_isError(decompressed_size) || decompressed_size != r_size) {
             return false;
         }
 
@@ -168,19 +159,16 @@ public:
 
     bool dict_compress(
         IN uint16_t dict_type, IN const char* in_data, IN std::size_t in_size, OUT std::string& compressed_buff) {
-        if (in_size >= PRE_ALLOCATED_ZSTD_BUFF_SIZE)
-        {
+        if (in_size >= PRE_ALLOCATED_ZSTD_BUFF_SIZE) {
             return false;
         }
 
         size_t const pre_buff_size = ZSTD_compressBound(in_size);
-        if (pre_buff_size >= PRE_ALLOCATED_ZSTD_BUFF_SIZE)
-        {
+        if (pre_buff_size >= PRE_ALLOCATED_ZSTD_BUFF_SIZE) {
             return false;
         }
 
-        if (compress_ctx_ == nullptr)
-        {
+        if (compress_ctx_ == nullptr) {
             compress_ctx_.reset(ZSTD_createCCtx());
         }
 
@@ -192,8 +180,7 @@ public:
         std::vector<char> pre_buffer(pre_buff_size);
         std::size_t const compressed_size = ZSTD_compress_usingCDict(
             compress_ctx_.get(), pre_buffer.data(), pre_buff_size, in_data, in_size, iter->second.compress.get());
-        if (ZSTD_isError(compressed_size))
-        {
+        if (ZSTD_isError(compressed_size)) {
             return false;
         }
 
@@ -205,8 +192,7 @@ public:
         IN uint16_t dict_type, IN const char* in_data, IN std::size_t in_size, OUT std::string& decompressed_buff) {
         unsigned long long const r_size = ZSTD_getFrameContentSize(in_data, in_size);
         if (r_size == ZSTD_CONTENTSIZE_ERROR || r_size == ZSTD_CONTENTSIZE_UNKNOWN ||
-            r_size > PRE_ALLOCATED_ZSTD_BUFF_SIZE)
-        {
+            r_size > PRE_ALLOCATED_ZSTD_BUFF_SIZE) {
             return false;
         }
 
@@ -216,13 +202,11 @@ public:
 
         unsigned const expected_dict_id = ZSTD_getDictID_fromDDict(iter->second.decompress.get());
         unsigned const actual_dict_id = ZSTD_getDictID_fromFrame(in_data, in_size);
-        if (actual_dict_id != expected_dict_id)
-        {
+        if (actual_dict_id != expected_dict_id) {
             return false;
         }
 
-        if (decompress_ctx_ == nullptr)
-        {
+        if (decompress_ctx_ == nullptr) {
             decompress_ctx_.reset(ZSTD_createDCtx());
         }
 
@@ -232,8 +216,7 @@ public:
         std::size_t decompressed_size = ZSTD_decompress_usingDDict(decompress_ctx_.get(), pre_buffer.data(),
             static_cast<size_t>(r_size), in_data, in_size, iter->second.decompress.get());
         // When zstd knows the content size, it will error if it doesn't match.
-        if (ZSTD_isError(decompressed_size) || decompressed_size != r_size)
-        {
+        if (ZSTD_isError(decompressed_size) || decompressed_size != r_size) {
             return false;
         }
 
@@ -247,8 +230,7 @@ protected:
     /*
      * Define the returned error code from utility functions.
      */
-    enum common_error_code
-    {
+    enum common_error_code {
         error_fsize = 1,
         error_fopen = 2,
         error_fclose = 3,
@@ -269,8 +251,7 @@ protected:
      */
     static void* malloc_or_die(std::size_t size) {
         void* const buff = malloc(size);
-        if (buff)
-        {
+        if (buff) {
             return buff;
         }
 
@@ -286,8 +267,7 @@ protected:
      */
     static size_t fsize_or_die(const char* filename) {
         struct stat st;
-        if (stat(filename, &st) != 0)
-        {
+        if (stat(filename, &st) != 0) {
             /* error */
             perror(filename);
             exit(common_error_code::error_fsize);
@@ -299,8 +279,7 @@ protected:
          * 2. if off_t -> size_t type conversion results in discrepancy,
          *    the file size is too large for type size_t.
          */
-        if ((file_size < 0) || (file_size != (off_t)size))
-        {
+        if ((file_size < 0) || (file_size != (off_t)size)) {
             fprintf(stderr, "%s : filesize too large \n", filename);
             exit(common_error_code::error_large_file);
         }
@@ -316,8 +295,7 @@ protected:
      */
     static FILE* fopen_or_die(const char* filename, const char* instruction) {
         FILE* const in_file = fopen(filename, instruction);
-        if (in_file)
-        {
+        if (in_file) {
             return in_file;
         }
         /* error */
@@ -340,8 +318,7 @@ protected:
 
         FILE* const in_file = fopen_or_die(file_name, "rb");
         size_t const read_size = fread(buffer, 1, file_size, in_file);
-        if (read_size != (size_t)file_size)
-        {
+        if (read_size != (size_t)file_size) {
             fprintf(stderr, "fread: %s : %s \n", file_name, strerror(errno));
             exit(common_error_code::error_fread);
         }

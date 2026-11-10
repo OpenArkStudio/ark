@@ -29,8 +29,7 @@ namespace ark {
 
 std::unique_ptr<redis_sample_module> make_redis_sample_module();
 
-class redis_sample_plugin final : public plugin_base<redis_sample_plugin>
-{
+class redis_sample_plugin final : public plugin_base<redis_sample_plugin> {
 public:
     void install() override;
     void uninstall() override;

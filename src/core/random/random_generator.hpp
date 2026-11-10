@@ -24,8 +24,7 @@
 
 namespace ark {
 
-class random_generator
-{
+class random_generator {
 public:
     random_generator()
         : seed_(0)
@@ -71,8 +70,7 @@ public:
         get_count_++;
 
         // reset
-        if (get_count_ >= (std::numeric_limits<int>::max() - 1))
-        {
+        if (get_count_ >= (std::numeric_limits<int>::max() - 1)) {
             get_count_ = 0;
         }
 
@@ -82,8 +80,7 @@ public:
     //--------------------------------------------------------------------
     // generate a random number which ranges in [0, max_range - 1]
     uint32_t random(uint32_t max_range) {
-        if (max_range == 0)
-        {
+        if (max_range == 0) {
             return 0;
         }
 
@@ -95,19 +92,15 @@ public:
         uint32_t min = 0;
         uint32_t max = 0;
 
-        if (min_range <= max_range)
-        {
+        if (min_range <= max_range) {
             min = min_range;
             max = max_range;
-        }
-        else
-        {
+        } else {
             min = max_range;
             max = min_range;
         }
 
-        if (min == max)
-        {
+        if (min == max) {
             return max;
         }
 
@@ -116,12 +109,9 @@ public:
 
     // generate a random number which ranges in [min_range, max_range - 1]
     int random(int min_range, int max_range) {
-        if (min_range == max_range)
-        {
+        if (min_range == max_range) {
             return min_range;
-        }
-        else if (min_range > max_range)
-        {
+        } else if (min_range > max_range) {
             std::swap(min_range, max_range);
             // int iMinSwap = min_range;
             // min_range = max_range;

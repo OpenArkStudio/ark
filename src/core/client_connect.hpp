@@ -25,8 +25,7 @@
 
 namespace ark {
 
-class client_connect
-{
+class client_connect {
 public:
     using ret_type = std::pair<bool, conv_id_t>;
 
@@ -39,14 +38,12 @@ public:
     ///user session manager
     ret_type add_session(const std::string& open_id, const conv_id_t& sesssion_id) {
         ret_type ret(false, 0U);
-        if (open_id.empty() || sesssion_id == 0)
-        {
+        if (open_id.empty() || sesssion_id == 0) {
             return ret;
         }
 
         auto iter_open_id = user_sesssion_list_.find(open_id);
-        if (iter_open_id != user_sesssion_list_.end())
-        {
+        if (iter_open_id != user_sesssion_list_.end()) {
             ret.second = iter_open_id->second;
             remove_session(iter_open_id->second);
         }
@@ -60,15 +57,13 @@ public:
 
     bool remove_session(const conv_id_t& sesssion_id) {
         auto iter_session_id = sesssion_user_list_.find(sesssion_id);
-        if (iter_session_id == sesssion_user_list_.end())
-        {
+        if (iter_session_id == sesssion_user_list_.end()) {
             return false;
         }
 
         auto& open_id = iter_session_id->second;
         auto iter_open_id = user_sesssion_list_.find(open_id);
-        if (iter_open_id != user_sesssion_list_.end())
-        {
+        if (iter_open_id != user_sesssion_list_.end()) {
             user_sesssion_list_.erase(iter_open_id);
         }
 
@@ -78,8 +73,7 @@ public:
 
     const std::string& get_opend_id(const conv_id_t& sesssion_id) {
         auto iter_session_id = sesssion_user_list_.find(sesssion_id);
-        if (iter_session_id == sesssion_user_list_.end())
-        {
+        if (iter_session_id == sesssion_user_list_.end()) {
             return null_str;
         }
 
@@ -88,8 +82,7 @@ public:
 
     conv_id_t get_session_id(const std::string& open_id) {
         auto iter_open_id = user_sesssion_list_.find(open_id);
-        if (iter_open_id == user_sesssion_list_.end())
-        {
+        if (iter_open_id == user_sesssion_list_.end()) {
             return null_int64;
         }
 

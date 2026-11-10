@@ -29,8 +29,7 @@ unsigned checks{};
 
 std::string required_environment(const char* name, bool allow_empty = false) {
     const auto* value = std::getenv(name);
-    if (!value || (!allow_empty && !*value))
-    {
+    if (!value || (!allow_empty && !*value)) {
         throw std::invalid_argument(std::string("Required test environment variable: ") + name);
     }
     return value;
@@ -40,8 +39,7 @@ std::uint16_t mysql_port() {
     const auto text = required_environment("ARK_DATABASE_MYSQL_PORT");
     unsigned port{};
     const auto parsed = std::from_chars(text.data(), text.data() + text.size(), port);
-    if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size() || !port || port > 65535)
-    {
+    if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size() || !port || port > 65535) {
         throw std::invalid_argument("ARK_DATABASE_MYSQL_PORT must be an integer between 1 and 65535");
     }
     return static_cast<std::uint16_t>(port);
@@ -49,22 +47,19 @@ std::uint16_t mysql_port() {
 
 void require(bool condition, const char* message) {
     ++checks;
-    if (!condition)
-    {
+    if (!condition) {
         throw std::runtime_error(message);
     }
 }
 
 mysql_service_reply await(mysql_service& service, std::optional<mysql_service_result>& completion) {
     const auto deadline = std::chrono::steady_clock::now() + 6s;
-    while (!completion && std::chrono::steady_clock::now() < deadline)
-    {
+    while (!completion && std::chrono::steady_clock::now() < deadline) {
         service.update();
         std::this_thread::sleep_for(1ms);
     }
     require(bool(completion), "No MySQL module completion before timeout");
-    if (auto* failure = std::get_if<std::exception_ptr>(&*completion))
-    {
+    if (auto* failure = std::get_if<std::exception_ptr>(&*completion)) {
         std::rethrow_exception(*failure);
     }
     auto reply = std::get<mysql_service_reply>(std::move(*completion));
@@ -102,8 +97,7 @@ mysql_service_reply execute(mysql_service& service, std::string sql, std::vector
 }
 
 void success(const mysql_service_reply& reply) {
-    if (!reply.result)
-    {
+    if (!reply.result) {
         throw std::runtime_error("Native MySQL failed: " + std::to_string(static_cast<int>(reply.result.status.code)) +
                                  " " + reply.result.status.message);
     }
@@ -130,14 +124,12 @@ void check_row(const query_result& result, const std::string& binary) {
 
 void wait_for_mysql_sleep(mysql_service& observer, const std::string& tag) {
     const auto expires = std::chrono::steady_clock::now() + 4s;
-    while (std::chrono::steady_clock::now() < expires)
-    {
+    while (std::chrono::steady_clock::now() < expires) {
         auto active = query(observer, "SELECT COUNT(*) FROM information_schema.processlist WHERE ID <> CONNECTION_ID() "
                                       "AND STATE = 'User sleep' AND INFO LIKE '%" +
                                           tag + "%'");
         success(active);
-        if (std::get<std::int64_t>(active.result.rows[0][0]) != 0)
-        {
+        if (std::get<std::int64_t>(active.result.rows[0][0]) != 0) {
             return;
         }
         std::this_thread::sleep_for(1ms);
@@ -205,8 +197,7 @@ void check_cancellation(const pool_options& options, const std::string& table) {
         [&](auto result) { ready_result = std::move(result); }, 4s);
     require(ready_id != 0, "Queued-result cancellation operation was not admitted");
     const auto ready_deadline = std::chrono::steady_clock::now() + 5s;
-    while (ready.is_pending(ready_id) && std::chrono::steady_clock::now() < ready_deadline)
-    {
+    while (ready.is_pending(ready_id) && std::chrono::steady_clock::now() < ready_deadline) {
         std::this_thread::sleep_for(1ms);
     }
     require(!ready.is_pending(ready_id) && !ready_result && !ready.cancel(ready_id),
@@ -269,8 +260,7 @@ int main() {
     pool_options options;
     std::string table;
     bool table_created{};
-    try
-    {
+    try {
         options.connection.host = required_environment("ARK_DATABASE_MYSQL_HOST");
         options.connection.port = mysql_port();
         options.connection.username = required_environment("ARK_DATABASE_MYSQL_USER");
@@ -347,12 +337,11 @@ int main() {
             "Module retained an oversized waiting parameter input");
         require(service.update() == 0 && rejected_callbacks == 0, "Unaccepted input triggered a callback");
         bool invalid_deadline_rejected{};
-        try
-        {
+        try {
             service.submit_query("SELECT 1", [&](auto) { ++rejected_callbacks; }, std::chrono::milliseconds::max());
+        } catch (const std::invalid_argument&) {
+            invalid_deadline_rejected = true;
         }
-        catch (const std::invalid_argument&)
-        { invalid_deadline_rejected = true; }
         require(invalid_deadline_rejected && rejected_callbacks == 0,
             "Unrepresentable operation deadline was admitted or completed");
 
@@ -428,8 +417,7 @@ int main() {
                     "SELECT ?", {std::string("owned")},
                     [&](mysql_service_result result) {
                         require(std::this_thread::get_id() == owner, "Destruction callback escaped the module thread");
-                        if (auto* failure = std::get_if<std::exception_ptr>(&result))
-                        {
+                        if (auto* failure = std::get_if<std::exception_ptr>(&result)) {
                             std::rethrow_exception(*failure);
                         }
                         const auto& reply = std::get<mysql_service_reply>(result);
@@ -441,8 +429,7 @@ int main() {
                     3s),
             "Destruction test was not admitted");
         const auto destruction_deadline = std::chrono::steady_clock::now() + 6s;
-        while (!destroyed && std::chrono::steady_clock::now() < destruction_deadline)
-        {
+        while (!destroyed && std::chrono::steady_clock::now() < destruction_deadline) {
             ephemeral->update();
             std::this_thread::sleep_for(1ms);
         }
@@ -467,18 +454,14 @@ int main() {
                   << " checks passed (owning query/prepared results, bounded admission, shared deadline, module-thread "
                      "callbacks, stop and callback destruction)\n";
         return 0;
-    }
-    catch (const std::exception& error)
-    {
-        if (table_created)
-        {
-            try
-            {
+    } catch (const std::exception& error) {
+        if (table_created) {
+            try {
                 mysql_service cleanup(options);
                 success(query(cleanup, "DROP TABLE IF EXISTS " + table));
+            } catch (const std::exception& cleanup_error) {
+                std::cerr << "Fixture cleanup failed for " << table << ": " << cleanup_error.what() << '\n';
             }
-            catch (const std::exception& cleanup_error)
-            { std::cerr << "Fixture cleanup failed for " << table << ": " << cleanup_error.what() << '\n'; }
         }
         std::cerr << error.what() << '\n';
         return 1;

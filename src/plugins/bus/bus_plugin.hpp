@@ -29,8 +29,7 @@ namespace ark {
 
 class msg_module;
 
-class bus_plugin final : public plugin_base<bus_plugin>
-{
+class bus_plugin final : public plugin_base<bus_plugin> {
 public:
     void install() override;
     void uninstall() override;

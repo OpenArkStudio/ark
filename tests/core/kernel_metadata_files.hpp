@@ -8,8 +8,7 @@
 
 namespace ark::test {
 
-class metadata_files
-{
+class metadata_files {
 public:
     metadata_files()
         : previous_(std::filesystem::current_path())

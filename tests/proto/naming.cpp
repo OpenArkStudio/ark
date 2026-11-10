@@ -18,15 +18,13 @@ bool lower_snake_case(const std::string& name) {
 void check_enum(const google::protobuf::EnumDescriptorProto& definition) {
     DOCTEST_INFO(definition.name());
     DOCTEST_CHECK(lower_snake_case(definition.name()));
-    for (const auto& value : definition.value())
-    {
+    for (const auto& value : definition.value()) {
         DOCTEST_INFO(value.name());
         DOCTEST_CHECK(lower_snake_case(value.name()));
     }
 }
 
-struct counts
-{
+struct counts {
     unsigned messages{};
     unsigned fields{};
     unsigned map_entries{};
@@ -35,8 +33,7 @@ struct counts
 
 void check_message(const google::protobuf::DescriptorProto& definition, counts& checked) {
     // Map entry type names belong to protoc, not hand-written schema declarations.
-    if (definition.options().map_entry())
-    {
+    if (definition.options().map_entry()) {
         ++checked.map_entries;
         return;
     }
@@ -46,33 +43,27 @@ void check_message(const google::protobuf::DescriptorProto& definition, counts& 
     std::set<int> synthetic_oneofs;
     static const std::set<std::string> retired_fields{
         "selfid", "self_serverid", "target_serverid", "gate_serverid", "nreqid", "logid"};
-    for (const auto& field : definition.field())
-    {
+    for (const auto& field : definition.field()) {
         DOCTEST_INFO(field.name());
         DOCTEST_CHECK(lower_snake_case(field.name()));
         DOCTEST_CHECK_FALSE(retired_fields.contains(field.name()));
         ++checked.fields;
-        if (field.proto3_optional())
-        {
+        if (field.proto3_optional()) {
             synthetic_oneofs.insert(field.oneof_index());
         }
     }
-    for (int index = 0; index < definition.oneof_decl_size(); ++index)
-    {
-        if (synthetic_oneofs.contains(index))
-        {
+    for (int index = 0; index < definition.oneof_decl_size(); ++index) {
+        if (synthetic_oneofs.contains(index)) {
             ++checked.optional_oneofs;
             continue;
         }
         DOCTEST_INFO(definition.oneof_decl(index).name());
         DOCTEST_CHECK(lower_snake_case(definition.oneof_decl(index).name()));
     }
-    for (const auto& nested : definition.nested_type())
-    {
+    for (const auto& nested : definition.nested_type()) {
         check_message(nested, checked);
     }
-    for (const auto& enumeration : definition.enum_type())
-    {
+    for (const auto& enumeration : definition.enum_type()) {
         check_enum(enumeration);
     }
 }
@@ -92,19 +83,16 @@ DOCTEST_TEST_CASE("Protoc descriptors enforce source snake-case names across eve
     DOCTEST_REQUIRE(descriptors.file_size() == ARK_PROTO_SOURCE_COUNT);
     counts checked;
     std::set<std::string> packages;
-    for (const auto& file : descriptors.file())
-    {
+    for (const auto& file : descriptors.file()) {
         DOCTEST_INFO(file.name());
         const auto path = std::filesystem::path(file.name());
         DOCTEST_CHECK(path.extension() == ".proto");
         DOCTEST_CHECK(lower_snake_case(path.stem().string()));
         packages.insert(file.package());
-        for (const auto& message : file.message_type())
-        {
+        for (const auto& message : file.message_type()) {
             check_message(message, checked);
         }
-        for (const auto& enumeration : file.enum_type())
-        {
+        for (const auto& enumeration : file.enum_type()) {
             check_enum(enumeration);
         }
     }
@@ -119,8 +107,7 @@ DOCTEST_TEST_CASE("Protoc descriptors enforce source snake-case names across eve
 DOCTEST_TEST_CASE("Renamed ID descriptors keep original field numbers types and JSON spelling") {
     using field_type = google::protobuf::FieldDescriptorProto;
 
-    struct preserved_field
-    {
+    struct preserved_field {
         const char* package;
         const char* message;
         const char* name;
@@ -141,26 +128,19 @@ DOCTEST_TEST_CASE("Renamed ID descriptors keep original field numbers types and 
         {"ark.protobuf", "mysql_parameters", "request_id", "nreqid", 6, field_type::TYPE_INT64},
         {"osslog", "login", "log_id", "logid", 1, field_type::TYPE_STRING}};
     const auto descriptors = read_descriptors();
-    for (const auto& preserved : expected)
-    {
+    for (const auto& preserved : expected) {
         DOCTEST_INFO(preserved.package << "." << preserved.message << "." << preserved.name);
         const field_type* found = nullptr;
-        for (const auto& file : descriptors.file())
-        {
-            if (file.package() != preserved.package)
-            {
+        for (const auto& file : descriptors.file()) {
+            if (file.package() != preserved.package) {
                 continue;
             }
-            for (const auto& message : file.message_type())
-            {
-                if (message.name() != preserved.message)
-                {
+            for (const auto& message : file.message_type()) {
+                if (message.name() != preserved.message) {
                     continue;
                 }
-                for (const auto& field : message.field())
-                {
-                    if (field.name() == preserved.name)
-                    {
+                for (const auto& field : message.field()) {
+                    if (field.name() == preserved.name) {
                         found = &field;
                     }
                 }

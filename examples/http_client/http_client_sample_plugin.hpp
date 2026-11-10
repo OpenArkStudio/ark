@@ -29,8 +29,7 @@ namespace ark {
 
 std::unique_ptr<http_client_sample_module> make_http_client_sample_module();
 
-class http_client_sample_plugin final : public plugin_base<http_client_sample_plugin>
-{
+class http_client_sample_plugin final : public plugin_base<http_client_sample_plugin> {
 public:
     void install() override;
     void uninstall() override;

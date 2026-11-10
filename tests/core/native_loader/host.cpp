@@ -9,8 +9,7 @@
 namespace {
 
 void require(bool condition, const char* message) {
-    if (!condition)
-    {
+    if (!condition) {
         std::cerr << message << '\n';
         std::exit(1);
     }
@@ -26,8 +25,7 @@ void verify_load(const std::string& directory) {
     const auto loaded = library.load(directory);
 #ifdef ARK_PLATFORM_WIN
     const auto error = GetLastError();
-    if (!loaded)
-    {
+    if (!loaded) {
         std::cerr << "Native load failed: " << error << '\n';
     }
 #endif

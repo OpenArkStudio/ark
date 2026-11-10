@@ -24,8 +24,7 @@
 
 namespace ark {
 
-class simulate_plugin final : public plugin_base<simulate_plugin>
-{
+class simulate_plugin final : public plugin_base<simulate_plugin> {
 public:
     void install() override;
     void uninstall() override;

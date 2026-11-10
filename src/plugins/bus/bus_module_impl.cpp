@@ -28,8 +28,7 @@
 
 namespace ark {
 
-class bus_module_impl final : public module_base<bus_module>
-{
+class bus_module_impl final : public module_base<bus_module> {
 public:
     bool init() override;
 
@@ -133,8 +132,7 @@ int bus_module_impl::combine_bus_id(const app_type app_type, const uint8_t inst_
 bool bus_module_impl::get_target_bus_relations(std::vector<app_type>& target_list) {
     bus_addr bus_addr(get_self_bus_id());
     auto iter = app_config_.connection_relations.find(static_cast<ark::app_type>(bus_addr.app_type));
-    if (iter != app_config_.connection_relations.end())
-    {
+    if (iter != app_config_.connection_relations.end()) {
         target_list = iter->second;
     }
 
@@ -143,8 +141,7 @@ bool bus_module_impl::get_target_bus_relations(std::vector<app_type>& target_lis
 
 bool bus_module_impl::get_other_proc(bus_id_t bus_id, proc_config& proc) const {
     auto iter = app_config_.other_proc_list.find(bus_id);
-    if (iter == app_config_.other_proc_list.end())
-    {
+    if (iter == app_config_.other_proc_list.end()) {
         return false;
     }
 
@@ -153,12 +150,10 @@ bool bus_module_impl::get_other_proc(bus_id_t bus_id, proc_config& proc) const {
 }
 
 int bus_module_impl::get_other_proc(const app_type app_type, std::vector<const proc_config*>& proc_list) const {
-    for (auto& iter : app_config_.other_proc_list)
-    {
+    for (auto& iter : app_config_.other_proc_list) {
         auto& proc = iter.second;
         bus_addr bus_id(proc.bus_id);
-        if (static_cast<ark::app_type>(bus_id.app_type) != app_type)
-        {
+        if (static_cast<ark::app_type>(bus_id.app_type) != app_type) {
             continue;
         }
 

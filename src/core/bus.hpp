@@ -29,8 +29,7 @@
 namespace ark {
 
 // bus address, like IP address, 8.8.8.8
-class bus_addr
-{
+class bus_addr {
 public:
     bus_id_t bus_id{0};
 
@@ -98,16 +97,14 @@ private:
 };
 
 // bus relation, app connect other app with direct way or waiting sync message
-class bus_relation
-{
+class bus_relation {
 public:
     uint8_t app_type{std::underlying_type<ark::app_type>::type(ark::app_type::ark_app_default)};
     uint8_t target_app_type{std::underlying_type<ark::app_type>::type(ark::app_type::ark_app_default)};
     bool connection_type{false};
 };
 
-class proc_config
-{
+class proc_config {
 public:
     bus_id_t bus_id{0};
     uint32_t max_connection{0};
@@ -117,8 +114,7 @@ public:
     // to add other fields
 };
 
-class reg_center
-{
+class reg_center {
 public:
     std::string ip{};
     uint16_t port{8500};
@@ -127,8 +123,7 @@ public:
     std::string check_timeout{"3s"};
 };
 
-class app_config
-{
+class app_config {
 public:
     ark::reg_center reg_center; // register center
 

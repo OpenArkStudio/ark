@@ -28,8 +28,7 @@
 
 namespace ark {
 
-class event_manager_impl final : public event_manager
-{
+class event_manager_impl final : public event_manager {
 public:
     event_manager_impl() = delete;
 
@@ -38,8 +37,7 @@ public:
     }
 
     void update() override {
-        for (auto iter : need_remove_events_)
-        {
+        for (auto iter : need_remove_events_) {
             event_callbacks_.erase(iter);
         }
 
@@ -48,14 +46,11 @@ public:
 
     bool add_event_call_back(const int event_id, event_process_functor&& cb) override {
         auto event_info_ptr = event_callbacks_.find_value(event_id);
-        if (event_info_ptr == nullptr)
-        {
+        if (event_info_ptr == nullptr) {
             auto event_info = std::make_shared<list<event_process_functor>>();
             event_info->emplace_back(cb);
             return event_callbacks_.insert(event_id, event_info).second;
-        }
-        else
-        {
+        } else {
             event_info_ptr->emplace_back(cb);
             return true;
         }
@@ -68,13 +63,11 @@ public:
 
     bool do_event(const int event_id, const data_list& args) override {
         auto event_info = event_callbacks_.find_value(event_id);
-        if (event_info == nullptr)
-        {
+        if (event_info == nullptr) {
             return false;
         }
 
-        for (auto iter : *event_info)
-        {
+        for (auto iter : *event_info) {
             iter(self_, event_id, args);
         }
 

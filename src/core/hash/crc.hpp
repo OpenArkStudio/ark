@@ -28,8 +28,7 @@
 
 namespace ark {
 
-class crc
-{
+class crc {
 public:
     static uint16_t crc16(const unsigned char* s, size_t l) {
 
@@ -56,8 +55,7 @@ public:
             0x1ef0};
 
         uint16_t init_val = 0;
-        for (size_t j = 0; j < l; ++j)
-        {
+        for (size_t j = 0; j < l; ++j) {
             unsigned char byte = s[j];
             init_val = (init_val << 8) ^ crc16_table[((init_val >> 8) ^ (uint16_t)byte) & 0x00FF];
         }
@@ -326,8 +324,7 @@ public:
         };
 
         uint32_t init_val = 0;
-        for (size_t j = 0; j < l; ++j)
-        {
+        for (size_t j = 0; j < l; ++j) {
             unsigned char byte = s[j];
             init_val = crc32_table[static_cast<unsigned char>(init_val) ^ (uint32_t)byte] ^ (init_val >> 8);
         }
@@ -596,8 +593,7 @@ public:
         };
 
         uint64_t init_val = 0;
-        for (size_t j = 0; j < l; ++j)
-        {
+        for (size_t j = 0; j < l; ++j) {
             unsigned char byte = s[j];
             init_val = crc64_table[static_cast<unsigned char>(init_val) ^ (uint64_t)byte] ^ (init_val >> 8);
         }

@@ -25,8 +25,7 @@
 
 namespace ark {
 
-class compress_module : public module
-{
+class compress_module : public module {
 public:
     virtual bool compress(IN const compress_type type, IN const char* in_data, IN std::size_t in_size,
         OUT std::string& compressed_buff, IN uint8_t compress_level = 1) = 0;

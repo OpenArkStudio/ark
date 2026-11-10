@@ -14,12 +14,10 @@ const char* phase = "setup";
 } // namespace
 
 void* operator new(std::size_t size) {
-    if (armed && ++allocation_count == fail_at)
-    {
+    if (armed && ++allocation_count == fail_at) {
         throw std::bad_alloc{};
     }
-    if (void* memory = std::malloc(size ? size : 1))
-    {
+    if (void* memory = std::malloc(size ? size : 1)) {
         return memory;
     }
     throw std::bad_alloc{};
@@ -44,24 +42,21 @@ TEST_CASE("Every nested publisher allocation failure preserves its state revisio
     source.root.containers.at(201).clear();
     source.root.containers.at(202).emplace(7, structural);
     const auto unchanged_source = source;
-    for (std::size_t position = 1; position < 2048 && !completed; ++position)
-    {
+    for (std::size_t position = 1; position < 2048 && !completed; ++position) {
         nested_publisher publisher(nested_test::binding(), nested_test::initial());
         const auto before = publisher.baseline();
         allocation_count = 0;
         fail_at = position;
         armed = true;
         bool failed = false;
-        try
-        {
+        try {
             const auto packet = publisher.update(source);
             completed = packet != nullptr;
+        } catch (const std::bad_alloc&) {
+            failed = true;
         }
-        catch (const std::bad_alloc&)
-        { failed = true; }
         armed = false;
-        if (failed)
-        {
+        if (failed) {
             CHECK(publisher.baseline() == before);
             CHECK(source == unchanged_source);
             const auto retry = publisher.update(source);
@@ -84,8 +79,7 @@ TEST_CASE("Every nested replica allocation failure preserves its committed state
     source.root.containers.at(201).clear();
     source.root.containers.at(202).emplace(7, structural);
     const auto packet = publisher.update(source);
-    for (std::size_t position = 1; position < 2048 && !completed; ++position)
-    {
+    for (std::size_t position = 1; position < 2048 && !completed; ++position) {
         nested_replica replica(nested_test::binding());
         REQUIRE(replica.apply(nested_test::initial()) == nested_apply_result::applied);
         const auto before = replica.state();
@@ -93,13 +87,13 @@ TEST_CASE("Every nested replica allocation failure preserves its committed state
         fail_at = position;
         armed = true;
         bool failed = false;
-        try
-        { completed = replica.apply(*packet) == nested_apply_result::applied; }
-        catch (const std::bad_alloc&)
-        { failed = true; }
+        try {
+            completed = replica.apply(*packet) == nested_apply_result::applied;
+        } catch (const std::bad_alloc&) {
+            failed = true;
+        }
         armed = false;
-        if (failed)
-        {
+        if (failed) {
             CHECK(replica.valid());
             CHECK(replica.state() == before);
             CHECK(replica.revision() == 1);
@@ -117,20 +111,19 @@ TEST_CASE("Every first nested baseline allocation failure preserves an uninstall
     stream_test::allocation_diagnostic diagnostic(phase, fail_at, allocation_count);
     bool completed = false;
     const auto baseline = nested_test::initial();
-    for (std::size_t position = 1; position < 2048 && !completed; ++position)
-    {
+    for (std::size_t position = 1; position < 2048 && !completed; ++position) {
         nested_replica replica(nested_test::binding());
         allocation_count = 0;
         fail_at = position;
         armed = true;
         bool failed = false;
-        try
-        { completed = replica.apply(baseline) == nested_apply_result::applied; }
-        catch (const std::bad_alloc&)
-        { failed = true; }
+        try {
+            completed = replica.apply(baseline) == nested_apply_result::applied;
+        } catch (const std::bad_alloc&) {
+            failed = true;
+        }
         armed = false;
-        if (failed)
-        {
+        if (failed) {
             CHECK_FALSE(replica.valid());
             CHECK(replica.state() == nullptr);
             CHECK(replica.revision() == 0);
@@ -145,21 +138,20 @@ TEST_CASE("Every nested tombstone allocation failure leaves publisher active at 
     phase = "nested-tombstone";
     stream_test::allocation_diagnostic diagnostic(phase, fail_at, allocation_count);
     bool completed = false;
-    for (std::size_t position = 1; position < 2048 && !completed; ++position)
-    {
+    for (std::size_t position = 1; position < 2048 && !completed; ++position) {
         nested_publisher publisher(nested_test::binding(), nested_test::initial());
         const auto before = publisher.baseline();
         allocation_count = 0;
         fail_at = position;
         armed = true;
         bool failed = false;
-        try
-        { completed = publisher.remove() != nullptr; }
-        catch (const std::bad_alloc&)
-        { failed = true; }
+        try {
+            completed = publisher.remove() != nullptr;
+        } catch (const std::bad_alloc&) {
+            failed = true;
+        }
         armed = false;
-        if (failed)
-        {
+        if (failed) {
             CHECK(publisher.baseline() == before);
             const auto packet = publisher.remove();
             REQUIRE(packet != nullptr);
@@ -179,25 +171,22 @@ TEST_CASE("A nested string patch copy fails without publishing a partial variant
     const std::map<std::uint32_t, scalar_value> sentinel{{99, true}};
     bool completed = false;
     std::size_t failures{};
-    for (std::size_t position = 1; position < 16 && !completed; ++position)
-    {
+    for (std::size_t position = 1; position < 16 && !completed; ++position) {
         auto output = sentinel;
         nested_detail::patch_budget budget(nested_stream_limits{});
         allocation_count = 0;
         fail_at = position;
         armed = true;
         bool failed = false;
-        try
-        {
+        try {
             nested_detail::patch_fields(before, next, output, budget);
             completed = true;
+        } catch (const std::bad_alloc&) {
+            failed = true;
         }
-        catch (const std::bad_alloc&)
-        { failed = true; }
         armed = false;
         CHECK(next == unchanged);
-        if (failed)
-        {
+        if (failed) {
             ++failures;
             CHECK(output == sentinel);
             nested_detail::patch_budget retry_budget(nested_stream_limits{});
@@ -220,24 +209,21 @@ TEST_CASE("Every nested publisher construction allocation failure preserves the 
     baseline.snapshot.root.containers.at(201).at(1).tables.at(200).rows.at(1).fields.at(2) = std::string(80, 'c');
     const auto unchanged = baseline.snapshot;
     bool completed = false;
-    for (std::size_t position = 1; position < 2048 && !completed; ++position)
-    {
+    for (std::size_t position = 1; position < 2048 && !completed; ++position) {
         allocation_count = 0;
         fail_at = position;
         armed = true;
         bool failed = false;
-        try
-        {
+        try {
             nested_publisher publisher(trusted, baseline);
             completed = publisher.baseline() != nullptr;
+        } catch (const std::bad_alloc&) {
+            failed = true;
         }
-        catch (const std::bad_alloc&)
-        { failed = true; }
         armed = false;
         CHECK(baseline.snapshot == unchanged);
         CHECK(baseline.revision == 1);
-        if (failed)
-        {
+        if (failed) {
             nested_publisher retry(trusted, baseline);
             CHECK(retry.baseline()->snapshot == unchanged);
             CHECK(retry.baseline()->revision == 1);

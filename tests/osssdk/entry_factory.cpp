@@ -11,8 +11,7 @@ unsigned created{};
 unsigned destroyed{};
 unsigned updated{};
 
-class entry_oss_sdk final : public ark::module_base<ark::oss_sdk_module>
-{
+class entry_oss_sdk final : public ark::module_base<ark::oss_sdk_module> {
 public:
     entry_oss_sdk() {
         ++created;
@@ -43,8 +42,7 @@ std::unique_ptr<oss_sdk_module> make_oss_sdk_module() {
 } // namespace ark::detail
 
 ARK_EXPORT_FUNC unsigned oss_sdk_entry_events(unsigned event) {
-    switch (event)
-    {
+    switch (event) {
     case 0:
         return created;
     case 1:

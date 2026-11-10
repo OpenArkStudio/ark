@@ -12,8 +12,7 @@
 namespace ark {
 
 template<std::derived_from<module> interface_type, std::derived_from<module>... provider_types>
-class module_base : public interface_type
-{
+class module_base : public interface_type {
 public:
     std::vector<std::string> get_dependencies() const override {
         return {typeid(provider_types).name()...};

@@ -15,15 +15,13 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void consul_plugin::install() {
-    if (!register_module(detail::make_consul_module(), module_update::disabled))
-    {
+    if (!register_module(detail::make_consul_module(), module_update::disabled)) {
         throw std::runtime_error("Consul module registration rejected");
     }
 }
 
 void consul_plugin::uninstall() {
-    if (!unregister_module<consul_module>())
-    {
+    if (!unregister_module<consul_module>()) {
         throw std::runtime_error("Consul module unregistration rejected");
     }
 }

@@ -197,8 +197,7 @@ int32_t entity_impl::get_map_entity_id() const {
 bool entity_impl::switch_scene(const int32_t map_id, const int32_t map_inst_id, const vector3d& pos) {
     ARK_ASSERT_RET_VAL(callback_manager_ != nullptr && opt_charactor_ != nullptr, false);
 
-    if (opt_charactor_->map_id == map_id && opt_charactor_->map_entity_id == map_inst_id)
-    {
+    if (opt_charactor_->map_id == map_id && opt_charactor_->map_entity_id == map_inst_id) {
         return false;
     }
 
@@ -246,8 +245,7 @@ float entity_impl::get_orient() const {
 bool entity_impl::set_position(const vector3d& position, const float orient) {
     ARK_ASSERT_RET_VAL(callback_manager_ != nullptr && opt_charactor_ != nullptr, false);
 
-    if (opt_charactor_->pos == position && opt_charactor_->orient == orient)
-    {
+    if (opt_charactor_->pos == position && opt_charactor_->orient == orient) {
         return false;
     }
 
@@ -265,8 +263,7 @@ bool entity_impl::set_position(const float x, const float y, const float z, cons
     ARK_ASSERT_RET_VAL(callback_manager_ != nullptr && opt_charactor_ != nullptr, false);
 
     if (opt_charactor_->pos.x == x && opt_charactor_->pos.y == y && opt_charactor_->pos.z == z &&
-        opt_charactor_->orient == orient)
-    {
+        opt_charactor_->orient == orient) {
         return false;
     }
 
@@ -557,8 +554,7 @@ std::shared_ptr<container> entity_impl::find_container(const uint32_t index) {
     ARK_ASSERT_RET_VAL(container_manager_ptr != nullptr, nullptr);
 
     auto container_ptr = container_manager_ptr->find_container(index);
-    if (container_ptr == nullptr)
-    {
+    if (container_ptr == nullptr) {
         // create a new container
         container_ptr = container_manager_ptr->create_container(class_meta_, index, guid_);
     }
@@ -578,8 +574,7 @@ table* entity_impl::find_table(const std::string& name) {
 
 table* entity_impl::find_table(const uint32_t index) {
     auto table_ptr = table_manager_->find_table(index);
-    if (nullptr == table_ptr)
-    {
+    if (nullptr == table_ptr) {
         auto func = std::bind_front(&entity_impl::on_table_call_back, this);
         table_ptr = table_manager_->create_table(index, std::move(func));
     }
@@ -634,8 +629,7 @@ bool entity_impl::add_custom_bool(const std::string& name, bool value) {
     ARK_ASSERT_RET_VAL(data_ptr != nullptr, false);
 
     data_ptr->set_bool(value);
-    if (!custom_data_list_.insert(name, data_ptr.get()).second)
-    {
+    if (!custom_data_list_.insert(name, data_ptr.get()).second) {
         return false;
     }
 
@@ -651,8 +645,7 @@ bool entity_impl::add_custom_int32(const std::string& name, const int32_t value)
     ARK_ASSERT_RET_VAL(data_ptr != nullptr, false);
 
     data_ptr->set_int(value);
-    if (!custom_data_list_.insert(name, data_ptr.get()).second)
-    {
+    if (!custom_data_list_.insert(name, data_ptr.get()).second) {
         return false;
     }
 
@@ -668,8 +661,7 @@ bool entity_impl::add_custom_u_int32(const std::string& name, const uint32_t val
     ARK_ASSERT_RET_VAL(data_ptr != nullptr, false);
 
     data_ptr->set_u_int(value);
-    if (!custom_data_list_.insert(name, data_ptr.get()).second)
-    {
+    if (!custom_data_list_.insert(name, data_ptr.get()).second) {
         return false;
     }
 
@@ -685,8 +677,7 @@ bool entity_impl::add_custom_int64(const std::string& name, const int64_t value)
     ARK_ASSERT_RET_VAL(data_ptr != nullptr, false);
 
     data_ptr->set_int64(value);
-    if (!custom_data_list_.insert(name, data_ptr.get()).second)
-    {
+    if (!custom_data_list_.insert(name, data_ptr.get()).second) {
         return false;
     }
 
@@ -702,8 +693,7 @@ bool entity_impl::add_custom_float(const std::string& name, const float value) {
     ARK_ASSERT_RET_VAL(data_ptr != nullptr, false);
 
     data_ptr->set_float(value);
-    if (!custom_data_list_.insert(name, data_ptr.get()).second)
-    {
+    if (!custom_data_list_.insert(name, data_ptr.get()).second) {
         return false;
     }
 
@@ -719,8 +709,7 @@ bool entity_impl::add_custom_double(const std::string& name, const double value)
     ARK_ASSERT_RET_VAL(data_ptr != nullptr, false);
 
     data_ptr->set_double(value);
-    if (!custom_data_list_.insert(name, data_ptr.get()).second)
-    {
+    if (!custom_data_list_.insert(name, data_ptr.get()).second) {
         return false;
     }
 
@@ -736,8 +725,7 @@ bool entity_impl::add_custom_string(const std::string& name, const std::string& 
     ARK_ASSERT_RET_VAL(data_ptr != nullptr, false);
 
     data_ptr->set_string(value.c_str());
-    if (!custom_data_list_.insert(name, data_ptr.get()).second)
-    {
+    if (!custom_data_list_.insert(name, data_ptr.get()).second) {
         return false;
     }
 
@@ -777,8 +765,7 @@ bool entity_impl::set_custom_int32(const std::string& name, const int32_t value)
 
 bool entity_impl::set_custom_u_int32(const std::string& name, const uint32_t value) {
     auto* data_ptr = custom_data_list_.find_value(name);
-    if (data_ptr == nullptr || data_ptr->get_type() != data_type::dt_uint32)
-    {
+    if (data_ptr == nullptr || data_ptr->get_type() != data_type::dt_uint32) {
         return false;
     }
 

@@ -55,11 +55,9 @@ void on_signal(int) {
 }
 
 void require(bool condition, const std::string& message) {
-    if (!condition)
-    {
+    if (!condition) {
 #ifdef ARK_COMPOSED_PLUGIN_TEST
-        if (composed_peer)
-        {
+        if (composed_peer) {
             std::cerr << message << std::endl;
             std::_Exit(1);
         }
@@ -83,8 +81,7 @@ void write_configuration(const std::string& endpoint) {
               "[[bus.applications]]\nname = 'login'\ntype = 32\n"
               "[[bus.relations]]\nsource = 'game'\ntarget = 'world'\n"
               "[[bus.relations]]\nsource = 'game'\ntarget = 'game'\n";
-    for (const auto& id : {"1.1.31.1", "1.1.30.1", "1.2.30.1", "2.1.30.1", "1.1.32.1"})
-    {
+    for (const auto& id : {"1.1.31.1", "1.1.30.1", "1.2.30.1", "2.1.30.1", "1.1.32.1"}) {
         output << "[[bus.processes]]\nbus_id = '" << id << "'\nserver_endpoint = ''\nintranet_endpoint = '"
                << (std::string(id) == "1.1.30.1" ? endpoint : "") << "'\nthreads = 1\nmax_connections = 10\n";
     }
@@ -95,8 +92,7 @@ void write_configuration(const std::string& endpoint) {
 #ifdef ARK_COMPOSED_PLUGIN_TEST
 // No Kernel/Net object crosses onto an HTTP worker. Only this independently
 // owned capture is retained by the native route, and snapshots own their values.
-struct route_capture
-{
+struct route_capture {
     std::thread::id owner;
     std::atomic<bool>& retired;
     std::atomic<unsigned> calls{};
@@ -131,15 +127,13 @@ void binary_echo(unsigned short port) {
     arknet::error_code result;
     stream.expires_at(bounded_deadline(2s));
     stream.async_connect({asio::ip::make_address("127.0.0.1"), port}, [&](arknet::error_code error) {
-        if (error)
-        {
+        if (error) {
             result = error;
             return;
         }
         stream.expires_at(bounded_deadline(2s));
         arknet::http::async_write(stream, request, [&](arknet::error_code error, std::size_t) {
-            if (error)
-            {
+            if (error) {
                 result = error;
                 return;
             }
@@ -153,8 +147,7 @@ void binary_echo(unsigned short port) {
         "Composed HTTP binary echo did not complete while SS was live");
 }
 
-class composition_probe
-{
+class composition_probe {
 public:
     composition_probe(ark::plugin_manager& manager, unsigned short port)
         : manager_(manager)
@@ -181,8 +174,7 @@ public:
     }
 
     ~composition_probe() {
-        if (std::uncaught_exceptions())
-        {
+        if (std::uncaught_exceptions()) {
             std::cerr << "Composed peer failed; retain live callback/DSO owners until isolated exit" << std::endl;
             std::_Exit(1);
         }
@@ -218,8 +210,7 @@ private:
 };
 #endif
 
-struct receiver
-{
+struct receiver {
     ark::plugin_manager& manager;
     ark::net_service_manager_module& network;
     ark::msg_module& messages;
@@ -255,21 +246,16 @@ struct receiver
         require(body.ParseFromArray(message->get_msg_data(), static_cast<int>(message->get_msg_length())) &&
                     body.y() == 12.5F && body.z() == -7.0F,
             "SS response Protobuf payload changed");
-        if (body.x() == 1.0F)
-        {
-            if (replies == 0 && !defer_markers)
-            {
+        if (body.x() == 1.0F) {
+            if (replies == 0 && !defer_markers) {
                 mark("first-roundtrip");
             }
             replies = 1;
-        }
-        else
-        {
+        } else {
             require(body.x() == 2.0F && replies == 1 && disconnects == 1 && connects == 2,
                 "Restart response arrived without exactly one disconnect and reconnect");
             replies = 2;
-            if (!defer_markers)
-            {
+            if (!defer_markers) {
                 mark("second-roundtrip");
             }
         }
@@ -278,12 +264,9 @@ struct receiver
     void event(const ark::net_event* event) {
         require(std::this_thread::get_id() == owner, "SS connection event left manager owner thread");
         require(event->get_bus_id() == server_id.bus_id, "Unexpected static target connection event");
-        if (event->get_type() == ark::net_event_type::connect)
-        {
+        if (event->get_type() == ark::net_event_type::connect) {
             ++connects;
-        }
-        else if (event->get_type() == ark::net_event_type::disconnect)
-        {
+        } else if (event->get_type() == ark::net_event_type::disconnect) {
             ++disconnects;
             ark::protobuf::point_3d body;
             require(replies == 1 && !network.get_net_connection_bus(client_id.bus_id, server_id.bus_id) &&
@@ -304,13 +287,11 @@ int peer(const std::string& role, const std::string& plugins, int generation, un
     manager.set_bus_id(role == "server" ? server_id.bus_id : client_id.bus_id);
     bool started = false;
     std::string diagnostic;
-    try
-    {
+    try {
         std::unordered_map<std::string, std::string> selected{
             {"ark_bus_plugin", "bus.toml"}, {"ark_net_plugin", ""}, {"ark_utility_plugin", ""}};
 #ifdef ARK_COMPOSED_PLUGIN_TEST
-        if (http_port)
-        {
+        if (http_port) {
             selected.emplace("ark_kernel_plugin", "");
             selected.emplace("ark_http_plugin", role + "-http.toml");
         }
@@ -318,14 +299,10 @@ int peer(const std::string& role, const std::string& plugins, int generation, un
         require(http_port == 0 && remote_http_port == 0, "Composition needs the independent composed test target");
 #endif
         started = manager.start(ark::date_time::get_now_time(), plugins + "/", "", selected);
-    }
-    catch (const std::exception& error)
-    {
-        if (role != "invalid")
-        {
+    } catch (const std::exception& error) {
+        if (role != "invalid") {
 #ifdef ARK_COMPOSED_PLUGIN_TEST
-            if (http_port)
-            {
+            if (http_port) {
                 std::cerr << "Composed startup failed: " << error.what() << std::endl;
                 std::_Exit(1);
             }
@@ -334,8 +311,7 @@ int peer(const std::string& role, const std::string& plugins, int generation, un
         }
         diagnostic = error.what();
     }
-    if (role == "invalid")
-    {
+    if (role == "invalid") {
         require(!started && manager.get_startup_failure().find("post_init:") != std::string::npos &&
                     diagnostic.find("static Bus target 1.1.30.1") != std::string::npos &&
                     diagnostic.find("intranet_endpoint") != std::string::npos,
@@ -353,8 +329,7 @@ int peer(const std::string& role, const std::string& plugins, int generation, un
     require(network && messages, "Actual Bus/Net interfaces missing");
 #ifdef ARK_COMPOSED_PLUGIN_TEST
     std::unique_ptr<composition_probe> composed;
-    if (http_port)
-    {
+    if (http_port) {
         composed = std::make_unique<composition_probe>(manager, http_port);
     }
     int http_generation{};
@@ -362,17 +337,14 @@ int peer(const std::string& role, const std::string& plugins, int generation, un
     receiver received{manager, *network, *messages, generation};
     received.defer_markers = http_port != 0;
     auto clients = network->get_client_service(ark::app_type::ark_app_world);
-    if (role == "server")
-    {
+    if (role == "server") {
         require(!clients, "Undeclared outgoing relation created a server client");
         require(network->create_server(), "Actual SS listener failed to start");
         auto server = network->get_intra_net_server();
         require(server && !network->get_inter_net_server(), "Static target listener selection changed");
         require(server->reg_msg_callback(45010, &received, &receiver::request), "SS request callback rejected");
         mark("server-ready-" + std::to_string(generation));
-    }
-    else
-    {
+    } else {
         require(clients && !network->get_client_service(ark::app_type::ark_app_game) &&
                     !network->get_client_service(ark::app_type::ark_app_login),
             "Static bootstrap did not exclude self or undeclared type");
@@ -385,12 +357,10 @@ int peer(const std::string& role, const std::string& plugins, int generation, un
     // Existing reconnect interval is 30s. Allow 5s for the initial and final
     // round trips; do not change or accelerate the production retry clock.
     const auto deadline = started_at + 40s;
-    while (!stopping && std::chrono::steady_clock::now() < deadline && (role == "server" || received.replies != 2))
-    {
+    while (!stopping && std::chrono::steady_clock::now() < deadline && (role == "server" || received.replies != 2)) {
         require(manager.update(ark::date_time::get_now_time()), "Actual plugin update failed");
 #ifdef ARK_COMPOSED_PLUGIN_TEST
-        if (composed && role == "client" && received.replies > http_generation)
-        {
+        if (composed && role == "client" && received.replies > http_generation) {
             binary_echo(http_port);
             binary_echo(remote_http_port);
             http_generation = received.replies;
@@ -399,14 +369,12 @@ int peer(const std::string& role, const std::string& plugins, int generation, un
             mark(http_generation == 1 ? "first-roundtrip" : "second-roundtrip");
         }
 #endif
-        if (role == "client")
-        {
+        if (role == "client") {
             require(!clients->get_connection_info(ark::bus_addr(1, 2, 30, 1).bus_id) &&
                         !clients->get_connection_info(ark::bus_addr(2, 1, 30, 1).bus_id),
                 "Bootstrap crossed configured channel/zone boundary");
             const auto now = std::chrono::steady_clock::now();
-            if (now >= send_at && network->get_net_connection_bus(client_id.bus_id, server_id.bus_id))
-            {
+            if (now >= send_at && network->get_net_connection_bus(client_id.bus_id, server_id.bus_id)) {
                 ark::protobuf::point_3d body;
                 body.set_y(12.5F);
                 body.set_z(-7.0F);
@@ -421,8 +389,7 @@ int peer(const std::string& role, const std::string& plugins, int generation, un
     // Drop public shared services while their DSO implementations remain loaded.
     clients.reset();
 #ifdef ARK_COMPOSED_PLUGIN_TEST
-    if (composed)
-    {
+    if (composed) {
         composed->before_stop();
     }
 #endif
@@ -430,16 +397,14 @@ int peer(const std::string& role, const std::string& plugins, int generation, un
         manager, ark::date_time::get_now_time, std::chrono::steady_clock::now() + 5s, "Static Bus actual DSOs");
     require(manager.stop(ark::date_time::get_now_time()), "Actual plugin normal repeated stop failed");
 #ifdef ARK_COMPOSED_PLUGIN_TEST
-    if (composed)
-    {
+    if (composed) {
         composed->after_stop();
     }
 #endif
     return 0;
 }
 
-class child
-{
+class child {
 public:
     child(const std::string& executable, const std::string& role, const std::string& plugins, int generation,
         const std::string& log_name, unsigned short http_port = 0, unsigned short remote_http_port = 0) {
@@ -448,21 +413,16 @@ public:
         const auto remote_http_text = std::to_string(remote_http_port);
         pid_ = ::fork();
         require(pid_ >= 0, "fork failed");
-        if (pid_ == 0)
-        {
+        if (pid_ == 0) {
             const auto log = ::open(log_name.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0600);
-            if (log < 0 || ::dup2(log, STDOUT_FILENO) < 0 || ::dup2(log, STDERR_FILENO) < 0)
-            {
+            if (log < 0 || ::dup2(log, STDOUT_FILENO) < 0 || ::dup2(log, STDERR_FILENO) < 0) {
                 ::_exit(126);
             }
             ::close(log);
-            if (http_port)
-            {
+            if (http_port) {
                 ::execl(executable.c_str(), executable.c_str(), role.c_str(), plugins.c_str(), generation_text.c_str(),
                     http_text.c_str(), remote_http_text.c_str(), static_cast<char*>(nullptr));
-            }
-            else
-            {
+            } else {
                 ::execl(executable.c_str(), executable.c_str(), role.c_str(), plugins.c_str(), generation_text.c_str(),
                     static_cast<char*>(nullptr));
             }
@@ -474,22 +434,18 @@ public:
     child& operator=(const child&) = delete;
 
     ~child() {
-        if (pid_ > 0)
-        {
+        if (pid_ > 0) {
             ::kill(pid_, SIGKILL);
-            while (::waitpid(pid_, &status_, 0) < 0 && errno == EINTR)
-            {
+            while (::waitpid(pid_, &status_, 0) < 0 && errno == EINTR) {
             }
         }
     }
 
     bool exited() {
-        if (pid_ > 0)
-        {
+        if (pid_ > 0) {
             const auto result = ::waitpid(pid_, &status_, WNOHANG);
             require(result >= 0 || errno == EINTR, "waitpid failed");
-            if (result == pid_)
-            {
+            if (result == pid_) {
                 pid_ = -1;
             }
         }
@@ -503,8 +459,7 @@ public:
 
     void finish() {
         const auto deadline = bounded_deadline(5s);
-        while (!exited() && std::chrono::steady_clock::now() < deadline)
-        {
+        while (!exited() && std::chrono::steady_clock::now() < deadline) {
             std::this_thread::sleep_for(5ms);
         }
         require(exited() && WIFEXITED(status_) && WEXITSTATUS(status_) == 0, "Owned child did not exit normally");
@@ -517,8 +472,7 @@ private:
 
 void await_marker(const std::string& name, child& process, std::chrono::seconds timeout) {
     const auto deadline = bounded_deadline(timeout);
-    while (!std::filesystem::exists(name) && std::chrono::steady_clock::now() < deadline)
-    {
+    while (!std::filesystem::exists(name) && std::chrono::steady_clock::now() < deadline) {
         require(!process.exited(), "Owned child exited before " + name);
         std::this_thread::sleep_for(5ms);
     }
@@ -533,16 +487,13 @@ int controller(const std::string& executable, const std::string& plugins, const 
     std::filesystem::create_directories(directory);
     std::filesystem::current_path(directory);
     std::cout << "Static Bus raw child logs: " << directory << std::endl;
-    if (!schema.empty())
-    {
+    if (!schema.empty()) {
         controller_deadline = std::chrono::steady_clock::now() + 55s;
     }
     int invalid_case = 0;
-    if (schema.empty())
-    {
+    if (schema.empty()) {
         for (const auto& endpoint : {"", "tcp://0.0.0.0:1234", "tcp://[::]:1234", "tcp://[0:0:0:0:0:0:0:0]:1234",
-                 "tcp://127.0.0.1:0", "ws://127.0.0.1:1234", "tcp://127.0.0.1:1234/path"})
-        {
+                 "tcp://127.0.0.1:0", "ws://127.0.0.1:1234", "tcp://127.0.0.1:1234/path"}) {
             write_configuration(endpoint);
             child invalid(executable, "invalid", plugins, 0, "invalid-" + std::to_string(++invalid_case) + ".log");
             invalid.finish();
@@ -554,16 +505,14 @@ int controller(const std::string& executable, const std::string& plugins, const 
     write_configuration("tcp://127.0.0.1:" + std::to_string(port));
     unsigned short server_http{}, client_http{};
 #ifdef ARK_COMPOSED_PLUGIN_TEST
-    if (!schema.empty())
-    {
+    if (!schema.empty()) {
         std::filesystem::create_directories("resource/meta");
         std::filesystem::copy_file(schema, "resource/meta/entity_schema.json");
         asio::ip::tcp::acceptor server_reservation(context, {asio::ip::make_address("127.0.0.1"), 0});
         asio::ip::tcp::acceptor client_reservation(context, {asio::ip::make_address("127.0.0.1"), 0});
         server_http = server_reservation.local_endpoint().port();
         client_http = client_reservation.local_endpoint().port();
-        for (const auto& entry : {std::pair{"server", server_http}, std::pair{"client", client_http}})
-        {
+        for (const auto& entry : {std::pair{"server", server_http}, std::pair{"client", client_http}}) {
             std::ofstream http(std::string(entry.first) + "-http.toml");
             http.exceptions(std::ios::failbit | std::ios::badbit);
             http << "[http]\nhost = '127.0.0.1'\nport = " << entry.second << "\nthreads = 3\n";
@@ -577,8 +526,7 @@ int controller(const std::string& executable, const std::string& plugins, const 
     await_marker("first-roundtrip", client, 5s);
     first.stop();
 #ifdef ARK_COMPOSED_PLUGIN_TEST
-    if (server_http)
-    {
+    if (server_http) {
         require_refused(server_http);
         require_refused(port);
     }
@@ -590,8 +538,7 @@ int controller(const std::string& executable, const std::string& plugins, const 
     client.finish();
     second.stop();
 #ifdef ARK_COMPOSED_PLUGIN_TEST
-    if (server_http)
-    {
+    if (server_http) {
         require_refused(server_http);
         require_refused(client_http);
         require_refused(port);
@@ -600,8 +547,7 @@ int controller(const std::string& executable, const std::string& plugins, const 
                "owned snapshots, callback retirement, endpoint closure and repeated normal stop passed\n";
     }
 #endif
-    if (schema.empty())
-    {
+    if (schema.empty()) {
         std::cout << "Static Bus actual two-process DSOs: eligibility, invalid endpoint diagnostics, SS registration, "
                      "Protobuf request/response, lost-route rejection, target restart, 30s policy reconnect and normal "
                      "stop passed\n";
@@ -611,31 +557,24 @@ int controller(const std::string& executable, const std::string& plugins, const 
 } // namespace
 
 int main(int argc, char* argv[]) {
-    try
-    {
-        if (argc == 3)
-        {
+    try {
+        if (argc == 3) {
             return controller(
                 std::filesystem::absolute(argv[0]).string(), std::filesystem::absolute(argv[1]).string(), argv[2]);
         }
 #ifdef ARK_COMPOSED_PLUGIN_TEST
-        if (argc == 5 && std::string(argv[3]) == "--composed")
-        {
+        if (argc == 5 && std::string(argv[3]) == "--composed") {
             return controller(std::filesystem::absolute(argv[0]).string(), std::filesystem::absolute(argv[1]).string(),
                 argv[2], std::filesystem::absolute(argv[4]).string());
         }
-        if (argc == 6)
-        {
+        if (argc == 6) {
             composed_peer = true;
             // The composed probe prevents unwinding active callback captures;
             // controller timeouts still terminate/reap only this owned child.
-            try
-            {
+            try {
                 return peer(argv[1], argv[2], std::stoi(argv[3]), static_cast<unsigned short>(std::stoi(argv[4])),
                     static_cast<unsigned short>(std::stoi(argv[5])));
-            }
-            catch (const std::exception& error)
-            {
+            } catch (const std::exception& error) {
                 std::cerr << error.what() << std::endl;
                 std::_Exit(1);
             }
@@ -643,9 +582,7 @@ int main(int argc, char* argv[]) {
 #endif
         require(argc == 4, "Expected plugin directory and runtime, or peer arguments");
         return peer(argv[1], argv[2], std::stoi(argv[3]));
-    }
-    catch (const std::exception& error)
-    {
+    } catch (const std::exception& error) {
         std::cerr << error.what() << std::endl;
         return 1;
     }

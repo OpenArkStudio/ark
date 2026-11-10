@@ -15,15 +15,13 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void etcd_client_plugin::install() {
-    if (!register_module(detail::make_etcd_client_module(), module_update::disabled))
-    {
+    if (!register_module(detail::make_etcd_client_module(), module_update::disabled)) {
         throw std::runtime_error("Etcd Client module registration rejected");
     }
 }
 
 void etcd_client_plugin::uninstall() {
-    if (!unregister_module<etcd_client_module>())
-    {
+    if (!unregister_module<etcd_client_module>()) {
         throw std::runtime_error("Etcd Client module unregistration rejected");
     }
 }

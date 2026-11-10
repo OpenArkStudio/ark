@@ -18,8 +18,7 @@
 
 namespace ark::guest_room {
 
-class room_module final : public module_base<module, kernel_module, map_module, net_service_manager_module>
-{
+class room_module final : public module_base<module, kernel_module, map_module, net_service_manager_module> {
 public:
     bool init() override;
     bool pre_update() override;
@@ -27,14 +26,12 @@ public:
     bool pre_shut() override;
 
 private:
-    struct output
-    {
+    struct output {
         msg_id_t id;
         std::string body;
     };
 
-    struct peer
-    {
+    struct peer {
         std::shared_ptr<entity> player;
         std::string player_id;
         std::unique_ptr<entity_sync::nested_publisher> publisher;

@@ -24,8 +24,7 @@
 
 namespace ark {
 
-class proxy_net_module : public module
-{
+class proxy_net_module : public module {
 public:
     virtual bool verify_connect_data(const std::string& account, const std::string& key) = 0;
 };

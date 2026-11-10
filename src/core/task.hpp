@@ -25,17 +25,14 @@ using task = asio::awaitable<result_type>;
 // the group or the business state referenced by its tasks. Destruction with
 // pending tasks (or on a different thread) terminates; it does not detach tasks,
 // block, poll recursively, or destroy suspended coroutine frames.
-class task_group
-{
-    struct task_record
-    {
+class task_group {
+    struct task_record {
         asio::cancellation_signal cancellation;
         std::function<void(std::exception_ptr)> completion;
         bool cancel_requested{};
     };
 
-    struct state
-    {
+    struct state {
         std::shared_ptr<arknet::manual_runtime> runtime;
         const std::thread::id owner = std::this_thread::get_id();
         std::unordered_map<std::uint64_t, std::shared_ptr<task_record>> tasks;
@@ -46,15 +43,13 @@ class task_group
         state(std::shared_ptr<arknet::manual_runtime> execution, std::size_t limit)
             : runtime(std::move(execution))
             , maximum(limit) {
-            if (!runtime || !maximum)
-            {
+            if (!runtime || !maximum) {
                 throw std::invalid_argument("Module task group requires a runtime and positive task limit");
             }
         }
 
         void check_owner() const {
-            if (owner != std::this_thread::get_id())
-            {
+            if (owner != std::this_thread::get_id()) {
                 throw std::logic_error("Module task group requires its constructing thread");
             }
         }
@@ -74,8 +69,7 @@ public:
     task_group& operator=(task_group&&) = delete;
 
     ~task_group() {
-        if (state_->owner != std::this_thread::get_id() || !state_->tasks.empty())
-        {
+        if (state_->owner != std::this_thread::get_id() || !state_->tasks.empty()) {
             std::terminate();
         }
     }
@@ -85,20 +79,17 @@ public:
     task_id start(task<> task, completion_handler completion = {}) {
         auto shared = state_;
         shared->check_owner();
-        if (!shared->accepting || shared->tasks.size() == shared->maximum)
-        {
+        if (!shared->accepting || shared->tasks.size() == shared->maximum) {
             return 0;
         }
-        if (shared->next_id == std::numeric_limits<task_id>::max())
-        {
+        if (shared->next_id == std::numeric_limits<task_id>::max()) {
             throw std::overflow_error("Module task identifiers exhausted");
         }
         auto record = std::make_shared<task_record>();
         record->completion = std::move(completion);
         const auto id = shared->next_id++;
         shared->tasks.emplace(id, record);
-        try
-        {
+        try {
             asio::co_spawn(shared->runtime->get_executor(), std::move(task),
                 asio::bind_cancellation_slot(
                     record->cancellation.slot(), [shared, record, id](std::exception_ptr error) mutable {
@@ -107,14 +98,11 @@ public:
                         // completion may destroy the public group facade.
                         shared->tasks.erase(id);
                         auto handler = std::move(record->completion);
-                        if (handler)
-                        {
+                        if (handler) {
                             handler(std::move(error));
                         }
                     }));
-        }
-        catch (...)
-        {
+        } catch (...) {
             shared->tasks.erase(id);
             throw;
         }
@@ -125,13 +113,11 @@ public:
         auto shared = state_;
         shared->check_owner();
         const auto found = shared->tasks.find(id);
-        if (found == shared->tasks.end())
-        {
+        if (found == shared->tasks.end()) {
             return false;
         }
         auto record = found->second;
-        if (!record->cancel_requested)
-        {
+        if (!record->cancel_requested) {
             record->cancel_requested = true;
             record->cancellation.emit(asio::cancellation_type::terminal);
         }
@@ -143,19 +129,15 @@ public:
         shared->check_owner();
         // Emission may synchronously execute an operation's cancellation hook.
         // Do not retain an iterator across that external code.
-        while (true)
-        {
+        while (true) {
             std::shared_ptr<task_record> next;
-            for (const auto& [id, record] : shared->tasks)
-            {
-                if (!record->cancel_requested)
-                {
+            for (const auto& [id, record] : shared->tasks) {
+                if (!record->cancel_requested) {
                     next = record;
                     break;
                 }
             }
-            if (!next)
-            {
+            if (!next) {
                 return;
             }
             next->cancel_requested = true;

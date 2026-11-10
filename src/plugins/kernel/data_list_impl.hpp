@@ -31,8 +31,7 @@
 
 namespace ark {
 
-class data_list_alloc
-{
+class data_list_alloc {
 public:
     void* alloc(size_t size) {
         ARK_NEW_ARRAY_RET(char, size);
@@ -48,17 +47,14 @@ public:
 };
 
 template<size_t data_size, size_t buffer_size, typename allocator_type = data_list_alloc>
-class base_data_list final : public data_list
-{
+class base_data_list final : public data_list {
 private:
     using self_t = base_data_list<data_size, buffer_size, allocator_type>;
 
-    struct dynamic_data_t
-    {
+    struct dynamic_data_t {
         data_type type;
 
-        union
-        {
+        union {
             bool bool_value;
             int int_value;
             uint32_t uint32_value;
@@ -93,30 +89,24 @@ public:
         int begin = 0;
         int end = 0;
 
-        for (int i = 0; i < length; i++)
-        {
-            if (source[i] == separator)
-            {
+        for (int i = 0; i < length; i++) {
+            if (source[i] == separator) {
                 end = i;
 
-                if (!add_string(&source[begin], end - begin))
-                {
+                if (!add_string(&source[begin], end - begin)) {
                     ARK_ASSERT_NO_EFFECT(0);
                 }
 
-                if (i + 1 < length)
-                {
+                if (i + 1 < length) {
                     begin = i + 1;
                 }
             }
         }
 
-        if (end < length)
-        {
+        if (end < length) {
             end = length;
 
-            if (!add_string(&source[begin], end - begin))
-            {
+            if (!add_string(&source[begin], end - begin)) {
                 ARK_ASSERT_NO_EFFECT(0);
             }
         }
@@ -138,8 +128,7 @@ public:
     }
 
     self_t operator=(const self_t& src) {
-        if (this == &src)
-        {
+        if (this == &src) {
             return *this;
         }
         release();
@@ -157,13 +146,11 @@ public:
     }
 
     void release() {
-        if (data_capacity_ > data_size)
-        {
+        if (data_capacity_ > data_size) {
             allocator_.free(data_, data_capacity_ * sizeof(dynamic_data_t));
         }
 
-        if (buffer_capacity_ > buffer_size)
-        {
+        if (buffer_capacity_ > buffer_size) {
             allocator_.free(buffer_, buffer_capacity_ * sizeof(char));
         }
     }
@@ -177,8 +164,7 @@ public:
         clear();
 
         std::string tmp(src);
-        if (tmp.empty())
-        {
+        if (tmp.empty()) {
             return true;
         }
 
@@ -187,11 +173,9 @@ public:
         tmp += tmp_split;
         std::string::size_type size = tmp.length();
 
-        for (std::string::size_type i = 0; i < size; ++i)
-        {
+        for (std::string::size_type i = 0; i < size; ++i) {
             pos = int(tmp.find(tmp_split, i));
-            if (pos < size)
-            {
+            if (pos < size) {
                 std::string sub = tmp.substr(i, pos - i);
                 add_string(sub.c_str());
 
@@ -208,15 +192,13 @@ public:
     }
 
     bool append(const data_list& src, size_t start, size_t count) override {
-        if (start >= src.get_count())
-        {
+        if (start >= src.get_count()) {
             return false;
         }
 
         size_t end = start + count;
 
-        if (end > src.get_count())
-        {
+        if (end > src.get_count()) {
             return false;
         }
 
@@ -238,8 +220,7 @@ public:
     }
 
     data_type get_type(size_t index) const override {
-        if (index >= data_size_)
-        {
+        if (index >= data_size_) {
             return data_type::dt_empty;
         }
 
@@ -299,8 +280,7 @@ public:
     bool add_string(const char* value) override {
         assert(value != nullptr);
         const size_t length = strlen(value);
-        if (length == std::numeric_limits<size_t>::max())
-        {
+        if (length == std::numeric_limits<size_t>::max()) {
             throw std::length_error("Kernel data list string exceeds its storage length");
         }
         const size_t value_size = length + 1;
@@ -318,16 +298,14 @@ public:
     }
 
     virtual bool add_string(const char* value, const int length) {
-        if (length <= 0)
-        {
+        if (length <= 0) {
             return false;
         }
 
         assert(value != nullptr);
         size_t value_size = strlen(value);
 
-        if (value_size > (size_t)length)
-        {
+        if (value_size > (size_t)length) {
             value_size = (size_t)length;
         }
 
@@ -375,299 +353,227 @@ public:
 
     // get data
     bool get_bool(size_t index) const override {
-        if (index > data_size_)
-        {
+        if (index > data_size_) {
             return null_boolean;
         }
 
-        if (data_[index].type == data_type::dt_boolean)
-        {
+        if (data_[index].type == data_type::dt_boolean) {
             return data_[index].bool_value;
-        }
-        else
-        {
+        } else {
             return null_boolean;
         }
     }
 
     int get_int(size_t index) const override {
-        if (index > data_size_)
-        {
+        if (index > data_size_) {
             return null_int;
         }
 
-        if (data_[index].type == data_type::dt_int32)
-        {
+        if (data_[index].type == data_type::dt_int32) {
             return data_[index].int_value;
-        }
-        else
-        {
+        } else {
             return null_int;
         }
     }
 
     int64_t int64(size_t index) const override {
-        if (index > data_size_)
-        {
+        if (index > data_size_) {
             return null_int64;
         }
 
-        if (data_[index].type == data_type::dt_int64)
-        {
+        if (data_[index].type == data_type::dt_int64) {
             return data_[index].int64_value;
-        }
-        else
-        {
+        } else {
             return null_int64;
         }
     }
 
     uint32_t u_int(size_t index) const override {
-        if (index > data_size_)
-        {
+        if (index > data_size_) {
             return null_int;
         }
 
-        if (data_[index].type == data_type::dt_uint32)
-        {
+        if (data_[index].type == data_type::dt_uint32) {
             return data_[index].uint32_value;
-        }
-        else
-        {
+        } else {
             return null_int;
         }
     }
 
     uint64_t u_int64(size_t index) const override {
-        if (index > data_size_)
-        {
+        if (index > data_size_) {
             return null_int64;
         }
 
-        if (data_[index].type == data_type::dt_uint64)
-        {
+        if (data_[index].type == data_type::dt_uint64) {
             return data_[index].uint64_value;
-        }
-        else
-        {
+        } else {
             return null_int64;
         }
     }
 
     float get_float(size_t index) const override {
-        if (index > data_size_)
-        {
+        if (index > data_size_) {
             return null_float;
         }
 
-        if (data_[index].type == data_type::dt_float)
-        {
+        if (data_[index].type == data_type::dt_float) {
             return data_[index].float_value;
-        }
-        else
-        {
+        } else {
             return null_float;
         }
     }
 
     double get_double(size_t index) const override {
-        if (index > data_size_)
-        {
+        if (index > data_size_) {
             return null_double;
         }
 
-        if (data_[index].type == data_type::dt_double)
-        {
+        if (data_[index].type == data_type::dt_double) {
             return data_[index].double_value;
-        }
-        else
-        {
+        } else {
             return null_double;
         }
     }
 
     const char* string(size_t index) const override {
-        if (index > data_size_)
-        {
+        if (index > data_size_) {
             return null_str.c_str();
         }
 
-        if (data_[index].type == data_type::dt_string)
-        {
+        if (data_[index].type == data_type::dt_string) {
             return buffer_ + data_[index].string_offset;
-        }
-        else
-        {
+        } else {
             return null_str.c_str();
         }
     }
 
     void* pointer(size_t index) const override {
-        if (index > data_size_)
-        {
+        if (index > data_size_) {
             return nullptr;
         }
 
-        if (data_[index].type == data_type::dt_pointer)
-        {
+        if (data_[index].type == data_type::dt_pointer) {
             return data_[index].pointer_value;
-        }
-        else
-        {
+        } else {
             return nullptr;
         }
     }
 
     const void* user_data(size_t index, size_t& size) const override {
-        if (index > data_size_)
-        {
+        if (index > data_size_) {
             size = 0;
             return nullptr;
         }
 
-        if (data_[index].type == data_type::dt_userdata)
-        {
+        if (data_[index].type == data_type::dt_userdata) {
             char* p = buffer_ + data_[index].user_data_offset;
             size = data::get_user_data_size(p);
             return data::get_user_data(p);
-        }
-        else
-        {
+        } else {
             size = 0;
             return nullptr;
         }
     }
 
     void* raw_user_data(size_t index) const override {
-        if (index > data_size_)
-        {
+        if (index > data_size_) {
             return nullptr;
         }
 
-        if (data_[index].type == data_type::dt_userdata)
-        {
+        if (data_[index].type == data_type::dt_userdata) {
             return buffer_ + data_[index].user_data_offset;
-        }
-        else
-        {
+        } else {
             return nullptr;
         }
     }
 
     virtual bool set_bool(size_t index, bool value) {
-        if (index >= data_size_)
-        {
+        if (index >= data_size_) {
             return false;
         }
 
-        if (data_[index].type != data_type::dt_boolean)
-        {
+        if (data_[index].type != data_type::dt_boolean) {
             return false;
-        }
-        else
-        {
+        } else {
             data_[index].bool_value = value;
             return true;
         }
     }
 
     virtual bool set_int(size_t index, int value) {
-        if (index >= data_size_)
-        {
+        if (index >= data_size_) {
             return false;
         }
 
-        if (data_[index].type != data_type::dt_int32)
-        {
+        if (data_[index].type != data_type::dt_int32) {
             return false;
-        }
-        else
-        {
+        } else {
             data_[index].int_value = value;
             return true;
         }
     }
 
     virtual bool set_int64(size_t index, int64_t value) {
-        if (index >= data_size_)
-        {
+        if (index >= data_size_) {
             return false;
         }
 
-        if (data_[index].type != data_type::dt_int64)
-        {
+        if (data_[index].type != data_type::dt_int64) {
             return false;
-        }
-        else
-        {
+        } else {
             data_[index].int64_value = value;
             return true;
         }
     }
 
     virtual bool set_u_int(size_t index, uint32_t value) {
-        if (index >= data_size_)
-        {
+        if (index >= data_size_) {
             return false;
         }
 
-        if (data_[index].type != data_type::dt_uint32)
-        {
+        if (data_[index].type != data_type::dt_uint32) {
             return false;
-        }
-        else
-        {
+        } else {
             data_[index].uint32_value = value;
             return true;
         }
     }
 
     virtual bool set_u_int64(size_t index, uint64_t value) {
-        if (index >= data_size_)
-        {
+        if (index >= data_size_) {
             return false;
         }
 
-        if (data_[index].type != data_type::dt_uint64)
-        {
+        if (data_[index].type != data_type::dt_uint64) {
             return false;
-        }
-        else
-        {
+        } else {
             data_[index].uint64_value = value;
             return true;
         }
     }
 
     virtual bool set_float(size_t index, float value) {
-        if (index >= data_size_)
-        {
+        if (index >= data_size_) {
             return false;
         }
 
-        if (data_[index].type != data_type::dt_float)
-        {
+        if (data_[index].type != data_type::dt_float) {
             return false;
-        }
-        else
-        {
+        } else {
             data_[index].float_value = value;
             return true;
         }
     }
 
     virtual bool set_double(size_t index, double value) {
-        if (index >= data_size_)
-        {
+        if (index >= data_size_) {
             return false;
         }
 
-        if (data_[index].type != data_type::dt_double)
-        {
+        if (data_[index].type != data_type::dt_double) {
             return false;
-        }
-        else
-        {
+        } else {
             data_[index].double_value = value;
             return true;
         }
@@ -676,26 +582,22 @@ public:
     virtual bool set_string(size_t index, const char* value) {
         assert(value != nullptr);
 
-        if (index >= data_size_)
-        {
+        if (index >= data_size_) {
             return false;
         }
 
-        if (data_[index].type != data_type::dt_string)
-        {
+        if (data_[index].type != data_type::dt_string) {
             return false;
         }
 
         char* p = buffer_ + data_[index].string_offset;
         const size_t length = strlen(value);
-        if (length == std::numeric_limits<size_t>::max())
-        {
+        if (length == std::numeric_limits<size_t>::max()) {
             throw std::length_error("Kernel data list string exceeds its storage length");
         }
         const size_t size1 = length + 1;
 
-        if (size1 <= (strlen(p) + 1))
-        {
+        if (size1 <= (strlen(p) + 1)) {
             ARK_STRNCPY(p, value, size1);
             return true;
         }
@@ -709,31 +611,25 @@ public:
     }
 
     virtual bool set_pointer(size_t index, void* value) {
-        if (index >= data_size_)
-        {
+        if (index >= data_size_) {
             return false;
         }
 
-        if (data_[index].type != data_type::dt_pointer)
-        {
+        if (data_[index].type != data_type::dt_pointer) {
             return false;
-        }
-        else
-        {
+        } else {
             data_[index].pointer_value = value;
             return true;
         }
     }
 
     const std::string to_string(size_t index) override {
-        if (index > data_size_)
-        {
+        if (index > data_size_) {
             return null_str;
         }
 
         std::string data;
-        switch (data_[index].type)
-        {
+        switch (data_[index].type) {
         case data_type::dt_boolean:
             data = std::to_string(data_[index].bool_value);
             break;
@@ -773,13 +669,11 @@ public:
     size_t get_mem_usage() const override {
         size_t size = sizeof(self_t);
 
-        if (data_capacity_ > data_size)
-        {
+        if (data_capacity_ > data_size) {
             size += sizeof(dynamic_data_t) * data_capacity_;
         }
 
-        if (buffer_capacity_ > buffer_size)
-        {
+        if (buffer_capacity_ > buffer_size) {
             size += sizeof(char) * buffer_capacity_;
         }
 
@@ -788,23 +682,19 @@ public:
 
 protected:
     void reserve_dynamic_data() {
-        if (data_size_ >= data_capacity_)
-        {
+        if (data_size_ >= data_capacity_) {
             constexpr size_t maximum = std::numeric_limits<size_t>::max() / sizeof(dynamic_data_t);
-            if (data_capacity_ > maximum / 2)
-            {
+            if (data_capacity_ > maximum / 2) {
                 throw std::length_error("Kernel data list exceeds its index storage");
             }
             size_t new_size = data_capacity_ * 2;
             dynamic_data_t* p = (dynamic_data_t*)allocator_.alloc(new_size * sizeof(dynamic_data_t));
-            if (p == nullptr)
-            {
+            if (p == nullptr) {
                 throw std::bad_alloc{};
             }
             memcpy(p, data_, data_size_ * sizeof(dynamic_data_t));
 
-            if (data_capacity_ > data_size)
-            {
+            if (data_capacity_ > data_size) {
                 allocator_.free(data_, data_capacity_ * sizeof(dynamic_data_t));
             }
 
@@ -820,24 +710,19 @@ protected:
 
     size_t buffer_capacity_for(size_t need_size) const {
         constexpr size_t maximum = std::numeric_limits<size_t>::max();
-        if (need_size > maximum - buffer_size_)
-        {
+        if (need_size > maximum - buffer_size_) {
             throw std::length_error("Kernel data list exceeds its buffer storage");
         }
         const size_t new_used = buffer_size_ + need_size;
-        if (new_used <= buffer_capacity_)
-        {
+        if (new_used <= buffer_capacity_) {
             return buffer_capacity_;
         }
-        if (buffer_capacity_ > maximum / 2)
-        {
+        if (buffer_capacity_ > maximum / 2) {
             throw std::length_error("Kernel data list buffer growth exceeds its storage length");
         }
         size_t new_size = buffer_capacity_ * 2;
-        if (new_used > new_size)
-        {
-            if (new_used > maximum / 2)
-            {
+        if (new_used > new_size) {
+            if (new_used > maximum / 2) {
                 throw std::length_error("Kernel data list buffer growth exceeds its storage length");
             }
             new_size = new_used * 2;
@@ -848,17 +733,14 @@ protected:
     char* add_buffer(size_t need_size) {
         const size_t new_size = buffer_capacity_for(need_size);
         const size_t new_used = buffer_size_ + need_size;
-        if (new_size > buffer_capacity_)
-        {
+        if (new_size > buffer_capacity_) {
             char* p = (char*)allocator_.alloc(new_size);
-            if (p == nullptr)
-            {
+            if (p == nullptr) {
                 throw std::bad_alloc{};
             }
             memcpy(p, buffer_, buffer_size_);
 
-            if (buffer_capacity_ > buffer_size)
-            {
+            if (buffer_capacity_ > buffer_size) {
                 allocator_.free(buffer_, buffer_capacity_);
             }
 
@@ -874,8 +756,7 @@ protected:
     void inner_append(const data& data) {
         bool success(false);
 
-        switch (data.get_type())
-        {
+        switch (data.get_type()) {
         case data_type::dt_boolean:
             success = add_bool(data.get_bool());
             break;
@@ -903,13 +784,11 @@ protected:
         case data_type::dt_pointer:
             success = add_pointer(data.get_pointer());
             break;
-        case data_type::dt_userdata:
-        {
+        case data_type::dt_userdata: {
             size_t size;
             const void* data_ptr = data.get_user_data(size);
             success = add_user_data(data_ptr, size);
-        }
-        break;
+        } break;
         default:
             ARK_ASSERT_NO_EFFECT(0);
             break;
@@ -921,10 +800,8 @@ protected:
     bool inner_append(const data_list& src, size_t start, size_t end) {
         bool success(false);
 
-        for (size_t i = start; i < end; ++i)
-        {
-            switch (src.get_type(i))
-            {
+        for (size_t i = start; i < end; ++i) {
+            switch (src.get_type(i)) {
             case data_type::dt_boolean:
                 success = add_bool(src.get_bool(i));
                 break;
@@ -952,13 +829,11 @@ protected:
             case data_type::dt_pointer:
                 success = add_pointer(src.pointer(i));
                 break;
-            case data_type::dt_userdata:
-            {
+            case data_type::dt_userdata: {
                 size_t size;
                 const void* data_ptr = src.user_data(i, size);
                 success = add_user_data(data_ptr, size);
-            }
-            break;
+            } break;
             default:
                 ARK_ASSERT_NO_EFFECT(0);
                 break;

@@ -12,8 +12,7 @@
 
 namespace {
 
-struct owned_wheel
-{
+struct owned_wheel {
     std::unique_ptr<ark::time_wheel_manager> wheel;
     unsigned releases{};
     ark::startup_cleanup_result result{ark::startup_cleanup_result::done};
@@ -24,31 +23,26 @@ struct owned_wheel
 ark::startup_cleanup_result release_wheel(void* pointer) {
     auto& context = *static_cast<owned_wheel*>(pointer);
     ++context.releases;
-    if (context.manager)
-    {
+    if (context.manager) {
         CHECK(context.manager->cleanup_failed_startup() == ark::startup_cleanup_result::unsafe);
         CHECK_FALSE(context.manager->prepare_startup_cleanup("reentrant", "test", {}, release_wheel));
         CHECK_THROWS_AS(context.manager->update(1), std::logic_error);
         CHECK_THROWS_AS(context.manager->add_module("forbidden", nullptr), std::logic_error);
     }
-    if (context.throw_release)
-    {
+    if (context.throw_release) {
         throw 42;
     }
-    if (context.result != ark::startup_cleanup_result::done)
-    {
+    if (context.result != ark::startup_cleanup_result::done) {
         return context.result;
     }
-    if (context.wheel)
-    {
+    if (context.wheel) {
         context.wheel->shut();
         context.wheel.reset();
     }
     return context.result;
 }
 
-class wheel_module : public ark::module
-{
+class wheel_module : public ark::module {
 public:
     wheel_module(std::shared_ptr<owned_wheel> context, unsigned phase, bool throws)
         : context_(std::move(context))
@@ -90,10 +84,8 @@ public:
 private:
     bool step(unsigned phase) {
         ++calls;
-        if (phase == failed_phase_)
-        {
-            if (throws_)
-            {
+        if (phase == failed_phase_) {
+            if (throws_) {
                 throw std::runtime_error("private wheel startup failure");
             }
             return false;
@@ -109,10 +101,8 @@ private:
 } // namespace
 
 TEST_CASE("Startup cleanup owns capsules before acquisition and runs once after each failed phase") {
-    for (unsigned phase{}; phase < 4; ++phase)
-    {
-        for (bool throws : {false, true})
-        {
+    for (unsigned phase{}; phase < 4; ++phase) {
+        for (bool throws : {false, true}) {
             ark::plugin_manager manager;
             auto context = std::make_shared<owned_wheel>();
             context->manager = &manager;
@@ -122,12 +112,9 @@ TEST_CASE("Startup cleanup owns capsules before acquisition and runs once after 
             REQUIRE(context->wheel->initialized());
             REQUIRE(manager.add_module("private-wheel", &module));
             auto& tasks = manager.create_task_group(module);
-            if (throws)
-            {
+            if (throws) {
                 CHECK_THROWS_AS(manager.start(1, {}, {}, {}), std::runtime_error);
-            }
-            else
-            {
+            } else {
                 CHECK_FALSE(manager.start(1, {}, {}, {}));
             }
             CHECK(context->releases == 0);
@@ -180,10 +167,8 @@ TEST_CASE("Startup cleanup rejects unsafe enrollment and only disarms on success
 
 TEST_CASE("Unsafe and throwing startup cleanup retain their capsule and never retry") {
     for (const auto result : {ark::startup_cleanup_result::unsafe, ark::startup_cleanup_result::failed,
-             ark::startup_cleanup_result::not_run})
-    {
-        for (bool throws : {false, true})
-        {
+             ark::startup_cleanup_result::not_run}) {
+        for (bool throws : {false, true}) {
             ark::plugin_manager manager;
             auto context = std::make_shared<owned_wheel>();
             context->result = result;
@@ -205,14 +190,12 @@ TEST_CASE("Unsafe and throwing startup cleanup retain their capsule and never re
 
 namespace {
 
-struct cleanup_trace
-{
+struct cleanup_trace {
     std::array<unsigned, ark::startup_cleanup_capacity> calls{};
     std::size_t count{};
 };
 
-struct traced_context
-{
+struct traced_context {
     cleanup_trace* trace{};
     unsigned id{};
     ark::startup_cleanup_result result{ark::startup_cleanup_result::done};
@@ -222,20 +205,17 @@ struct traced_context
 ark::startup_cleanup_result trace_cleanup(void* pointer) {
     auto& context = *static_cast<traced_context*>(pointer);
     auto& trace = *context.trace;
-    if (trace.count < trace.calls.size())
-    {
+    if (trace.count < trace.calls.size()) {
         trace.calls[trace.count] = context.id;
     }
     ++trace.count;
-    if (context.throws)
-    {
+    if (context.throws) {
         throw 17;
     }
     return context.result;
 }
 
-class startup_failure_module final : public ark::module
-{
+class startup_failure_module final : public ark::module {
 public:
     bool init() override {
         return false;
@@ -255,8 +235,7 @@ TEST_CASE("Startup cleanup accepts sixteen independent owners and rejects withou
     ark::plugin_manager manager;
     startup_failure_module module;
     REQUIRE(manager.add_module("failure", &module));
-    for (std::size_t index{}; index < resource_keys.size(); ++index)
-    {
+    for (std::size_t index{}; index < resource_keys.size(); ++index) {
         auto context = std::make_shared<traced_context>();
         context->trace = &trace;
         context->id = static_cast<unsigned>(index);
@@ -275,8 +254,7 @@ TEST_CASE("Startup cleanup accepts sixteen independent owners and rejects withou
     CHECK(overflow.use_count() == 1);
     CHECK(manager.cleanup_failed_startup() == ark::startup_cleanup_result::done);
     REQUIRE(trace.count == ark::startup_cleanup_capacity);
-    for (std::size_t index{}; index < trace.count; ++index)
-    {
+    for (std::size_t index{}; index < trace.count; ++index) {
         CHECK(trace.calls[index] == ark::startup_cleanup_capacity - index - 1);
         CHECK_FALSE(retained[index].expired());
     }
@@ -286,22 +264,18 @@ TEST_CASE("Startup cleanup accepts sixteen independent owners and rejects withou
 
 TEST_CASE("Startup cleanup stops at the first incomplete newer owner and retains all contexts") {
     for (const auto result : {ark::startup_cleanup_result::unsafe, ark::startup_cleanup_result::failed,
-             ark::startup_cleanup_result::not_run})
-    {
-        for (bool throws : {false, true})
-        {
+             ark::startup_cleanup_result::not_run}) {
+        for (bool throws : {false, true}) {
             cleanup_trace trace;
             ark::plugin_manager manager;
             startup_failure_module module;
             REQUIRE(manager.add_module("failure", &module));
             std::array<std::weak_ptr<traced_context>, 3> retained;
-            for (unsigned index{}; index < retained.size(); ++index)
-            {
+            for (unsigned index{}; index < retained.size(); ++index) {
                 auto context = std::make_shared<traced_context>();
                 context->trace = &trace;
                 context->id = index;
-                if (index == 1)
-                {
+                if (index == 1) {
                     context->result = result;
                     context->throws = throws;
                 }
@@ -316,8 +290,7 @@ TEST_CASE("Startup cleanup stops at the first incomplete newer owner and retains
             REQUIRE(trace.count == 2);
             CHECK(trace.calls[0] == 2);
             CHECK(trace.calls[1] == 1);
-            for (const auto& context : retained)
-            {
+            for (const auto& context : retained) {
                 CHECK_FALSE(context.expired());
             }
         }
@@ -328,16 +301,14 @@ TEST_CASE("Successful startup disarms all owners and permits no late enrollment"
     cleanup_trace trace;
     ark::plugin_manager manager;
     std::array<std::shared_ptr<traced_context>, 3> contexts;
-    for (std::size_t index{}; index < contexts.size(); ++index)
-    {
+    for (std::size_t index{}; index < contexts.size(); ++index) {
         contexts[index] = std::make_shared<traced_context>();
         contexts[index]->trace = &trace;
         REQUIRE(manager.prepare_startup_cleanup(resource_keys[index], "plugin", contexts[index], trace_cleanup));
         CHECK(contexts[index].use_count() == 2);
     }
     REQUIRE(manager.start(1, {}, {}, {}));
-    for (const auto& context : contexts)
-    {
+    for (const auto& context : contexts) {
         CHECK(context.use_count() == 1);
     }
     CHECK(trace.count == 0);

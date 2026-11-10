@@ -46,8 +46,7 @@ DOCTEST_TEST_CASE("Plugin-manager typed lookup exposes the requested module type
 }
 
 DOCTEST_TEST_CASE("Unsigned 32-bit conversion preserves decimal boundaries and accepted prefixes") {
-    struct conversion_case
-    {
+    struct conversion_case {
         const char* text;
         std::uint32_t expected;
     };
@@ -55,8 +54,7 @@ DOCTEST_TEST_CASE("Unsigned 32-bit conversion preserves decimal boundaries and a
     const conversion_case cases[] = {{"0", 0u}, {"2147483647", 2147483647u}, {"2147483648", 2147483648u},
         {"4045620583", 4045620583u}, {"4294967295", std::numeric_limits<std::uint32_t>::max()}, {" \t+42suffix", 42u},
         {"-1", std::numeric_limits<std::uint32_t>::max()}};
-    for (const auto& value : cases)
-    {
+    for (const auto& value : cases) {
         DOCTEST_CAPTURE(value.text);
         DOCTEST_CHECK(lexical_cast<std::uint32_t>(std::string(value.text)) == value.expected);
         DOCTEST_CHECK(lexical_cast<std::uint32_t>(value.text) == value.expected);
@@ -64,8 +62,7 @@ DOCTEST_TEST_CASE("Unsigned 32-bit conversion preserves decimal boundaries and a
 }
 
 DOCTEST_TEST_CASE("Unsigned 64-bit conversion preserves decimal boundaries and accepted prefixes") {
-    struct conversion_case
-    {
+    struct conversion_case {
         const char* text;
         std::uint64_t expected;
     };
@@ -75,8 +72,7 @@ DOCTEST_TEST_CASE("Unsigned 64-bit conversion preserves decimal boundaries and a
         {"18446744073709551614", 18446744073709551614ULL},
         {"18446744073709551615", std::numeric_limits<std::uint64_t>::max()}, {" \t+42suffix", 42ULL},
         {"-1", std::numeric_limits<std::uint64_t>::max()}};
-    for (const auto& value : cases)
-    {
+    for (const auto& value : cases) {
         DOCTEST_CAPTURE(std::string(value.text));
         DOCTEST_CHECK(lexical_cast<std::uint64_t>(std::string(value.text)) == value.expected);
         DOCTEST_CHECK(lexical_cast<std::uint64_t>(value.text) == value.expected);

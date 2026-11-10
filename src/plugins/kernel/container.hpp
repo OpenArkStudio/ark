@@ -29,8 +29,7 @@ namespace ark {
 
 class entity;
 
-class container
-{
+class container {
 public:
     virtual ~container() = default;
 

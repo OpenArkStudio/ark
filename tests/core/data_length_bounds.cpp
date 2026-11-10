@@ -13,8 +13,7 @@
 
 namespace {
 
-struct measured_allocator
-{
+struct measured_allocator {
     static inline std::size_t calls{};
     static inline std::size_t requested{};
     static inline bool reject{};
@@ -22,8 +21,7 @@ struct measured_allocator
     void* alloc(std::size_t size) {
         ++calls;
         requested = size;
-        if (reject)
-        {
+        if (reject) {
             return nullptr;
         }
         return new char[size];
@@ -40,8 +38,7 @@ struct measured_allocator
 using measured_data = ark::data_base<8, measured_allocator>;
 constexpr char payload[] = "binary\0value";
 
-struct reject_allocations
-{
+struct reject_allocations {
     reject_allocations() {
         measured_allocator::reject = true;
     }
@@ -55,8 +52,7 @@ struct reject_allocations
 
 TEST_CASE("Kernel owned user data rejects unrepresentable storage before allocation") {
     const std::size_t limit = std::numeric_limits<std::uint32_t>::max();
-    for (const auto size : {limit - sizeof(std::size_t) + 1, limit, std::numeric_limits<std::size_t>::max()})
-    {
+    for (const auto size : {limit - sizeof(std::size_t) + 1, limit, std::numeric_limits<std::size_t>::max()}) {
         CAPTURE(size);
         measured_data previous(ark::data_type::dt_string, "existing allocated value");
         const auto* storage = previous.get_string();
@@ -122,19 +118,16 @@ TEST_CASE("Kernel owned data rejects oversized raw metadata during copy and assi
 
 TEST_CASE("Kernel owned data keeps valid inline string and binary storage behavior") {
     measured_data value;
-    for (const auto* text : {"", "1234567", "12345678", "a longer allocated string"})
-    {
+    for (const auto* text : {"", "1234567", "12345678", "a longer allocated string"}) {
         value.set_string(text);
         CHECK(std::string(value.get_string()) == text);
     }
-    for (const auto size : {std::size_t{0}, sizeof(payload)})
-    {
+    for (const auto size : {std::size_t{0}, sizeof(payload)}) {
         value.set_user_data(payload, size);
         std::size_t actual{};
         const auto* bytes = value.get_user_data(actual);
         CHECK(actual == size);
-        if (size)
-        {
+        if (size) {
             CHECK(std::memcmp(bytes, payload, size) == 0);
         }
         measured_data copy(value);
@@ -142,8 +135,7 @@ TEST_CASE("Kernel owned data keeps valid inline string and binary storage behavi
         std::size_t copied_size{};
         const auto* copied_bytes = copy.get_user_data(copied_size);
         CHECK(copied_size == size);
-        if (size)
-        {
+        if (size) {
             CHECK(std::memcmp(copied_bytes, payload, size) == 0);
         }
     }

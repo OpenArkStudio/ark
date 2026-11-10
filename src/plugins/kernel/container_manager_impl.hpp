@@ -25,8 +25,7 @@
 
 namespace ark {
 
-class container_manager_impl final : public container_manager
-{
+class container_manager_impl final : public container_manager {
 private:
     // container
     container_list container_data_;

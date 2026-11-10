@@ -5,8 +5,7 @@
 
 namespace ark {
 
-class etcd_client
-{
+class etcd_client {
 public:
     virtual ~etcd_client() = default;
 

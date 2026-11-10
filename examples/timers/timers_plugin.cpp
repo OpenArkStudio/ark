@@ -34,15 +34,13 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void timers_plugin::install() {
-    if (!register_module(make_timers_module(), module_update::enabled))
-    {
+    if (!register_module(make_timers_module(), module_update::enabled)) {
         throw std::runtime_error("timers module registration rejected");
     }
 }
 
 void timers_plugin::uninstall() {
-    if (!unregister_module<timers_module>())
-    {
+    if (!unregister_module<timers_module>()) {
         throw std::runtime_error("timers module unregistration rejected");
     }
 }

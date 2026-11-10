@@ -18,8 +18,7 @@
 #include "../../src/plugins/net/net_service_manager_module_impl.cpp"
 
 namespace ark {
-struct net_listener_startup_test_access
-{
+struct net_listener_startup_test_access {
     static auto* candidate(net_service_manager_module& module) {
         auto& impl = static_cast<net_service_manager_module_impl&>(module);
         return impl.server_services_.empty() ? nullptr : &impl.server_services_.begin()->second;
@@ -27,18 +26,15 @@ struct net_listener_startup_test_access
 
     static bool native_started(net_service_manager_module& module) {
         const auto* entry = candidate(module);
-        if (!entry)
-        {
+        if (!entry) {
             return false;
         }
         auto network = entry->service->get_net();
-        if (auto* tcp = dynamic_cast<tcp_server*>(network.get()))
-        {
+        if (auto* tcp = dynamic_cast<tcp_server*>(network.get())) {
             return tcp->server_ && tcp->server_->iopool().started() &&
                    tcp->server_->iopool().get(0)->get_thread_id() != std::thread::id{};
         }
-        if (auto* rudp = dynamic_cast<rudp_server*>(network.get()))
-        {
+        if (auto* rudp = dynamic_cast<rudp_server*>(network.get())) {
             return rudp->server_ && rudp->server_->iopool().started() &&
                    rudp->server_->iopool().get(0)->get_thread_id() != std::thread::id{};
         }
@@ -47,19 +43,16 @@ struct net_listener_startup_test_access
 
     static bool worker_initialized(net_service_manager_module& module) {
         const auto* entry = candidate(module);
-        if (!entry)
-        {
+        if (!entry) {
             return false;
         }
         // operator new may be reached while io_pool::start holds its lifecycle
         // mutex. Observe the fixture's single lane without reentering started().
         auto network = entry->service->get_net();
-        if (auto* tcp = dynamic_cast<tcp_server*>(network.get()))
-        {
+        if (auto* tcp = dynamic_cast<tcp_server*>(network.get())) {
             return tcp->server_ && tcp->server_->iopool().get(0)->get_thread_id() != std::thread::id{};
         }
-        if (auto* rudp = dynamic_cast<rudp_server*>(network.get()))
-        {
+        if (auto* rudp = dynamic_cast<rudp_server*>(network.get())) {
             return rudp->server_ && rudp->server_->iopool().get(0)->get_thread_id() != std::thread::id{};
         }
         return false;
@@ -67,12 +60,10 @@ struct net_listener_startup_test_access
 
     static std::uint16_t port(net_server_service& service) {
         auto network = service.get_net();
-        if (auto* tcp = dynamic_cast<tcp_server*>(network.get()))
-        {
+        if (auto* tcp = dynamic_cast<tcp_server*>(network.get())) {
             return tcp->server_->listen_port();
         }
-        if (auto* rudp = dynamic_cast<rudp_server*>(network.get()))
-        {
+        if (auto* rudp = dynamic_cast<rudp_server*>(network.get())) {
             return rudp->server_->listen_port();
         }
         return 0;
@@ -89,22 +80,19 @@ std::weak_ptr<ark::net_server_service_impl> observed_service;
 bool failure_child{};
 
 void before_allocation() {
-    if (fail_after_worker && observed_module && access::worker_initialized(*observed_module))
-    {
+    if (fail_after_worker && observed_module && access::worker_initialized(*observed_module)) {
         // Keep only a weak observation: the test must not rescue a missing owner.
         observed_service = access::candidate(*observed_module)->service;
         fail_after_worker = false;
         fail_allocations = true;
     }
-    if (fail_allocations)
-    {
+    if (fail_allocations) {
         throw std::bad_alloc();
     }
 }
 
 void require(bool condition, const char* message) {
-    if (!condition)
-    {
+    if (!condition) {
         ark::app_detail::write_native_stderr(message);
         ark::app_detail::write_native_stderr("\n");
         std::_Exit(2);
@@ -112,14 +100,12 @@ void require(bool condition, const char* message) {
 }
 
 void forbidden_cleanup() {
-    if (failure_child)
-    {
+    if (failure_child) {
         ark::app_detail::write_native_stderr("forbidden Net listener ordinary cleanup\n");
     }
 }
 
-struct fixture_bus final : ark::module_base<ark::bus_module>
-{
+struct fixture_bus final : ark::module_base<ark::bus_module> {
     ark::proc_config proc;
     ark::reg_center registry;
     std::string name{"fixture"};
@@ -173,8 +159,7 @@ struct fixture_bus final : ark::module_base<ark::bus_module>
     }
 };
 
-struct fixture_timer final : ark::module_base<ark::timer_module>
-{
+struct fixture_timer final : ark::module_base<ark::timer_module> {
     bool remove_timer(std::uint64_t) override {
         forbidden_cleanup();
         return true;
@@ -190,8 +175,7 @@ struct fixture_timer final : ark::module_base<ark::timer_module>
     }
 };
 
-struct fixture_msg final : ark::module_base<ark::msg_module>
-{
+struct fixture_msg final : ark::module_base<ark::msg_module> {
     bool send_def_cs_msg_by_app_type(ark::app_type, ark::msg_id_t, const google::protobuf::Message&) override {
         return false;
     }
@@ -222,17 +206,13 @@ struct fixture_msg final : ark::module_base<ark::msg_module>
     }
 };
 
-struct consumer_interface : ark::module
-{
-};
+struct consumer_interface : ark::module {};
 
-struct consumer final : ark::module_base<consumer_interface, ark::net_service_manager_module>
-{
+struct consumer final : ark::module_base<consumer_interface, ark::net_service_manager_module> {
     ark::net_service_manager_module* network{};
 
     bool init() override {
-        if (failure_child)
-        {
+        if (failure_child) {
             observed_module = network;
             fail_after_worker = true;
             return network->create_server(60000, ark::s_msg_header{}, ark::ss_msg_header{});
@@ -260,8 +240,7 @@ struct consumer final : ark::module_base<consumer_interface, ark::net_service_ma
     }
 };
 
-struct fixture_plugin final : ark::plugin_base<fixture_plugin>
-{
+struct fixture_plugin final : ark::plugin_base<fixture_plugin> {
     fixture_bus* bus{};
     ark::net_service_manager_module* network{};
 
@@ -340,12 +319,9 @@ void rejected(ark::proto_type protocol) {
     asio::ip::tcp::acceptor tcp(context);
     asio::ip::udp::socket udp(context);
     const bool stream = protocol == ark::proto_type::tcp;
-    if (stream)
-    {
+    if (stream) {
         tcp.open(asio::ip::tcp::v4());
-    }
-    else
-    {
+    } else {
         udp.open(asio::ip::udp::v4());
     }
 #if defined(_WIN32)
@@ -355,25 +331,19 @@ void rejected(ark::proto_type protocol) {
                 sizeof(exclusive)) == 0,
         "exclusive fixture endpoint");
 #endif
-    if (stream)
-    {
+    if (stream) {
         tcp.bind({asio::ip::address_v4::loopback(), 0});
         tcp.listen();
-    }
-    else
-    {
+    } else {
         udp.bind({asio::ip::address_v4::loopback(), 0});
     }
     plugin.bus->proc.server_ep.set_port(stream ? tcp.local_endpoint().port() : udp.local_endpoint().port());
     require(!create(*plugin.network), "occupied listener must return false");
     require(!plugin.network->get_inter_net_server() && !access::candidate(*plugin.network),
         "false candidate removed after ordinary cleanup");
-    if (stream)
-    {
+    if (stream) {
         tcp.close();
-    }
-    else
-    {
+    } else {
         udp.close();
     }
     require(create(*plugin.network), "same slot retries after ordinary false");
@@ -392,10 +362,11 @@ void rejected(ark::proto_type protocol) {
     // Prepare owning call arguments before injection; manager.start is never retried.
     const std::string directory;
     const std::unordered_map<std::string, std::string> plugins;
-    try
-    { manager.start(0, directory, directory, plugins); }
-    catch (const std::bad_alloc&)
-    { caught = true; }
+    try {
+        manager.start(0, directory, directory, plugins);
+    } catch (const std::bad_alloc&) {
+        caught = true;
+    }
     require(caught && fail_allocations && !fail_after_worker,
         "start did not propagate persistent allocation failure after native workers");
     const auto* entry = access::candidate(*plugin.network);
@@ -403,8 +374,7 @@ void rejected(ark::proto_type protocol) {
     require(access::native_started(*plugin.network), "native worker owner lost before runner");
     require(!plugin.network->get_inter_net_server() && !plugin.network->get_intra_net_server(),
         "unpublished candidate escaped getter");
-    if (retry_probe)
-    {
+    if (retry_probe) {
         // Separate compatibility child: allow the API's new owning header copies
         // to test slot rejection, then restore failure for the emergency exit.
         fail_allocations = false;
@@ -421,8 +391,7 @@ void rejected(ark::proto_type protocol) {
 
 void* operator new(std::size_t size) {
     before_allocation();
-    if (void* pointer = std::malloc(size ? size : 1))
-    {
+    if (void* pointer = std::malloc(size ? size : 1)) {
         return pointer;
     }
     throw std::bad_alloc();
@@ -449,10 +418,11 @@ void operator delete[](void* pointer, std::size_t) noexcept {
 }
 
 void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
-    try
-    { return ::operator new(size); }
-    catch (...)
-    { return nullptr; }
+    try {
+        return ::operator new(size);
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
@@ -478,10 +448,8 @@ int main(int argc, char** argv) {
 #endif
         std::_Exit(86);
     });
-    if (argc == 2 && std::strcmp(argv[1], "normal") == 0)
-    {
-        for (const auto protocol : {ark::proto_type::tcp, ark::proto_type::udp})
-        {
+    if (argc == 2 && std::strcmp(argv[1], "normal") == 0) {
+        for (const auto protocol : {ark::proto_type::tcp, ark::proto_type::udp}) {
             successful(protocol, false);
             successful(protocol, true);
             rejected(protocol);
@@ -489,14 +457,11 @@ int main(int argc, char** argv) {
         std::fputs("Net listener normal controls passed\n", stderr);
         return 0;
     }
-    if (argc == 3 && (std::strcmp(argv[1], "exception") == 0 || std::strcmp(argv[1], "retry") == 0))
-    {
-        if (std::strcmp(argv[2], "tcp") == 0)
-        {
+    if (argc == 3 && (std::strcmp(argv[1], "exception") == 0 || std::strcmp(argv[1], "retry") == 0)) {
+        if (std::strcmp(argv[2], "tcp") == 0) {
             allocation_failure(ark::proto_type::tcp, std::strcmp(argv[1], "retry") == 0);
         }
-        if (std::strcmp(argv[2], "rudp") == 0)
-        {
+        if (std::strcmp(argv[2], "rudp") == 0) {
             allocation_failure(ark::proto_type::udp, std::strcmp(argv[1], "retry") == 0);
         }
     }

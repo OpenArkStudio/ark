@@ -34,8 +34,7 @@ using namespace std;
 namespace ark {
 namespace {
 
-class http_client_sample_module_impl final : public module_base<http_client_sample_module>
-{
+class http_client_sample_module_impl final : public module_base<http_client_sample_module> {
 public:
     bool init() override;
     bool post_init() override;
@@ -48,8 +47,7 @@ private:
 bool http_client_sample_module_impl::init() {
     http_client_ = find_module<http_client_module>();
     auto* etcd = find_module<etcd_client_module>();
-    if (!http_client_ || !etcd)
-    {
+    if (!http_client_ || !etcd) {
         return false;
     }
     etcd_client_ =

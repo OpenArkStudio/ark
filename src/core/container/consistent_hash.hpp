@@ -27,8 +27,7 @@
 
 namespace ark {
 
-class v_node
-{
+class v_node {
 public:
     v_node(int server_id, const std::string& ip, std::size_t port, std::size_t id)
         : bus_id(server_id)
@@ -56,8 +55,7 @@ public:
 
 template<typename element_type, typename hasher_type,
     typename allocator_param_type = std::allocator<std::pair<const typename hasher_type::result_type, element_type>>>
-class consistent_hashmap
-{
+class consistent_hashmap {
 public:
     using size_type = typename hasher_type::result_type;
     using map_type = std::map<size_type, element_type, std::less<size_type>, allocator_param_type>;
@@ -77,8 +75,7 @@ public:
 
     void insert(bus_id_t bus_id, const std::string& ip, uint16_t port) {
         v_node vnode(bus_id, ip, port, 0);
-        for (std::size_t i = 0; i < vnode_count_; ++i)
-        {
+        for (std::size_t i = 0; i < vnode_count_; ++i) {
             vnode.vnode_id = i;
             insert(vnode);
         }
@@ -124,15 +121,13 @@ protected:
     }
 
     iterator find(size_type hash) {
-        if (nodes_.empty())
-        {
+        if (nodes_.empty()) {
             return nodes_.end();
         }
 
         iterator it = nodes_.lower_bound(hash);
 
-        if (it == nodes_.end())
-        {
+        if (it == nodes_.end()) {
             it = nodes_.begin();
         }
 
@@ -149,8 +144,7 @@ private:
     std::size_t vnode_count_{100}; // default virtual node count is 100
 };
 
-class crc_hasher
-{
+class crc_hasher {
 public:
     using result_type = uint32_t;
 
@@ -164,8 +158,7 @@ public:
     }
 };
 
-class murmur_hasher
-{
+class murmur_hasher {
 public:
     using result_type = uint32_t;
 

@@ -24,8 +24,7 @@
 
 namespace ark {
 
-class dir_plugin final : public plugin_base<dir_plugin>
-{
+class dir_plugin final : public plugin_base<dir_plugin> {
 public:
     void install() override;
     void uninstall() override;

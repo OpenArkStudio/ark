@@ -32,8 +32,7 @@
 
 namespace ark {
 
-class data_alloc_new_type
-{
+class data_alloc_new_type {
 public:
     void* alloc(size_t size) {
         ARK_NEW_ARRAY_RET(char, size);
@@ -49,8 +48,7 @@ public:
 };
 
 template<size_t buffer_size, typename allocator_type = data_alloc_new_type>
-class data_base final : public data
-{
+class data_base final : public data {
 public:
     using self_t = data_base<buffer_size, allocator_type>;
 
@@ -70,8 +68,7 @@ public:
     data_base(const self_t& src) {
         this->type_ = src.type_;
 
-        switch (this->type_)
-        {
+        switch (this->type_) {
         case data_type::dt_boolean:
             bool_value_ = src.bool_value_;
             break;
@@ -114,8 +111,7 @@ public:
     explicit data_base(const data& src) {
         this->type_ = src.get_type();
 
-        switch (this->type_)
-        {
+        switch (this->type_) {
         case data_type::dt_boolean:
             bool_value_ = src.get_bool();
             break;
@@ -156,16 +152,14 @@ public:
     }
 
     bool from(const node* data_ptr) override {
-        if (data_ptr == nullptr)
-        {
+        if (data_ptr == nullptr) {
             return false;
         }
 
         self_t replacement;
         replacement.type_ = data_ptr->get_type();
 
-        switch (replacement.type_)
-        {
+        switch (replacement.type_) {
         case data_type::dt_boolean:
             replacement.bool_value_ = data_ptr->get_bool();
             break;
@@ -285,31 +279,24 @@ public:
         char tmp_buffer[buffer_size] = {0};
         bool tmp_use_buffer = (tmp_type == data_type::dt_string) && (this->string_value_ == this->inline_buffer_);
 
-        if (tmp_use_buffer)
-        {
+        if (tmp_use_buffer) {
             memcpy(tmp_buffer, this->inline_buffer_, buffer_size);
         }
 
-        if ((src.type_ == data_type::dt_string) && (src.string_value_ == src.inline_buffer_))
-        {
+        if ((src.type_ == data_type::dt_string) && (src.string_value_ == src.inline_buffer_)) {
             memcpy(this->inline_buffer_, src.inline_buffer_, buffer_size);
             string_value_ = inline_buffer_;
-        }
-        else
-        {
+        } else {
             this->int64_value_ = src.int64_value_;
             allocated_length_ = src.allocated_length_;
         }
 
         this->type_ = src.type_;
 
-        if (tmp_use_buffer)
-        {
+        if (tmp_use_buffer) {
             memcpy(src.inline_buffer_, tmp_buffer, buffer_size);
             src.string_value_ = src.inline_buffer_;
-        }
-        else
-        {
+        } else {
             src.int64_value_ = tmp_value;
             src.allocated_length_ = tmp_alloc_len;
         }
@@ -325,8 +312,7 @@ public:
     }
 
     void set_default_value(data_type type) override {
-        switch (type)
-        {
+        switch (type) {
         case data_type::dt_boolean:
             set_bool(null_boolean);
             break;
@@ -358,8 +344,7 @@ public:
     }
 
     bool is_null_value() const override {
-        switch (get_type())
-        {
+        switch (get_type()) {
         case data_type::dt_boolean:
             return bool_value_ == null_boolean;
             break;
@@ -400,8 +385,7 @@ public:
 
     int get_int() const override {
 #if defined(ARK_USE_GUID_32)
-        if (type_ == data_type::dt_guid)
-        {
+        if (type_ == data_type::dt_guid) {
             return int_value_;
         }
 #endif
@@ -411,8 +395,7 @@ public:
 
     int64_t get_int64() const override {
 #if !defined(ARK_USE_GUID_32)
-        if (type_ == data_type::dt_guid)
-        {
+        if (type_ == data_type::dt_guid) {
             return int64_value_;
         }
 #endif
@@ -453,8 +436,7 @@ public:
     const void* get_user_data(size_t& size) const override {
         assert(type_ == data_type::dt_userdata);
 
-        if (type_ != data_type::dt_userdata)
-        {
+        if (type_ != data_type::dt_userdata) {
             size = 0;
             return nullptr;
         }
@@ -545,24 +527,17 @@ public:
     size_t get_mem_usage() const override {
         size_t size = sizeof(self_t);
 
-        switch (type_)
-        {
-        case data_type::dt_string:
-        {
-            if (string_value_ != nullptr)
-            {
+        switch (type_) {
+        case data_type::dt_string: {
+            if (string_value_ != nullptr) {
                 size += strlen(string_value_) + 1;
             }
-        }
-        break;
-        case data_type::dt_userdata:
-        {
-            if (user_data_ != nullptr)
-            {
+        } break;
+        case data_type::dt_userdata: {
+            if (user_data_ != nullptr) {
                 size += data::get_user_data_size(user_data_);
             }
-        }
-        break;
+        } break;
         default:
             break;
         }
@@ -571,8 +546,7 @@ public:
     }
 
     std::string to_string() const override {
-        switch (get_type())
-        {
+        switch (get_type()) {
         case data_type::dt_boolean:
             return std::to_string(this->bool_value_);
             break;
@@ -606,26 +580,19 @@ public:
     }
 
     void release() {
-        switch (type_)
-        {
-        case data_type::dt_string:
-        {
-            if (string_value_ != inline_buffer_)
-            {
+        switch (type_) {
+        case data_type::dt_string: {
+            if (string_value_ != inline_buffer_) {
                 allocator_.free(string_value_, allocated_length_);
                 string_value_ = nullptr;
             }
-        }
-        break;
-        case data_type::dt_userdata:
-        {
-            if (user_data_ != nullptr)
-            {
+        } break;
+        case data_type::dt_userdata: {
+            if (user_data_ != nullptr) {
                 allocator_.free(user_data_, allocated_length_);
                 user_data_ = nullptr;
             }
-        }
-        break;
+        } break;
         default:
             break;
         }
@@ -634,24 +601,19 @@ public:
 protected:
     void inner_set_string(const char* value) {
         const size_t length = strlen(value);
-        if (length >= std::numeric_limits<uint32_t>::max() && length >= buffer_size)
-        {
+        if (length >= std::numeric_limits<uint32_t>::max() && length >= buffer_size) {
             throw std::length_error("Kernel string exceeds its storage length");
         }
         const size_t value_size = length + 1;
         char* p = nullptr;
 
-        if (value_size > buffer_size)
-        {
+        if (value_size > buffer_size) {
             p = (char*)allocator_.alloc(value_size);
-            if (p == nullptr)
-            {
+            if (p == nullptr) {
                 throw std::bad_alloc{};
             }
             allocated_length_ = (uint32_t)value_size;
-        }
-        else
-        {
+        } else {
             p = inline_buffer_;
         }
 
@@ -661,14 +623,12 @@ protected:
 
     void inner_set_user_data(const void* data, size_t size) {
         constexpr size_t maximum = std::numeric_limits<uint32_t>::max();
-        if (size > maximum - sizeof(size_t))
-        {
+        if (size > maximum - sizeof(size_t)) {
             throw std::length_error("Kernel user data exceeds its storage length");
         }
         const size_t value_size = get_raw_user_data_size(size);
         char* p = (char*)allocator_.alloc(value_size);
-        if (p == nullptr)
-        {
+        if (p == nullptr) {
             throw std::bad_alloc{};
         }
         init_raw_user_data(p, data, size);
@@ -689,9 +649,7 @@ protected:
     }
 
 private:
-    struct guid_tag
-    {
-    };
+    struct guid_tag {};
 
     data_base(guid_tag, const guid_t& value)
         : type_(data_type::dt_guid)
@@ -720,8 +678,7 @@ private:
     data_type type_;
 
     // This union size is 8 bytes
-    union
-    {
+    union {
         bool bool_value_;
         int int_value_;
         uint32_t uint32_value_;
@@ -735,8 +692,7 @@ private:
     };
 
     // buffer
-    union
-    {
+    union {
         uint32_t allocated_length_{0};
         char inline_buffer_[buffer_size];
     };

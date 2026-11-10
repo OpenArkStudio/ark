@@ -34,8 +34,7 @@
 
 namespace ark {
 
-class http_client_module : public module
-{
+class http_client_module : public module {
 public:
     virtual std::future<std::pair<bool, std::string>> async_request(arknet::http::verb method, const std::string& host,
         const uint16_t port, const std::string& url, const std::map<std::string, std::string>* url_params = nullptr,

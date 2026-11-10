@@ -11,8 +11,7 @@
 
 namespace {
 
-struct vector_object
-{
+struct vector_object {
     vector_object(int value, int& destroyed)
         : value(value)
         , destroyed(destroyed) {
@@ -200,12 +199,9 @@ DOCTEST_TEST_CASE("Shared-vector moves preserve external references and safely r
 DOCTEST_TEST_CASE_TEMPLATE("Object-vector slots and const forward and reverse iteration preserve their contracts",
     vector_type, ark::pointer_vector<int>, ark::shared_vector<int>) {
     auto make_value = [](int value) {
-        if constexpr (std::is_same_v<typename vector_type::value_type, int*>)
-        {
+        if constexpr (std::is_same_v<typename vector_type::value_type, int*>) {
             return new int(value);
-        }
-        else
-        {
+        } else {
             return std::make_shared<int>(value);
         }
     };
@@ -228,15 +224,13 @@ DOCTEST_TEST_CASE_TEMPLATE("Object-vector slots and const forward and reverse it
     DOCTEST_CHECK(values.size() == 3);
 
     std::vector<int> forward;
-    for (auto it = observed.cbegin(); it != observed.cend(); ++it)
-    {
+    for (auto it = observed.cbegin(); it != observed.cend(); ++it) {
         forward.push_back(**it);
     }
     const std::vector<int> expected_forward{1, 2, 3};
     DOCTEST_CHECK(forward == expected_forward);
     std::vector<int> reverse;
-    for (auto it = observed.crbegin(); it != observed.crend(); ++it)
-    {
+    for (auto it = observed.crbegin(); it != observed.crend(); ++it) {
         reverse.push_back(**it);
     }
     const std::vector<int> expected_reverse{3, 2, 1};

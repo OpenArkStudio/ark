@@ -25,8 +25,7 @@
 
 namespace ark {
 
-class vector3d
-{
+class vector3d {
 public:
     float x{0.0f};
     float y{0.0f};
@@ -53,8 +52,7 @@ public:
     }
 
     const vector3d& operator=(const vector3d& rhs) {
-        if (this != &rhs)
-        {
+        if (this != &rhs) {
             x = rhs.x;
             y = rhs.y;
             z = rhs.z;

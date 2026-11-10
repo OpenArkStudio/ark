@@ -125,8 +125,7 @@ std::shared_ptr<class_call_back_manager> class_meta::get_class_call_back_manager
 
 uint32_t class_meta::get_index(const std::string& name) const {
     auto iter = name_index_list_.find(name);
-    if (iter == name_index_list_.end())
-    {
+    if (iter == name_index_list_.end()) {
         return null_int;
     }
 

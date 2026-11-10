@@ -34,8 +34,7 @@ namespace ark {
 
 class table_meta;
 
-class class_meta final
-{
+class class_meta final {
 public:
     using name_index_list = std::unordered_map<std::string, uint32_t>;
     using data_meta_list = shared_object_map<uint32_t, node_meta>;

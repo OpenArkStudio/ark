@@ -29,8 +29,7 @@ namespace ark {
 
 std::unique_ptr<http_server_sample_module> make_http_server_sample_module();
 
-class http_server_plugin final : public plugin_base<http_server_plugin>
-{
+class http_server_plugin final : public plugin_base<http_server_plugin> {
 public:
     void install() override;
     void uninstall() override;

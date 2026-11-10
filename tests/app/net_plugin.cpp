@@ -20,8 +20,7 @@ namespace {
 using namespace std::chrono_literals;
 
 void require(bool condition, const std::string& message) {
-    if (!condition)
-    {
+    if (!condition) {
         std::cerr << message << std::endl;
         std::_Exit(1);
     }
@@ -30,8 +29,7 @@ void require(bool condition, const std::string& message) {
 template<class predicate, class pump>
 void wait_for(predicate ready, pump update) {
     const auto deadline = std::chrono::steady_clock::now() + 5s;
-    while (!ready() && std::chrono::steady_clock::now() < deadline)
-    {
+    while (!ready() && std::chrono::steady_clock::now() < deadline) {
         update();
         std::this_thread::sleep_for(1ms);
     }
@@ -46,8 +44,7 @@ arknet::error_code listener_probe(asio::io_context&, const asio::ip::tcp::endpoi
     bool completed = false;
     bool timed_out = false;
     deadline.async_wait([&](const arknet::error_code& error) {
-        if (!error && !completed)
-        {
+        if (!error && !completed) {
             timed_out = true;
             arknet::error_code ignored;
             probe.cancel(ignored);
@@ -65,8 +62,7 @@ arknet::error_code listener_probe(asio::io_context&, const asio::ip::tcp::endpoi
     return result;
 }
 
-struct receiver
-{
+struct receiver {
     void on_message(const ark::net_msg* message, ark::conv_id_t session) {
         require(std::this_thread::get_id() == owner, "Net callback left the manager thread");
         require(session != 0 && message->get_msg_id() == 45000, "Net callback arguments changed");
@@ -77,8 +73,7 @@ struct receiver
     std::string body;
 };
 
-struct drain_hold final : ark::module
-{
+struct drain_hold final : ark::module {
     bool ready_to_shut() const override {
         return ready;
     }
@@ -171,8 +166,7 @@ int main(int argc, char* argv[]) {
     std::atomic<bool> answered{};
     std::atomic<bool> pending_received{};
     peer.bind_recv([&](auto& session, arknet::http_request::request_type& request) {
-        if (request.target() == "/pending")
-        {
+        if (request.target() == "/pending") {
             pending_received.store(true);
             return;
         }

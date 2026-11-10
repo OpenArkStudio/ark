@@ -8,8 +8,7 @@
 namespace ark {
 
 template<typename element_type>
-class thread_safe_queue
-{
+class thread_safe_queue {
 private:
     std::queue<element_type> data_queue_;
     mutable std::mutex mutex_;
@@ -29,8 +28,7 @@ public:
 
     bool try_pop(element_type& value) {
         std::lock_guard guard(mutex_);
-        if (data_queue_.empty())
-        {
+        if (data_queue_.empty()) {
             return false;
         }
 

@@ -45,8 +45,7 @@ void on_process_deadline(int) {
 }
 
 void require(bool condition, const std::string& reason) {
-    if (!condition)
-    {
+    if (!condition) {
         fail(reason);
     }
 }
@@ -62,9 +61,7 @@ int make_socket() {
 } // namespace
 
 int main(int argc, char** argv) {
-    struct sigaction deadline_action
-    {
-    };
+    struct sigaction deadline_action {};
 
     deadline_action.sa_handler = on_process_deadline;
     require(sigemptyset(&deadline_action.sa_mask) == 0 && ::sigaction(SIGALRM, &deadline_action, nullptr) == 0,
@@ -126,8 +123,7 @@ int main(int argc, char** argv) {
     require(::connect(client, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0, "HTTP connect failed");
     const std::string request = "GET /installed HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
     std::size_t sent{};
-    while (sent != request.size())
-    {
+    while (sent != request.size()) {
         const auto count = ::send(client, request.data() + sent, request.size() - sent, 0);
         require(count > 0, "HTTP send failed");
         sent += static_cast<std::size_t>(count);
@@ -135,8 +131,7 @@ int main(int argc, char** argv) {
     std::string response;
     char bytes[4096];
     ssize_t count;
-    while ((count = ::recv(client, bytes, sizeof(bytes), 0)) > 0)
-    {
+    while ((count = ::recv(client, bytes, sizeof(bytes), 0)) > 0) {
         response.append(bytes, static_cast<std::size_t>(count));
         require(response.size() <= 65536, "HTTP response exceeded the fixture bound");
     }
@@ -146,8 +141,7 @@ int main(int argc, char** argv) {
         response.starts_with("HTTP/1.1 200 ") && response.ends_with("installed-http-cxx20"), "HTTP response mismatch");
     std::cout << "HTTP response: 200 installed-http-cxx20\n";
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (!manager.stop_until(ark::date_time::get_now_time(), deadline))
-    {
+    while (!manager.stop_until(ark::date_time::get_now_time(), deadline)) {
         require(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopping &&
                     manager.get_shutdown_failure().empty() && !manager.get_shutdown_exception() &&
                     std::chrono::steady_clock::now() < deadline,

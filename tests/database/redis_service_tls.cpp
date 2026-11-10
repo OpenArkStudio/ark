@@ -29,8 +29,7 @@ using service_type = ark::detail::tls_redis_service;
 using bridge_type = ark::detail::database_awaitable<arknet::redis::result>;
 using result_type = arknet::redis::result;
 
-struct peer_observation
-{
+struct peer_observation {
     arknet::error_code handshake_error;
     arknet::error_code read_error;
     arknet::error_code write_error;
@@ -39,8 +38,7 @@ struct peer_observation
 };
 
 // A bounded RESP-over-TLS protocol test endpoint, not a Redis server implementation.
-class tls_endpoint
-{
+class tls_endpoint {
 public:
     explicit tls_endpoint(const std::string& certificate = "server.pem") {
         const std::string directory = ARK_DATABASE_REDIS_CERT_DIR;
@@ -72,8 +70,7 @@ public:
     }
 
     peer_observation finish() {
-        if (completion_.wait_for(6s) != std::future_status::ready)
-        {
+        if (completion_.wait_for(6s) != std::future_status::ready) {
             throw std::runtime_error("TLS protocol endpoint did not finish");
         }
         return completion_.get();
@@ -84,26 +81,21 @@ private:
         asio::ssl::stream<asio::ip::tcp::socket> stream(io_, context_);
         asio::steady_timer deadline(io_, 5s);
         deadline.async_wait([&](arknet::error_code error) {
-            if (!error)
-            {
+            if (!error) {
                 observation_.timed_out = true;
                 arknet::error_code ignored;
                 acceptor_.cancel(ignored);
                 stream.next_layer().close(ignored);
             }
         });
-        try
-        {
+        try {
             co_await acceptor_.async_accept(stream.next_layer(), asio::use_awaitable);
             co_await stream.async_handshake(asio::ssl::stream_base::server,
                 asio::redirect_error(asio::use_awaitable, observation_.handshake_error));
-            if (!observation_.handshake_error)
-            {
+            if (!observation_.handshake_error) {
                 co_await exchange(stream);
             }
-        }
-        catch (...)
-        {
+        } catch (...) {
             deadline.cancel();
             throw;
         }
@@ -113,88 +105,65 @@ private:
     asio::awaitable<void> exchange(asio::ssl::stream<asio::ip::tcp::socket>& stream) {
         arknet::redis::detail::resp_decoder decoder;
         bool blocked = false;
-        for (;;)
-        {
+        for (;;) {
             arknet::redis::value value;
             const auto status = decoder.next(value);
-            if (status == arknet::redis::detail::resp_status::ready)
-            {
-                if (value.type != arknet::redis::value_type::array || value.elements.empty())
-                {
+            if (status == arknet::redis::detail::resp_status::ready) {
+                if (value.type != arknet::redis::value_type::array || value.elements.empty()) {
                     throw std::runtime_error("Unexpected protocol command");
                 }
                 arknet::redis::command arguments;
-                for (auto& argument : value.elements)
-                {
-                    if (argument.type != arknet::redis::value_type::bulk_string)
-                    {
+                for (auto& argument : value.elements) {
+                    if (argument.type != arknet::redis::value_type::bulk_string) {
                         throw std::runtime_error("Expected a binary RESP command argument");
                     }
                     arguments.push_back(std::move(argument.text));
                 }
                 ++commands_;
                 std::string response;
-                if (arguments == arknet::redis::command{"HELLO", "3"})
-                {
+                if (arguments == arknet::redis::command{"HELLO", "3"}) {
                     response = "%1\r\n+proto\r\n:3\r\n";
-                }
-                else if (arguments == arknet::redis::command{"RESET"})
-                {
-                    if (blocked)
-                    {
+                } else if (arguments == arknet::redis::command{"RESET"}) {
+                    if (blocked) {
                         // A released lease may queue RESET behind its cancelled reply slot.
                         // Keep both unanswered until the client closes the transport.
                         continue;
                     }
                     response = "+RESET\r\n";
-                }
-                else
-                {
-                    if (blocked)
-                    {
+                } else {
+                    if (blocked) {
                         throw std::runtime_error("Unexpected command after blocked TLS test request");
                     }
                     ++business_commands_;
-                    if (arguments.size() == 2 && arguments[0] == "ECHO")
-                    {
+                    if (arguments.size() == 2 && arguments[0] == "ECHO") {
                         response = "$" + std::to_string(arguments[1].size()) + "\r\n" + arguments[1] + "\r\n";
-                    }
-                    else if (arguments == arknet::redis::command{"PING"})
-                    {
+                    } else if (arguments == arknet::redis::command{"PING"}) {
                         response = "+PONG\r\n";
-                    }
-                    else if (arguments == arknet::redis::command{"BLPOP", "ark-tls-test", "0"})
-                    {
+                    } else if (arguments == arknet::redis::command{"BLPOP", "ark-tls-test", "0"}) {
                         // Deliberately send no reply: exercise a genuinely sent cancellation.
                         blocked = true;
                         continue;
-                    }
-                    else
-                    {
+                    } else {
                         throw std::runtime_error("Unsupported command in TLS protocol test endpoint");
                     }
                 }
                 co_await asio::async_write(stream, asio::buffer(response),
                     asio::redirect_error(asio::use_awaitable, observation_.write_error));
-                if (observation_.write_error)
-                {
+                if (observation_.write_error) {
                     co_return;
                 }
                 continue;
             }
-            if (status != arknet::redis::detail::resp_status::need_more)
-            {
+            if (status != arknet::redis::detail::resp_status::need_more) {
                 throw std::runtime_error("Invalid RESP input in TLS protocol test endpoint");
             }
             std::array<char, 4096> bytes;
             const auto count = co_await stream.async_read_some(
                 asio::buffer(bytes), asio::redirect_error(asio::use_awaitable, observation_.read_error));
-            if (observation_.read_error)
-            {
+            if (observation_.read_error) {
                 co_return;
             }
-            if (!decoder.append(std::string_view(bytes.data(), count)))
-            {
+            if (!decoder.append(std::string_view(bytes.data(), count))) {
                 throw std::runtime_error("RESP protocol test endpoint limit exceeded");
             }
         }
@@ -215,10 +184,8 @@ private:
 template<class predicate_type>
 bool wait_until(predicate_type predicate, std::chrono::milliseconds maximum = 3s) {
     const auto deadline = std::chrono::steady_clock::now() + maximum;
-    while (!predicate())
-    {
-        if (std::chrono::steady_clock::now() >= deadline)
-        {
+    while (!predicate()) {
+        if (std::chrono::steady_clock::now() >= deadline) {
             return false;
         }
         std::this_thread::sleep_for(1ms);
@@ -242,16 +209,14 @@ arknet::redis::pool_options options_for(const tls_endpoint& endpoint) {
 }
 
 result_type take_result(ark::detail::redis_service_result result) {
-    if (auto* error = std::get_if<std::exception_ptr>(&result))
-    {
+    if (auto* error = std::get_if<std::exception_ptr>(&result)) {
         std::rethrow_exception(*error);
     }
     return std::get<result_type>(std::move(result));
 }
 
 void check_peer(const peer_observation& observation) {
-    if (observation.failure)
-    {
+    if (observation.failure) {
         std::rethrow_exception(observation.failure);
     }
     CHECK_FALSE(observation.timed_out);
@@ -298,12 +263,9 @@ ark::detail::module_task<> issue_command(service_type& service, bridge_type& bri
             return service.start(
                 std::move(arguments),
                 [complete = std::move(complete)](ark::detail::redis_service_result value) mutable {
-                    if (auto* error = std::get_if<std::exception_ptr>(&value))
-                    {
+                    if (auto* error = std::get_if<std::exception_ptr>(&value)) {
                         complete(*error, {});
-                    }
-                    else
-                    {
+                    } else {
                         complete({}, std::get<result_type>(std::move(value)));
                     }
                 },
@@ -381,8 +343,7 @@ TEST_CASE("Redis TLS sent cancellation resumes an owning coroutine result on the
         group.poll();
         return group.pending() == 0 && bridge.pending() == 0;
     });
-    if (!drained)
-    {
+    if (!drained) {
         // A failed test cannot legally destroy a still-suspended coroutine owner.
         std::fputs("Redis TLS coroutine did not drain before the test deadline\n", stderr);
         std::_Exit(1);
