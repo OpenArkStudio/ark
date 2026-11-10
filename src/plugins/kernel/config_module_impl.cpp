@@ -42,18 +42,15 @@ bool config_module_impl::shut() {
 }
 
 bool config_module_impl::load() {
-    if (loaded_)
-    {
+    if (loaded_) {
         return false;
     }
 
     auto& class_meta_list = class_meta_module_->get_static_meta_list();
-    for (auto iter : class_meta_list)
-    {
+    for (auto iter : class_meta_list) {
         auto class_meta = iter.second;
         const auto& config = class_meta->get_json_config();
-        if (!config)
-        {
+        if (!config) {
             throw entity_json::error(
                 detail::entity_json_file(), "/configs", "configuration metadata has no validated JSON rows");
         }

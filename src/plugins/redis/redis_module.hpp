@@ -14,16 +14,14 @@
 namespace ark {
 
 // All strings, authentication and TLS settings are owned by the configuration.
-struct redis_options
-{
+struct redis_options {
     arknet::redis::pool_options pool;
     std::size_t max_operations{64};
     std::size_t max_input_bytes{1024 * 1024};
     bool tls{};
 };
 
-class redis_module : public module
-{
+class redis_module : public module {
 public:
     // Owner-thread setup. Names are unique; duplicate names or sealed admission
     // return false. Invalid options (including unavailable TLS) throw.

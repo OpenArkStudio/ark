@@ -14,8 +14,7 @@
 
 namespace {
 template<typename interface_type>
-class observed_provider : public ark::module_base<interface_type>
-{
+class observed_provider : public ark::module_base<interface_type> {
 public:
     std::vector<std::string> get_dependencies() const override {
         return dependencies;
@@ -42,8 +41,7 @@ public:
     }
 
     bool pre_shut() override {
-        if (dependent_stopped)
-        {
+        if (dependent_stopped) {
             CHECK(*dependent_stopped);
         }
         phases.emplace_back("pre_shut");
@@ -55,8 +53,7 @@ public:
     const bool* dependent_stopped{};
 };
 
-class bus_provider final : public observed_provider<ark::bus_module>
-{
+class bus_provider final : public observed_provider<ark::bus_module> {
 public:
     const std::string get_app_whole_name(ark::bus_id_t) override {
         return {};
@@ -115,8 +112,7 @@ private:
     ark::reg_center registry_;
 };
 
-class net_provider final : public observed_provider<ark::net_service_manager_module>
-{
+class net_provider final : public observed_provider<ark::net_service_manager_module> {
 public:
     bool create_server(std::size_t, const ark::msg_header&, const ark::msg_header&) override {
         return false;
@@ -163,8 +159,7 @@ public:
     unsigned lookups{};
 };
 
-struct fixture
-{
+struct fixture {
     fixture() {
         REQUIRE(manager.add_module(typeid(ark::bus_module).name(), &bus));
         REQUIRE(manager.add_module(typeid(ark::net_service_manager_module).name(), &network));
@@ -178,8 +173,7 @@ struct fixture
     std::unique_ptr<ark::msg_module> messages{ark::detail::make_msg_module()};
 };
 
-class message_dependent final : public ark::module_base<ark::module, ark::msg_module>
-{
+class message_dependent final : public ark::module_base<ark::module, ark::msg_module> {
 public:
     explicit message_dependent(fixture& state)
         : state_(state) {
@@ -234,8 +228,7 @@ TEST_CASE("Message production factory declares its retained Bus and Net provider
 }
 
 TEST_CASE("Message missing providers fail manager validation before any startup hook") {
-    for (const bool missing_bus : {true, false})
-    {
+    for (const bool missing_bus : {true, false}) {
         CAPTURE(missing_bus);
         fixture state;
         const std::string missing =
@@ -253,8 +246,7 @@ TEST_CASE("Message missing providers fail manager validation before any startup 
 }
 
 TEST_CASE("Message provider cycles fail validation before any startup hook") {
-    for (const bool cycle_via_bus : {true, false})
-    {
+    for (const bool cycle_via_bus : {true, false}) {
         CAPTURE(cycle_via_bus);
         fixture state;
         auto& dependencies = cycle_via_bus ? state.bus.dependencies : state.network.dependencies;
@@ -269,8 +261,7 @@ TEST_CASE("Message provider cycles fail validation before any startup hook") {
 
 TEST_CASE("Message graph orders provider startup and reverses admission stop") {
     // The production send-failure path writes through the host logger.
-    struct logger_scope
-    {
+    struct logger_scope {
         logger_scope() {
             current.set_log_func([](auto, const auto&) {});
             ark::logger::init(&current);

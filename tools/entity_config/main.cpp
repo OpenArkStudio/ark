@@ -27,62 +27,47 @@ void help() {
 } // namespace
 
 int main(int argc, char** argv) {
-    try
-    {
+    try {
 #ifdef _WIN32
         boost::nowide::args utf8_arguments(argc, argv);
 #endif
         std::map<std::string, std::string> options;
         std::map<std::string, std::string> data;
         bool replace = false, code = true;
-        for (int i = 1; i < argc; ++i)
-        {
+        for (int i = 1; i < argc; ++i) {
             const std::string argument = argv[i];
-            if (argument == "--help" || argument == "-h")
-            {
+            if (argument == "--help" || argument == "-h") {
                 help();
                 return 0;
             }
-            if (argument == "--replace" || argument == "--no-code")
-            {
-                if (argument == "--replace")
-                {
+            if (argument == "--replace" || argument == "--no-code") {
+                if (argument == "--replace") {
                     replace = true;
-                }
-                else
-                {
+                } else {
                     code = false;
                 }
                 continue;
             }
             if (argument != "--workbook" && argument != "--schema" && argument != "--schema-sheet" &&
-                argument != "--data" && argument != "--input" && argument != "--output" && argument != "--validate")
-            {
+                argument != "--data" && argument != "--input" && argument != "--output" && argument != "--validate") {
                 throw std::invalid_argument("unknown option " + argument);
             }
-            if (++i == argc)
-            {
+            if (++i == argc) {
                 throw std::invalid_argument("missing value for " + argument);
             }
             const std::string value = argv[i];
-            if (argument == "--data")
-            {
+            if (argument == "--data") {
                 const auto equal = value.find('=');
                 if (equal == 0 || equal == std::string::npos || equal + 1 == value.size() ||
-                    !data.emplace(value.substr(0, equal), value.substr(equal + 1)).second)
-                {
+                    !data.emplace(value.substr(0, equal), value.substr(equal + 1)).second) {
                     throw std::invalid_argument("expected a unique --data Class=FILE");
                 }
-            }
-            else if (!options.emplace(argument, value).second)
-            {
+            } else if (!options.emplace(argument, value).second) {
                 throw std::invalid_argument("duplicate option " + argument);
             }
         }
-        if (options.contains("--validate"))
-        {
-            if (options.size() != 1 || !data.empty() || replace || !code)
-            {
+        if (options.contains("--validate")) {
+            if (options.size() != 1 || !data.empty() || replace || !code) {
                 throw std::invalid_argument("--validate must be used on its own");
             }
             const auto document = ark::entity_json::load(options.at("--validate"));
@@ -94,39 +79,29 @@ int main(int argc, char** argv) {
                            static_cast<int>(options.contains("--schema")) +
                            static_cast<int>(options.contains("--input"));
         if (modes != 1 || !options.contains("--output") ||
-            (!options.contains("--schema") && (options.contains("--schema-sheet") || !data.empty())))
-        {
+            (!options.contains("--schema") && (options.contains("--schema-sheet") || !data.empty()))) {
             throw std::invalid_argument("choose one input mode and an --output directory; use --help");
         }
         ark::entity_json::document document;
-        if (options.contains("--input"))
-        {
+        if (options.contains("--input")) {
             document = ark::entity_json::load(options.at("--input"));
-        }
-        else if (options.contains("--schema"))
-        {
+        } else if (options.contains("--schema")) {
             document = ark::entity_export::read_fields(
                 ark::entity_export::read_table(ark::entity_export::utf8_path(options.at("--schema")),
                     options.contains("--schema-sheet") ? options.at("--schema-sheet") : ""));
-            for (const auto& [name, path] : data)
-            {
+            for (const auto& [name, path] : data) {
                 ark::entity_export::add_config(
                     document, name, ark::entity_export::read_table(ark::entity_export::utf8_path(path)));
             }
-        }
-        else
-        {
+        } else {
             auto sheets = ark::entity_export::read_workbook(ark::entity_export::utf8_path(options.at("--workbook")));
             const auto fields = sheets.find("fields");
-            if (fields == sheets.end())
-            {
+            if (fields == sheets.end()) {
                 throw std::runtime_error("combined workbook requires a worksheet named fields");
             }
             document = ark::entity_export::read_fields(fields->second);
-            for (const auto& [name, sheet] : sheets)
-            {
-                if (name != "fields")
-                {
+            for (const auto& [name, sheet] : sheets) {
+                if (name != "fields") {
                     ark::entity_export::add_config(document, name, sheet);
                 }
             }
@@ -136,14 +111,10 @@ int main(int argc, char** argv) {
         std::cout << "Exported " << document.classes.size() << " classes and " << document.configs.size()
                   << " configuration tables to " << options.at("--output") << '\n';
         return 0;
-    }
-    catch (const std::invalid_argument& error)
-    {
+    } catch (const std::invalid_argument& error) {
         std::cerr << "Usage error: " << error.what() << '\n';
         return 2;
-    }
-    catch (const std::exception& error)
-    {
+    } catch (const std::exception& error) {
         std::cerr << "Export failed: " << error.what() << '\n';
         return 1;
     }

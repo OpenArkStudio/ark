@@ -25,8 +25,7 @@ static_assert(
 
 namespace {
 
-class sequential_guid_module final : public ark::guid_module
-{
+class sequential_guid_module final : public ark::guid_module {
 public:
     ark::guid_t create_guid() override {
         return next_++;
@@ -40,8 +39,7 @@ private:
     ark::guid_t next_{1000};
 };
 
-class entity_config_files
-{
+class entity_config_files {
 public:
     entity_config_files()
         : previous_(std::filesystem::current_path())
@@ -71,8 +69,7 @@ private:
     std::filesystem::path directory_;
 };
 
-class configured_world
-{
+class configured_world {
 public:
     configured_world() {
         ark::logger::init(&logger_);
@@ -92,10 +89,8 @@ public:
     }
 
     ~configured_world() {
-        for (const auto id : contained_)
-        {
-            if (kernel.get_entity(id))
-            {
+        for (const auto id : contained_) {
+            if (kernel.get_entity(id)) {
                 kernel.destroy_entity(id);
             }
         }
@@ -117,8 +112,7 @@ public:
 
     std::shared_ptr<ark::entity> create_child(ark::guid_t parent, ark::id_type config_id) {
         auto result = kernel.create_container_entity(parent, ark::entity_meta_player::items_index(), "item", config_id);
-        if (result)
-        {
+        if (result) {
             contained_.push_back(result->get_id());
         }
         return result;
@@ -150,15 +144,12 @@ ark::protobuf::protobuf_entity_data entity_data(configured_world& world, const s
     return data;
 }
 
-struct creation_observer
-{
+struct creation_observer {
     int on_class_event(const ark::guid_t& id, const std::string&, ark::entity_event event, const ark::data_list&) {
         if (event >= ark::entity_event::entity_evt_pre_load_data &&
-            event <= ark::entity_event::entity_evt_data_finished)
-        {
+            event <= ark::entity_event::entity_evt_data_finished) {
             events.push_back(event);
-            if (event == ark::entity_event::entity_evt_pre_load_data)
-            {
+            if (event == ark::entity_event::entity_evt_pre_load_data) {
                 snapshot_saved = kernel->entity_node_to_protobuf_data(kernel->get_entity(id), &pre_load_data);
             }
         }
@@ -404,8 +395,7 @@ TEST_CASE("public entity custom uint32 updates preserve the full unsigned range"
     REQUIRE(object->add_custom_u_int32("sequence", 0));
     CHECK(object->get_custom_u_int32("sequence") == 0);
     for (const auto value :
-        {std::numeric_limits<std::uint32_t>::max(), std::uint32_t{0x80000000}, std::uint32_t{1}, std::uint32_t{0}})
-    {
+        {std::numeric_limits<std::uint32_t>::max(), std::uint32_t{0x80000000}, std::uint32_t{1}, std::uint32_t{0}}) {
         REQUIRE(object->set_custom_u_int32("sequence", value));
         CHECK(object->get_custom_u_int32("sequence") == value);
         CHECK(object->find_custom_data("sequence"));
@@ -413,8 +403,7 @@ TEST_CASE("public entity custom uint32 updates preserve the full unsigned range"
 }
 
 TEST_CASE("public entity uint64 setters preserve values and report only actual changes") {
-    struct uint64_observer
-    {
+    struct uint64_observer {
         int changed(
             const ark::guid_t&, const std::string&, std::uint32_t, const ark::data& before, const ark::data& after) {
             CHECK(before.get_type() == ark::data_type::dt_uint64);
@@ -471,8 +460,7 @@ TEST_CASE("public entity custom uint32 rejects other scalar types without changi
     REQUIRE(object->add_custom_float("float", 1.25F));
     REQUIRE(object->add_custom_double("double", 2.5));
     REQUIRE(object->add_custom_string("string", "preserved"));
-    for (const auto* name : {"boolean", "signed32", "signed64", "float", "double", "string"})
-    {
+    for (const auto* name : {"boolean", "signed32", "signed64", "float", "double", "string"}) {
         CHECK_FALSE(object->set_custom_u_int32(name, 0));
         CHECK_FALSE(object->set_custom_u_int32(name, std::numeric_limits<std::uint32_t>::max()));
     }

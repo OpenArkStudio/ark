@@ -19,24 +19,20 @@ namespace ark::app_detail {
 
 inline void write_native_stderr(std::string_view line) noexcept {
     std::size_t written{};
-    while (written < line.size())
-    {
+    while (written < line.size()) {
 #ifdef ARK_PLATFORM_WIN
         DWORD count{};
         if (!WriteFile(GetStdHandle(STD_ERROR_HANDLE), line.data() + written, static_cast<DWORD>(line.size() - written),
                 &count, nullptr) ||
-            count == 0)
-        {
+            count == 0) {
             break;
         }
 #else
         const auto count = ::write(STDERR_FILENO, line.data() + written, line.size() - written);
-        if (count < 0 && errno == EINTR)
-        {
+        if (count < 0 && errno == EINTR) {
             continue;
         }
-        if (count <= 0)
-        {
+        if (count <= 0) {
             break;
         }
 #endif
@@ -51,23 +47,19 @@ inline void write_startup_failure(
     char line[1024];
     std::size_t size{};
     const auto append = [&](std::string_view value) {
-        for (const char character : value)
-        {
-            if (size == sizeof(line) - 1)
-            {
+        for (const char character : value) {
+            if (size == sizeof(line) - 1) {
                 break;
             }
             line[size++] = character;
         }
     };
     append("Application startup failed");
-    if (!phase.empty())
-    {
+    if (!phase.empty()) {
         append(" at ");
         append(phase);
     }
-    if (!owner.empty())
-    {
+    if (!owner.empty()) {
         append(": ");
         append(owner);
     }
@@ -89,16 +81,12 @@ inline void write_startup_failure(
     // The manager already exists before start; no allocation, logger callback or
     // virtual name lookup is needed to preserve the primary failure diagnostic.
     const auto& call = manager.get_startup_call();
-    if (call.result == startup_call_result::exception && !call.diagnostic_ready)
-    {
+    if (call.result == startup_call_result::exception && !call.diagnostic_ready) {
         write_startup_failure(call.phase.data(), detail, call.owner.data());
-    }
-    else
-    {
+    } else {
         write_startup_failure(manager.get_startup_failure(), detail);
     }
-    switch (manager.cleanup_failed_startup())
-    {
+    switch (manager.cleanup_failed_startup()) {
     case startup_cleanup_result::done:
         write_native_stderr("Startup failure cleanup: done\n");
         break;

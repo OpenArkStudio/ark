@@ -300,12 +300,9 @@ void test_week_of_year(int y, int m, int d) {
 
 TEST_CASE("return week_of_year", "int GetWeekOfYear(int firstDayOfWeek = MONDAY) const") {
     int days_of_month_table[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-    for (int y = 2017; y <= 2019; y++)
-    {
-        for (int i = 1; i <= 12; i++)
-        {
-            for (int j = 1; j <= days_of_month_table[i]; j++)
-            {
+    for (int y = 2017; y <= 2019; y++) {
+        for (int i = 1; i <= 12; i++) {
+            for (int j = 1; j <= days_of_month_table[i]; j++) {
                 test_week_of_year(y, i, j);
             }
         }
@@ -339,12 +336,9 @@ TEST_CASE("return hour of day in am/pm format", "int GethourAMPM() const") {
 
     int tzd = 8;
     p->tm_hour -= tzd;
-    if (p->tm_hour < 1)
-    {
+    if (p->tm_hour < 1) {
         p->tm_hour = 12;
-    }
-    else if (p->tm_hour > 12)
-    {
+    } else if (p->tm_hour > 12) {
         p->tm_hour -= 12;
     }
     REQUIRE(date_time_instance.get_hour() == p->tm_hour);
@@ -360,8 +354,7 @@ TEST_CASE("return hour of day whether in am", "bool IsAM() const") {
     int tzd = 8;
     p->tm_hour -= tzd;
     bool isam = false;
-    if (p->tm_hour < 12)
-    {
+    if (p->tm_hour < 12) {
         isam = true;
     }
     REQUIRE(date_time_instance.is_am() == isam);
@@ -377,8 +370,7 @@ TEST_CASE("return hour of day whether in pm", "bool IsPM() const") {
     int tzd = 8;
     p->tm_hour -= tzd;
     bool ispm = false;
-    if (p->tm_hour >= 12)
-    {
+    if (p->tm_hour >= 12) {
         ispm = true;
     }
     REQUIRE(date_time_instance.is_pm() == ispm);
@@ -468,8 +460,7 @@ TEST_CASE("return days of month by parameter year and month", "static int GetDay
     auto year = date_time_provider.get_year();
     auto month = date_time_provider.get_month();
     int days_of_month_table[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-    if (month == 2 && date_time_provider.is_leap_year())
-    {
+    if (month == 2 && date_time_provider.is_leap_year()) {
         days_of_month_table[2] = 29;
     }
     REQUIRE(ark::date_time::get_days_of_month(year, month) == days_of_month_table[month]);

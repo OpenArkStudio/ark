@@ -67,10 +67,9 @@ TEST_CASE("Completion before native submit returns preserves the next stage ID")
 TEST_CASE("A throwing native initiation rolls its phase back before terminal completion") {
     database_request_control control;
     const auto submission = control.begin(stage::acquire);
-    try
-    { throw std::runtime_error("native initiation failed"); }
-    catch (const std::runtime_error&)
-    {
+    try {
+        throw std::runtime_error("native initiation failed");
+    } catch (const std::runtime_error&) {
         CHECK(control.complete(submission));
         CHECK(control.finish());
     }

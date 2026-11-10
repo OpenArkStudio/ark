@@ -16,8 +16,7 @@
 
 namespace {
 
-struct throwing_value
-{
+struct throwing_value {
     int value = 0;
     bool throw_copy = false;
     bool throw_assign = false;
@@ -30,15 +29,13 @@ struct throwing_value
 
     throwing_value(const throwing_value& other)
         : value(other.value) {
-        if (other.throw_copy)
-        {
+        if (other.throw_copy) {
             throw std::runtime_error("copy failed");
         }
     }
 
     throwing_value& operator=(const throwing_value& other) {
-        if (throw_assign)
-        {
+        if (throw_assign) {
             throw std::runtime_error("assignment failed");
         }
         value = other.value;
@@ -52,21 +49,20 @@ bool queue_operation_finishes(ark::queue<throwing_value>& values, operation_type
     auto completion = done.get_future();
     std::exception_ptr failure;
     std::thread worker([&] {
-        try
-        { operation(); }
-        catch (...)
-        { failure = std::current_exception(); }
+        try {
+            operation();
+        } catch (...) {
+            failure = std::current_exception();
+        }
         done.set_value();
     });
     const bool finished = completion.wait_for(std::chrono::seconds(2)) == std::future_status::ready;
-    if (!finished)
-    {
+    if (!finished) {
         // Recover a leaked spin lock so the regression reports a failure instead of hanging the process.
         values.unlock();
     }
     worker.join();
-    if (failure)
-    {
+    if (failure) {
         std::rethrow_exception(failure);
     }
     return finished;
@@ -137,60 +133,46 @@ DOCTEST_TEST_CASE("Queue producers consumers and count observers share one synch
     std::atomic<int> invalid_values{0};
     std::atomic<bool> invalid_count{false};
     std::vector<std::thread> workers;
-    for (int producer = 0; producer < producer_count; ++producer)
-    {
+    for (int producer = 0; producer < producer_count; ++producer) {
         workers.emplace_back([&, producer] {
-            for (int value = 0; value < values_per_producer; ++value)
-            {
+            for (int value = 0; value < values_per_producer; ++value) {
                 values.push(producer * values_per_producer + value);
             }
             ++finished_producers;
         });
     }
-    for (int consumer = 0; consumer < 3; ++consumer)
-    {
+    for (int consumer = 0; consumer < 3; ++consumer) {
         workers.emplace_back([&] {
-            while (finished_producers.load() < producer_count || values.count() > 0)
-            {
+            while (finished_producers.load() < producer_count || values.count() > 0) {
                 int value;
-                if (values.pop(value))
-                {
-                    if (value < 0 || value >= total)
-                    {
+                if (values.pop(value)) {
+                    if (value < 0 || value >= total) {
                         ++invalid_values;
-                    }
-                    else
-                    {
+                    } else {
                         ++received[value];
                     }
-                }
-                else
-                {
+                } else {
                     std::this_thread::yield();
                 }
             }
         });
     }
     std::thread observer([&] {
-        while (finished_producers.load() < producer_count || values.count() > 0)
-        {
+        while (finished_producers.load() < producer_count || values.count() > 0) {
             const int size = values.count();
-            if (size < 0 || size > total)
-            {
+            if (size < 0 || size > total) {
                 invalid_count = true;
             }
         }
     });
-    for (auto& worker : workers)
-    {
+    for (auto& worker : workers) {
         worker.join();
     }
     observer.join();
     DOCTEST_CHECK(invalid_values.load() == 0);
     DOCTEST_CHECK_FALSE(invalid_count.load());
     DOCTEST_CHECK(values.count() == 0);
-    for (const auto& count : received)
-    {
+    for (const auto& count : received) {
         DOCTEST_REQUIRE(count.load() == 1);
     }
 }

@@ -26,8 +26,7 @@
 
 namespace ark {
 
-class static_entity_impl final : public static_entity
-{
+class static_entity_impl final : public static_entity {
 public:
     using table_list = object_map<uint32_t, table>;
 

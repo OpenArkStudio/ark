@@ -6,8 +6,7 @@
 
 namespace ark {
 
-class consul_module_impl final : public module_base<consul_module>
-{
+class consul_module_impl final : public module_base<consul_module> {
 public:
     bool init() override;
 

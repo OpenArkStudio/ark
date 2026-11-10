@@ -15,16 +15,14 @@
 namespace {
 
 void require(bool condition, const std::string& message) {
-    if (!condition)
-    {
+    if (!condition) {
         std::cerr << message << std::endl;
         std::_Exit(1);
     }
 }
 
 // Observe Bus serialization through the existing public Net relation seam.
-class recording_net final : public ark::net
-{
+class recording_net final : public ark::net {
 public:
     void update() override {
     }

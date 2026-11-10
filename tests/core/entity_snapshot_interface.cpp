@@ -13,8 +13,7 @@ using namespace ark;
 
 // An external source implementation of the original pure interface, without a
 // capture override. The newly added default must preserve its concreteness.
-class legacy_snapshot_kernel : public ark::kernel_module
-{
+class legacy_snapshot_kernel : public ark::kernel_module {
 public:
     bool do_event(
         const guid_t& self, const std::string& name, entity_event event, const data_list& value_list) override {
@@ -156,8 +155,7 @@ public:
 
 static_assert(!std::is_abstract_v<legacy_snapshot_kernel>);
 
-class custom_snapshot_kernel final : public legacy_snapshot_kernel
-{
+class custom_snapshot_kernel final : public legacy_snapshot_kernel {
 public:
     ark::entity_sync::scalar_snapshot capture_scalar_snapshot(
         const ark::entity&, std::span<const std::uint32_t>, const ark::entity_sync::snapshot_limits& = {}) override {

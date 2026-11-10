@@ -19,8 +19,7 @@ using construction_test::counts;
 using construction_test::make_service;
 using construction_test::service;
 
-class test_plugin final : public ark::plugin_base<test_plugin>
-{
+class test_plugin final : public ark::plugin_base<test_plugin> {
 public:
     using plugin_base::register_module;
     using plugin_base::unregister_module;
@@ -33,8 +32,7 @@ public:
     }
 };
 
-class other_plugin final : public ark::plugin_base<other_plugin>
-{
+class other_plugin final : public ark::plugin_base<other_plugin> {
 public:
     using plugin_base::register_module;
     using plugin_base::unregister_module;
@@ -51,8 +49,7 @@ static_assert(!std::is_copy_assignable_v<test_plugin>);
 static_assert(!std::is_move_constructible_v<test_plugin>);
 static_assert(!std::is_move_assignable_v<test_plugin>);
 
-class throwing_service final : public service
-{
+class throwing_service final : public service {
 public:
     explicit throwing_service(counts& events)
         : events_(events) {
@@ -74,14 +71,12 @@ private:
     counts& events_;
 };
 
-struct metadata_counts : counts
-{
+struct metadata_counts : counts {
     unsigned manager_assignments{};
     unsigned name_assignments{};
 };
 
-class metadata_service final : public ark::module_base<service>
-{
+class metadata_service final : public ark::module_base<service> {
 public:
     explicit metadata_service(metadata_counts& events)
         : events_(events) {
@@ -109,8 +104,7 @@ private:
     metadata_counts& events_;
 };
 
-class registration_guard final : public ark::module_base<ark::module>
-{
+class registration_guard final : public ark::module_base<ark::module> {
 public:
     registration_guard(test_plugin& owner, metadata_counts& events)
         : owner_(owner)
@@ -133,8 +127,7 @@ private:
     metadata_counts& events_;
 };
 
-class guarded_service final : public ark::module_base<service>
-{
+class guarded_service final : public ark::module_base<service> {
 public:
     explicit guarded_service(test_plugin& owner)
         : owner_(owner) {
@@ -163,8 +156,7 @@ ark::task<> accepted_work() {
 } // namespace
 
 TEST_CASE("Typed private factories preserve interface identity and explicit update admission") {
-    for (const auto mode : {ark::module_update::disabled, ark::module_update::enabled})
-    {
+    for (const auto mode : {ark::module_update::disabled, ark::module_update::enabled}) {
         ark::plugin_manager manager;
         test_plugin owner;
         owner.set_plugin_manager(&manager);
@@ -208,18 +200,20 @@ TEST_CASE("Typed construction rejects foreign threads before candidate metadata 
     bool registration_rejected{}, empty_removal_rejected{};
     std::exception_ptr unexpected;
     std::thread worker([&] {
-        try
-        { owner.register_module<service>(std::make_unique<metadata_service>(rejected), ark::module_update::enabled); }
-        catch (const std::logic_error&)
-        { registration_rejected = true; }
-        catch (...)
-        { unexpected = std::current_exception(); }
-        try
-        { owner.unregister_module<service>(); }
-        catch (const std::logic_error&)
-        { empty_removal_rejected = true; }
-        catch (...)
-        { unexpected = std::current_exception(); }
+        try {
+            owner.register_module<service>(std::make_unique<metadata_service>(rejected), ark::module_update::enabled);
+        } catch (const std::logic_error&) {
+            registration_rejected = true;
+        } catch (...) {
+            unexpected = std::current_exception();
+        }
+        try {
+            owner.unregister_module<service>();
+        } catch (const std::logic_error&) {
+            empty_removal_rejected = true;
+        } catch (...) {
+            unexpected = std::current_exception();
+        }
     });
     worker.join();
     CHECK(unexpected == nullptr);

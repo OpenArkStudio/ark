@@ -25,8 +25,7 @@
 
 namespace ark {
 
-class node
-{
+class node {
 public:
     virtual ~node() = default;
 

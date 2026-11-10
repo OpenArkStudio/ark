@@ -26,8 +26,7 @@
 
 namespace ark {
 
-class static_entity
-{
+class static_entity {
 public:
     virtual ~static_entity() = default;
 

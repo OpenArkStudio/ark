@@ -142,8 +142,7 @@ void entity_operations_module::destroy_test() {
     ARK_LOG_DEBUG("DestroyTest Start...");
 
     size_t count = 1;
-    for (size_t i = 0; i < count; i++)
-    {
+    for (size_t i = 0; i < count; i++) {
         auto entity_ptr = create_an_player_and_init();
         kernel_module_->destroy_entity(entity_ptr->get_id());
     }
@@ -234,8 +233,7 @@ std::shared_ptr<ark::entity> entity_operations_module::create_an_player_and_init
     ARK_ASSERT_RET_VAL(row_ptr != nullptr, nullptr);
     row_ptr->set_int64(col_guid, 1111);
 
-    if (!entity_ptr->find_custom_data("test"))
-    {
+    if (!entity_ptr->find_custom_data("test")) {
         entity_ptr->add_custom_int32("test", 111);
     }
 
@@ -249,13 +247,11 @@ void entity_operations_module::custom_data_test(const guid_t& guid, size_t count
     std::cout << "----------[index] time [custom data] test start----------" << std::endl;
 
     auto entity_ptr = kernel_module_->get_entity(guid);
-    if (nullptr == entity_ptr)
-    {
+    if (nullptr == entity_ptr) {
         return;
     }
 
-    if (!entity_ptr->find_custom_data("test") && !entity_ptr->add_custom_int32("test", 0))
-    {
+    if (!entity_ptr->find_custom_data("test") && !entity_ptr->add_custom_int32("test", 0)) {
         return;
     }
 
@@ -271,8 +267,7 @@ int entity_operations_module::on_class_call_back_event(
 
     std::cout << "ClassName: " << class_name << " ID: " << self << " Event: " << (int)event << std::endl;
 
-    if (event == entity_event::entity_evt_data_finished)
-    {
+    if (event == entity_event::entity_evt_data_finished) {
         //
     }
 
@@ -297,12 +292,9 @@ int entity_operations_module::on_table_call_back_event(
     const guid_t& self, const table_event_data& data, const ark::data& old_value, const ark::data& new_value) {
     std::cout << "---------- OnTableCallBackEvent start----------" << std::endl;
 
-    if (data.op_type == (size_t)table_op_type::table_add)
-    {
+    if (data.op_type == (size_t)table_op_type::table_add) {
         std::cout << "table name: " << data.table_name << " row : " << data.row << std::endl;
-    }
-    else
-    {
+    } else {
         std::cout << "table name: " << data.table_name << " row : " << data.row << " data index : " << data.data_index
                   << " old value : " << old_value.to_string() << " new value : " << new_value.to_string() << std::endl;
     }

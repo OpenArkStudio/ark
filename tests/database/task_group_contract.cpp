@@ -41,14 +41,12 @@ ark::task<> pending_task() {
 } // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 2)
-    {
+    if (argc != 2) {
         return 2;
     }
     install_contract_exit();
     const std::string_view mode(argv[1]);
-    if (mode == "--pending-destruction")
-    {
+    if (mode == "--pending-destruction") {
         auto runtime = std::make_shared<arknet::manual_runtime>();
         ark::task_group group(runtime);
         group.start(pending_task());
@@ -56,8 +54,7 @@ int main(int argc, char** argv) {
         // Destroying this owner violates the documented drain precondition.
         return 0;
     }
-    if (mode == "--wrong-thread-destruction")
-    {
+    if (mode == "--wrong-thread-destruction") {
         auto runtime = std::make_shared<arknet::manual_runtime>();
         auto group = std::make_unique<ark::task_group>(runtime);
         std::thread worker([owned = std::move(group)]() mutable {

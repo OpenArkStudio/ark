@@ -22,8 +22,7 @@
 
 namespace ark {
 
-class container_meta final
-{
+class container_meta final {
 private:
     // container name
     std::string name_{null_str};

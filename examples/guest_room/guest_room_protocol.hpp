@@ -22,8 +22,7 @@ inline constexpr msg_id_t delta = 60009;
 inline constexpr std::uint32_t max_body = 8192;
 inline constexpr std::uint32_t protocol_version = 2;
 
-class header final : public msg_header
-{
+class header final : public msg_header {
 public:
     explicit header(bool client_requests_only = false)
         : client_requests_only_(client_requests_only) {
@@ -38,13 +37,11 @@ public:
         id_ = (std::uint16_t(bytes[4]) << 8) | bytes[5];
         length_ = (std::uint32_t(bytes[8]) << 24) | (std::uint32_t(bytes[9]) << 16) | (std::uint32_t(bytes[10]) << 8) |
                   bytes[11];
-        if (std::memcmp(bytes, "ARK2", 4) != 0 || bytes[6] != 0 || bytes[7] != 0 || length_ > max_body)
-        {
+        if (std::memcmp(bytes, "ARK2", 4) != 0 || bytes[6] != 0 || bytes[7] != 0 || length_ > max_body) {
             // Net rejects this size before allocating a message or invoking callbacks.
             length_ = max_body + 1;
         }
-        if (client_requests_only_ && id_ != join && id_ != move && id_ != ping && id_ != action)
-        {
+        if (client_requests_only_ && id_ != join && id_ != move && id_ != ping && id_ != action) {
             // Keep unsupported/reserved IDs out of Net's own registration/heartbeat dispatch.
             id_ = unsupported;
         }
@@ -55,8 +52,7 @@ public:
         output.push_back(static_cast<char>(id_ >> 8));
         output.push_back(static_cast<char>(id_));
         output.append(2, '\0');
-        for (int shift = 24; shift >= 0; shift -= 8)
-        {
+        for (int shift = 24; shift >= 0; shift -= 8) {
             output.push_back(static_cast<char>(length_ >> shift));
         }
     }
@@ -96,55 +92,42 @@ private:
 };
 
 inline bool valid_name(const std::string& name) {
-    if (name.empty() || name.size() > 64)
-    {
+    if (name.empty() || name.size() > 64) {
         return false;
     }
     // Validate UTF-8 explicitly: protobuf bytes fields also use this rule for names.
-    for (std::size_t i = 0; i < name.size();)
-    {
+    for (std::size_t i = 0; i < name.size();) {
         const auto first = static_cast<unsigned char>(name[i++]);
         std::uint32_t point = first;
         unsigned continuation = 0;
         std::uint32_t minimum = 0;
-        if (first >= 0xc2 && first <= 0xdf)
-        {
+        if (first >= 0xc2 && first <= 0xdf) {
             point = first & 0x1f;
             continuation = 1;
             minimum = 0x80;
-        }
-        else if (first >= 0xe0 && first <= 0xef)
-        {
+        } else if (first >= 0xe0 && first <= 0xef) {
             point = first & 0x0f;
             continuation = 2;
             minimum = 0x800;
-        }
-        else if (first >= 0xf0 && first <= 0xf4)
-        {
+        } else if (first >= 0xf0 && first <= 0xf4) {
             point = first & 0x07;
             continuation = 3;
             minimum = 0x10000;
-        }
-        else if (first >= 0x80)
-        {
+        } else if (first >= 0x80) {
             return false;
         }
-        if (continuation > name.size() - i)
-        {
+        if (continuation > name.size() - i) {
             return false;
         }
-        for (unsigned count = 0; count < continuation; ++count)
-        {
+        for (unsigned count = 0; count < continuation; ++count) {
             const auto byte = static_cast<unsigned char>(name[i++]);
-            if ((byte & 0xc0) != 0x80)
-            {
+            if ((byte & 0xc0) != 0x80) {
                 return false;
             }
             point = (point << 6) | (byte & 0x3f);
         }
         if (point < minimum || point > 0x10ffff || (point >= 0xd800 && point <= 0xdfff) || point < 0x20 ||
-            (point >= 0x7f && point <= 0x9f))
-        {
+            (point >= 0x7f && point <= 0x9f)) {
             return false;
         }
     }

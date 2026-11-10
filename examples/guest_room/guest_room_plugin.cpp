@@ -16,15 +16,13 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void plugin::install() {
-    if (!register_module(std::make_unique<room_module>(), module_update::enabled))
-    {
+    if (!register_module(std::make_unique<room_module>(), module_update::enabled)) {
         throw std::runtime_error("guest_room module registration rejected");
     }
 }
 
 void plugin::uninstall() {
-    if (!unregister_module<room_module>())
-    {
+    if (!unregister_module<room_module>()) {
         throw std::runtime_error("guest_room module unregistration rejected");
     }
 }

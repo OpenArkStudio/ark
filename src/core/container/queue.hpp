@@ -28,8 +28,7 @@
 
 namespace ark {
 
-class queue_lock : public noncopyable
-{
+class queue_lock : public noncopyable {
 public:
     explicit queue_lock() {
         flag_.clear();
@@ -39,8 +38,7 @@ public:
     }
 
     void lock() {
-        while (flag_.test_and_set(std::memory_order_acquire))
-        {
+        while (flag_.test_and_set(std::memory_order_acquire)) {
         }
     }
 
@@ -55,8 +53,7 @@ private:
 using lock = queue_lock;
 
 template<typename element_type>
-class queue : public lock
-{
+class queue : public lock {
 public:
     queue() {
     }
@@ -72,8 +69,7 @@ public:
 
     bool pop(element_type& object) {
         std::lock_guard<queue_lock> guard(*this);
-        if (list_.empty())
-        {
+        if (list_.empty()) {
             return false;
         }
 

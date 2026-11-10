@@ -15,15 +15,13 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void kafka_plugin::install() {
-    if (!register_module(detail::make_kafka_module(), module_update::enabled))
-    {
+    if (!register_module(detail::make_kafka_module(), module_update::enabled)) {
         throw std::runtime_error("Kafka module registration rejected");
     }
 }
 
 void kafka_plugin::uninstall() {
-    if (!unregister_module<kafka_module>())
-    {
+    if (!unregister_module<kafka_module>()) {
         throw std::runtime_error("Kafka module unregistration rejected");
     }
 }

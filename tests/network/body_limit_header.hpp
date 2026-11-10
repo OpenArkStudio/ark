@@ -6,8 +6,7 @@
 namespace ark::test {
 
 template<class base>
-class large_body_header : public base
-{
+class large_body_header : public base {
 public:
     std::uint32_t max_body_size() const override {
         return 8192;

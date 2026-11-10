@@ -20,8 +20,7 @@ namespace {
 using namespace std::chrono_literals;
 
 template<typename interface_type>
-class observed_provider : public ark::module_base<interface_type>
-{
+class observed_provider : public ark::module_base<interface_type> {
 public:
     std::vector<std::string> get_dependencies() const override {
         return dependencies;
@@ -48,8 +47,7 @@ public:
     }
 
     bool pre_shut() override {
-        if (dependent_stopped)
-        {
+        if (dependent_stopped) {
             CHECK(*dependent_stopped);
         }
         phases.emplace_back("pre_shut");
@@ -61,8 +59,7 @@ public:
     const bool* dependent_stopped{};
 };
 
-class bus_provider final : public observed_provider<ark::bus_module>
-{
+class bus_provider final : public observed_provider<ark::bus_module> {
 public:
     const std::string get_app_whole_name(ark::bus_id_t) override {
         return {};
@@ -102,8 +99,7 @@ public:
 
     bool get_target_bus_relations(std::vector<ark::app_type>&) override {
         ++configuration_reads;
-        if (throw_before_registration)
-        {
+        if (throw_before_registration) {
             throw std::runtime_error("controlled Bus configuration failure");
         }
         return true;
@@ -126,16 +122,14 @@ private:
     ark::reg_center registry_;
 };
 
-struct registration
-{
+struct registration {
     std::uint64_t id;
     std::uint32_t count;
     std::chrono::milliseconds interval;
     std::weak_ptr<int> callback_lifetime;
 };
 
-class timer_provider final : public observed_provider<ark::timer_module>
-{
+class timer_provider final : public observed_provider<ark::timer_module> {
 public:
     using ark::timer_module::add_forever_timer;
 
@@ -167,8 +161,7 @@ protected:
     std::uint64_t add_single_timer(const ark::guid_t& entity, std::chrono::milliseconds interval, std::uint32_t count,
         ark::timer_functor&& callback) override {
         ++attempts;
-        if (reject_registration)
-        {
+        if (reject_registration) {
             return 0;
         }
         auto lifetime = std::make_shared<int>(1);
@@ -193,8 +186,7 @@ private:
     ark::time_wheel_manager wheel_;
 };
 
-struct receiver
-{
+struct receiver {
     void on_timer(std::uint64_t, const ark::guid_t&) {
         ++calls;
     }
@@ -202,8 +194,7 @@ struct receiver
     unsigned calls{};
 };
 
-struct fixture
-{
+struct fixture {
     fixture() {
         REQUIRE(manager.add_module(typeid(ark::bus_module).name(), &bus));
         REQUIRE(manager.add_module(typeid(ark::timer_module).name(), &timer));
@@ -217,8 +208,7 @@ struct fixture
     std::unique_ptr<ark::net_service_manager_module> network{ark::detail::make_net_service_manager_module()};
 };
 
-class net_dependent final : public ark::module_base<ark::module, ark::net_service_manager_module>
-{
+class net_dependent final : public ark::module_base<ark::module, ark::net_service_manager_module> {
 public:
     explicit net_dependent(fixture& state)
         : state_(state) {
@@ -275,8 +265,7 @@ TEST_CASE("Net declares its actual required Bus and Timer interfaces") {
 }
 
 TEST_CASE("Net missing providers fail real manager startup before module side effects") {
-    for (const bool missing_bus : {true, false})
-    {
+    for (const bool missing_bus : {true, false}) {
         CAPTURE(missing_bus);
         fixture state;
         const std::string missing = missing_bus ? typeid(ark::bus_module).name() : typeid(ark::timer_module).name();
@@ -297,8 +286,7 @@ TEST_CASE("Net missing providers fail real manager startup before module side ef
 }
 
 TEST_CASE("Net required providers participate in cycle validation before initialization") {
-    for (const bool cycle_via_bus : {true, false})
-    {
+    for (const bool cycle_via_bus : {true, false}) {
         CAPTURE(cycle_via_bus);
         fixture state;
         auto& dependencies = cycle_via_bus ? state.bus.dependencies : state.timer.dependencies;

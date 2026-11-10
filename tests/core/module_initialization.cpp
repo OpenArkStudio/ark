@@ -16,8 +16,7 @@
 
 namespace {
 
-class unused_guid_module final : public ark::guid_module
-{
+class unused_guid_module final : public ark::guid_module {
 public:
     ark::guid_t create_guid() override {
         return {};
@@ -28,8 +27,7 @@ public:
     }
 };
 
-class startup_observer final : public ark::module
-{
+class startup_observer final : public ark::module {
 public:
     bool init() override {
         ++init_calls;
@@ -65,13 +63,10 @@ void verify_initialization_order(bool config_init_first, bool config_post_init_f
     register_module.operator()<ark::guid_module>(&guid);
 
     REQUIRE(map.init());
-    if (config_init_first)
-    {
+    if (config_init_first) {
         REQUIRE(config.init());
         REQUIRE(kernel.init());
-    }
-    else
-    {
+    } else {
         REQUIRE(kernel.init());
         REQUIRE(config.init());
     }
@@ -82,13 +77,10 @@ void verify_initialization_order(bool config_init_first, bool config_post_init_f
     REQUIRE(metadata.find_meta("Player") != nullptr);
     REQUIRE(metadata.find_static_meta("attribute") != nullptr);
 
-    if (config_post_init_first)
-    {
+    if (config_post_init_first) {
         REQUIRE(config.post_init());
         REQUIRE(kernel.post_init());
-    }
-    else
-    {
+    } else {
         REQUIRE(kernel.post_init());
         REQUIRE(config.post_init());
     }
@@ -127,8 +119,7 @@ TEST_CASE("kernel and config initialize before schema regardless of consumer ord
 
 TEST_CASE("Kernel rejects missing declared providers before actual modules initialize") {
     for (const auto* missing :
-        {typeid(ark::class_meta_module).name(), typeid(ark::config_module).name(), typeid(ark::guid_module).name()})
-    {
+        {typeid(ark::class_meta_module).name(), typeid(ark::config_module).name(), typeid(ark::guid_module).name()}) {
         CAPTURE(missing);
         ark::plugin_manager manager;
         ark::class_meta_module_impl metadata;
@@ -141,8 +132,7 @@ TEST_CASE("Kernel rejects missing declared providers before actual modules initi
         // proves graph validation precedes even otherwise runnable modules.
         REQUIRE(manager.add_module("!startup-observer", &observer));
         const auto add = [&]<typename interface_type>(interface_type* implementation) {
-            if (std::string(missing) != typeid(interface_type).name())
-            {
+            if (std::string(missing) != typeid(interface_type).name()) {
                 implementation->set_plugin_manager(&manager);
                 REQUIRE(manager.add_module(typeid(interface_type).name(), implementation));
             }
@@ -195,8 +185,7 @@ TEST_CASE("Kernel manager startup loads real metadata and configuration with rev
 }
 
 TEST_CASE("sync callback registration replaces the prior owner for every singleton mask handler") {
-    struct observations
-    {
+    struct observations {
         unsigned nodes{}, tables{}, containers{}, delayed{};
     };
 

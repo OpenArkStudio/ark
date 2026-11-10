@@ -27,16 +27,12 @@ namespace ark {
 bool class_meta_module_impl::init() {
     class_meta_manager_ = ARK_NEW class_meta_manager;
 
-    try
-    {
-        if (!load())
-        {
+    try {
+        if (!load()) {
             ARK_DELETE(class_meta_manager_);
             return false;
         }
-    }
-    catch (...)
-    {
+    } catch (...) {
         ARK_DELETE(class_meta_manager_);
         throw;
     }

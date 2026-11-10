@@ -35,23 +35,19 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void net_plugin::install() {
-    if (!register_module(detail::make_http_client_module(get_plugin_manager()), module_update::enabled))
-    {
+    if (!register_module(detail::make_http_client_module(get_plugin_manager()), module_update::enabled)) {
         throw std::runtime_error("net HTTP client module registration rejected");
     }
-    if (!register_module(detail::make_net_service_manager_module(), module_update::enabled))
-    {
+    if (!register_module(detail::make_net_service_manager_module(), module_update::enabled)) {
         throw std::runtime_error("net service manager module registration rejected");
     }
 }
 
 void net_plugin::uninstall() {
-    if (!unregister_module<net_service_manager_module>())
-    {
+    if (!unregister_module<net_service_manager_module>()) {
         throw std::runtime_error("net service manager module unregistration rejected");
     }
-    if (!unregister_module<http_client_module>())
-    {
+    if (!unregister_module<http_client_module>()) {
         throw std::runtime_error("net HTTP client module unregistration rejected");
     }
 }

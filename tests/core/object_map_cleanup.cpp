@@ -11,8 +11,7 @@
 
 namespace {
 
-struct guarded_key
-{
+struct guarded_key {
     int value{};
     static inline int copies_before_failure{-1};
     static inline int copies{};
@@ -23,12 +22,10 @@ struct guarded_key
 
     guarded_key(const guarded_key& other)
         : value(other.value) {
-        if (copies_before_failure == 0)
-        {
+        if (copies_before_failure == 0) {
             throw std::runtime_error("key copy failed");
         }
-        if (copies_before_failure > 0)
-        {
+        if (copies_before_failure > 0) {
             --copies_before_failure;
         }
         ++copies;
@@ -39,8 +36,7 @@ struct guarded_key
     auto operator<=>(const guarded_key&) const = default;
 };
 
-struct cleanup_value
-{
+struct cleanup_value {
     explicit cleanup_value(int& destroyed)
         : destroyed(destroyed) {
     }
@@ -55,8 +51,7 @@ struct cleanup_value
 } // namespace
 
 template<>
-struct std::hash<guarded_key>
-{
+struct std::hash<guarded_key> {
     std::size_t operator()(const guarded_key& key) const noexcept {
         return std::hash<int>{}(key.value);
     }
@@ -82,10 +77,11 @@ TEST_CASE_TEMPLATE("Owning object maps clear entries without copying keys or ret
     const auto copies = guarded_key::copies;
     bool caught{};
     guarded_key::copies_before_failure = 1;
-    try
-    { values.clear(); }
-    catch (const std::runtime_error&)
-    { caught = true; }
+    try {
+        values.clear();
+    } catch (const std::runtime_error&) {
+        caught = true;
+    }
     guarded_key::copies_before_failure = -1;
     CHECK_FALSE(caught);
     CHECK(guarded_key::copies == copies);
@@ -121,10 +117,11 @@ TEST_CASE_TEMPLATE(
         const auto copies = guarded_key::copies;
         bool caught{};
         guarded_key::copies_before_failure = 0;
-        try
-        { values.clear(); }
-        catch (const std::runtime_error&)
-        { caught = true; }
+        try {
+            values.clear();
+        } catch (const std::runtime_error&) {
+            caught = true;
+        }
         guarded_key::copies_before_failure = -1;
         CHECK_FALSE(caught);
         CHECK(guarded_key::copies == copies);
@@ -152,10 +149,11 @@ TEST_CASE_TEMPLATE("Object maps with reference values retain borrowed objects du
             const auto copies = guarded_key::copies;
             bool caught{};
             guarded_key::copies_before_failure = 0;
-            try
-            { values.clear(); }
-            catch (const std::runtime_error&)
-            { caught = true; }
+            try {
+                values.clear();
+            } catch (const std::runtime_error&) {
+                caught = true;
+            }
             guarded_key::copies_before_failure = -1;
             CHECK_FALSE(caught);
             CHECK(guarded_key::copies == copies);

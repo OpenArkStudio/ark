@@ -51,8 +51,7 @@ check_interval = '10s'
 check_timeout = '3s'
 )";
 
-class configuration_file
-{
+class configuration_file {
 public:
     configuration_file()
         : path_(std::filesystem::temp_directory_path() /
@@ -148,8 +147,7 @@ TEST_CASE("Bus rejects malformed identifiers endpoints numbers references and un
             {"type = 30", "type = 30\nextra = 1"}, {"source = 'game'", "source = 'game'\nextra = 1"},
             {"threads = 2", "threads = 2\nextra = 1"}, {"port = 8500", "port = 8500\nextra = 1"},
             {"[[bus.applications]]", "[[bus.wrong_applications]]"}, {"[bus.registry]", "[bus.wrong_registry]"},
-            {"server_endpoint = 'udp://0.0.0.0:9101'", ""}})
-    {
+            {"server_endpoint = 'udp://0.0.0.0:9101'", ""}}) {
         INFO(from, " -> ", to);
         CHECK_THROWS_AS(
             ark::bus_config_detail::load(file.write(replace(configuration, from, to)), 0), std::runtime_error);
@@ -202,13 +200,10 @@ check_timeout = '3s'
 TEST_CASE("Bus diagnostics identify the file array index and invalid field") {
     configuration_file file;
     const auto path = file.write(replace(configuration, "threads = 2", "threads = 256"));
-    try
-    {
+    try {
         static_cast<void>(ark::bus_config_detail::load(path, 0));
         FAIL("invalid threads accepted");
-    }
-    catch (const std::runtime_error& error)
-    {
+    } catch (const std::runtime_error& error) {
         const std::string message = error.what();
         CHECK(message.find(path) != std::string::npos);
         CHECK(message.find("bus.processes[0]") != std::string::npos);
@@ -237,18 +232,13 @@ TEST_CASE("Bus rejects duplicate application names types relations and process I
         std::vector<std::tuple<std::string, std::string, std::string>>{{"name = 'game'", "name = 'world'", "name"},
             {"type = 31", "type = 30", "type"},
             {"[bus.registry]", "[[bus.relations]]\nsource = 'game'\ntarget = 'world'\n[bus.registry]", "source/target"},
-            {"'1.1.31.1'", "'1.1.30.1'", "bus_id"}})
-    {
-        for (const auto self : {ark::bus_addr(1, 1, 30, 1).bus_id, ark::bus_addr(1, 1, 31, 1).bus_id})
-        {
+            {"'1.1.31.1'", "'1.1.30.1'", "bus_id"}}) {
+        for (const auto self : {ark::bus_addr(1, 1, 30, 1).bus_id, ark::bus_addr(1, 1, 31, 1).bus_id}) {
             const auto path = file.write(replace(configuration, from, to));
-            try
-            {
+            try {
                 static_cast<void>(ark::bus_config_detail::load(path, self));
                 FAIL("duplicate configuration accepted");
-            }
-            catch (const std::runtime_error& error)
-            {
+            } catch (const std::runtime_error& error) {
                 const std::string message = error.what();
                 CHECK(message.find(path) != std::string::npos);
                 CHECK(message.find("duplicate") != std::string::npos);
@@ -274,8 +264,7 @@ TEST_CASE("Bus module retains bracketed IPv6 endpoint hosts without brackets for
     CHECK(module.get_self_proc().server_ep.get_port() == 9102);
     CHECK(module.get_self_proc().intranet_ep.get_ip() == "2001:db8::1");
     CHECK(module.get_self_proc().intranet_ep.get_port() == 0);
-    for (const auto& host : {"::", "::ffff:192.0.2.1", "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"})
-    {
+    for (const auto& host : {"::", "::ffff:192.0.2.1", "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"}) {
         const auto endpoint = ark::bus_config_detail::parse_endpoint(
             "tcp://[" + std::string(host) + "]:65535/path", "test", "server_endpoint");
         CHECK(endpoint.get_ip() == host);

@@ -28,8 +28,7 @@ static_assert(std::is_nothrow_move_constructible_v<mysql_transaction_reply>);
 
 // Controlled callback endpoints check only the factory/bridge contract. They
 // neither simulate a database nor establish lease/deadline/commit correctness.
-struct transaction_stub
-{
+struct transaction_stub {
     using callback = std::function<void(mysql_transaction_reply)>;
     std::vector<std::string> submitted;
     mysql_transaction_options options{};
@@ -72,12 +71,10 @@ struct transaction_stub
         CHECK_FALSE(in_callback);
         CHECK(active == 0);
         submitted.push_back(std::move(operation));
-        if (throw_on_start)
-        {
+        if (throw_on_start) {
             throw std::runtime_error("Transaction initiation threw before acceptance");
         }
-        if (inline_reply)
-        {
+        if (inline_reply) {
             handler(std::move(immediate));
             return 0;
         }
@@ -102,8 +99,7 @@ struct transaction_stub
     }
 };
 
-struct transaction_owner
-{
+struct transaction_owner {
     std::shared_ptr<arknet::manual_runtime> runtime = std::make_shared<arknet::manual_runtime>();
     module_task_group tasks{runtime, 1};
     database_awaitable<mysql_transaction_reply> bridge{runtime, 1};
@@ -135,8 +131,7 @@ struct transaction_owner
     }
 
     void drain() {
-        for (unsigned step = 0; step < 16 && tasks.pending(); ++step)
-        {
+        for (unsigned step = 0; step < 16 && tasks.pending(); ++step) {
             deliver();
         }
         CHECK(tasks.pending() == 0);
@@ -146,8 +141,7 @@ struct transaction_owner
 
 module_task<mysql_transaction_reply> operation(
     unsigned kind, transaction_stub& endpoint, database_awaitable<mysql_transaction_reply>& bridge) {
-    switch (kind)
-    {
+    switch (kind) {
     case 0:
         return mysql_transaction_begin(endpoint, bridge, {83ms, 19ms});
     case 1:
@@ -181,8 +175,7 @@ module_task<> sequential_transaction(
 TEST_CASE("Transaction factories own options and SQL before lazy start and drop without submission") {
     transaction_stub endpoint;
     transaction_owner owner;
-    for (unsigned kind = 0; kind < 5; ++kind)
-    {
+    for (unsigned kind = 0; kind < 5; ++kind) {
         auto unstarted = operation(kind, endpoint, owner.bridge);
     }
     CHECK(endpoint.submitted.empty());
@@ -243,8 +236,7 @@ TEST_CASE("Transaction factories own options and SQL before lazy start and drop 
 }
 
 TEST_CASE("All transaction factories deliver ID zero refusals on the owner executor") {
-    for (unsigned kind = 0; kind < 5; ++kind)
-    {
+    for (unsigned kind = 0; kind < 5; ++kind) {
         CAPTURE(kind);
         transaction_stub endpoint;
         transaction_owner owner;
@@ -267,8 +259,7 @@ TEST_CASE("All transaction factories deliver ID zero refusals on the owner execu
 }
 
 TEST_CASE("Transaction initiation throws remain distinct from the reply initiation diagnostic") {
-    for (unsigned kind = 0; kind < 5; ++kind)
-    {
+    for (unsigned kind = 0; kind < 5; ++kind) {
         CAPTURE(kind);
         transaction_stub endpoint;
         transaction_owner owner;
@@ -350,8 +341,7 @@ TEST_CASE("Transaction initiation throws remain distinct from the reply initiati
 }
 
 TEST_CASE("All transaction cancellations retain the record until the native uncertain terminal") {
-    for (unsigned kind = 0; kind < 5; ++kind)
-    {
+    for (unsigned kind = 0; kind < 5; ++kind) {
         CAPTURE(kind);
         transaction_stub endpoint;
         transaction_owner owner;
@@ -384,8 +374,7 @@ TEST_CASE("All transaction cancellations retain the record until the native unce
 }
 
 TEST_CASE("Transaction sequences retire callback and bridge capacity before the next step at quota one") {
-    for (const auto rollback : {false, true})
-    {
+    for (const auto rollback : {false, true}) {
         CAPTURE(rollback);
         transaction_stub endpoint;
         transaction_owner owner;

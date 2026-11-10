@@ -22,8 +22,7 @@
 
 namespace {
 
-enum resource : std::size_t
-{
+enum resource : std::size_t {
     cctx,
     dctx,
     cdict,
@@ -38,8 +37,7 @@ bool fail_map{};
 bool fail_next_new{};
 
 bool fail(resource kind) {
-    if (fail_resource == kind)
-    {
+    if (fail_resource == kind) {
         fail_resource = resource_count;
         return true;
     }
@@ -67,8 +65,7 @@ ZSTD_CDict* create_cdict(const void* data, std::size_t size, int level) {
 ZSTD_DDict* create_ddict(const void* data, std::size_t size) {
     auto* value = fail(ddict) ? nullptr : ZSTD_createDDict(data, size);
     live[ddict] += value != nullptr;
-    if (value && std::exchange(fail_map, false))
-    {
+    if (value && std::exchange(fail_map, false)) {
         fail_next_new = true;
     }
     return value;
@@ -105,8 +102,7 @@ void free_buffer(void* value) noexcept {
     std::free(value);
 }
 
-struct dictionary_file
-{
+struct dictionary_file {
     std::filesystem::path path;
     std::string bytes;
 
@@ -115,8 +111,7 @@ struct dictionary_file
                ("ark-zstd-ownership-" + std::to_string(seed) + "-" +
                    std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())))
         , bytes(4096, '\0') {
-        for (auto& byte : bytes)
-        {
+        for (auto& byte : bytes) {
             seed = seed * 1664525u + 1013904223u;
             byte = static_cast<char>(seed >> 24);
         }
@@ -137,12 +132,10 @@ struct dictionary_file
 // Only this executable replaces map allocation and the native resource entrypoints.
 // Production inline definitions never mix with differently expanded definitions.
 void* operator new(std::size_t size) {
-    if (std::exchange(fail_next_new, false))
-    {
+    if (std::exchange(fail_next_new, false)) {
         throw std::bad_alloc{};
     }
-    if (auto* value = std::malloc(size ? size : 1))
-    {
+    if (auto* value = std::malloc(size ? size : 1)) {
         return value;
     }
     throw std::bad_alloc{};
@@ -206,8 +199,7 @@ TEST_CASE("Zstandard duplicate dictionary keys retain the first pair without lea
         const auto first_frame = frame(codec, input);
         REQUIRE(first_frame.size() < input.size()); // Exercise actual dictionary references.
         const auto initial = live;
-        for (int attempt = 0; attempt < 8; ++attempt)
-        {
+        for (int attempt = 0; attempt < 8; ++attempt) {
             CHECK(codec.init_z_std_dict(1, replacement.path.string(), 15));
             CHECK(live == initial);
             CHECK(frame(codec, input) == first_frame);
@@ -226,8 +218,7 @@ TEST_CASE("Zstandard dictionary creation failures preserve existing entries and 
         const auto input = dictionary.bytes.substr(100, 2048);
         const auto original = frame(codec, input);
         const auto initial = live;
-        for (auto kind : {cdict, ddict})
-        {
+        for (auto kind : {cdict, ddict}) {
             fail_resource = kind;
             CHECK_FALSE(codec.init_z_std_dict(2, dictionary.path.string(), 1));
             CHECK(fail_resource == resource_count);
@@ -255,10 +246,11 @@ TEST_CASE("Zstandard dictionary insertion exceptions leave no partial entry and 
         const auto initial = live;
         fail_map = true;
         bool caught{};
-        try
-        { codec.init_z_std_dict(2, dictionary.path.string(), 1); }
-        catch (const std::bad_alloc&)
-        { caught = true; }
+        try {
+            codec.init_z_std_dict(2, dictionary.path.string(), 1);
+        } catch (const std::bad_alloc&) {
+            caught = true;
+        }
         CHECK_FALSE(fail_map);
         CHECK_FALSE(fail_next_new);
         CHECK(caught);
@@ -336,8 +328,7 @@ TEST_CASE("Zstandard populated moves release overwritten owners once and retain 
 
 TEST_CASE("Zstandard fallible move construction preserves the source after allocation failure" *
           doctest::skip(std::is_nothrow_move_constructible_v<ark::zstd_compress>)) {
-    if constexpr (!std::is_nothrow_move_constructible_v<ark::zstd_compress>)
-    {
+    if constexpr (!std::is_nothrow_move_constructible_v<ark::zstd_compress>) {
         dictionary_file dictionary(1);
         const auto input = dictionary.bytes.substr(100, 2048);
         check_empty_resources();
@@ -349,10 +340,11 @@ TEST_CASE("Zstandard fallible move construction preserves the source after alloc
             bool caught{};
             // Arm immediately before construction; doctest assertion setup may allocate too.
             fail_next_new = true;
-            try
-            { ark::zstd_compress moved(std::move(source)); }
-            catch (const std::bad_alloc&)
-            { caught = true; }
+            try {
+                ark::zstd_compress moved(std::move(source));
+            } catch (const std::bad_alloc&) {
+                caught = true;
+            }
             const bool consumed = !std::exchange(fail_next_new, false);
             CHECK(consumed);
             CHECK(caught);

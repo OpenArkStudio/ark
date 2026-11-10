@@ -34,15 +34,13 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void mysql_plugin::install() {
-    if (!register_module(detail::make_mysql_module(), module_update::enabled))
-    {
+    if (!register_module(detail::make_mysql_module(), module_update::enabled)) {
         throw std::runtime_error("mysql module registration rejected");
     }
 }
 
 void mysql_plugin::uninstall() {
-    if (!unregister_module<mysql_module>())
-    {
+    if (!unregister_module<mysql_module>()) {
         throw std::runtime_error("mysql module unregistration rejected");
     }
 }

@@ -25,8 +25,7 @@
 namespace ark {
 
 template<typename key_type, typename mapped_type, bool use_hash_map = false>
-class object_map_base
-{
+class object_map_base {
 public:
     using k_type = key_type;
     using v_type = mapped_type;
@@ -62,8 +61,7 @@ public:
     }
 
     object_map_base& operator=(object_map_base&& other) noexcept(std::is_nothrow_move_assignable_v<map_type>) {
-        if (this != &other)
-        {
+        if (this != &other) {
             clear();
             nodes_ = std::move(other.nodes_);
             other.nodes_.clear();
@@ -89,8 +87,7 @@ public:
 
     // will delete allocated memory
     iterator erase(iterator it) {
-        if (it != nodes_.end())
-        {
+        if (it != nodes_.end()) {
             delete_value(it->second);
             return nodes_.erase(it);
         }
@@ -101,8 +98,7 @@ public:
     // will delete allocated memory
     bool erase(const k_type& key) {
         auto iter = nodes_.find(key);
-        if (iter == nodes_.end())
-        {
+        if (iter == nodes_.end()) {
             return false;
         }
 
@@ -142,8 +138,7 @@ public:
 
     // will delete allocated memory
     void clear() {
-        for (auto& iter : nodes_)
-        {
+        for (auto& iter : nodes_) {
             delete_value(iter.second);
         }
 
@@ -152,8 +147,7 @@ public:
 
     v_type find_value(const k_type& key) {
         auto iter = find(key);
-        if (iter != end())
-        {
+        if (iter != end()) {
             return iter->second;
         }
 
@@ -166,8 +160,7 @@ public:
 
     v_type find_value(const k_type& key) const {
         auto iter = find(key);
-        if (iter != end())
-        {
+        if (iter != end()) {
             return iter->second;
         }
 
@@ -177,8 +170,7 @@ public:
 private:
     template<typename stored_type>
     void delete_value(stored_type& value) {
-        if constexpr (std::is_pointer_v<stored_type>)
-        {
+        if constexpr (std::is_pointer_v<stored_type>) {
             delete value;
             value = nullptr;
         }

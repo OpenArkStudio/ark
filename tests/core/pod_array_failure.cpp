@@ -14,13 +14,11 @@ size_t fail_array_call{};
 bool failure_consumed{};
 
 void* allocate_array(size_t bytes) {
-    if (fail_array_call && --fail_array_call == 0)
-    {
+    if (fail_array_call && --fail_array_call == 0) {
         failure_consumed = true;
         throw std::bad_alloc{};
     }
-    if (auto* result = std::malloc(bytes ? bytes : 1))
-    {
+    if (auto* result = std::malloc(bytes ? bytes : 1)) {
         return result;
     }
     throw std::bad_alloc{};
@@ -39,10 +37,11 @@ void* operator new[](std::size_t bytes) {
 }
 
 void* operator new[](std::size_t bytes, const std::nothrow_t&) noexcept {
-    try
-    { return allocate_array(bytes); }
-    catch (...)
-    { return nullptr; }
+    try {
+        return allocate_array(bytes);
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void operator delete[](void* value) noexcept {
@@ -64,10 +63,11 @@ TEST_CASE("POD array default allocation failure throws without replacing live st
     const auto* original = values.data();
     fail_array(1);
     bool caught{};
-    try
-    { values.push_back(values[0]); }
-    catch (const std::bad_alloc&)
-    { caught = true; }
+    try {
+        values.push_back(values[0]);
+    } catch (const std::bad_alloc&) {
+        caught = true;
+    }
     CHECK(failure_consumed);
     CHECK(caught);
     CHECK(values.data() == original);
@@ -79,8 +79,7 @@ TEST_CASE("POD array default allocation failure throws without replacing live st
 }
 
 TEST_CASE("Array map rolls back pointer growth bucket and node allocation failures") {
-    for (size_t ordinal = 1; ordinal <= 3; ++ordinal)
-    {
+    for (size_t ordinal = 1; ordinal <= 3; ++ordinal) {
         INFO("failed array allocation ordinal=", ordinal);
         int original = 11;
         int candidate = 22;
@@ -90,10 +89,11 @@ TEST_CASE("Array map rolls back pointer growth bucket and node allocation failur
         REQUIRE(values.add_element(existing_name, &original));
         fail_array(ordinal); // Pointer array, index bucket expansion, then index node.
         bool caught{};
-        try
-        { values.add_element(new_name, &candidate); }
-        catch (const std::bad_alloc&)
-        { caught = true; }
+        try {
+            values.add_element(new_name, &candidate);
+        } catch (const std::bad_alloc&) {
+            caught = true;
+        }
         CHECK(failure_consumed);
         CHECK(caught);
         REQUIRE(values.get_count() == 1);
@@ -125,10 +125,11 @@ TEST_CASE("Array map failed duplicate insertion preserves the existing name and 
     REQUIRE(values.add_element(name, &original));
     fail_array(3); // Bucket expansion succeeds; allocating the duplicate node fails.
     bool caught{};
-    try
-    { values.add_element(name, &candidate); }
-    catch (const std::bad_alloc&)
-    { caught = true; }
+    try {
+        values.add_element(name, &candidate);
+    } catch (const std::bad_alloc&) {
+        caught = true;
+    }
     CHECK(failure_consumed);
     CHECK(caught);
     REQUIRE(values.get_count() == 1);

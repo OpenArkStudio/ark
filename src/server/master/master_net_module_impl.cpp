@@ -31,8 +31,7 @@ bool master_net_module_impl::init() {
     bus_module_ = get_plugin_manager()->try_find_module<bus_module>();
     net_service_manager_module_ = get_plugin_manager()->try_find_module<net_service_manager_module>();
 
-    if (bus_module_ == nullptr || net_service_manager_module_ == nullptr)
-    {
+    if (bus_module_ == nullptr || net_service_manager_module_ == nullptr) {
         ARK_LOG_ERROR("master network startup requires Bus and Net modules");
         return false;
     }
@@ -53,15 +52,13 @@ bool master_net_module_impl::post_init() {
 
 bool master_net_module_impl::start_server() {
     auto ret = net_service_manager_module_->create_server();
-    if (!ret)
-    {
+    if (!ret) {
         ARK_LOG_ERROR("Cannot start server net, busid = {}", bus_module_->get_self_bus_name());
         return false;
     }
 
     net_server_ = net_service_manager_module_->get_inter_net_server();
-    if (net_server_ == nullptr)
-    {
+    if (net_server_ == nullptr) {
         ARK_LOG_ERROR("Cannot find server net, busid = {}", bus_module_->get_self_bus_name());
         return false;
     }

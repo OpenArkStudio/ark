@@ -27,8 +27,7 @@
 
 namespace ark {
 
-class http_plugin final : public plugin_base<http_plugin>
-{
+class http_plugin final : public plugin_base<http_plugin> {
 public:
     void install() override;
     void uninstall() override;

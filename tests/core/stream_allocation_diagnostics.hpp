@@ -10,8 +10,7 @@ namespace stream_test {
 
 // Only installed in the isolated, single-threaded allocation executables. No
 // C++ allocation or logging is needed if an injected failure hits noexcept code.
-class allocation_diagnostic final
-{
+class allocation_diagnostic final {
 public:
     allocation_diagnostic(const char* const& phase, const std::size_t& position, const std::size_t& count) noexcept
         : phase_(phase)
@@ -32,15 +31,13 @@ public:
 
 private:
     [[noreturn]] static void terminate() noexcept {
-        if (const auto* context = active_)
-        {
+        if (const auto* context = active_) {
             std::fprintf(stderr, "stream allocation terminate: phase=%s fail_at=%zu allocation_count=%zu\n",
                 context->phase_, context->position_, context->count_);
             std::fflush(stderr);
             active_ = context->previous_context_;
             // Preserve doctest's existing crash reporting and failure exit.
-            if (context->previous_handler_)
-            {
+            if (context->previous_handler_) {
                 context->previous_handler_();
             }
         }

@@ -27,8 +27,7 @@
 namespace ark {
 namespace {
 
-struct unpublished_node_deleter
-{
+struct unpublished_node_deleter {
     void operator()(node* pointer) const noexcept {
         ARK_DELETE(pointer);
     }
@@ -54,84 +53,58 @@ void node_manager::init_data(const data_list& args) {
     size_t count = args.get_count();
     ARK_ASSERT_RET_NONE(count % 2 == 0);
 
-    for (size_t i = 0; i < count; i += 2)
-    {
+    for (size_t i = 0; i < count; i += 2) {
         auto data_type = args.get_type(i);
         auto index = args.u_int(i + 1);
-        switch (data_type)
-        {
-        case ark::data_type::dt_boolean:
-        {
+        switch (data_type) {
+        case ark::data_type::dt_boolean: {
             node* node_ptr = find_data(index);
-            if (node_ptr != nullptr)
-            {
+            if (node_ptr != nullptr) {
                 node_ptr->set_bool(args.get_bool(i));
             }
-        }
-        break;
-        case ark::data_type::dt_int32:
-        {
+        } break;
+        case ark::data_type::dt_int32: {
             node* node_ptr = find_data(index);
-            if (node_ptr != nullptr)
-            {
+            if (node_ptr != nullptr) {
                 node_ptr->set_int32(args.get_int(i));
             }
-        }
-        break;
-        case ark::data_type::dt_uint32:
-        {
+        } break;
+        case ark::data_type::dt_uint32: {
             node* node_ptr = find_data(index);
-            if (node_ptr != nullptr)
-            {
+            if (node_ptr != nullptr) {
                 node_ptr->set_u_int32(args.u_int(i));
             }
-        }
-        break;
-        case ark::data_type::dt_int64:
-        {
+        } break;
+        case ark::data_type::dt_int64: {
             node* node_ptr = find_data(index);
-            if (node_ptr != nullptr)
-            {
+            if (node_ptr != nullptr) {
                 node_ptr->set_int64(args.int64(i));
             }
-        }
-        break;
-        case ark::data_type::dt_uint64:
-        {
+        } break;
+        case ark::data_type::dt_uint64: {
             node* node_ptr = find_data(index);
-            if (node_ptr != nullptr)
-            {
+            if (node_ptr != nullptr) {
                 node_ptr->set_u_int64(args.u_int64(i));
             }
-        }
-        break;
-        case ark::data_type::dt_float:
-        {
+        } break;
+        case ark::data_type::dt_float: {
             node* node_ptr = find_data(index);
-            if (node_ptr != nullptr)
-            {
+            if (node_ptr != nullptr) {
                 node_ptr->set_float(args.get_float(i));
             }
-        }
-        break;
-        case ark::data_type::dt_double:
-        {
+        } break;
+        case ark::data_type::dt_double: {
             node* node_ptr = find_data(index);
-            if (node_ptr != nullptr)
-            {
+            if (node_ptr != nullptr) {
                 node_ptr->set_double(args.get_double(i));
             }
-        }
-        break;
-        case ark::data_type::dt_string:
-        {
+        } break;
+        case ark::data_type::dt_string: {
             node* node_ptr = find_data(index);
-            if (node_ptr != nullptr)
-            {
+            if (node_ptr != nullptr) {
                 node_ptr->set_string(args.string(i));
             }
-        }
-        break;
+        } break;
         default:
             break;
         }
@@ -154,8 +127,7 @@ node* node_manager::create_data(std::shared_ptr<node_meta> data_meta_ptr) {
     scoped_node data_ptr(create_data_by_meta(data_meta_ptr));
     ARK_ASSERT_RET_VAL(data_ptr != nullptr, nullptr);
 
-    if (!data_list_.insert(index, data_ptr.get()).second)
-    {
+    if (!data_list_.insert(index, data_ptr.get()).second) {
         return nullptr;
     }
 
@@ -171,8 +143,7 @@ bool node_manager::create_data(node* data_ptr) {
 
     new_data_ptr->copy_from(data_ptr);
 
-    if (!data_list_.insert(new_data_ptr->get_index(), new_data_ptr.get()).second)
-    {
+    if (!data_list_.insert(new_data_ptr->get_index(), new_data_ptr.get()).second) {
         return false;
     }
 
@@ -419,15 +390,13 @@ bool node_manager::set_bool(const uint32_t index, bool value) {
     ARK_ASSERT_RET_VAL(data_type == data_type::dt_boolean, false);
 
     auto old_value = data_ptr->get_bool();
-    if (old_value == value)
-    {
+    if (old_value == value) {
         return false;
     }
 
     data_ptr->set_bool(value);
 
-    if (func_)
-    {
+    if (func_) {
         // data callbacks
         func_(data_ptr, data_impl(data_type, old_value), data_impl(data_type, value));
     }
@@ -443,15 +412,13 @@ bool node_manager::set_int32(const uint32_t index, const int32_t value) {
     ARK_ASSERT_RET_VAL(data_type == data_type::dt_int32, false);
 
     auto old_value = data_ptr->get_int32();
-    if (old_value == value)
-    {
+    if (old_value == value) {
         return false;
     }
 
     data_ptr->set_int32(value);
 
-    if (func_)
-    {
+    if (func_) {
         // data callbacks
         func_(data_ptr, data_impl(data_type, old_value), data_impl(data_type, value));
     }
@@ -467,15 +434,13 @@ bool node_manager::set_u_int32(const uint32_t index, const uint32_t value) {
     ARK_ASSERT_RET_VAL(data_type == data_type::dt_uint32, false);
 
     auto old_value = data_ptr->get_u_int32();
-    if (old_value == value)
-    {
+    if (old_value == value) {
         return false;
     }
 
     data_ptr->set_u_int32(value);
 
-    if (func_)
-    {
+    if (func_) {
         // data callbacks
         func_(data_ptr, data_impl(data_type, old_value), data_impl(data_type, value));
     }
@@ -491,15 +456,13 @@ bool node_manager::set_int64(const uint32_t index, const int64_t value) {
     ARK_ASSERT_RET_VAL(data_type == data_type::dt_int64, false);
 
     auto old_value = data_ptr->get_int64();
-    if (old_value == value)
-    {
+    if (old_value == value) {
         return false;
     }
 
     data_ptr->set_int64(value);
 
-    if (func_)
-    {
+    if (func_) {
         // data callbacks
         func_(data_ptr, data_impl(data_type, old_value), data_impl(data_type, value));
     }
@@ -515,15 +478,13 @@ bool node_manager::set_u_int64(const uint32_t index, const uint64_t value) {
     ARK_ASSERT_RET_VAL(data_type == data_type::dt_uint64, false);
 
     auto old_value = data_ptr->get_u_int64();
-    if (old_value == value)
-    {
+    if (old_value == value) {
         return false;
     }
 
     data_ptr->set_u_int64(value);
 
-    if (func_)
-    {
+    if (func_) {
         // data callbacks
         func_(data_ptr, data_impl(data_type, old_value), data_impl(data_type, value));
     }
@@ -539,15 +500,13 @@ bool node_manager::set_float(const uint32_t index, const float value) {
     ARK_ASSERT_RET_VAL(data_type == data_type::dt_float, false);
 
     auto old_value = data_ptr->get_float();
-    if (old_value == value)
-    {
+    if (old_value == value) {
         return false;
     }
 
     data_ptr->set_float(value);
 
-    if (func_)
-    {
+    if (func_) {
         // data callbacks
         func_(data_ptr, data_impl(data_type, old_value), data_impl(data_type, value));
     }
@@ -563,15 +522,13 @@ bool node_manager::set_double(const uint32_t index, const double value) {
     ARK_ASSERT_RET_VAL(data_type == data_type::dt_double, false);
 
     auto old_value = data_ptr->get_double();
-    if (old_value == value)
-    {
+    if (old_value == value) {
         return false;
     }
 
     data_ptr->set_double(value);
 
-    if (func_)
-    {
+    if (func_) {
         // data callbacks
         func_(data_ptr, data_impl(data_type, old_value), data_impl(data_type, value));
     }
@@ -587,15 +544,13 @@ bool node_manager::set_string(const uint32_t index, const std::string& value) {
     ARK_ASSERT_RET_VAL(data_type == data_type::dt_string, false);
 
     auto old_value = data_ptr->get_string();
-    if (old_value == value)
-    {
+    if (old_value == value) {
         return false;
     }
 
     data_ptr->set_string(value);
 
-    if (func_)
-    {
+    if (func_) {
         // data callbacks
         func_(data_ptr, data_impl(data_type, old_value.c_str()), data_impl(data_type, value.c_str()));
     }
@@ -612,15 +567,13 @@ bool node_manager::set_w_string(const uint32_t index, const std::wstring& value)
     ARK_ASSERT_RET_VAL(data_type == data_type::dt_wstring, false);
 
     auto old_value = data_ptr->get_w_string();
-    if (old_value == value)
-    {
+    if (old_value == value) {
         return false;
     }
 
     data_ptr->set_w_string(value);
 
-    if (func_)
-    {
+    if (func_) {
         // data callbacks
         func_(data_ptr, data_impl(data_type, old_value.c_str()), data_impl(data_type, value.c_str()));
     }
@@ -637,15 +590,13 @@ bool node_manager::set_guid(const uint32_t index, const guid_t& value) {
     ARK_ASSERT_RET_VAL(data_type == data_type::dt_guid, false);
 
     auto old_value = data_ptr->get_object();
-    if (old_value == value)
-    {
+    if (old_value == value) {
         return false;
     }
 
     data_ptr->set_object(value);
 
-    if (func_)
-    {
+    if (func_) {
         // data callbacks
         func_(data_ptr, data_impl::from_guid(old_value), data_impl::from_guid(value));
     }
@@ -666,16 +617,14 @@ uint32_t node_manager::get_index(const std::string& name) const {
 
 node* node_manager::find_data(const uint32_t index) {
     auto data_ptr = data_list_.find_value(index);
-    if (nullptr == data_ptr)
-    {
+    if (nullptr == data_ptr) {
         auto data_meta_ptr = class_meta_->find_data_meta(index);
         ARK_ASSERT_RET_VAL(data_meta_ptr != nullptr, nullptr);
 
         scoped_node candidate(create_data_by_meta(data_meta_ptr));
         ARK_ASSERT_RET_VAL(candidate != nullptr, nullptr);
 
-        if (!data_list_.insert(index, candidate.get()).second)
-        {
+        if (!data_list_.insert(index, candidate.get()).second) {
             return nullptr;
         }
         data_ptr = candidate.release();

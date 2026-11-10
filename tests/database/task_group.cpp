@@ -24,23 +24,22 @@ module_task<> throw_task() {
 }
 
 module_task<> wait_task(asio::steady_timer& timer, bool& cancelled) {
-    try
-    { co_await timer.async_wait(asio::use_awaitable); }
-    catch (const asio::system_error& error)
-    { cancelled = error.code() == asio::error::operation_aborted; }
+    try {
+        co_await timer.async_wait(asio::use_awaitable);
+    } catch (const asio::system_error& error) {
+        cancelled = error.code() == asio::error::operation_aborted;
+    }
 }
 
 module_task<> multi_step_task(unsigned& started, unsigned& resumed) {
     ++started;
-    for (unsigned step = 0; step < 3; ++step)
-    {
+    for (unsigned step = 0; step < 3; ++step) {
         co_await asio::post(asio::use_awaitable);
         ++resumed;
     }
 }
 
-struct capture_release
-{
+struct capture_release {
     std::thread::id owner;
     unsigned& released;
     bool& wrong_thread;
@@ -80,16 +79,16 @@ TEST_CASE("Task completion and exceptions run on the module owner") {
     REQUIRE(group.start(throw_task(), [&](std::exception_ptr error) {
         CHECK(std::this_thread::get_id() == owner);
         REQUIRE(error);
-        try
-        { std::rethrow_exception(error); }
-        catch (const std::runtime_error& failure)
-        { CHECK(std::string(failure.what()) == "task body failure"); }
+        try {
+            std::rethrow_exception(error);
+        } catch (const std::runtime_error& failure) {
+            CHECK(std::string(failure.what()) == "task body failure");
+        }
         ++completed;
     }));
     CHECK(group.start(finish_task(started)) == 0);
     CHECK(started == 0);
-    for (unsigned step = 0; step < 16 && group.pending(); ++step)
-    {
+    for (unsigned step = 0; step < 16 && group.pending(); ++step) {
         group.poll(1);
     }
     CHECK(completed == 2);
@@ -118,8 +117,7 @@ TEST_CASE("Close requests cancellation and requires explicit owner polling to dr
     group.close();
     CHECK_FALSE(group.closed());
     CHECK(completed == 0);
-    for (unsigned step = 0; step < 16 && !group.closed(); ++step)
-    {
+    for (unsigned step = 0; step < 16 && !group.closed(); ++step) {
         group.poll(1);
     }
     CHECK(group.closed());
@@ -154,18 +152,21 @@ TEST_CASE("Task group rejects cross-thread state access") {
     module_task_group group(runtime);
     unsigned rejected{};
     std::thread worker([&] {
-        try
-        { group.pending(); }
-        catch (const std::logic_error&)
-        { ++rejected; }
-        try
-        { group.close(); }
-        catch (const std::logic_error&)
-        { ++rejected; }
-        try
-        { group.stop_accepting(); }
-        catch (const std::logic_error&)
-        { ++rejected; }
+        try {
+            group.pending();
+        } catch (const std::logic_error&) {
+            ++rejected;
+        }
+        try {
+            group.close();
+        } catch (const std::logic_error&) {
+            ++rejected;
+        }
+        try {
+            group.stop_accepting();
+        } catch (const std::logic_error&) {
+            ++rejected;
+        }
     });
     worker.join();
     CHECK(rejected == 3);
@@ -176,10 +177,11 @@ TEST_CASE("Task group rejects cross-thread state access") {
     REQUIRE(group.pending() == 0);
     group.stop_accepting();
     std::thread closed_worker([&] {
-        try
-        { group.stop_accepting(); }
-        catch (const std::logic_error&)
-        { ++rejected; }
+        try {
+            group.stop_accepting();
+        } catch (const std::logic_error&) {
+            ++rejected;
+        }
     });
     closed_worker.join();
     CHECK(rejected == 4);
@@ -206,8 +208,7 @@ TEST_CASE("Stopping admission preserves accepted tasks across multiple awaits") 
         CHECK_FALSE(error);
         ++completed;
     }) != 0);
-    if (poll_first)
-    {
+    if (poll_first) {
         group.poll(1);
         CHECK(started == 1);
     }
@@ -217,8 +218,7 @@ TEST_CASE("Stopping admission preserves accepted tasks across multiple awaits") 
     CHECK_FALSE(group.closed());
     CHECK(completed == 0);
     CHECK(group.start(finish_task(rejected_started)) == 0);
-    for (unsigned step = 0; step < 16 && !group.closed(); ++step)
-    {
+    for (unsigned step = 0; step < 16 && !group.closed(); ++step) {
         group.poll(1);
     }
     CHECK(group.closed());
@@ -249,8 +249,7 @@ TEST_CASE("Close still cancels accepted work after admission has stopped") {
     CHECK(completed == 0);
     CHECK(group.pending() == 1);
     group.close();
-    for (unsigned step = 0; step < 16 && !group.closed(); ++step)
-    {
+    for (unsigned step = 0; step < 16 && !group.closed(); ++step) {
         group.poll(1);
     }
     CHECK(group.closed());
@@ -297,8 +296,7 @@ TEST_CASE("Stopped admission releases accepted and refused captures on the owner
           0);
     CHECK(released == 2);
     CHECK(refused_started == 0);
-    for (unsigned step = 0; step < 16 && !group.closed(); ++step)
-    {
+    for (unsigned step = 0; step < 16 && !group.closed(); ++step) {
         group.poll(1);
     }
     CHECK(group.closed());
@@ -314,19 +312,18 @@ TEST_CASE("Close before the first poll still drains the accepted task completion
     unsigned started{};
     unsigned completed{};
     group.start(finish_task(started), [&](std::exception_ptr error) {
-        if (error)
-        {
-            try
-            { std::rethrow_exception(error); }
-            catch (const asio::system_error& failure)
-            { CHECK(failure.code() == asio::error::operation_aborted); }
+        if (error) {
+            try {
+                std::rethrow_exception(error);
+            } catch (const asio::system_error& failure) {
+                CHECK(failure.code() == asio::error::operation_aborted);
+            }
         }
         ++completed;
     });
     group.close();
     CHECK_FALSE(group.closed());
-    for (unsigned step = 0; step < 16 && !group.closed(); ++step)
-    {
+    for (unsigned step = 0; step < 16 && !group.closed(); ++step) {
         group.poll(1);
     }
     CHECK(group.closed());

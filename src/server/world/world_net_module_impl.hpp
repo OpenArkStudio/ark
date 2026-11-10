@@ -31,8 +31,7 @@
 
 namespace ark {
 
-class world_net_module_impl final : public module_base<world_net_module, bus_module, net_service_manager_module>
-{
+class world_net_module_impl final : public module_base<world_net_module, bus_module, net_service_manager_module> {
 public:
     bool init() override;
     bool post_init() override;

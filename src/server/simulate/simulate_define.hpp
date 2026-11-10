@@ -11,8 +11,7 @@ using simulate_net_id = int64_t;
 using simulate_trigger_cb_function =
     std::function<void(const std::string& scene_id, const int32_t index, const simulate::trigger_pair& pair)>;
 
-class simulate_scene
-{
+class simulate_scene {
 public:
     simulate_scene() {
     }
@@ -37,8 +36,7 @@ public:
 
     const guid_t& find_actor(const simulate_net_id obj_id) {
         auto iter = net_id_actor_list_.find(obj_id);
-        if (iter == net_id_actor_list_.end())
-        {
+        if (iter == net_id_actor_list_.end()) {
             return null_guid;
         }
 
@@ -47,8 +45,7 @@ public:
 
     simulate_net_id find_obj(const guid_t& actor_obj_id) {
         auto iter = actor_net_id_list_.find(actor_obj_id);
-        if (iter == actor_net_id_list_.end())
-        {
+        if (iter == actor_net_id_list_.end()) {
             return 0;
         }
 
@@ -57,8 +54,7 @@ public:
 
     void remove_obj(const simulate_net_id obj_id) {
         auto iter = net_id_actor_list_.find(obj_id);
-        if (iter == net_id_actor_list_.end())
-        {
+        if (iter == net_id_actor_list_.end()) {
             return;
         }
 
@@ -69,8 +65,7 @@ public:
 
     void remove_actor(const guid_t& actor_obj_id) {
         auto iter = actor_net_id_list_.find(actor_obj_id);
-        if (iter == actor_net_id_list_.end())
-        {
+        if (iter == actor_net_id_list_.end()) {
             return;
         }
 

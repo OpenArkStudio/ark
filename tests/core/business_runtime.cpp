@@ -17,8 +17,7 @@
 
 namespace {
 
-class observed_module final : public ark::module
-{
+class observed_module final : public ark::module {
 public:
     explicit observed_module(std::string name)
         : name_(std::move(name)) {
@@ -30,16 +29,14 @@ public:
 
     std::vector<std::string> get_dependencies() const override {
         ++dependency_reads;
-        if (dependency_metadata_throws)
-        {
+        if (dependency_metadata_throws) {
             throw std::runtime_error("dependency metadata must not be read again");
         }
         return dependencies;
     }
 
     bool update() override {
-        if (on_update)
-        {
+        if (on_update) {
             on_update();
         }
         return true;
@@ -52,8 +49,7 @@ public:
 
     bool pre_shut() override {
         ++pre_shut_calls;
-        if (on_pre_shut)
-        {
+        if (on_pre_shut) {
             on_pre_shut();
         }
         return pre_shut_result;
@@ -61,8 +57,7 @@ public:
 
     bool shut() override {
         ++shut_calls;
-        if (on_shut)
-        {
+        if (on_shut) {
             on_shut();
         }
         return shut_result;
@@ -130,8 +125,7 @@ ark::task<> consume_provider(ark::module& provider, std::string& result) {
 
 using bridge_type = ark::detail::database_awaitable<std::string>;
 
-struct controlled_service
-{
+struct controlled_service {
     using callback = std::function<void(std::exception_ptr, std::string)>;
     callback pending;
     callback first_callback;
@@ -142,8 +136,7 @@ struct controlled_service
     std::uint64_t start(callback completion) {
         CHECK_FALSE(pending);
         pending = std::move(completion);
-        if (!first_callback)
-        {
+        if (!first_callback) {
             first_callback = pending;
         }
         return ++started;
@@ -157,8 +150,7 @@ struct controlled_service
 
     void cancel() {
         ++cancelled;
-        if (!defer_cancellation)
-        {
+        if (!defer_cancellation) {
             complete_cancelled();
         }
     }
@@ -180,8 +172,7 @@ ark::task<> sequential_operations(controlled_service& service, bridge_type& brid
 
 using ark::module;
 
-class removal_module final : public module
-{
+class removal_module final : public module {
 public:
     explicit removal_module(unsigned& destroyed)
         : destroyed_(destroyed) {
@@ -200,8 +191,7 @@ private:
     unsigned& destroyed_;
 };
 
-struct removal_owner
-{
+struct removal_owner {
     ark::plugin_manager& manager;
     std::unordered_map<std::string, module*> modules_;
 
@@ -230,8 +220,7 @@ TEST_CASE("Registered modules share one bounded owner executor after completion 
     unsigned first_updates{}, second_updates{}, handlers{}, completions{};
     first.on_update = [&] { ++first_updates; };
     second.on_update = [&] { ++second_updates; };
-    for (unsigned index = 0; index < 4; ++index)
-    {
+    for (unsigned index = 0; index < 4; ++index) {
         asio::post(runtime->get_executor(), [&] {
             CHECK(first_updates > 0);
             CHECK(second_updates > 0);
@@ -363,8 +352,7 @@ TEST_CASE("Update and cancellation completion exceptions preserve owner reentran
     module.on_update = [] { throw std::runtime_error("module update failed"); };
     REQUIRE(tasks.start(ready_task(), [&](std::exception_ptr error) {
         CHECK(error);
-        if (error)
-        {
+        if (error) {
             CHECK_THROWS_AS(std::rethrow_exception(error), arknet::system_error);
         }
         CHECK_FALSE(manager.stop(3));
@@ -391,10 +379,11 @@ TEST_CASE("Manager owner and active registry checks reject mutations before they
     unsigned rejected{};
     std::thread worker([&] {
         auto rejects = [&](auto action) {
-            try
-            { action(); }
-            catch (const std::logic_error&)
-            { ++rejected; }
+            try {
+                action();
+            } catch (const std::logic_error&) {
+                ++rejected;
+            }
         };
         rejects([&] { manager.get_task_runtime(); });
         rejects([&] { manager.get_tasks(module); });
@@ -482,8 +471,7 @@ TEST_CASE("Managed task groups enforce registration capacity identity and termin
     auto* original = &manager.create_task_group(first, 1);
     CHECK_THROWS_AS(manager.create_task_group(first), std::logic_error);
     std::vector<std::unique_ptr<observed_module>> modules;
-    for (unsigned index = 0; index < 40; ++index)
-    {
+    for (unsigned index = 0; index < 40; ++index) {
         auto next = std::make_unique<observed_module>("next-" + std::to_string(index));
         REQUIRE(manager.add_module(next->get_name(), next.get()));
         manager.create_task_group(*next);
@@ -516,8 +504,7 @@ TEST_CASE("Every module must be ready before any shutdown hook and updates retir
     REQUIRE(manager.update(2));
     REQUIRE(manager.pending_tasks() == 0);
 
-    for (unsigned attempt = 0; attempt < 2; ++attempt)
-    {
+    for (unsigned attempt = 0; attempt < 2; ++attempt) {
         CHECK_FALSE(manager.stop(3 + attempt));
         CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::stopping);
         CHECK(manager.get_shutdown_failure().empty());
@@ -607,8 +594,7 @@ TEST_CASE("Modules without a readiness override keep their default shutdown beha
 }
 
 TEST_CASE("Shutdown hook failure is observable and retains modules without repeated teardown") {
-    for (unsigned failure = 0; failure < 4; ++failure)
-    {
+    for (unsigned failure = 0; failure < 4; ++failure) {
         CAPTURE(failure);
         ark::plugin_manager manager;
         observed_module module("failed-shutdown");
@@ -616,12 +602,10 @@ TEST_CASE("Shutdown hook failure is observable and retains modules without repea
         auto& tasks = manager.create_task_group(module);
         module.pre_shut_result = failure != 0;
         module.shut_result = failure != 1;
-        if (failure == 2)
-        {
+        if (failure == 2) {
             module.on_pre_shut = [] { throw std::runtime_error("pre_shut failed"); };
         }
-        if (failure == 3)
-        {
+        if (failure == 3) {
             module.on_shut = [] { throw std::runtime_error("shut failed"); };
         }
         CHECK_FALSE(manager.stop(1));
@@ -748,15 +732,13 @@ TEST_CASE("Shutdown retains resources after a required provider is removed") {
 }
 
 TEST_CASE("Shutdown uses unchanged cached metadata but validates an invalidated graph once") {
-    for (const bool changed : {false, true})
-    {
+    for (const bool changed : {false, true}) {
         ark::plugin_manager manager;
         observed_module module("module"), added("added");
         REQUIRE(manager.add_module(module.get_name(), &module));
         REQUIRE(manager.start(0, {}, {}, {}));
         module.dependency_metadata_throws = true;
-        if (changed)
-        {
+        if (changed) {
             REQUIRE(manager.add_module(added.get_name(), &added));
             CHECK_FALSE(manager.stop(1));
             CHECK(manager.get_shutdown_state() == ark::plugin_manager::shutdown_state::failed);
@@ -768,9 +750,7 @@ TEST_CASE("Shutdown uses unchanged cached metadata but validates an invalidated 
             CHECK(module.dependency_reads == 2);
             CHECK(module.pre_shut_calls == 0);
             CHECK(added.pre_shut_calls == 0);
-        }
-        else
-        {
+        } else {
             CHECK(manager.stop(1));
             CHECK(module.dependency_reads == 1);
             CHECK(module.pre_shut_calls == 1);

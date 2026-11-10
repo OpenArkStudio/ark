@@ -12,8 +12,7 @@ namespace ark::config_detail {
 
 // Private transport/parser diagnostics. Schema owners translate these when they
 // expose a more specific public exception, such as application_manifest_error.
-class read_error : public std::runtime_error
-{
+class read_error : public std::runtime_error {
 public:
     read_error(const std::string& path, std::string reason, std::size_t line = 0, std::size_t column = 0);
 

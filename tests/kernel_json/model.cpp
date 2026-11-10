@@ -35,13 +35,10 @@ std::string replaced(std::string input, const std::string& old, const std::strin
 }
 
 void invalid(const std::string& input, const std::string& expected_pointer) {
-    try
-    {
+    try {
         static_cast<void>(parse(input, "resource/meta/example.json"));
         FAIL("invalid JSON definition was accepted");
-    }
-    catch (const error& error)
-    {
+    } catch (const error& error) {
         CHECK(error.source() == "resource/meta/example.json");
         CHECK(error.pointer() == expected_pointer);
         CHECK(std::string(error.what()).find(expected_pointer) != std::string::npos);
@@ -112,8 +109,7 @@ TEST_CASE("Entity JSON typed scalars preserve full integer ranges and reject coe
              {"bool", "true", "1"}, {"int32", "-2147483648", "2147483648"}, {"uint32", "4294967295", "-1"},
              {"int64", "-9223372036854775808", "9223372036854775808"}, {"uint64", "18446744073709551615", "-1"},
              {"float", "1.25", "1e99"}, {"double", "1.2345678901234567", "\"1.0\""}, {"string", "\"内容\"", "false"},
-             {"guid", "\"9223372036854775807\"", "\"9223372036854775808\""}})
-    {
+             {"guid", "\"9223372036854775807\"", "\"9223372036854775808\""}}) {
         auto input = replaced(sample(), "\"name\":\"hp\",\"index\":104,\"type\":\"uint32\"",
             "\"name\":\"hp\",\"index\":104,\"type\":\"" + type + "\"");
         CHECK_NOTHROW(parse(replaced(input, "\"hp\":100", "\"hp\":" + good)));
@@ -133,8 +129,7 @@ TEST_CASE("Entity JSON plain-model validation shares the canonical parser and ca
 }
 
 TEST_CASE("Entity JSON loads UTF-8 input paths and retains them in diagnostics") {
-    struct temporary_directory
-    {
+    struct temporary_directory {
         std::filesystem::path path =
             std::filesystem::temp_directory_path() /
             ("ark-json-path-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -162,13 +157,10 @@ TEST_CASE("Entity JSON loads UTF-8 input paths and retains them in diagnostics")
         REQUIRE(output.good());
         output << "{";
     }
-    try
-    {
+    try {
         static_cast<void>(load(utf8));
         FAIL("invalid JSON at the UTF-8 path was accepted");
-    }
-    catch (const error& error)
-    {
+    } catch (const error& error) {
         CHECK(error.source() == utf8);
         CHECK(std::string(error.what()).find(utf8) != std::string::npos);
     }

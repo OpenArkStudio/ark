@@ -28,8 +28,7 @@
 
 namespace ark {
 
-class xxtea
-{
+class xxtea {
 public:
     /**
      * Function: xxtea_encrypt
@@ -42,8 +41,7 @@ public:
         size_t out_len = 0;
         std::unique_ptr<void, decltype(&std::free)> ret(
             xxtea_encrypt(data.c_str(), data.length(), key.c_str(), &out_len), &std::free);
-        if (ret == nullptr)
-        {
+        if (ret == nullptr) {
             return false;
         }
 
@@ -62,8 +60,7 @@ public:
         size_t out_len = 0;
         std::unique_ptr<void, decltype(&std::free)> ret(
             xxtea_decrypt(data.c_str(), data.length(), key.c_str(), &out_len), &std::free);
-        if (ret == nullptr)
-        {
+        if (ret == nullptr) {
             return false;
         }
 
@@ -83,8 +80,7 @@ public:
      */
     static void* xxtea_encrypt(const void* data, size_t len, const void* key, size_t* out_len) {
         if (data == nullptr || key == nullptr || out_len == nullptr || len == 0 ||
-            len > (std::numeric_limits<uint32_t>::max)())
-        {
+            len > (std::numeric_limits<uint32_t>::max)()) {
             return nullptr;
         }
         const auto fixed_key = normalize_key(key);
@@ -103,8 +99,7 @@ public:
      */
     static void* xxtea_decrypt(const void* data, size_t len, const void* key, size_t* out_len) {
         if (data == nullptr || key == nullptr || out_len == nullptr || len == 0 || len % sizeof(uint32_t) != 0 ||
-            len > (std::numeric_limits<uint32_t>::max)())
-        {
+            len > (std::numeric_limits<uint32_t>::max)()) {
             return nullptr;
         }
         const auto fixed_key = normalize_key(key);
@@ -123,8 +118,7 @@ protected:
     static std::array<uint8_t, 16> normalize_key(const void* key) {
         std::array<uint8_t, 16> result{};
         const auto* bytes = static_cast<const uint8_t*>(key);
-        for (size_t index = 0; index < result.size() && bytes[index] != 0; ++index)
-        {
+        for (size_t index = 0; index < result.size() && bytes[index] != 0; ++index) {
             result[index] = bytes[index];
         }
         return result;
@@ -136,33 +130,24 @@ protected:
 
         n = (((len & 3) == 0) ? (len >> 2) : ((len >> 2) + 1));
 
-        if (inc_len)
-        {
+        if (inc_len) {
             out = (uint32_t*)calloc(n + 1, sizeof(uint32_t));
-            if (!out)
-            {
+            if (!out) {
                 return nullptr;
             }
             out[n] = (uint32_t)len;
             *out_len = n + 1;
-        }
-        else
-        {
+        } else {
             out = (uint32_t*)calloc(n, sizeof(uint32_t));
-            if (!out)
-            {
+            if (!out) {
                 return nullptr;
             }
             *out_len = n;
         }
-        if constexpr (std::endian::native == std::endian::little)
-        {
+        if constexpr (std::endian::native == std::endian::little) {
             std::memcpy(out, data, len);
-        }
-        else
-        {
-            for (size_t i = 0; i < len; ++i)
-            {
+        } else {
+            for (size_t i = 0; i < len; ++i) {
                 out[i >> 2] |= static_cast<uint32_t>(data[i]) << ((i & 3) << 3);
             }
         }
@@ -177,12 +162,10 @@ protected:
 
         n = len << 2;
 
-        if (inc_len)
-        {
+        if (inc_len) {
             m = data[len - 1];
             n -= 4;
-            if ((m < n - 3) || (m > n))
-            {
+            if ((m < n - 3) || (m > n)) {
                 return nullptr;
             }
             n = m;
@@ -190,19 +173,14 @@ protected:
 
         out = (uint8_t*)malloc(n + 1);
 
-        if (out == nullptr)
-        {
+        if (out == nullptr) {
             return nullptr;
         }
 
-        if constexpr (std::endian::native == std::endian::little)
-        {
+        if constexpr (std::endian::native == std::endian::little) {
             std::memcpy(out, data, n);
-        }
-        else
-        {
-            for (size_t i = 0; i < n; ++i)
-            {
+        } else {
+            for (size_t i = 0; i < n; ++i) {
                 out[i] = static_cast<uint8_t>(data[i >> 2] >> ((i & 3) << 3));
             }
         }
@@ -217,18 +195,15 @@ protected:
         uint32_t n = (uint32_t)len - 1;
         uint32_t z = data[n], y, p, q = 6 + 52 / (n + 1), sum = 0, e;
 
-        if (n < 1)
-        {
+        if (n < 1) {
             return data;
         }
 
-        while (0 < q--)
-        {
+        while (0 < q--) {
             sum += delta;
             e = sum >> 2 & 3;
 
-            for (p = 0; p < n; p++)
-            {
+            for (p = 0; p < n; p++) {
                 y = data[p + 1];
                 z = data[p] += mix(z, y, sum, p, e, std::span<const uint32_t, 4>(key, 4));
             }
@@ -244,17 +219,14 @@ protected:
         uint32_t n = (uint32_t)len - 1;
         uint32_t z, y = data[0], p, q = 6 + 52 / (n + 1), sum = q * delta, e;
 
-        if (n < 1)
-        {
+        if (n < 1) {
             return data;
         }
 
-        while (sum != 0)
-        {
+        while (sum != 0) {
             e = sum >> 2 & 3;
 
-            for (p = n; p > 0; p--)
-            {
+            for (p = n; p > 0; p--) {
                 z = data[p - 1];
                 y = data[p] -= mix(z, y, sum, p, e, std::span<const uint32_t, 4>(key, 4));
             }
@@ -272,20 +244,17 @@ protected:
         uint32_t *data_array, *key_array;
         size_t data_len, key_len;
 
-        if (!len)
-        {
+        if (!len) {
             return nullptr;
         }
 
         data_array = xxtea_to_uint_array(data, len, 1, &data_len);
-        if (!data_array)
-        {
+        if (!data_array) {
             return nullptr;
         }
 
         key_array = xxtea_to_uint_array(key, 16, 0, &key_len);
-        if (!key_array)
-        {
+        if (!key_array) {
             free(data_array);
             return nullptr;
         }
@@ -303,20 +272,17 @@ protected:
         uint32_t *data_array, *key_array;
         size_t data_len, key_len;
 
-        if (!len)
-        {
+        if (!len) {
             return nullptr;
         }
 
         data_array = xxtea_to_uint_array(data, len, 0, &data_len);
-        if (!data_array)
-        {
+        if (!data_array) {
             return nullptr;
         }
 
         key_array = xxtea_to_uint_array(key, 16, 0, &key_len);
-        if (!key_array)
-        {
+        if (!key_array) {
             free(data_array);
             return nullptr;
         }

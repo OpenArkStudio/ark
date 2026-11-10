@@ -16,16 +16,14 @@ namespace {
 using namespace std::chrono_literals;
 
 void require(bool condition, const char* message) {
-    if (!condition)
-    {
+    if (!condition) {
         throw std::runtime_error(message);
     }
 }
 
 void reap(pid_t pid) {
     int status;
-    while (waitpid(pid, &status, 0) < 0 && errno == EINTR)
-    {
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
     }
 }
 
@@ -38,54 +36,42 @@ void exit_failure(int) {
 }
 
 int fixture(const std::string& mode, int identity) {
-    if (mode == "success")
-    {
+    if (mode == "success") {
         std::signal(SIGTERM, exit_success);
-    }
-    else if (mode == "failure")
-    {
+    } else if (mode == "failure") {
         std::signal(SIGTERM, exit_failure);
-    }
-    else
-    {
+    } else {
         std::signal(SIGTERM, SIG_IGN);
     }
     const auto pid = getpid();
     require(write(identity, &pid, sizeof(pid)) == sizeof(pid), "fixture PID write failed");
     close(identity);
-    if (mode == "early_failure")
-    {
+    if (mode == "early_failure") {
         return 37;
     }
-    if (mode != "not_ready")
-    {
+    if (mode != "not_ready") {
         std::cout << "timers_module, PostInit" << std::endl;
     }
-    if (mode == "ready_early_failure")
-    {
+    if (mode == "ready_early_failure") {
         return 37;
     }
-    for (;;)
-    {
+    for (;;) {
         pause();
     }
 }
 
-class owned_case
-{
+class owned_case {
 public:
     owned_case() = default;
     owned_case(const owned_case&) = delete;
     owned_case& operator=(const owned_case&) = delete;
 
     ~owned_case() {
-        if (helper_ > 0)
-        {
+        if (helper_ > 0) {
             kill(helper_, SIGKILL);
             reap(helper_);
         }
-        if (child_ > 0)
-        {
+        if (child_ > 0) {
             kill(child_, SIGKILL);
         }
         std::error_code ignored;
@@ -100,33 +86,26 @@ public:
         const auto descriptor = std::to_string(identity[1]);
         helper_ = fork();
         require(helper_ >= 0, "helper fork failed");
-        if (helper_ == 0)
-        {
+        if (helper_ == 0) {
             // Trap handlers in a non-interactive shell require these signals
             // to be catchable when the shell starts, regardless of its runner.
             constexpr int signals[] = {SIGHUP, SIGINT, SIGTERM, SIGALRM, SIGPIPE};
             sigset_t catchable;
-            if (sigemptyset(&catchable) != 0)
-            {
+            if (sigemptyset(&catchable) != 0) {
                 _exit(126);
             }
-            for (const int number : signals)
-            {
-                if (std::signal(number, SIG_DFL) == SIG_ERR || sigaddset(&catchable, number) != 0)
-                {
+            for (const int number : signals) {
+                if (std::signal(number, SIG_DFL) == SIG_ERR || sigaddset(&catchable, number) != 0) {
                     _exit(126);
                 }
             }
-            if (sigprocmask(SIG_UNBLOCK, &catchable, nullptr) != 0)
-            {
+            if (sigprocmask(SIG_UNBLOCK, &catchable, nullptr) != 0) {
                 _exit(126);
             }
             close(identity[0]);
-            if (broken_reader)
-            {
+            if (broken_reader) {
                 int output[2];
-                if (pipe(output) != 0 || dup2(output[1], STDOUT_FILENO) < 0)
-                {
+                if (pipe(output) != 0 || dup2(output[1], STDOUT_FILENO) < 0) {
                     _exit(126);
                 }
                 close(output[0]);
@@ -144,15 +123,13 @@ public:
         close(identity[0]);
         require(received == sizeof(child_) && child_ > 0, "fixture did not report its PID");
         require(child_ != helper_ && child_ != unrelated, "fixture identity is not an owned child");
-        if (interrupt)
-        {
+        if (interrupt) {
             require(kill(helper_, interrupt) == 0, "helper interrupt failed");
         }
         const auto deadline = std::chrono::steady_clock::now() + 5s;
         int status = 0;
         pid_t exited = 0;
-        while ((exited = waitpid(helper_, &status, WNOHANG)) == 0 && std::chrono::steady_clock::now() < deadline)
-        {
+        while ((exited = waitpid(helper_, &status, WNOHANG)) == 0 && std::chrono::steady_clock::now() < deadline) {
             std::this_thread::sleep_for(10ms);
         }
         require(exited == helper_, "helper failed to clean up within its test bound");
@@ -178,46 +155,38 @@ private:
 } // namespace
 
 int main(int argc, char* argv[]) {
-    if (argc == 4 && std::string(argv[1]) == "--fixture")
-    {
+    if (argc == 4 && std::string(argv[1]) == "--fixture") {
         return fixture(argv[2], std::stoi(argv[3]));
     }
-    if (argc != 2)
-    {
+    if (argc != 2) {
         std::cerr << "Usage: application_preset_stop <helper-script>" << std::endl;
         return 2;
     }
     // Build runners can ignore or block SIGINT. Exercise both inherited states
     // every run; the helper child must restore its signal preconditions.
     const auto previous_interrupt = std::signal(SIGINT, SIG_IGN);
-    if (previous_interrupt == SIG_ERR)
-    {
+    if (previous_interrupt == SIG_ERR) {
         std::cerr << "could not prepare inherited SIGINT disposition" << std::endl;
         return 1;
     }
     sigset_t blocked, previous_mask;
     if (sigemptyset(&blocked) != 0 || sigaddset(&blocked, SIGINT) != 0 ||
-        sigprocmask(SIG_BLOCK, &blocked, &previous_mask) != 0)
-    {
+        sigprocmask(SIG_BLOCK, &blocked, &previous_mask) != 0) {
         std::cerr << "could not prepare inherited SIGINT mask" << std::endl;
         return 1;
     }
     const auto directory = std::filesystem::temp_directory_path() / ("ark-preset-stop-" + std::to_string(getpid()));
-    if (!std::filesystem::create_directory(directory))
-    {
+    if (!std::filesystem::create_directory(directory)) {
         return 1;
     }
     const auto unrelated = fork();
-    if (unrelated == 0)
-    {
-        for (;;)
-        {
+    if (unrelated == 0) {
+        for (;;) {
             pause();
         }
     }
     int result = 0;
-    try
-    {
+    try {
         require(unrelated > 0, "unrelated fixture fork failed");
         owned_case{}.run(argv[1], argv[0], directory, "success", 0, false, 0, unrelated);
         owned_case{}.run(argv[1], argv[0], directory, "failure", 0, false, 23, unrelated);
@@ -229,14 +198,11 @@ int main(int argc, char* argv[]) {
         owned_case{}.run(argv[1], argv[0], directory, "not_ready", SIGINT, false, 130, unrelated);
         owned_case{}.run(argv[1], argv[0], directory, "not_ready", SIGTERM, false, 143, unrelated);
         owned_case{}.run(argv[1], argv[0], directory, "ignore_term", 0, true, 141, unrelated);
-    }
-    catch (const std::exception& error)
-    {
+    } catch (const std::exception& error) {
         std::cerr << error.what() << std::endl;
         result = 1;
     }
-    if (unrelated > 0)
-    {
+    if (unrelated > 0) {
         kill(unrelated, SIGTERM);
         reap(unrelated);
     }

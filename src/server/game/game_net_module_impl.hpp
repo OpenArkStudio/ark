@@ -35,8 +35,7 @@ namespace ark {
 
 class game_net_module_impl final
     : public module_base<game_net_module, kernel_module, bus_module, net_service_manager_module, map_module,
-          class_meta_module>
-{
+          class_meta_module> {
 public:
     bool init() override;
     bool post_init() override;

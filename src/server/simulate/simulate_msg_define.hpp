@@ -7,8 +7,7 @@
 
 namespace simulate {
 
-enum class simulate_msg_type : uint16_t
-{
+enum class simulate_msg_type : uint16_t {
     simulate_msg_unknown = 0,
 
     ///req msg starts from 1
@@ -32,8 +31,7 @@ enum class simulate_msg_type : uint16_t
     SIMULATE_REG_SERVER = 65535,
 };
 
-class simulate_vec3
-{
+class simulate_vec3 {
 public:
     simulate_vec3() {
     }
@@ -209,8 +207,7 @@ public:
 };
 
 ///trigger
-class trigger_pair
-{
+class trigger_pair {
 public:
     int64_t trigger_obj_id{0}; //trigger object
     int64_t other_obj_id{0};   //other object

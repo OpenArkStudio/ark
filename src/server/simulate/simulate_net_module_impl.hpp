@@ -29,8 +29,7 @@
 
 namespace ark {
 
-class simulate_net_module_impl final : public module_base<simulate_net_module>
-{
+class simulate_net_module_impl final : public module_base<simulate_net_module> {
 public:
     bool init() override;
     bool post_init() override;

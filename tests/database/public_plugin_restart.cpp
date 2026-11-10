@@ -27,15 +27,13 @@ namespace {
 
 using namespace std::chrono_literals;
 
-class acceptance_failure : public std::runtime_error
-{
+class acceptance_failure : public std::runtime_error {
 public:
     using std::runtime_error::runtime_error;
 };
 
 void require(bool condition, const char* message) {
-    if (!condition)
-    {
+    if (!condition) {
         throw acceptance_failure(message);
     }
 }
@@ -55,16 +53,14 @@ std::uint16_t port(const char* name) {
     return static_cast<std::uint16_t>(number);
 }
 
-struct completion
-{
+struct completion {
     unsigned count{};
     bool on_owner{};
     std::exception_ptr error;
 };
 
 // Public interfaces only: no implementation/factory object is linked into this host.
-class plugin_host
-{
+class plugin_host {
 public:
     ark::plugin_manager manager;
     ark::task_group* tasks{};
@@ -79,12 +75,10 @@ public:
     }
 
     ~plugin_host() {
-        if (!stopped_)
-        {
-            try
-            { stop(); }
-            catch (...)
-            {
+        if (!stopped_) {
+            try {
+                stop();
+            } catch (...) {
                 std::cerr << "Database restart acceptance could not naturally drain\n" << std::flush;
                 std::_Exit(1);
             }
@@ -107,8 +101,7 @@ public:
     }
 
     static void check_completion(const completion& record) {
-        if (record.error)
-        {
+        if (record.error) {
             std::rethrow_exception(record.error);
         }
         require(record.count == 1 && record.on_owner, "DSO root completion repeated or escaped its owner");
@@ -116,8 +109,7 @@ public:
 
     void pump_until(const std::function<bool()>& done) {
         const auto deadline = std::chrono::steady_clock::now() + 25s;
-        while (!done())
-        {
+        while (!done()) {
             require(std::chrono::steady_clock::now() < deadline, "Database restart acceptance exceeded bound");
             require(manager.update(0), "Database restart owner update failed");
             // Throttling only; server-visible state establishes restart readiness.
@@ -137,8 +129,7 @@ public:
 
     void stop() {
         const auto deadline = std::chrono::steady_clock::now() + 30s;
-        while (!(stopped_ = manager.stop(0)))
-        {
+        while (!(stopped_ = manager.stop(0))) {
             require(manager.get_shutdown_state() != ark::plugin_manager::shutdown_state::failed &&
                         std::chrono::steady_clock::now() < deadline,
                 "Interrupted DSO requests did not naturally retire within the shutdown bound");
@@ -169,8 +160,7 @@ ark::task<> observer_interval() {
 
 // The shell actor owns the service and signal authority. The host publishes
 // observed server state and waits for independently verified service readiness.
-class fault_barrier
-{
+class fault_barrier {
 public:
     explicit fault_barrier(std::string protocol)
         : directory_(environment("ARK_DATABASE_FAULT_DIR"))
@@ -242,16 +232,13 @@ void redis_success(const arknet::redis::result& result) {
 
 std::string client_field(std::string_view line, std::string_view name) {
     const auto marker = std::string(name) + "=";
-    for (std::size_t position{}; position < line.size();)
-    {
+    for (std::size_t position{}; position < line.size();) {
         const auto end = line.find(' ', position);
         const auto field = line.substr(position, end == std::string_view::npos ? end : end - position);
-        if (field.starts_with(marker))
-        {
+        if (field.starts_with(marker)) {
             return std::string(field.substr(marker.size()));
         }
-        if (end == std::string_view::npos)
-        {
+        if (end == std::string_view::npos) {
             break;
         }
         position = end + 1;
@@ -266,25 +253,21 @@ std::optional<std::string> blocked_client(const arknet::redis::result& listing, 
                 reply.type == arknet::redis::value_type::verbatim_string,
         "Redis CLIENT LIST result was not text");
     std::string_view remaining = reply.text;
-    if (reply.type == arknet::redis::value_type::verbatim_string)
-    {
+    if (reply.type == arknet::redis::value_type::verbatim_string) {
         require(remaining.starts_with("txt:"), "Redis CLIENT LIST verbatim result had an unexpected format");
         remaining.remove_prefix(4);
     }
     std::optional<std::string> found;
-    while (!remaining.empty())
-    {
+    while (!remaining.empty()) {
         const auto end = remaining.find('\n');
         const auto line = remaining.substr(0, end);
         if (client_field(line, "name") == tag && client_field(line, "cmd") == "xread" &&
-            client_field(line, "flags").find('b') != std::string::npos)
-        {
+            client_field(line, "flags").find('b') != std::string::npos) {
             require(!found, "Redis observer saw concurrent replay of its tagged read-only command");
             found = client_field(line, "id");
             require(!found->empty(), "Redis observer could not identify the blocked client");
         }
-        if (end == std::string_view::npos)
-        {
+        if (end == std::string_view::npos) {
             break;
         }
         remaining.remove_prefix(end + 1);
@@ -316,15 +299,13 @@ ark::task<> redis_request(
 ark::task<> redis_observe(plugin_host& host, ark::redis_module& database, fault_barrier& barrier,
     const completion& request, const std::optional<arknet::redis::result>& result, std::string tag) {
     const auto deadline = std::chrono::steady_clock::now() + 10s;
-    for (;;)
-    {
+    for (;;) {
         require(!request.count && !result && std::chrono::steady_clock::now() < deadline,
             "Redis request retired before server-active observation or observation exceeded bound");
         arknet::redis::command clients{"CLIENT", "LIST"};
         auto listing = co_await database.command("observer", std::move(clients), 3s);
         host.check_executor();
-        if (const auto id = blocked_client(listing, tag))
-        {
+        if (const auto id = blocked_client(listing, tag)) {
             require(!request.count && !result, "Redis request completed before fault readiness");
             barrier.observed(*id);
             co_return;
@@ -415,8 +396,7 @@ void check_redis() {
 
 #if defined(ARKNET_ENABLE_SSL)
 ark::task<> mysql_preflight(plugin_host& host, ark::mysql_module& database) {
-    for (const auto* name : {"primary", "observer"})
-    {
+    for (const auto* name : {"primary", "observer"}) {
         auto ready = co_await database.query(name, "SELECT 1", 5s);
         host.check_executor();
         require(bool(ready), "MySQL restart preflight failed");
@@ -435,19 +415,16 @@ ark::task<> mysql_observe(plugin_host& host, ark::mysql_module& database, fault_
     const auto sql = "SELECT CAST(ID AS SIGNED), STATE FROM information_schema.processlist "
                      "WHERE ID <> CONNECTION_ID() AND INFO LIKE '%" +
                      tag + "%'";
-    for (;;)
-    {
+    for (;;) {
         require(!request.count && !result && std::chrono::steady_clock::now() < deadline,
             "MySQL request retired before server-active observation or observation exceeded bound");
         auto listing = co_await database.query("observer", sql, 3s);
         host.check_executor();
         require(bool(listing) && listing.result.rows.size() <= 1, "MySQL independent active observer failed");
-        if (!listing.result.rows.empty())
-        {
+        if (!listing.result.rows.empty()) {
             require(listing.result.rows[0].size() == 2, "MySQL observer lost its ID/state fields");
             const auto* phase = std::get_if<std::string>(&listing.result.rows[0][1]);
-            if (phase && *phase == "User sleep")
-            {
+            if (phase && *phase == "User sleep") {
                 const auto id = std::get<std::int64_t>(listing.result.rows[0][0]);
                 require(!request.count && !result, "MySQL request completed before fault readiness");
                 barrier.observed(std::to_string(id));
@@ -550,29 +527,25 @@ void check_mysql() {
 } // namespace
 
 int main(int argc, char** argv) {
-    try
-    {
+    try {
         require(argc <= 2, "Usage: ark_database_public_plugin_restart_tests [redis|mysql]");
         const std::string_view protocol(argc == 1 ? "redis" : argv[1]);
-        if (protocol == "redis")
-        {
+        if (protocol == "redis") {
             check_redis();
         }
 #if defined(ARKNET_ENABLE_SSL)
-        else if (protocol == "mysql")
-        {
+        else if (protocol == "mysql") {
             check_mysql();
         }
 #endif
-        else
-        {
+        else {
             throw acceptance_failure("Unsupported database restart protocol");
         }
         return 0;
+    } catch (const acceptance_failure& error) {
+        std::cerr << error.what() << '\n';
+    } catch (...) {
+        std::cerr << "Database restart acceptance failed with an unexpected exception\n";
     }
-    catch (const acceptance_failure& error)
-    { std::cerr << error.what() << '\n'; }
-    catch (...)
-    { std::cerr << "Database restart acceptance failed with an unexpected exception\n"; }
     return 1;
 }

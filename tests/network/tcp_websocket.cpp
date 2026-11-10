@@ -28,8 +28,7 @@ namespace {
 
 using namespace std::chrono_literals;
 
-struct message
-{
+struct message {
     ark::msg_id_t id;
     ark::conv_id_t session;
     std::string body;
@@ -38,14 +37,12 @@ struct message
     ark::bus_id_t destination;
 };
 
-struct event
-{
+struct event {
     ark::net_event_type type;
     ark::conv_id_t session;
 };
 
-struct receiver
-{
+struct receiver {
     const std::thread::id dispatch_thread = std::this_thread::get_id();
     std::atomic<bool> wrong_thread{false};
     std::mutex mutex;
@@ -56,8 +53,7 @@ struct receiver
     ark::conv_id_t websocket_reference_session{};
 
     void receive_message(const ark::net_msg* message, ark::conv_id_t session) {
-        if (std::this_thread::get_id() != dispatch_thread)
-        {
+        if (std::this_thread::get_id() != dispatch_thread) {
             wrong_thread.store(true);
         }
         {
@@ -67,8 +63,7 @@ struct receiver
                                                : std::string(message->get_msg_data(), message->get_msg_length()),
                 message->get_actor_id(), message->get_src_bus(), message->get_dst_bus()});
         }
-        if (on_message)
-        {
+        if (on_message) {
             on_message(session);
         }
     }
@@ -80,8 +75,7 @@ struct receiver
     }
 
     void on_event(const ark::net_event* event) {
-        if (std::this_thread::get_id() != dispatch_thread)
-        {
+        if (std::this_thread::get_id() != dispatch_thread) {
             wrong_thread.store(true);
         }
         std::lock_guard guard(mutex);
@@ -109,11 +103,9 @@ template<typename predicate_type, typename pump_type>
     requires std::invocable<pump_type>
 bool wait(predicate_type predicate, pump_type pump, std::chrono::milliseconds timeout = 3000ms) {
     const auto deadline = std::chrono::steady_clock::now() + timeout;
-    do
-    {
+    do {
         pump();
-        if (predicate())
-        {
+        if (predicate()) {
             return true;
         }
         std::this_thread::sleep_for(2ms);
@@ -143,12 +135,9 @@ std::string encode_frame(ark::msg_header& header, ark::msg_id_t id, const std::s
 
 template<typename client_type>
 std::shared_ptr<client_type> create_client(receiver& receiver) {
-    if constexpr (std::is_same_v<client_type, ark::websocket_client>)
-    {
+    if constexpr (std::is_same_v<client_type, ark::websocket_client>) {
         return std::make_shared<client_type>(&receiver, &receiver::on_websocket_message, &receiver::on_event);
-    }
-    else
-    {
+    } else {
         return std::make_shared<client_type>(&receiver, &receiver::receive_message, &receiver::on_event);
     }
 }
@@ -196,19 +185,16 @@ void reentrant_close() {
     receiver receiver;
     auto server = std::make_shared<wrapper_type>(&receiver, &receiver::receive_message, &receiver::on_event);
     receiver.on_message = [weak = std::weak_ptr(server)](ark::conv_id_t session) {
-        if (const auto owner = weak.lock())
-        {
+        if (const auto owner = weak.lock()) {
             owner->close_session(session);
         }
     };
     const auto port = available_port();
     REQUIRE(server->start_server(std::make_shared<ark::s_msg_header>(), 11, "127.0.0.1", port, 2, 10, 30000));
     transport_type client;
-    if constexpr (std::is_same_v<transport_type, arknet::ws_client>)
-    {
+    if constexpr (std::is_same_v<transport_type, arknet::ws_client>) {
         client.bind_connect([&] {
-            if (!arknet::get_last_error())
-            {
+            if (!arknet::get_last_error()) {
                 client.ws_stream().binary(true);
             }
         });
@@ -251,11 +237,9 @@ void reject_oversized_frame() {
     const auto port = available_port();
     REQUIRE(server->start_server(std::make_shared<ark::s_msg_header>(), 11, "127.0.0.1", port, 2, 10, 30000));
     transport_type client;
-    if constexpr (std::is_same_v<transport_type, arknet::ws_client>)
-    {
+    if constexpr (std::is_same_v<transport_type, arknet::ws_client>) {
         client.bind_connect([&] {
-            if (!arknet::get_last_error())
-            {
+            if (!arknet::get_last_error()) {
                 client.ws_stream().binary(true);
             }
         });
@@ -272,8 +256,7 @@ void reject_oversized_frame() {
     REQUIRE(wait([&] { return !client.is_started(); }));
 }
 
-class reconnect_during_serialization : public ark::s_msg_header
-{
+class reconnect_during_serialization : public ark::s_msg_header {
 public:
     explicit reconnect_during_serialization(std::function<void()> reconnect)
         : reconnect_(std::move(reconnect)) {
@@ -298,8 +281,7 @@ void stale_session_cannot_send_or_close_replacement() {
     std::atomic<size_t> connections{0};
     transport_type server(1024, 1024 * 1024, 2);
     server.bind_connect([&](auto& session) {
-        if constexpr (std::is_same_v<transport_type, arknet::ws_server>)
-        {
+        if constexpr (std::is_same_v<transport_type, arknet::ws_server>) {
             session->ws_stream().binary(true);
         }
         std::lock_guard guard(peer_mutex);
@@ -451,8 +433,7 @@ TEST_CASE("WebSocket server sends binary ARK frames") {
     std::string reply;
     arknet::ws_client client;
     client.bind_connect([&] {
-        if (!arknet::get_last_error())
-        {
+        if (!arknet::get_last_error()) {
             client.ws_stream().binary(true);
         }
     });

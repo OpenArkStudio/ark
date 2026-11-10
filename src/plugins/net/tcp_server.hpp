@@ -36,8 +36,7 @@ namespace ark {
 class tcp_server final
     : public net
     , public noncopyable
-    , public std::enable_shared_from_this<tcp_server>
-{
+    , public std::enable_shared_from_this<tcp_server> {
 public:
     tcp_server(net_msg_functor message_callback, net_event_functor event_callback)
         : net_msg_cb_(std::move(message_callback))

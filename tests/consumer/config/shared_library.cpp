@@ -14,8 +14,7 @@ TEST_CASE("Application and plugin readers link and diagnose from a shared librar
         std::filesystem::temp_directory_path() /
         ("ark-shared-config-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".toml");
 
-    struct cleanup
-    {
+    struct cleanup {
         std::filesystem::path path;
 
         ~cleanup() {
@@ -34,15 +33,11 @@ TEST_CASE("Application and plugin readers link and diagnose from a shared librar
     write("[http]\nhost='localhost'\nport=0\nthreads=1\n");
     CHECK(read_config_from_shared_library(path.string(), false));
     write("[broken\nsecret='SECRET_SENTINEL'\n");
-    for (const auto application : {true, false})
-    {
-        try
-        {
+    for (const auto application : {true, false}) {
+        try {
             static_cast<void>(read_config_from_shared_library(path.string(), application));
             FAIL("malformed configuration accepted by shared library");
-        }
-        catch (const std::runtime_error& error)
-        {
+        } catch (const std::runtime_error& error) {
             CHECK(std::string(error.what()).find(path.string() + ":1:") != std::string::npos);
             CHECK(std::string(error.what()).find("SECRET_SENTINEL") == std::string::npos);
         }

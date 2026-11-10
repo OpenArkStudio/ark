@@ -12,8 +12,7 @@
 #include <arknet/mysql/pool.hpp>
 
 // Test-only transparent TCP relay: it never parses or decrypts MySQL/TLS.
-class mysql_transaction_relay
-{
+class mysql_transaction_relay {
 public:
     explicit mysql_transaction_relay(std::uint16_t upstream)
         : upstream_(upstream)
@@ -21,15 +20,13 @@ public:
         , worker_([this] {
             deadline_.expires_after(std::chrono::seconds(8));
             deadline_.async_wait([this](arknet::error_code error) {
-                if (!error)
-                {
+                if (!error) {
                     timed_out_ = true;
                     close();
                 }
             });
             asio::co_spawn(io_, connect(), [this](std::exception_ptr error) {
-                if (error)
-                {
+                if (error) {
                     failed_ = true;
                     close();
                 }
@@ -71,11 +68,9 @@ private:
     asio::awaitable<void> connect() {
         co_await acceptor_.async_accept(downstream_, asio::use_awaitable);
         co_await upstream_socket_.async_connect({asio::ip::address_v4::loopback(), upstream_}, asio::use_awaitable);
-        for (const bool responses : {false, true})
-        {
+        for (const bool responses : {false, true}) {
             asio::co_spawn(io_, forward(responses), [this](std::exception_ptr error) {
-                if (error)
-                {
+                if (error) {
                     failed_ = true;
                 }
                 close();
@@ -87,24 +82,20 @@ private:
         auto& source = responses ? upstream_socket_ : downstream_;
         auto& destination = responses ? downstream_ : upstream_socket_;
         std::array<char, 16384> bytes;
-        for (;;)
-        {
+        for (;;) {
             arknet::error_code error;
             const auto count =
                 co_await source.async_read_some(asio::buffer(bytes), asio::redirect_error(asio::use_awaitable, error));
-            if (error)
-            {
+            if (error) {
                 co_return;
             }
-            if (responses && dropping_)
-            {
+            if (responses && dropping_) {
                 discarded_bytes_ += count;
                 continue;
             }
             co_await asio::async_write(
                 destination, asio::buffer(bytes.data(), count), asio::redirect_error(asio::use_awaitable, error));
-            if (error)
-            {
+            if (error) {
                 co_return;
             }
         }

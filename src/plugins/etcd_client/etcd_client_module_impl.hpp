@@ -6,8 +6,7 @@
 
 namespace ark {
 
-class etcd_client_module_impl final : public module_base<etcd_client_module>
-{
+class etcd_client_module_impl final : public module_base<etcd_client_module> {
 public:
     bool init() override;
 

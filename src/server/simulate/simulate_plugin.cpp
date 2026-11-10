@@ -35,23 +35,19 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void simulate_plugin::install() {
-    if (!register_module(detail::make_simulate_net_module(), module_update::disabled))
-    {
+    if (!register_module(detail::make_simulate_net_module(), module_update::disabled)) {
         throw std::runtime_error("simulate_net_module registration rejected");
     }
-    if (!register_module(detail::make_simulate_module(), module_update::disabled))
-    {
+    if (!register_module(detail::make_simulate_module(), module_update::disabled)) {
         throw std::runtime_error("simulate_module registration rejected");
     }
 }
 
 void simulate_plugin::uninstall() {
-    if (!unregister_module<simulate_module>())
-    {
+    if (!unregister_module<simulate_module>()) {
         throw std::runtime_error("simulate_module unregistration rejected");
     }
-    if (!unregister_module<simulate_net_module>())
-    {
+    if (!unregister_module<simulate_net_module>()) {
         throw std::runtime_error("simulate_net_module unregistration rejected");
     }
 }

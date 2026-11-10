@@ -31,16 +31,14 @@ scalar_snapshot capture_scalar_snapshot(
 
 constexpr std::array<std::uint32_t, 9> all_fields{1, 2, 3, 4, 5, 6, 7, 8, 9};
 
-class snapshot_entity
-{
+class snapshot_entity {
 public:
     explicit snapshot_entity(std::string class_name = "SnapshotOwner")
         : schema(std::make_shared<ark::class_meta>(class_name)) {
         const std::array types{ark::data_type::dt_boolean, ark::data_type::dt_int32, ark::data_type::dt_uint32,
             ark::data_type::dt_int64, ark::data_type::dt_uint64, ark::data_type::dt_float, ark::data_type::dt_double,
             ark::data_type::dt_string, ark::data_type::dt_guid};
-        for (std::uint32_t index = 1; index <= types.size(); ++index)
-        {
+        for (std::uint32_t index = 1; index <= types.size(); ++index) {
             add_field(index, types[index - 1]);
         }
         source = std::make_shared<ark::entity_impl>(
@@ -217,8 +215,7 @@ TEST_CASE("scalar snapshot rejects invalid selections and unsupported declared t
         ark::data_type::dt_array, ark::data_type::dt_table, ark::data_type::dt_pointer, ark::data_type::dt_userdata,
         static_cast<ark::data_type>(999)};
     std::uint32_t index = 20;
-    for (const auto type : unsupported)
-    {
+    for (const auto type : unsupported) {
         fixture.add_field(index, type);
         const std::array selection{index++};
         CHECK_THROWS_AS(capture_scalar_snapshot(*fixture.source, selection), std::invalid_argument);
@@ -232,16 +229,14 @@ TEST_CASE("scalar snapshot rejects nonfinite selected floats while preserving so
     const std::array<std::uint32_t, 1> floats{6};
     const std::array<std::uint32_t, 1> doubles{7};
     for (const auto value : {std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity(),
-             std::numeric_limits<float>::quiet_NaN()})
-    {
+             std::numeric_limits<float>::quiet_NaN()}) {
         static_cast<void>(fixture.source->set_float(6, value));
         CHECK_THROWS_AS(capture_scalar_snapshot(*fixture.source, floats), std::invalid_argument);
         const auto after = fixture.source->get_float(6);
         CHECK((std::isnan(value) ? std::isnan(after) : after == value));
     }
     for (const auto value : {std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity(),
-             std::numeric_limits<double>::quiet_NaN()})
-    {
+             std::numeric_limits<double>::quiet_NaN()}) {
         static_cast<void>(fixture.source->set_double(7, value));
         CHECK_THROWS_AS(capture_scalar_snapshot(*fixture.source, doubles), std::invalid_argument);
         const auto after = fixture.source->get_double(7);

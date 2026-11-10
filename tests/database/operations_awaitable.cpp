@@ -28,8 +28,7 @@ using ark::detail::module_task_group;
 
 // Controlled service callbacks exercise the operation/bridge contract without
 // a network endpoint. They do not simulate a database or establish live results.
-struct redis_service_stub
-{
+struct redis_service_stub {
     using callback = std::function<void(ark::detail::redis_service_result)>;
     std::vector<arknet::redis::command> submitted;
     std::chrono::milliseconds timeout{};
@@ -51,12 +50,10 @@ struct redis_service_stub
         ++starts;
         submitted = std::move(commands);
         timeout = limit;
-        if (throw_on_start)
-        {
+        if (throw_on_start) {
             throw std::runtime_error("Redis initiation failed locally");
         }
-        if (inline_reply)
-        {
+        if (inline_reply) {
             handler(std::move(immediate));
             return 0;
         }
@@ -75,8 +72,7 @@ struct redis_service_stub
 };
 
 template<class result_type>
-struct operation_owner
-{
+struct operation_owner {
     std::shared_ptr<arknet::manual_runtime> runtime = std::make_shared<arknet::manual_runtime>();
     module_task_group tasks{runtime, 1};
     database_awaitable<result_type> bridge{runtime, 1};
@@ -104,8 +100,7 @@ struct operation_owner
     }
 
     void drain() {
-        for (unsigned step = 0; step < 16 && tasks.pending(); ++step)
-        {
+        for (unsigned step = 0; step < 16 && tasks.pending(); ++step) {
             bridge.dispatch();
             tasks.poll();
         }
@@ -199,21 +194,17 @@ TEST_CASE("Redis operation owns inputs before a lazy task starts and retains ord
 }
 
 TEST_CASE("Redis inline rejection and local exceptions use owner delivery rather than a synthetic success") {
-    for (unsigned mode = 0; mode < 3; ++mode)
-    {
+    for (unsigned mode = 0; mode < 3; ++mode) {
         CAPTURE(mode);
         redis_service_stub service;
         operation_owner<arknet::redis::result> owner;
         service.inline_reply = true;
         service.throw_on_start = mode == 2;
-        if (mode == 0)
-        {
+        if (mode == 0) {
             arknet::redis::result rejection;
             rejection.error = arknet::redis::client_errc::queue_full;
             service.immediate = std::move(rejection);
-        }
-        else
-        {
+        } else {
             service.immediate = std::make_exception_ptr(std::runtime_error("Redis callback failed locally"));
         }
         owner.start(ark::detail::redis_command(service, owner.bridge, {"PING"}, 18ms));
@@ -222,14 +213,11 @@ TEST_CASE("Redis inline rejection and local exceptions use owner delivery rather
         CHECK(owner.bridge.pending() == 1);
         owner.drain();
         CHECK(owner.completed == 1);
-        if (mode == 0)
-        {
+        if (mode == 0) {
             CHECK_FALSE(owner.error);
             REQUIRE(owner.result);
             CHECK(owner.result->error == arknet::redis::client_errc::queue_full);
-        }
-        else
-        {
+        } else {
             CHECK_FALSE(owner.result);
             REQUIRE(owner.error);
             CHECK_THROWS_AS(std::rethrow_exception(owner.error), std::runtime_error);
@@ -275,8 +263,7 @@ TEST_CASE("Real plain and TLS Redis services instantiate the facade and reject i
 #if defined(ARKNET_ENABLE_SSL)
 namespace {
 
-struct mysql_service_stub
-{
+struct mysql_service_stub {
     using callback = std::function<void(ark::detail::mysql_service_result)>;
     std::string sql;
     std::vector<arknet::mysql::field_value> parameters;
@@ -306,12 +293,10 @@ struct mysql_service_stub
         sql = std::move(text);
         parameters = std::move(values);
         timeout = limit;
-        if (throw_on_start)
-        {
+        if (throw_on_start) {
             throw std::runtime_error("MySQL initiation failed locally");
         }
-        if (inline_reply)
-        {
+        if (inline_reply) {
             handler(std::move(immediate));
             return 0;
         }
@@ -388,21 +373,17 @@ TEST_CASE("MySQL query and execute own their lazy inputs and preserve execution 
 }
 
 TEST_CASE("MySQL inline rejection and local exceptions are preserved through both operation entry points") {
-    for (unsigned mode = 0; mode < 3; ++mode)
-    {
+    for (unsigned mode = 0; mode < 3; ++mode) {
         CAPTURE(mode);
         mysql_service_stub service;
         operation_owner<ark::detail::mysql_service_reply> owner;
         service.inline_reply = true;
         service.throw_on_start = mode == 2;
-        if (mode == 0)
-        {
+        if (mode == 0) {
             ark::detail::mysql_service_reply rejected;
             rejected.result.status.code = arknet::mysql::connection_errc::queue_full;
             service.immediate = std::move(rejected);
-        }
-        else
-        {
+        } else {
             service.immediate = std::make_exception_ptr(std::runtime_error("MySQL callback failed locally"));
         }
         owner.start(mode == 1 ? ark::detail::mysql_query(service, owner.bridge, "SELECT 1", 18ms)
@@ -412,14 +393,11 @@ TEST_CASE("MySQL inline rejection and local exceptions are preserved through bot
         CHECK(owner.bridge.pending() == 1);
         owner.drain();
         CHECK(owner.completed == 1);
-        if (mode == 0)
-        {
+        if (mode == 0) {
             CHECK_FALSE(owner.error);
             REQUIRE(owner.result);
             CHECK(owner.result->result.status.code == arknet::mysql::connection_errc::queue_full);
-        }
-        else
-        {
+        } else {
             CHECK_FALSE(owner.result);
             REQUIRE(owner.error);
             CHECK_THROWS_AS(std::rethrow_exception(owner.error), std::runtime_error);

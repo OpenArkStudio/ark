@@ -13,15 +13,13 @@
 
 namespace ark {
 
-enum class module_update
-{
+enum class module_update {
     disabled,
     enabled
 };
 
 template<typename derived_type>
-class plugin_base : public plugin
-{
+class plugin_base : public plugin {
 public:
     plugin_base() = default;
     plugin_base(const plugin_base&) = delete;
@@ -60,33 +58,27 @@ protected:
     template<std::derived_from<module> interface_type>
     bool register_module(std::unique_ptr<interface_type> candidate, module_update update) {
         get_plugin_manager()->check_registration();
-        if (!candidate)
-        {
+        if (!candidate) {
             return false;
         }
         const std::string name = typeid(interface_type).name();
         candidate->set_plugin_manager(get_plugin_manager());
         candidate->set_name(name);
         const auto [entry, inserted] = modules_.emplace(name, candidate.get());
-        if (!inserted)
-        {
+        if (!inserted) {
             return false;
         }
-        try
-        {
+        try {
             if (!get_plugin_manager()->register_owned_module(name, *candidate, update == module_update::enabled,
                     {this,
                         [](void* owner, const std::string& key) {
                             return static_cast<plugin_base*>(owner)->destroy_named_module(key);
                         },
-                        lifetime_}))
-            {
+                        lifetime_})) {
                 modules_.erase(entry);
                 return false;
             }
-        }
-        catch (...)
-        {
+        } catch (...) {
             modules_.erase(entry);
             throw;
         }
@@ -103,8 +95,7 @@ private:
     bool unregister_named_module(const std::string& name) {
         get_plugin_manager()->check_registry_mutation();
         const auto entry = modules_.find(name);
-        if (entry == modules_.end() || !destroy_named_module(name))
-        {
+        if (entry == modules_.end() || !destroy_named_module(name)) {
             return false;
         }
         modules_.erase(entry);
@@ -114,19 +105,16 @@ private:
     bool destroy_named_module(const std::string& name) {
         get_plugin_manager()->check_registry_mutation();
         const auto entry = modules_.find(name);
-        if (entry == modules_.end())
-        {
+        if (entry == modules_.end()) {
             return false;
         }
         // Keep a null entry until uninstall acknowledges this registration.
         // Existing explicit unregister calls still succeed exactly once.
-        if (!entry->second)
-        {
+        if (!entry->second) {
             return true;
         }
         std::unique_ptr<task_group> retired_tasks;
-        if (!get_plugin_manager()->unregister_owned_module(entry->first, *entry->second, retired_tasks))
-        {
+        if (!get_plugin_manager()->unregister_owned_module(entry->first, *entry->second, retired_tasks)) {
             return false;
         }
         auto* instance = std::exchange(entry->second, nullptr);

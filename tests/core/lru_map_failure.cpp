@@ -18,8 +18,7 @@ int failure_limit{-1};
 int allocation_count{};
 const char* phase{"setup"};
 
-class allocation_diagnostic final
-{
+class allocation_diagnostic final {
 public:
     allocation_diagnostic()
         : previous_handler_(std::set_terminate(terminate)) {
@@ -36,8 +35,7 @@ private:
         std::fprintf(stderr, "LRU allocation terminate: phase=%s fail_after=%d allocation_count=%d deferred=%d\n",
             phase, failure_limit, allocation_count, deferred_allocations_before_failure);
         std::fflush(stderr);
-        if (active_ && active_->previous_handler_)
-        {
+        if (active_ && active_->previous_handler_) {
             active_->previous_handler_();
         }
         std::_Exit(EXIT_FAILURE);
@@ -47,8 +45,7 @@ private:
     inline static allocation_diagnostic* active_{};
 };
 
-struct allocation_key
-{
+struct allocation_key {
     int value{};
 
     allocation_key(int value)
@@ -58,8 +55,7 @@ struct allocation_key
     bool operator==(const allocation_key&) const = default;
 };
 
-struct allocating_value
-{
+struct allocating_value {
     std::shared_ptr<int> owner;
     std::unique_ptr<int> payload;
 
@@ -79,15 +75,13 @@ struct allocating_value
 } // namespace
 
 template<>
-struct std::hash<allocation_key>
-{
+struct std::hash<allocation_key> {
     std::size_t operator()(const allocation_key& key) const noexcept {
         // Copying first constructs empty standard containers. MSVC Debug's
         // _Hash_vec allocator constructor allocates its proxy inside noexcept.
         // Arm at the first source lookup, before any entry is allocated, so every
         // content allocation is covered without claiming that proxy OOM unwinds.
-        if (deferred_allocations_before_failure >= 0)
-        {
+        if (deferred_allocations_before_failure >= 0) {
             allocations_before_failure = deferred_allocations_before_failure;
             deferred_allocations_before_failure = -1;
         }
@@ -96,21 +90,17 @@ struct std::hash<allocation_key>
 };
 
 void* operator new(std::size_t size) {
-    if (allocations_before_failure >= 0)
-    {
+    if (allocations_before_failure >= 0) {
         ++allocation_count;
     }
-    if (allocations_before_failure == 0)
-    {
+    if (allocations_before_failure == 0) {
         allocations_before_failure = -1;
         throw std::bad_alloc{};
     }
-    if (allocations_before_failure > 0)
-    {
+    if (allocations_before_failure > 0) {
         --allocations_before_failure;
     }
-    if (auto* result = std::malloc(size ? size : 1))
-    {
+    if (auto* result = std::malloc(size ? size : 1)) {
         return result;
     }
     throw std::bad_alloc{};
@@ -128,8 +118,7 @@ TEST_CASE("LRU allocation failure rolls back insertion and releases candidate va
     allocation_diagnostic diagnostic;
     bool saw_failure{};
     bool saw_success{};
-    for (int limit = 0; limit < 64; ++limit)
-    {
+    for (int limit = 0; limit < 64; ++limit) {
         ark::lru_map<int, std::shared_ptr<int>> values(2);
         values.insert(1, std::make_shared<int>(10));
         values.insert(2, std::make_shared<int>(20));
@@ -139,14 +128,14 @@ TEST_CASE("LRU allocation failure rolls back insertion and releases candidate va
         failure_limit = limit;
         allocation_count = 0;
         allocations_before_failure = limit;
-        try
-        { values.insert(3, candidate); }
-        catch (const std::bad_alloc&)
-        { caught = true; }
+        try {
+            values.insert(3, candidate);
+        } catch (const std::bad_alloc&) {
+            caught = true;
+        }
         allocations_before_failure = -1;
         REQUIRE(values.size() == 2);
-        if (caught)
-        {
+        if (caught) {
             saw_failure = true;
             CHECK(allocation_count == limit + 1);
             CHECK(candidate.use_count() == 1);
@@ -156,9 +145,7 @@ TEST_CASE("LRU allocation failure rolls back insertion and releases candidate va
             REQUIRE(values.find(2) != values.end());
             values.erase(2);
             CHECK(values.size() == 1);
-        }
-        else
-        {
+        } else {
             saw_success = true;
             CHECK(allocation_count == limit);
             CHECK(candidate.use_count() == 2);
@@ -175,8 +162,7 @@ TEST_CASE("LRU allocation failure during copy assignment retains both caches and
     allocation_diagnostic diagnostic;
     bool saw_failure{};
     bool saw_success{};
-    for (int limit = 0; limit < 64; ++limit)
-    {
+    for (int limit = 0; limit < 64; ++limit) {
         const auto source_owner = std::make_shared<int>(10);
         ark::lru_map<allocation_key, allocating_value> source(2);
         source.insert(1, source_owner);
@@ -189,15 +175,15 @@ TEST_CASE("LRU allocation failure during copy assignment retains both caches and
         failure_limit = limit;
         allocation_count = 0;
         deferred_allocations_before_failure = limit;
-        try
-        { destination = source; }
-        catch (const std::bad_alloc&)
-        { caught = true; }
+        try {
+            destination = source;
+        } catch (const std::bad_alloc&) {
+            caught = true;
+        }
         allocations_before_failure = -1;
         REQUIRE(deferred_allocations_before_failure == -1);
         REQUIRE(source.size() == 2);
-        if (caught)
-        {
+        if (caught) {
             saw_failure = true;
             CHECK(allocation_count == limit + 1);
             REQUIRE(destination.size() == 1);
@@ -212,9 +198,7 @@ TEST_CASE("LRU allocation failure during copy assignment retains both caches and
             source.insert(3, std::make_shared<int>(30));
             CHECK(source.find(1) == source.end());
             CHECK(source.size() == 2);
-        }
-        else
-        {
+        } else {
             saw_success = true;
             CHECK(allocation_count == limit);
             CHECK(destination_owner.use_count() == 1);
@@ -236,8 +220,7 @@ TEST_CASE("LRU allocation failure during copy construction releases partial copi
     allocation_diagnostic diagnostic;
     bool saw_failure{};
     bool saw_success{};
-    for (int limit = 0; limit < 64; ++limit)
-    {
+    for (int limit = 0; limit < 64; ++limit) {
         const auto source_owner = std::make_shared<int>(10);
         ark::lru_map<allocation_key, allocating_value> source(2);
         source.insert(1, source_owner);
@@ -248,15 +231,15 @@ TEST_CASE("LRU allocation failure during copy construction releases partial copi
         failure_limit = limit;
         allocation_count = 0;
         deferred_allocations_before_failure = limit;
-        try
-        { copied.emplace(source); }
-        catch (const std::bad_alloc&)
-        { caught = true; }
+        try {
+            copied.emplace(source);
+        } catch (const std::bad_alloc&) {
+            caught = true;
+        }
         allocations_before_failure = -1;
         REQUIRE(deferred_allocations_before_failure == -1);
         REQUIRE(source.size() == 2);
-        if (caught)
-        {
+        if (caught) {
             saw_failure = true;
             CHECK(allocation_count == limit + 1);
             CHECK_FALSE(copied.has_value());
@@ -264,9 +247,7 @@ TEST_CASE("LRU allocation failure during copy construction releases partial copi
             source.insert(3, std::make_shared<int>(30));
             CHECK(source.find(1) == source.end());
             CHECK(source.size() == 2);
-        }
-        else
-        {
+        } else {
             saw_success = true;
             CHECK(allocation_count == limit);
             REQUIRE(copied.has_value());

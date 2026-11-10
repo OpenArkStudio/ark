@@ -31,8 +31,7 @@
 
 namespace ark {
 
-struct delay_sync_row
-{
+struct delay_sync_row {
     delay_sync_row(const uint32_t row)
         : row(row) {
     }
@@ -42,20 +41,17 @@ struct delay_sync_row
     std::set<node*> node_list;
 };
 
-struct delay_sync_table
-{
+struct delay_sync_table {
     bool need_clear{false};
     std::map<uint32_t, delay_sync_row> row_list;
 };
 
-struct delay_sync_container
-{
+struct delay_sync_container {
     std::set<uint32_t> index_list;
     std::set<uint32_t> destroy_list;
 };
 
-struct delay_sync_data
-{
+struct delay_sync_data {
     // node list
     std::set<node*> node_list;
 
@@ -66,8 +62,7 @@ struct delay_sync_data
     std::map<uint32_t, delay_sync_container> container_list;
 };
 
-class class_call_back_manager final
-{
+class class_call_back_manager final {
 public:
     // delay sync data
     using delay_sync_mask_data = std::map<data_mask, delay_sync_data>;

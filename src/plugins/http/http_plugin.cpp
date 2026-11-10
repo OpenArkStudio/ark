@@ -34,15 +34,13 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void http_plugin::install() {
-    if (!register_module(detail::make_http_server_module(get_plugin_manager()), module_update::disabled))
-    {
+    if (!register_module(detail::make_http_server_module(get_plugin_manager()), module_update::disabled)) {
         throw std::runtime_error("HTTP server module registration rejected");
     }
 }
 
 void http_plugin::uninstall() {
-    if (!unregister_module<http_server_module>())
-    {
+    if (!unregister_module<http_server_module>()) {
         throw std::runtime_error("HTTP server module unregistration rejected");
     }
 }

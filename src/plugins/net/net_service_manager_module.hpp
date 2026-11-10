@@ -26,8 +26,7 @@
 
 namespace ark {
 
-class net_service_manager_module : public module
-{
+class net_service_manager_module : public module {
 public:
     // server-side net service
     virtual bool create_server(const size_t silent_timeout = std::chrono::milliseconds(ark_net_heart_time).count(),

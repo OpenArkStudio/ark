@@ -21,35 +21,29 @@ namespace {
 using namespace std::chrono_literals;
 
 void require(bool condition, const char* message) {
-    if (!condition)
-    {
+    if (!condition) {
         throw std::runtime_error(message);
     }
 }
 
-struct socket_owner
-{
+struct socket_owner {
     int value = ::socket(AF_INET, SOCK_STREAM, 0);
 
     ~socket_owner() {
-        if (value >= 0)
-        {
+        if (value >= 0) {
             ::close(value);
         }
     }
 };
 
-struct child_owner
-{
+struct child_owner {
     pid_t pid = -1;
 
     ~child_owner() {
-        if (pid > 0)
-        {
+        if (pid > 0) {
             // Only this helper's unreaped child is eligible for cleanup.
             ::kill(pid, SIGKILL);
-            while (::waitpid(pid, nullptr, 0) < 0 && errno == EINTR)
-            {
+            while (::waitpid(pid, nullptr, 0) < 0 && errno == EINTR) {
             }
         }
     }
@@ -67,19 +61,16 @@ int connect_to(int socket, unsigned short port) {
     require(socket >= 0, "socket creation failed");
     require(::fcntl(socket, F_SETFL, O_NONBLOCK) == 0, "nonblocking socket setup failed");
     const auto endpoint = address(port);
-    if (::connect(socket, reinterpret_cast<const sockaddr*>(&endpoint), sizeof(endpoint)) == 0)
-    {
+    if (::connect(socket, reinterpret_cast<const sockaddr*>(&endpoint), sizeof(endpoint)) == 0) {
         return 0;
     }
-    if (errno != EINPROGRESS)
-    {
+    if (errno != EINPROGRESS) {
         return errno;
     }
     pollfd pending{socket, POLLOUT, 0};
     const auto ready = ::poll(&pending, 1, 100);
     require(ready >= 0, "connection poll failed");
-    if (ready == 0)
-    {
+    if (ready == 0) {
         return ETIMEDOUT;
     }
     int error = 0;
@@ -97,8 +88,7 @@ std::string read_log(const std::filesystem::path& path) {
 int main(int argc, char** argv) {
     std::filesystem::path child_log;
     int observed_status = -1;
-    try
-    {
+    try {
         require(argc == 5 || argc == 7,
             "Expected launcher, plugin directory, source root, fresh runtime directory and optional role/scenario");
         const std::string role = argc == 7 ? argv[5] : "login";
@@ -134,19 +124,15 @@ int main(int argc, char** argv) {
                 "Ephemeral loopback port lookup failed");
             port = ntohs(allocated.sin_port);
         }
-        if (scenario == "occupied")
-        {
+        if (scenario == "occupied") {
             require(::listen(reservation.value, 1) == 0, "Owned collision listener could not start");
-        }
-        else
-        {
+        } else {
             ::close(reservation.value);
             reservation.value = -1;
         }
         // Healthy startup releases the ephemeral reservation before the launcher
         // binds. The collision scenario retains only this helper's own listener.
-        if (with_kernel)
-        {
+        if (with_kernel) {
             std::filesystem::create_directories(runtime / "resource/meta");
             std::ofstream schema(runtime / "resource/meta/entity_schema.json");
             schema.exceptions(std::ios::failbit | std::ios::badbit);
@@ -161,8 +147,7 @@ int main(int argc, char** argv) {
                  << "[[plugins]]\nname = 'ark_utility_plugin'\nconfig = ''\n"
                  << "[[plugins]]\nname = 'ark_bus_plugin'\nconfig = 'bus.toml'\n"
                  << "[[plugins]]\nname = 'ark_net_plugin'\nconfig = ''\n";
-        if (with_kernel)
-        {
+        if (with_kernel) {
             manifest << "[[plugins]]\nname = 'ark_kernel_plugin'\nconfig = ''\n";
         }
         manifest << "[[plugins]]\nname = 'ark_" << role << "_plugin'\nconfig = ''\n";
@@ -179,15 +164,12 @@ int main(int argc, char** argv) {
         child_owner child;
         child.pid = ::fork();
         require(child.pid >= 0, "fork failed");
-        if (child.pid == 0)
-        {
-            if (::chdir(runtime.c_str()) != 0)
-            {
+        if (child.pid == 0) {
+            if (::chdir(runtime.c_str()) != 0) {
                 std::_Exit(125);
             }
             const auto output = ::open(log_path.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0600);
-            if (output < 0 || ::dup2(output, STDOUT_FILENO) < 0 || ::dup2(output, STDERR_FILENO) < 0)
-            {
+            if (output < 0 || ::dup2(output, STDOUT_FILENO) < 0 || ::dup2(output, STDERR_FILENO) < 0) {
                 std::_Exit(125);
             }
             ::close(output);
@@ -196,12 +178,10 @@ int main(int argc, char** argv) {
             std::_Exit(126);
         }
         const auto startup_deadline = std::chrono::steady_clock::now() + 10s;
-        for (;;)
-        {
+        for (;;) {
             int status = 0;
             const auto waited = ::waitpid(child.pid, &status, WNOHANG);
-            if (waited == child.pid)
-            {
+            if (waited == child.pid) {
                 observed_status = status;
                 child.pid = -1;
                 require(scenario == "occupied", "Launcher exited before readiness");
@@ -221,8 +201,7 @@ int main(int argc, char** argv) {
                 return 0;
             }
             require(waited == 0, "Launcher startup wait failed");
-            if (read_log(log_path).find("Start net server successful") != std::string::npos)
-            {
+            if (read_log(log_path).find("Start net server successful") != std::string::npos) {
                 require(scenario == "healthy", "Role accepted an occupied endpoint");
                 break;
             }
@@ -242,12 +221,10 @@ int main(int argc, char** argv) {
         // process before replying to its FIN would wait for its native deadline.
         ::shutdown(peer.value, SHUT_WR);
         int status = 0;
-        for (;;)
-        {
+        for (;;) {
             const auto waited = ::waitpid(child.pid, &status, WNOHANG);
             require(waited >= 0, "Launcher wait failed");
-            if (waited == child.pid)
-            {
+            if (waited == child.pid) {
                 child.pid = -1;
                 break;
             }
@@ -267,25 +244,18 @@ int main(int argc, char** argv) {
                                   : ": actual Utility/Bus/Net/role DSOs: ")
                   << "loopback connection, signal shutdown, peer closure, "
                      "listener refusal and exit 0 passed; no business handler claimed\n";
-    }
-    catch (const std::exception& error)
-    {
+    } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
-        if (observed_status >= 0)
-        {
-            if (WIFSIGNALED(observed_status))
-            {
+        if (observed_status >= 0) {
+            if (WIFSIGNALED(observed_status)) {
                 std::cerr << "Child terminated by signal " << WTERMSIG(observed_status) << '\n';
-            }
-            else if (WIFEXITED(observed_status))
-            {
+            } else if (WIFEXITED(observed_status)) {
                 std::cerr << "Child exit code " << WEXITSTATUS(observed_status) << '\n';
             }
         }
         std::ifstream diagnostic(child_log, std::ios::binary | std::ios::ate);
         const auto end = diagnostic.tellg();
-        if (end > 0)
-        {
+        if (end > 0) {
             const auto count = end > 16384 ? std::streamoff{16384} : std::streamoff{end};
             diagnostic.seekg(end - count);
             std::string tail(static_cast<std::size_t>(count), '\0');

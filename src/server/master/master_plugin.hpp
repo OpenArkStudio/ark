@@ -24,8 +24,7 @@
 
 namespace ark {
 
-class master_plugin final : public plugin_base<master_plugin>
-{
+class master_plugin final : public plugin_base<master_plugin> {
 public:
     void install() override;
     void uninstall() override;

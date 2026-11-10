@@ -15,8 +15,7 @@
 
 namespace {
 
-struct counted_object
-{
+struct counted_object {
     explicit counted_object(int& destroyed)
         : destroyed_(destroyed) {
     }
@@ -109,8 +108,7 @@ DOCTEST_TEST_CASE("Object-map constant end iterators delimit all entries") {
     DOCTEST_CHECK(constant_values.cbegin() != constant_values.cend());
     DOCTEST_CHECK(constant_values.cend() == constant_values.end());
     int count = 0;
-    for (auto it = constant_values.cbegin(); it != constant_values.cend(); ++it)
-    {
+    for (auto it = constant_values.cbegin(); it != constant_values.cend(); ++it) {
         ++count;
     }
     DOCTEST_CHECK(count == 2);
@@ -237,8 +235,7 @@ DOCTEST_TEST_CASE_TEMPLATE("Shared object maps copy ownership and move entries w
 
 namespace {
 
-struct pod_iterator_buckets : ark::string_traits<char>
-{
+struct pod_iterator_buckets : ark::string_traits<char> {
     static std::size_t hash(const char* key) {
         return key[0] == 'z' ? 2 : 0;
     }
@@ -314,8 +311,7 @@ DOCTEST_TEST_CASE("POD string pointer mappings expose the stored pointer slot wi
 }
 
 DOCTEST_TEST_CASE("POD string empty and missing lookup paths reach end without dereferencing it") {
-    for (const std::size_t buckets : {std::size_t{0}, std::size_t{4}})
-    {
+    for (const std::size_t buckets : {std::size_t{0}, std::size_t{4}}) {
         ark::pod_string<char, std::size_t> values(buckets);
         DOCTEST_CHECK(values.begin() == values.end());
         DOCTEST_CHECK(values.find("missing") == values.end());

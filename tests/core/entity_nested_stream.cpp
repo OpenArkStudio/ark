@@ -398,8 +398,7 @@ TEST_CASE("Nested owning copies preserve every scalar alternative across baselin
         {4, std::int64_t{-4}}, {5, std::uint64_t{5}}, {6, 1.25f}, {7, 2.5}, {8, std::string(256, 's')},
         {9, guid_value{99}}};
     trusted.root.fields.clear();
-    for (const auto& [index, value] : baseline.snapshot.root.scalars.fields)
-    {
+    for (const auto& [index, value] : baseline.snapshot.root.scalars.fields) {
         trusted.root.fields.emplace(index, static_cast<nested_scalar_type>(value.index()));
     }
     nested_publisher publisher(trusted, baseline);
@@ -413,8 +412,7 @@ TEST_CASE("Nested owning copies preserve every scalar alternative across baselin
     const auto packet = publisher.update(next);
     REQUIRE(packet != nullptr);
     REQUIRE(replica.apply(*packet) == nested_apply_result::applied);
-    for (const auto& [index, value] : expected.root.scalars.fields)
-    {
+    for (const auto& [index, value] : expected.root.scalars.fields) {
         CHECK(replica.state()->root.scalars.fields.at(index).index() == value.index());
         CHECK(replica.state()->root.scalars.fields.at(index) == value);
     }

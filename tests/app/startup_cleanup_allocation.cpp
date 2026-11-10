@@ -22,15 +22,13 @@ bool fail_allocations{};
 const char* active_mode = "setup";
 ark::plugin_manager* active_manager{};
 
-struct context
-{
+struct context {
     std::unique_ptr<ark::time_wheel_manager> wheel;
 };
 
 ark::startup_cleanup_result release(void* pointer) {
     auto& capsule = *static_cast<context*>(pointer);
-    if (capsule.wheel)
-    {
+    if (capsule.wheel) {
         capsule.wheel->shut();
         capsule.wheel.reset();
     }
@@ -38,16 +36,14 @@ ark::startup_cleanup_result release(void* pointer) {
     return ark::startup_cleanup_result::done;
 }
 
-class allocation_module final : public ark::module
-{
+class allocation_module final : public ark::module {
 public:
     std::shared_ptr<context> capsule;
     bool partial_wheel{};
 
     bool init() override {
         fail_allocations = true;
-        if (partial_wheel)
-        {
+        if (partial_wheel) {
             capsule->wheel->init(1);
         }
         throw std::bad_alloc();
@@ -56,10 +52,8 @@ public:
 } // namespace
 
 void* operator new(std::size_t size) {
-    if (!fail_allocations)
-    {
-        if (auto* pointer = std::malloc(size == 0 ? 1 : size))
-        {
+    if (!fail_allocations) {
+        if (auto* pointer = std::malloc(size == 0 ? 1 : size)) {
             return pointer;
         }
     }
@@ -90,17 +84,19 @@ void operator delete[](void* pointer, std::size_t) noexcept {
 // Otherwise a sanitizer's nothrow interceptor can bypass this replacement and
 // hand memory from its operator-new family to our replacement delete/free.
 void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
-    try
-    { return ::operator new(size); }
-    catch (...)
-    { return nullptr; }
+    try {
+        return ::operator new(size);
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
-    try
-    { return ::operator new[](size); }
-    catch (...)
-    { return nullptr; }
+    try {
+        return ::operator new[](size);
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void operator delete(void* pointer, const std::nothrow_t&) noexcept {
@@ -119,30 +115,29 @@ int allocation_family_probe() {
     const bool allocated = single && array;
     ::operator delete(single);
     ::operator delete[](array);
-    if (!allocated)
-    {
+    if (!allocated) {
         return 10;
     }
 
     // A constructor exception uses the matching nothrow placement-delete form.
-    struct construction_failure
-    {
+    struct construction_failure {
         construction_failure() {
             throw 17;
         }
     };
 
     bool single_threw = false, array_threw = false;
-    try
-    { (void)new (std::nothrow) construction_failure; }
-    catch (int error)
-    { single_threw = error == 17; }
-    try
-    { (void)new (std::nothrow) construction_failure[2]; }
-    catch (int error)
-    { array_threw = error == 17; }
-    if (!single_threw || !array_threw)
-    {
+    try {
+        (void)new (std::nothrow) construction_failure;
+    } catch (int error) {
+        single_threw = error == 17;
+    }
+    try {
+        (void)new (std::nothrow) construction_failure[2];
+    } catch (int error) {
+        array_threw = error == 17;
+    }
+    if (!single_threw || !array_threw) {
         return 11;
     }
 
@@ -153,12 +148,12 @@ int allocation_family_probe() {
     ::operator delete(single);
     ::operator delete[](array);
     bool throwing_failed = false;
-    try
-    { (void)::operator new(1); }
-    catch (const std::bad_alloc&)
-    { throwing_failed = true; }
-    if (!failed || !throwing_failed || !fail_allocations)
-    {
+    try {
+        (void)::operator new(1);
+    } catch (const std::bad_alloc&) {
+        throwing_failed = true;
+    }
+    if (!failed || !throwing_failed || !fail_allocations) {
         return 12;
     }
     ark::app_detail::write_native_stderr(
@@ -169,8 +164,7 @@ int allocation_family_probe() {
 } // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 2)
-    {
+    if (argc != 2) {
         return 2;
     }
     active_mode = argv[1];
@@ -178,13 +172,10 @@ int main(int argc, char** argv) {
     // crash reporting until the parent's process timeout hides the cause.
     std::set_terminate([]() noexcept {
         ark::app_detail::write_native_stderr("Startup allocation probe: unexpected std::terminate\n");
-        if (active_manager)
-        {
+        if (active_manager) {
             const auto& call = active_manager->get_startup_call();
             ark::app_detail::write_startup_failure(call.phase.data(), active_mode, call.owner.data());
-        }
-        else
-        {
+        } else {
             ark::app_detail::write_startup_failure("unexpected terminate", active_mode);
         }
 #ifdef ARK_PLATFORM_WIN
@@ -193,8 +184,7 @@ int main(int argc, char** argv) {
         std::_Exit(86);
     });
     const std::string_view mode(argv[1]);
-    if (mode == "allocation-family")
-    {
+    if (mode == "allocation-family") {
         // The failed allocation flag stays armed until this isolated exit.
         std::_Exit(allocation_family_probe());
     }
@@ -212,49 +202,39 @@ int main(int argc, char** argv) {
     module.capsule = std::make_shared<context>();
     module.capsule->wheel = std::make_unique<ark::time_wheel_manager>();
     module.partial_wheel = mode == "partial-wheel";
-    if (mode != "partial-wheel")
-    {
+    if (mode != "partial-wheel") {
         module.capsule->wheel->init(1);
     }
-    if (!manager.add_module("allocation-wheel", &module))
-    {
+    if (!manager.add_module("allocation-wheel", &module)) {
         return 3;
     }
     std::array<std::shared_ptr<context>, ark::startup_cleanup_capacity> capsules;
     constexpr std::array<const char*, ark::startup_cleanup_capacity> keys{"resource-0", "resource-1", "resource-2",
         "resource-3", "resource-4", "resource-5", "resource-6", "resource-7", "resource-8", "resource-9", "resource-10",
         "resource-11", "resource-12", "resource-13", "resource-14", "resource-15"};
-    if (mode == "registry")
-    {
+    if (mode == "registry") {
         capsules[0] = module.capsule;
-        for (std::size_t index = 1; index < capsules.size(); ++index)
-        {
+        for (std::size_t index = 1; index < capsules.size(); ++index) {
             capsules[index] = std::make_shared<context>();
         }
     }
-    try
-    {
-        if (mode == "capsule")
-        {
+    try {
+        if (mode == "capsule") {
             fail_allocations = true;
             (void)std::make_shared<context>();
             return 4;
         }
         // Preparation and fixed phase recording themselves must not allocate.
         fail_allocations = true;
-        if (mode == "registry")
-        {
-            for (std::size_t index{}; index < capsules.size(); ++index)
-            {
-                if (!manager.prepare_startup_cleanup(keys[index], "allocation-test", capsules[index], release))
-                {
+        if (mode == "registry") {
+            for (std::size_t index{}; index < capsules.size(); ++index) {
+                if (!manager.prepare_startup_cleanup(keys[index], "allocation-test", capsules[index], release)) {
                     return 5;
                 }
                 const auto owners = capsules[index].use_count();
                 const bool duplicate =
                     manager.prepare_startup_cleanup(keys[index], "other-plugin", capsules[index], release);
-                if (duplicate || capsules[index].use_count() != owners)
-                {
+                if (duplicate || capsules[index].use_count() != owners) {
                     return 9;
                 }
             }
@@ -262,38 +242,29 @@ int main(int argc, char** argv) {
             const bool overflow =
                 manager.prepare_startup_cleanup("overflow", "allocation-test", module.capsule, release);
             const bool duplicate = manager.prepare_startup_cleanup(keys[0], "other-plugin", module.capsule, release);
-            if (overflow || duplicate || module.capsule.use_count() != owners)
-            {
+            if (overflow || duplicate || module.capsule.use_count() != owners) {
                 return 9;
             }
-        }
-        else if (!manager.prepare_startup_cleanup("allocation-wheel", "allocation-test", module.capsule, release))
-        {
+        } else if (!manager.prepare_startup_cleanup("allocation-wheel", "allocation-test", module.capsule, release)) {
             return 5;
         }
         ark::startup_call_record record;
         record.enter("allocation-wheel", "constructor");
-        if (record.result != ark::startup_call_result::entered)
-        {
+        if (record.result != ark::startup_call_result::entered) {
             return 6;
         }
-        if (mode == "terminate-probe")
-        {
+        if (mode == "terminate-probe") {
             std::terminate();
         }
-        if (mode == "call-argument")
-        {
+        if (mode == "call-argument") {
             const auto failed_argument = []() -> const std::string& { throw std::bad_alloc{}; };
             (void)manager.start(1, failed_argument(), configuration_directory, plugins);
         }
         fail_allocations = mode == "phase-record" || mode == "registry";
         (void)manager.start(1, library_directory, configuration_directory, plugins);
-    }
-    catch (const std::exception& error)
-    {
+    } catch (const std::exception& error) {
         const bool entered = manager.get_startup_call().result != ark::startup_call_result::not_entered;
-        if ((mode == "phase-record" && !entered) || (mode == "call-argument" && entered))
-        {
+        if ((mode == "phase-record" && !entered) || (mode == "call-argument" && entered)) {
             return 8;
         }
         // Failure remains armed through the real production diagnostic, cleanup

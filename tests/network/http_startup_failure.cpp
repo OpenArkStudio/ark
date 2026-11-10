@@ -21,8 +21,7 @@ bool fail_next_allocation{};
 bool fail_allocations{};
 
 bool fail_after_reservation(std::size_t size) {
-    if (observed_endpoint && ark::http_endpoints.contains(*observed_endpoint))
-    {
+    if (observed_endpoint && ark::http_endpoints.contains(*observed_endpoint)) {
         observed_endpoint = nullptr;
         failed_size = size;
         fail_allocations = true;
@@ -40,13 +39,11 @@ std::uint16_t unused_http_port() {
 } // namespace
 
 void* operator new(std::size_t size) {
-    if (fail_allocations || fail_next_allocation || fail_after_reservation(size))
-    {
+    if (fail_allocations || fail_next_allocation || fail_after_reservation(size)) {
         fail_next_allocation = false;
         throw std::bad_alloc{};
     }
-    if (auto* value = std::malloc(size ? size : 1))
-    {
+    if (auto* value = std::malloc(size ? size : 1)) {
         return value;
     }
     throw std::bad_alloc{};
@@ -62,10 +59,11 @@ void operator delete(void* value, std::size_t) noexcept {
 
 // Match the scalar nothrow allocation family when a native constructor unwinds.
 void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
-    try
-    { return ::operator new(size); }
-    catch (...)
-    { return nullptr; }
+    try {
+        return ::operator new(size);
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void operator delete(void* value, const std::nothrow_t&) noexcept {
@@ -79,10 +77,11 @@ TEST_CASE("HTTP allocation failure after reservation releases only its endpoint 
     auto server = ark::detail::make_http_server_module();
     bool threw{};
     observed_endpoint = &endpoint;
-    try
-    { server->start_server(ip, port, 1); }
-    catch (const std::bad_alloc&)
-    { threw = true; }
+    try {
+        server->start_server(ip, port, 1);
+    } catch (const std::bad_alloc&) {
+        threw = true;
+    }
     observed_endpoint = nullptr;
     fail_allocations = false;
     CHECK(threw);

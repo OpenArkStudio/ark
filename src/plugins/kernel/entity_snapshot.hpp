@@ -12,8 +12,7 @@
 
 namespace ark::entity_sync {
 
-struct guid_value
-{
+struct guid_value {
     guid_t value{};
     bool operator==(const guid_value&) const = default;
 };
@@ -21,16 +20,14 @@ struct guid_value
 using scalar_value = std::variant<bool, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, float, double,
     std::string, guid_value>;
 
-struct scalar_snapshot
-{
+struct scalar_snapshot {
     guid_t entity_id{};
     std::string class_name;
     std::map<std::uint32_t, scalar_value> fields;
     bool operator==(const scalar_snapshot&) const = default;
 };
 
-struct snapshot_limits
-{
+struct snapshot_limits {
     std::size_t max_fields{1024};
     // Combined class-name and selected string-field bytes, including embedded NULs.
     std::size_t max_string_bytes{1024 * 1024};
@@ -43,8 +40,7 @@ namespace detail {
 // even a deleted copy/move constructor is supported. The factory must return a
 // prvalue, and the adapter must be consumed synchronously within its captures.
 template<typename factory_type>
-struct direct_value
-{
+struct direct_value {
     factory_type create;
     using value_type = std::invoke_result_t<const factory_type&>;
 
@@ -72,8 +68,7 @@ inline scalar_value copy_scalar_value(const scalar_value& input) {
 
 inline std::map<std::uint32_t, scalar_value> copy_scalar_fields(const std::map<std::uint32_t, scalar_value>& input) {
     std::map<std::uint32_t, scalar_value> result;
-    for (const auto& [index, item] : input)
-    {
+    for (const auto& [index, item] : input) {
         result.emplace_hint(result.end(), index, direct_value{[&] { return copy_scalar_value(item); }});
     }
     return result;

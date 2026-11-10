@@ -9,8 +9,7 @@
 
 namespace ark {
 
-class consul_module : public module
-{
+class consul_module : public module {
 public:
     // Set register center url(You should call this function first)
     // virtual void SetRegisterCenter(const std::string& center_ip, const uint16_t center_port) = 0;

@@ -24,8 +24,7 @@
 
 namespace ark {
 
-class simulate_net_module : public module
-{
+class simulate_net_module : public module {
 public:
     //virtual method
 };

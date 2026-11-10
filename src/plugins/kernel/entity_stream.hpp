@@ -17,16 +17,14 @@
 namespace ark::entity_sync {
 
 // In-process value envelopes, not a serialized message format or transport API.
-struct scalar_baseline
-{
+struct scalar_baseline {
     std::string schema_id;
     std::uint64_t generation{};
     std::uint64_t revision{};
     scalar_snapshot snapshot;
 };
 
-struct scalar_delta
-{
+struct scalar_delta {
     std::string schema_id;
     std::uint64_t generation{};
     std::uint64_t required_revision{};
@@ -37,8 +35,7 @@ struct scalar_delta
     bool removed{false};
 };
 
-enum class scalar_apply_result
-{
+enum class scalar_apply_result {
     applied,
     duplicate,
     rejected
@@ -55,35 +52,26 @@ inline void swap_scalar_snapshots(scalar_snapshot& left, scalar_snapshot& right)
 
 inline void validate_scalar_state(guid_t id, const std::string& name,
     const std::map<std::uint32_t, scalar_value>& fields, const snapshot_limits& limits) {
-    if (id == guid_t{} || name.empty())
-    {
+    if (id == guid_t{} || name.empty()) {
         throw std::invalid_argument("Scalar state requires an entity ID and class");
     }
-    if (fields.size() > limits.max_fields || name.size() > limits.max_string_bytes)
-    {
+    if (fields.size() > limits.max_fields || name.size() > limits.max_string_bytes) {
         throw std::length_error("Scalar state exceeds snapshot limits");
     }
     auto remaining = limits.max_string_bytes - name.size();
-    for (const auto& [index, value] : fields)
-    {
-        if (index == 0 || value.valueless_by_exception())
-        {
+    for (const auto& [index, value] : fields) {
+        if (index == 0 || value.valueless_by_exception()) {
             throw std::invalid_argument("Invalid scalar field");
         }
         std::visit(
             [&](const auto& item) {
                 using type = std::decay_t<decltype(item)>;
-                if constexpr (std::is_floating_point_v<type>)
-                {
-                    if (!std::isfinite(item))
-                    {
+                if constexpr (std::is_floating_point_v<type>) {
+                    if (!std::isfinite(item)) {
                         throw std::invalid_argument("Non-finite scalar field");
                     }
-                }
-                else if constexpr (std::is_same_v<type, std::string>)
-                {
-                    if (item.size() > remaining)
-                    {
+                } else if constexpr (std::is_same_v<type, std::string>) {
+                    if (item.size() > remaining) {
                         throw std::length_error("Scalar strings exceed snapshot limits");
                     }
                     remaining -= item.size();
@@ -94,12 +82,10 @@ inline void validate_scalar_state(guid_t id, const std::string& name,
 }
 
 inline void validate_scalar_schema(const std::string& schema, const snapshot_limits& limits) {
-    if (schema.empty())
-    {
+    if (schema.empty()) {
         throw std::invalid_argument("A scalar stream requires an application schema ID");
     }
-    if (schema.size() > limits.max_string_bytes)
-    {
+    if (schema.size() > limits.max_string_bytes) {
         throw std::length_error("Scalar schema ID exceeds snapshot limits");
     }
 }
@@ -109,8 +95,7 @@ inline void validate_scalar_schema(const std::string& schema, const snapshot_lim
 // Owner-thread state differ. Returning a delta does not acknowledge network delivery.
 // Call update once at the application's explicit flush point. A changed selection
 // or schema requires a new publisher/generation and a new baseline.
-class scalar_publisher final
-{
+class scalar_publisher final {
 public:
     explicit scalar_publisher(const scalar_baseline& initial, snapshot_limits limits = {})
         : limits_(limits)
@@ -127,25 +112,20 @@ public:
         require_active();
         detail::validate_scalar_state(next.entity_id, next.class_name, next.fields, limits_);
         if (next.entity_id != current_.snapshot.entity_id || next.class_name != current_.snapshot.class_name ||
-            next.fields.size() != current_.snapshot.fields.size())
-        {
+            next.fields.size() != current_.snapshot.fields.size()) {
             throw std::invalid_argument("Scalar identity or selection changed; establish a new baseline");
         }
         auto delta = envelope();
-        for (const auto& [index, value] : next.fields)
-        {
+        for (const auto& [index, value] : next.fields) {
             const auto before = current_.snapshot.fields.find(index);
-            if (before == current_.snapshot.fields.end() || before->second.index() != value.index())
-            {
+            if (before == current_.snapshot.fields.end() || before->second.index() != value.index()) {
                 throw std::invalid_argument("Scalar field selection or type changed");
             }
-            if (before->second != value)
-            {
+            if (before->second != value) {
                 delta.fields.emplace(index, detail::direct_value{[&] { return detail::copy_scalar_value(value); }});
             }
         }
-        if (delta.fields.empty())
-        {
+        if (delta.fields.empty()) {
             return {};
         }
         advance(delta);
@@ -172,8 +152,7 @@ private:
         detail::validate_scalar_schema(initial.schema_id, limits);
         detail::validate_scalar_state(
             initial.snapshot.entity_id, initial.snapshot.class_name, initial.snapshot.fields, limits);
-        if (initial.generation == 0 || initial.revision == 0)
-        {
+        if (initial.generation == 0 || initial.revision == 0) {
             throw std::invalid_argument("Scalar generation and revision must be positive");
         }
         return {
@@ -188,8 +167,7 @@ private:
     }
 
     void require_active() const {
-        if (removed_)
-        {
+        if (removed_) {
             throw std::logic_error("Scalar entity was removed; establish a new generation");
         }
     }
@@ -200,8 +178,7 @@ private:
     }
 
     void advance(scalar_delta& delta) const {
-        if (current_.revision == std::numeric_limits<std::uint64_t>::max())
-        {
+        if (current_.revision == std::numeric_limits<std::uint64_t>::max()) {
             throw std::overflow_error("Scalar revision exhausted; establish a new generation");
         }
         delta.revision = current_.revision + 1;
@@ -214,8 +191,7 @@ private:
 
 // Validates in-process envelopes for an explicitly bound root. It is not a wire
 // decoder, schema-definition validator or authorization/session mechanism.
-class scalar_replica final
-{
+class scalar_replica final {
 public:
     scalar_replica(std::string schema, guid_t id, std::string class_name, snapshot_limits limits = {})
         : schema_(std::move(schema))
@@ -227,26 +203,22 @@ public:
     }
 
     scalar_apply_result apply(const scalar_baseline& input) {
-        try
-        {
+        try {
             detail::validate_scalar_schema(input.schema_id, limits_);
             detail::validate_scalar_state(
                 input.snapshot.entity_id, input.snapshot.class_name, input.snapshot.fields, limits_);
-        }
-        catch (const std::invalid_argument&)
-        { return reject(); }
-        catch (const std::length_error&)
-        { return reject(); }
-        if (input.schema_id != schema_ || input.snapshot.entity_id != id_ || input.snapshot.class_name != class_name_ ||
-            input.generation == 0 || input.revision == 0 || input.generation < generation_)
-        {
+        } catch (const std::invalid_argument&) {
+            return reject();
+        } catch (const std::length_error&) {
             return reject();
         }
-        if (input.generation == generation_)
-        {
+        if (input.schema_id != schema_ || input.snapshot.entity_id != id_ || input.snapshot.class_name != class_name_ ||
+            input.generation == 0 || input.revision == 0 || input.generation < generation_) {
+            return reject();
+        }
+        if (input.generation == generation_) {
             if (valid_ &&
-                (input.revision < revision_ || (input.revision == revision_ && state_ && *state_ == input.snapshot)))
-            {
+                (input.revision < revision_ || (input.revision == revision_ && state_ && *state_ == input.snapshot))) {
                 return scalar_apply_result::duplicate;
             }
             return reject();
@@ -261,60 +233,49 @@ public:
     }
 
     scalar_apply_result apply(const scalar_delta& input) {
-        try
-        { detail::validate_scalar_state(input.entity_id, input.class_name, input.fields, limits_); }
-        catch (const std::invalid_argument&)
-        { return reject(); }
-        catch (const std::length_error&)
-        { return reject(); }
+        try {
+            detail::validate_scalar_state(input.entity_id, input.class_name, input.fields, limits_);
+        } catch (const std::invalid_argument&) {
+            return reject();
+        } catch (const std::length_error&) {
+            return reject();
+        }
         if (!valid_ || input.schema_id != schema_ || input.entity_id != id_ || input.class_name != class_name_ ||
             input.generation != generation_ || input.required_revision == 0 ||
             input.required_revision == std::numeric_limits<std::uint64_t>::max() ||
             input.revision != input.required_revision + 1 || (input.removed && !input.fields.empty()) ||
-            (!input.removed && input.fields.empty()))
-        {
+            (!input.removed && input.fields.empty())) {
             return reject();
         }
-        if (input.revision <= revision_)
-        {
+        if (input.revision <= revision_) {
             return scalar_apply_result::duplicate;
         }
-        if (input.required_revision != revision_ || !state_)
-        {
+        if (input.required_revision != revision_ || !state_) {
             return reject();
         }
-        if (input.removed)
-        {
+        if (input.removed) {
             state_.reset();
-        }
-        else
-        {
-            for (const auto& [index, value] : input.fields)
-            {
+        } else {
+            for (const auto& [index, value] : input.fields) {
                 const auto old = state_->fields.find(index);
-                if (old == state_->fields.end() || old->second.index() != value.index())
-                {
+                if (old == state_->fields.end() || old->second.index() != value.index()) {
                     return reject();
                 }
             }
             // Validate the merged text budget before allocating a state copy.
             auto remaining = limits_.max_string_bytes - class_name_.size();
-            for (const auto& [index, old] : state_->fields)
-            {
+            for (const auto& [index, old] : state_->fields) {
                 const auto changed = input.fields.find(index);
                 const auto& value = changed == input.fields.end() ? old : changed->second;
-                if (const auto text = std::get_if<std::string>(&value))
-                {
-                    if (text->size() > remaining)
-                    {
+                if (const auto text = std::get_if<std::string>(&value)) {
+                    if (text->size() > remaining) {
                         return reject();
                     }
                     remaining -= text->size();
                 }
             }
             auto replacement = detail::copy_scalar_snapshot(*state_);
-            for (const auto& [index, value] : input.fields)
-            {
+            for (const auto& [index, value] : input.fields) {
                 replacement.fields.at(index) = detail::copy_scalar_value(value);
             }
             auto immutable = std::make_shared<const scalar_snapshot>(detail::direct_value{[&] {

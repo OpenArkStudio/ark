@@ -11,8 +11,7 @@ unsigned created{};
 unsigned destroyed{};
 unsigned updated{};
 
-class entry_consul final : public ark::module_base<ark::consul_module>
-{
+class entry_consul final : public ark::module_base<ark::consul_module> {
 public:
     entry_consul() {
         ++created;
@@ -67,8 +66,7 @@ std::unique_ptr<consul_module> make_consul_module() {
 } // namespace ark::detail
 
 ARK_EXPORT_FUNC unsigned consul_entry_events(unsigned event) {
-    switch (event)
-    {
+    switch (event) {
     case 0:
         return created;
     case 1:

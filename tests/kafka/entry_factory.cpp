@@ -11,8 +11,7 @@ unsigned created{};
 unsigned destroyed{};
 unsigned updated{};
 
-class entry_kafka final : public ark::module_base<ark::kafka_module>
-{
+class entry_kafka final : public ark::module_base<ark::kafka_module> {
 public:
     entry_kafka() {
         ++created;
@@ -51,8 +50,7 @@ std::unique_ptr<kafka_module> make_kafka_module() {
 } // namespace ark::detail
 
 ARK_EXPORT_FUNC unsigned kafka_entry_events(unsigned event) {
-    switch (event)
-    {
+    switch (event) {
     case 0:
         return created;
     case 1:

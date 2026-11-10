@@ -25,8 +25,7 @@
 
 namespace ark {
 
-class timespan
-{
+class timespan {
 public:
     using time_diff = int64_t;
 
@@ -63,8 +62,7 @@ public:
     }
 
     timespan& operator=(const timespan& timespan) {
-        if (this != &timespan)
-        {
+        if (this != &timespan) {
             this->span_ = timespan.span_;
         }
         return *this;
@@ -217,11 +215,9 @@ private:
 
 ////////////////////////////////////////////////////////////////////////
 
-class date_time
-{
+class date_time {
 public:
-    enum months
-    {
+    enum months {
         january = 1,
         february,
         march,
@@ -236,8 +232,7 @@ public:
         december
     };
 
-    enum days_of_week
-    {
+    enum days_of_week {
         sunday = 0,
         monday,
         tuesday,
@@ -289,8 +284,7 @@ public:
     ~date_time() = default;
 
     date_time& operator=(const date_time& other) {
-        if (this != &other)
-        {
+        if (this != &other) {
             ts_ = other.ts_;
         }
 
@@ -461,8 +455,7 @@ public:
         // find the first firstDayOfWeek.
         int base_day = 1;
 
-        while (date_time(get_year(), 1, base_day).get_day_of_week() != first_day_of_week)
-        {
+        while (date_time(get_year(), 1, base_day).get_day_of_week() != first_day_of_week) {
             ++base_day;
         }
 
@@ -474,12 +467,9 @@ public:
         int day = get_day_of_year();
         day++;
         int offs = base_day <= 4 ? 0 : 1; //weekofYear of baseDay
-        if (day < base_day)
-        {
+        if (day < base_day) {
             return offs;
-        }
-        else
-        {
+        } else {
             return (day - base_day) / 7 + 1 + offs;
         }
     }
@@ -494,12 +484,9 @@ public:
     // 0 = Sunday, 1 = Monday, ..., 6 = Saturday).
     int get_day_of_week(int first_day_of_week = monday) const {
         std::tm tm = get_utc_time();
-        if (first_day_of_week == monday)
-        {
+        if (first_day_of_week == monday) {
             return ((tm.tm_wday == 0) ? 7 : tm.tm_wday);
-        }
-        else
-        {
+        } else {
             return tm.tm_wday;
         }
     }
@@ -521,16 +508,11 @@ public:
     int gethour_ampm() const {
         int hour = get_hour();
 
-        if (hour < 1)
-        {
+        if (hour < 1) {
             return 12;
-        }
-        else if (hour > 12)
-        {
+        } else if (hour > 12) {
             return hour - 12;
-        }
-        else
-        {
+        } else {
             return hour;
         }
     }
@@ -590,13 +572,11 @@ public:
     }
 
     bool same_week(time_val time) {
-        if (!same_year(time))
-        {
+        if (!same_year(time)) {
             return false;
         }
 
-        if (same_day(time))
-        {
+        if (same_day(time)) {
             return true;
         }
 
@@ -627,19 +607,15 @@ public:
     static int get_days_of_month(int year, int month) {
         ARK_ASSERT_NO_EFFECT(month >= 1 && month <= 12);
 
-        if (month < 1 || month > 12)
-        {
+        if (month < 1 || month > 12) {
             return -1;
         }
 
         static int days_of_month_table[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 
-        if (month == 2 && is_leap_year(year))
-        {
+        if (month == 2 && is_leap_year(year)) {
             return 29;
-        }
-        else
-        {
+        } else {
             return days_of_month_table[month];
         }
     }

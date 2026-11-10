@@ -26,8 +26,7 @@
 
 namespace ark {
 
-class simulate_module_impl final : public module_base<simulate_module>
-{
+class simulate_module_impl final : public module_base<simulate_module> {
 public:
     bool init() override;
 

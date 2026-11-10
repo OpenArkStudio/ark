@@ -20,15 +20,13 @@ using request_type = arknet::http::request<arknet::http::string_body>;
 using response_type = arknet::http::response<arknet::http::string_body>;
 
 void require(bool condition, const std::string& message) {
-    if (!condition)
-    {
+    if (!condition) {
         std::cerr << message << std::endl;
         std::_Exit(1);
     }
 }
 
-struct wire_result
-{
+struct wire_result {
     arknet::error_code error;
     response_type response;
 };
@@ -38,8 +36,7 @@ wire_result request(uint16_t port, arknet::http::verb method, const std::string&
     asio::ip::tcp::socket socket(context);
     wire_result result;
     socket.connect({asio::ip::make_address("127.0.0.1"), port}, result.error);
-    if (result.error)
-    {
+    if (result.error) {
         return result;
     }
     request_type request(method, target, 11);
@@ -47,8 +44,7 @@ wire_result request(uint16_t port, arknet::http::verb method, const std::string&
     request.body() = std::move(body);
     request.prepare_payload();
     arknet::http::write(socket, request, result.error);
-    if (!result.error)
-    {
+    if (!result.error) {
         beast::flat_buffer buffer;
         arknet::http::read(socket, buffer, result.response, result.error);
     }
@@ -57,8 +53,7 @@ wire_result request(uint16_t port, arknet::http::verb method, const std::string&
     return result;
 }
 
-struct route_state
-{
+struct route_state {
     explicit route_state(std::atomic<bool>& retired)
         : retired(retired) {
     }
@@ -114,8 +109,7 @@ int main(int argc, char* argv[]) {
     router.add(arknet::http::verb::get, "/retire", [state](const auto&, auto& response) {
         state->active.store(true);
         const auto deadline = std::chrono::steady_clock::now() + 5s;
-        while (!state->release.load() && std::chrono::steady_clock::now() < deadline)
-        {
+        while (!state->release.load() && std::chrono::steady_clock::now() < deadline) {
             std::this_thread::sleep_for(1ms);
         }
         require(state->release.load(), "Controlled HTTP route was never released");
@@ -144,8 +138,7 @@ int main(int argc, char* argv[]) {
     wire_result pending_result;
     std::thread pending([&] { pending_result = request(port, arknet::http::verb::get, "/retire"); });
     const auto deadline = std::chrono::steady_clock::now() + 5s;
-    while (!state->active.load() && std::chrono::steady_clock::now() < deadline)
-    {
+    while (!state->active.load() && std::chrono::steady_clock::now() < deadline) {
         std::this_thread::sleep_for(1ms);
     }
     require(state->active.load(), "Pending HTTP wire request never entered its route");
@@ -162,8 +155,7 @@ int main(int argc, char* argv[]) {
                 pending_result.response.body() == "retired",
         "An admitted route lost its response during drain");
     const auto drain_deadline = std::chrono::steady_clock::now() + 5s;
-    while (!manager.stop(1) && std::chrono::steady_clock::now() < drain_deadline)
-    {
+    while (!manager.stop(1) && std::chrono::steady_clock::now() < drain_deadline) {
         manager.update(1);
         std::this_thread::sleep_for(1ms);
     }

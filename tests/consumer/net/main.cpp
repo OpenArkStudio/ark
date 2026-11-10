@@ -20,8 +20,7 @@ static_assert(std::is_base_of_v<ark::net_server_service, ark::net_server_service
 #error "Net SDK mapping must exclude HTTP/manager implementations and private plugin assembly"
 #endif
 
-struct receiver
-{
+struct receiver {
     void on_message(const ark::net_msg*, ark::conv_id_t) {
     }
 

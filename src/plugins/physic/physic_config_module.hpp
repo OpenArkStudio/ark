@@ -25,8 +25,7 @@
 
 namespace ark {
 
-class physic_config_module : public module
-{
+class physic_config_module : public module {
 public:
     ///get scene by config id
     virtual bool get_physic_scene(const std::string& scene_id, physic_scene& scene) const = 0;

@@ -26,8 +26,7 @@
 
 namespace ark {
 
-class entity_operations_module final : public module_base<module>
-{
+class entity_operations_module final : public module_base<module> {
 public:
     explicit entity_operations_module() = default;
 

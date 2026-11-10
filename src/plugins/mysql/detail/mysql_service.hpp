@@ -28,8 +28,7 @@ namespace ark::detail {
 // Internal bridge; the published plugin API remains unchanged.
 // Keep execution and statement cleanup outcomes separate:
 // a failed close must not turn a successful write into a failed/replayed write.
-struct mysql_service_reply
-{
+struct mysql_service_reply {
     arknet::mysql::query_result result;
     std::optional<arknet::mysql::connection_result> statement_close;
     std::exception_ptr statement_close_exception;
@@ -37,22 +36,19 @@ struct mysql_service_reply
 
 using mysql_service_result = std::variant<mysql_service_reply, std::exception_ptr>;
 
-class mysql_service
-{
+class mysql_service {
     using queue_type = completion_queue<mysql_service_result>;
     using control_type = database_request_control;
     struct operation;
 
-    struct request_registry
-    {
+    struct request_registry {
         std::mutex mutex;
         std::unordered_map<std::uint64_t, std::weak_ptr<operation>> active;
         std::uint64_t next_id{1};
         database_service_diagnostics diagnostics;
     };
 
-    struct operation : std::enable_shared_from_this<operation>
-    {
+    struct operation : std::enable_shared_from_this<operation> {
         control_type control;
         std::weak_ptr<request_registry> registry;
         std::uint64_t id{};
@@ -69,25 +65,17 @@ class mysql_service
         bool prepared{};
 
         void forward_cancel(std::optional<control_type::cancellation> cancellation) {
-            if (cancellation)
-            {
-                try
-                {
-                    if (cancellation->target == control_type::stage::acquire)
-                    {
+            if (cancellation) {
+                try {
+                    if (cancellation->target == control_type::stage::acquire) {
                         pool->cancel(cancellation->id);
-                    }
-                    else
-                    {
+                    } else {
                         lease.cancel(cancellation->id);
                     }
-                }
-                catch (...)
-                {
+                } catch (...) {
                     // A failed cancellation post cannot turn an accepted write
                     // into a known failure. Its real completion/deadline remains.
-                    if (auto requests = registry.lock())
-                    {
+                    if (auto requests = registry.lock()) {
                         std::lock_guard lock(requests->mutex);
                         requests->diagnostics.cancellation_submission = std::current_exception();
                     }
@@ -102,29 +90,21 @@ class mysql_service
         }
 
         void erase_request() {
-            if (auto requests = registry.lock())
-            {
+            if (auto requests = registry.lock()) {
                 std::lock_guard lock(requests->mutex);
                 requests->active.erase(id);
             }
         }
 
         void return_lease(bool discard = false) {
-            try
-            {
-                if (discard)
-                {
+            try {
+                if (discard) {
                     lease.discard();
-                }
-                else
-                {
+                } else {
                     lease.release();
                 }
-            }
-            catch (...)
-            {
-                if (auto requests = registry.lock())
-                {
+            } catch (...) {
+                if (auto requests = registry.lock()) {
                     std::lock_guard lock(requests->mutex);
                     requests->diagnostics.lease_return = std::current_exception();
                 }
@@ -134,8 +114,7 @@ class mysql_service
         std::optional<arknet::mysql::query_options> remaining_options() const {
             const auto remaining =
                 std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
-            if (remaining <= std::chrono::milliseconds::zero())
-            {
+            if (remaining <= std::chrono::milliseconds::zero()) {
                 return std::nullopt;
             }
             auto options = limits;
@@ -144,8 +123,7 @@ class mysql_service
         }
 
         void finish() {
-            if (!control.finish())
-            {
+            if (!control.finish()) {
                 return;
             }
             return_lease();
@@ -154,8 +132,7 @@ class mysql_service
         }
 
         void fail(std::exception_ptr failure) {
-            if (!control.finish())
-            {
+            if (!control.finish()) {
                 return;
             }
             return_lease(true);
@@ -165,8 +142,7 @@ class mysql_service
 
         void close_statement() {
             const auto options = remaining_options();
-            if (!options || !lease)
-            {
+            if (!options || !lease) {
                 arknet::mysql::connection_result cleanup;
                 cleanup.code =
                     options ? arknet::mysql::connection_errc::not_connected : arknet::mysql::connection_errc::timeout;
@@ -175,28 +151,23 @@ class mysql_service
                 finish();
                 return;
             }
-            try
-            {
+            try {
                 const auto submission = control.begin(control_type::stage::command);
                 const auto native_id = lease.async_close(
                     statement,
                     [self = shared_from_this(), submission](arknet::mysql::connection_result result) mutable {
-                        if (!self->control.complete(submission))
-                        {
+                        if (!self->control.complete(submission)) {
                             return;
                         }
                         self->reply.statement_close.emplace(std::move(result));
-                        if (!bool(*self->reply.statement_close))
-                        {
+                        if (!bool(*self->reply.statement_close)) {
                             self->return_lease(true);
                         }
                         self->finish();
                     },
                     *options);
                 forward_cancel(control.publish(submission, native_id));
-            }
-            catch (...)
-            {
+            } catch (...) {
                 reply.statement_close_exception = std::current_exception();
                 return_lease(true);
                 finish();
@@ -204,15 +175,13 @@ class mysql_service
         }
 
         void execute() {
-            if (control.cancelled())
-            {
+            if (control.cancelled()) {
                 reply.result.status.code = arknet::mysql::connection_errc::cancelled;
                 close_statement();
                 return;
             }
             const auto options = remaining_options();
-            if (!options)
-            {
+            if (!options) {
                 reply.result.status.code = arknet::mysql::connection_errc::timeout;
                 close_statement();
                 return;
@@ -221,8 +190,7 @@ class mysql_service
             const auto native_id = lease.async_execute(
                 statement, std::move(parameters),
                 [self = shared_from_this(), submission](arknet::mysql::query_result result) mutable {
-                    if (!self->control.complete(submission))
-                    {
+                    if (!self->control.complete(submission)) {
                         return;
                     }
                     self->reply.result = std::move(result);
@@ -233,65 +201,56 @@ class mysql_service
         }
 
         void acquired(arknet::mysql::pool::acquire_result result) {
-            if (!result)
-            {
+            if (!result) {
                 reply.result.status = std::move(result.status);
                 // A successful acquisition status is insufficient if the
                 // lease became unavailable before this callback used it.
-                if (reply.result.status.code == arknet::mysql::connection_errc::none)
-                {
+                if (reply.result.status.code == arknet::mysql::connection_errc::none) {
                     reply.result.status.code = arknet::mysql::connection_errc::not_connected;
                 }
                 finish();
                 return;
             }
             lease = std::move(result.connection);
-            if (control.cancelled())
-            {
+            if (control.cancelled()) {
                 reply.result.status.code = arknet::mysql::connection_errc::cancelled;
                 finish();
                 return;
             }
             const auto options = remaining_options();
-            if (!options)
-            {
+            if (!options) {
                 reply.result.status.code = arknet::mysql::connection_errc::timeout;
                 finish();
                 return;
             }
-            if (prepared)
-            {
+            if (prepared) {
                 const auto submission = control.begin(control_type::stage::command);
                 const auto native_id = lease.async_prepare(
                     std::move(sql),
                     [self = shared_from_this(), submission](arknet::mysql::prepare_result result) mutable {
-                        if (!self->control.complete(submission))
-                        {
+                        if (!self->control.complete(submission)) {
                             return;
                         }
-                        if (!result)
-                        {
+                        if (!result) {
                             self->reply.result.status = std::move(result.status);
                             self->finish();
                             return;
                         }
                         self->statement = std::move(result.statement);
-                        try
-                        { self->execute(); }
-                        catch (...)
-                        { self->fail(std::current_exception()); }
+                        try {
+                            self->execute();
+                        } catch (...) {
+                            self->fail(std::current_exception());
+                        }
                     },
                     *options);
                 forward_cancel(control.publish(submission, native_id));
-            }
-            else
-            {
+            } else {
                 const auto submission = control.begin(control_type::stage::command);
                 const auto native_id = lease.async_query(
                     std::move(sql),
                     [self = shared_from_this(), submission](arknet::mysql::query_result result) mutable {
-                        if (!self->control.complete(submission))
-                        {
+                        if (!self->control.complete(submission)) {
                             return;
                         }
                         self->reply.result = std::move(result);
@@ -349,8 +308,7 @@ public:
         {
             std::lock_guard lock(requests_->mutex);
             const auto found = requests_->active.find(id);
-            if (found != requests_->active.end())
-            {
+            if (found != requests_->active.end()) {
                 pending = found->second.lock();
             }
         }
@@ -384,16 +342,13 @@ public:
         {
             std::lock_guard lock(requests_->mutex);
             pending.reserve(requests_->active.size());
-            for (const auto& [id, weak] : requests_->active)
-            {
-                if (auto request = weak.lock())
-                {
+            for (const auto& [id, weak] : requests_->active) {
+                if (auto request = weak.lock()) {
                     pending.push_back(std::move(request));
                 }
             }
         }
-        for (const auto& request : pending)
-        {
+        for (const auto& request : pending) {
             request->cancel();
         }
     }
@@ -457,19 +412,16 @@ private:
     template<class finalizer_type>
     bool retire_native(finalizer_type finalizer) {
         check_owner();
-        if (!logically_drained())
-        {
+        if (!logically_drained()) {
             return false;
         }
         auto activity = activity_;
         auto pool = pool_;
-        if (activity->native_retired)
-        {
+        if (activity->native_retired) {
             return true;
         }
         database_service_activity::guard active(activity);
-        if (!finalizer(*pool))
-        {
+        if (!finalizer(*pool)) {
             return false;
         }
         activity->native_retired = true;
@@ -477,8 +429,7 @@ private:
     }
 
     void check_owner() const {
-        if (std::this_thread::get_id() != owner_)
-        {
+        if (std::this_thread::get_id() != owner_) {
             throw std::logic_error("Database service must be used on its module thread");
         }
     }
@@ -491,37 +442,30 @@ private:
         auto handler = std::make_shared<callback>(std::move(completion));
         mysql_service_result rejected;
         request_id id{};
-        if (!arknet::detail::checked_deadline(std::chrono::steady_clock::now(), timeout))
-        {
+        if (!arknet::detail::checked_deadline(std::chrono::steady_clock::now(), timeout)) {
             std::get<mysql_service_reply>(rejected).result.status.code =
                 arknet::mysql::connection_errc::invalid_options;
-        }
-        else
-        {
-            try
-            {
+        } else {
+            try {
                 id = submit(
                     std::move(sql), std::move(parameters),
                     [handler](mysql_service_result result) {
-                        if (*handler)
-                        {
+                        if (*handler) {
                             (*handler)(std::move(result));
                         }
                     },
                     timeout, prepared);
-                if (id)
-                {
+                if (id) {
                     return id;
                 }
                 std::get<mysql_service_reply>(rejected).result.status.code =
                     accepting_ ? arknet::mysql::connection_errc::queue_full
                                : arknet::mysql::connection_errc::not_connected;
+            } catch (...) {
+                rejected = std::current_exception();
             }
-            catch (...)
-            { rejected = std::current_exception(); }
         }
-        if (*handler)
-        {
+        if (*handler) {
             (*handler)(std::move(rejected));
         }
         return 0;
@@ -533,38 +477,31 @@ private:
         database_service_activity::guard active(activity_);
         auto completion = std::move(incoming);
         const auto deadline = arknet::detail::checked_deadline(std::chrono::steady_clock::now(), timeout);
-        if (!deadline)
-        {
+        if (!deadline) {
             throw std::invalid_argument("Database operation timeout is not representable");
         }
         std::size_t bytes = sql.capacity();
         if (parameters.capacity() >
-            (std::numeric_limits<std::size_t>::max() - bytes) / sizeof(arknet::mysql::field_value))
-        {
+            (std::numeric_limits<std::size_t>::max() - bytes) / sizeof(arknet::mysql::field_value)) {
             return false;
         }
         bytes += parameters.capacity() * sizeof(arknet::mysql::field_value);
-        for (const auto& value : parameters)
-        {
-            if (const auto* text = std::get_if<std::string>(&value))
-            {
-                if (text->capacity() > std::numeric_limits<std::size_t>::max() - bytes)
-                {
+        for (const auto& value : parameters) {
+            if (const auto* text = std::get_if<std::string>(&value)) {
+                if (text->capacity() > std::numeric_limits<std::size_t>::max() - bytes) {
                     return false;
                 }
                 bytes += text->capacity();
             }
         }
         auto ticket = completions_->admit(bytes, std::move(completion));
-        if (!ticket)
-        {
+        if (!ticket) {
             return 0;
         }
         auto queue = completions_;
         auto requests = requests_;
         std::shared_ptr<operation> pending;
-        try
-        {
+        try {
             pending = std::make_shared<operation>();
             pending->queue = queue;
             pending->registry = requests;
@@ -577,16 +514,14 @@ private:
             pending->prepared = prepared;
             {
                 std::lock_guard lock(requests->mutex);
-                if (!requests->next_id)
-                {
+                if (!requests->next_id) {
                     throw std::overflow_error("Database request IDs exhausted");
                 }
                 pending->id = requests->next_id++;
                 requests->active.emplace(pending->id, pending);
             }
             const auto options = pending->remaining_options();
-            if (!options)
-            {
+            if (!options) {
                 pending->reply.result.status.code = arknet::mysql::connection_errc::timeout;
                 pending->finish();
                 return pending->id;
@@ -594,22 +529,19 @@ private:
             const auto submission = pending->control.begin(control_type::stage::acquire);
             const auto native_id = pending->pool->async_acquire(
                 [pending, submission](arknet::mysql::pool::acquire_result acquired) mutable {
-                    if (!pending->control.complete(submission))
-                    {
+                    if (!pending->control.complete(submission)) {
                         return;
                     }
-                    try
-                    { pending->acquired(std::move(acquired)); }
-                    catch (...)
-                    { pending->fail(std::current_exception()); }
+                    try {
+                        pending->acquired(std::move(acquired));
+                    } catch (...) {
+                        pending->fail(std::current_exception());
+                    }
                 },
                 options->timeout);
             pending->forward_cancel(pending->control.publish(submission, native_id));
-        }
-        catch (...)
-        {
-            if (pending)
-            {
+        } catch (...) {
+            if (pending) {
                 pending->control.finish();
                 pending->erase_request();
             }

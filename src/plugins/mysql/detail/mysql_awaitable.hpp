@@ -26,12 +26,9 @@ module_task<mysql_service_reply> mysql_query(service_type& service, database_awa
             return service.start_query(
                 std::move(sql),
                 [completion = std::move(completion)](mysql_service_result result) mutable {
-                    if (auto* error = std::get_if<std::exception_ptr>(&result))
-                    {
+                    if (auto* error = std::get_if<std::exception_ptr>(&result)) {
                         completion(*error, {});
-                    }
-                    else
-                    {
+                    } else {
                         completion({}, std::get<mysql_service_reply>(std::move(result)));
                     }
                 },
@@ -48,12 +45,9 @@ module_task<mysql_service_reply> mysql_execute(service_type& service, database_a
             return service.start_execute(
                 std::move(sql), std::move(parameters),
                 [completion = std::move(completion)](mysql_service_result result) mutable {
-                    if (auto* error = std::get_if<std::exception_ptr>(&result))
-                    {
+                    if (auto* error = std::get_if<std::exception_ptr>(&result)) {
                         completion(*error, {});
-                    }
-                    else
-                    {
+                    } else {
                         completion({}, std::get<mysql_service_reply>(std::move(result)));
                     }
                 },

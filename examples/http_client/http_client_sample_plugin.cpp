@@ -34,15 +34,13 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void http_client_sample_plugin::install() {
-    if (!register_module(make_http_client_sample_module(), module_update::disabled))
-    {
+    if (!register_module(make_http_client_sample_module(), module_update::disabled)) {
         throw std::runtime_error("http_client example module registration rejected");
     }
 }
 
 void http_client_sample_plugin::uninstall() {
-    if (!unregister_module<http_client_sample_module>())
-    {
+    if (!unregister_module<http_client_sample_module>()) {
         throw std::runtime_error("http_client example module unregistration rejected");
     }
 }

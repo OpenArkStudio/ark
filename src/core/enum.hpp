@@ -24,8 +24,7 @@
 
 namespace ark {
 
-enum class data_type : uint32_t
-{
+enum class data_type : uint32_t {
     dt_empty,    // unknown
     dt_boolean,  // bool
     dt_int32,    // int32
@@ -44,16 +43,14 @@ enum class data_type : uint32_t
     dt_userdata, // user data(char*)
 };
 
-enum class connection_type : uint32_t
-{
+enum class connection_type : uint32_t {
     brt_unknown,     // unknown
     brt_direct,      // directly
     brt_wait_notify, // wait notify
     brt_record,      // do not connect, but need record info
 };
 
-enum class entity_event : uint32_t
-{
+enum class entity_event : uint32_t {
     entity_evt_none = 0,
     entity_evt_destroy,
     entity_evt_pre_destroy,
@@ -66,8 +63,7 @@ enum class entity_event : uint32_t
     entity_evt_all_finished, // Call it by yourself when create entity finished
 };
 
-enum class data_op_type : uint16_t
-{
+enum class data_op_type : uint16_t {
     dot_unknown = 0,
     dot_inc, // +
     dot_dec, // -
@@ -88,8 +84,7 @@ enum class table_op_type : uint16_t // table operate type
     table_clear,    // clear all rows
 };
 
-enum class data_mask : uint16_t
-{
+enum class data_mask : uint16_t {
     pf_sync_view = 0,  // send to others
     pf_sync_self = 1,  // send to self
     pf_real_time = 2,  // send real-time when changed
@@ -100,8 +95,7 @@ enum class data_mask : uint16_t
     pf_log = 7,        // log when changed
 };
 
-enum class container_op_type : uint32_t
-{
+enum class container_op_type : uint32_t {
     op_create = 0,  // new entity
     op_place = 1,   // place another entity
     op_remove = 2,  // remove en entity but do not destroy
@@ -109,8 +103,7 @@ enum class container_op_type : uint32_t
     op_destroy = 4, // destroy an entity
 };
 
-enum class http_method : uint8_t
-{
+enum class http_method : uint8_t {
     http_method_head,
     http_method_get,
     http_method_post,
@@ -119,8 +112,7 @@ enum class http_method : uint8_t
     http_method_max
 };
 
-enum class compress_type : uint8_t
-{
+enum class compress_type : uint8_t {
     compress_type_none,
     compress_type_zlib,
     compress_type_zstd

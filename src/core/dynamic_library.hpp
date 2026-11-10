@@ -33,8 +33,7 @@ namespace detail {
 struct dynamic_library_test_access;
 }
 
-class dynamic_library
-{
+class dynamic_library {
 public:
     explicit dynamic_library(const std::string& lib_name)
         : name_(lib_name) {
@@ -57,8 +56,7 @@ public:
 #ifdef ARK_PLATFORM_WIN
         const auto result = load_windows_library(path + name_);
         lib_inst_ = result.first;
-        if (!lib_inst_)
-        {
+        if (!lib_inst_) {
             // Preserve the native failure after temporary path buffers retire.
             SetLastError(result.second);
         }
@@ -89,28 +87,23 @@ private:
 #ifdef ARK_PLATFORM_WIN
     static std::pair<DYNLIB_HANDLE, DWORD> load_windows_library(const std::string& path) {
         const auto count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path.c_str(), -1, nullptr, 0);
-        if (count == 0)
-        {
+        if (count == 0) {
             return {nullptr, GetLastError()};
         }
         std::wstring requested(count, L'\0');
-        if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path.c_str(), -1, requested.data(), count) == 0)
-        {
+        if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path.c_str(), -1, requested.data(), count) == 0) {
             return {nullptr, GetLastError()};
         }
         const auto capacity = GetFullPathNameW(requested.c_str(), 0, nullptr, nullptr);
-        if (capacity == 0)
-        {
+        if (capacity == 0) {
             return {nullptr, GetLastError()};
         }
         std::wstring absolute(capacity, L'\0');
         const auto length = GetFullPathNameW(requested.c_str(), capacity, absolute.data(), nullptr);
-        if (length == 0)
-        {
+        if (length == 0) {
             return {nullptr, GetLastError()};
         }
-        if (length >= capacity)
-        {
+        if (length >= capacity) {
             return {nullptr, ERROR_INSUFFICIENT_BUFFER};
         }
         absolute.resize(length);
@@ -132,12 +125,10 @@ private:
 
     template<typename close_type>
     bool unload_with(close_type close) {
-        if (!lib_inst_)
-        {
+        if (!lib_inst_) {
             return true;
         }
-        if (!native_unload_succeeded(close(lib_inst_)))
-        {
+        if (!native_unload_succeeded(close(lib_inst_))) {
             return false;
         }
         lib_inst_ = nullptr;

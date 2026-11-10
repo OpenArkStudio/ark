@@ -24,8 +24,6 @@
 
 namespace ark {
 
-class master_net_module : public module
-{
-};
+class master_net_module : public module {};
 
 } // namespace ark

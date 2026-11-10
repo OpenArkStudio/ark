@@ -29,8 +29,7 @@ namespace ark {
 
 std::unique_ptr<timers_module> make_timers_module();
 
-class timers_plugin final : public plugin_base<timers_plugin>
-{
+class timers_plugin final : public plugin_base<timers_plugin> {
 public:
     void install() override;
     void uninstall() override;

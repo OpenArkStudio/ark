@@ -34,39 +34,31 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void utility_plugin::install() {
-    if (!register_module(detail::make_guid_module(), module_update::disabled))
-    {
+    if (!register_module(detail::make_guid_module(), module_update::disabled)) {
         throw std::runtime_error("utility guid module registration rejected");
     }
-    if (!register_module(detail::make_timer_module(), module_update::enabled))
-    {
+    if (!register_module(detail::make_timer_module(), module_update::enabled)) {
         throw std::runtime_error("utility timer module registration rejected");
     }
-    if (!register_module(detail::make_schedule_module(), module_update::disabled))
-    {
+    if (!register_module(detail::make_schedule_module(), module_update::disabled)) {
         throw std::runtime_error("utility schedule module registration rejected");
     }
-    if (!register_module(detail::make_compress_module(), module_update::disabled))
-    {
+    if (!register_module(detail::make_compress_module(), module_update::disabled)) {
         throw std::runtime_error("utility compress module registration rejected");
     }
 }
 
 void utility_plugin::uninstall() {
-    if (!unregister_module<compress_module>())
-    {
+    if (!unregister_module<compress_module>()) {
         throw std::runtime_error("utility compress module unregistration rejected");
     }
-    if (!unregister_module<schedule_module>())
-    {
+    if (!unregister_module<schedule_module>()) {
         throw std::runtime_error("utility schedule module unregistration rejected");
     }
-    if (!unregister_module<timer_module>())
-    {
+    if (!unregister_module<timer_module>()) {
         throw std::runtime_error("utility timer module unregistration rejected");
     }
-    if (!unregister_module<guid_module>())
-    {
+    if (!unregister_module<guid_module>()) {
         throw std::runtime_error("utility guid module unregistration rejected");
     }
 }

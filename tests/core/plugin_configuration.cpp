@@ -11,8 +11,7 @@
 
 namespace {
 
-class configuration_file
-{
+class configuration_file {
 public:
     configuration_file()
         : path_(
@@ -58,8 +57,7 @@ TEST_CASE("HTTP rejects missing mistyped unknown and out-of-range settings") {
              "[http]\nhost='localhost'\nport=9090\nthreads=0\n", "[http]\nhost='localhost'\nport=9090\nthreads=256\n",
              "[http]\nhost='localhost'\nport=9090\nthreads=4.0\n", "[http]\nhost='localhost'\nport='9090'\nthreads=4\n",
              "[http]\nhost=''\nport=9090\nthreads=4\n", "[http]\nhost=\"\\u0000\"\nport=9090\nthreads=4\n",
-             "[http]\nport=9090\nthreads=4\n", "[wrong]\nhost='localhost'\n", "<xml><conf ip='localhost'/></xml>"})
-    {
+             "[http]\nport=9090\nthreads=4\n", "[wrong]\nhost='localhost'\n", "<xml><conf ip='localhost'/></xml>"}) {
         CHECK_THROWS_AS(ark::plugin_config_detail::load_http(file.write(text)), std::runtime_error);
     }
 }
@@ -70,8 +68,7 @@ TEST_CASE("Consul accepts a hostname and validates its port before network acces
     CHECK(config.host == "localhost");
     CHECK(config.port == 8500);
     for (const auto text : {"[consul]\nhost='localhost'\nport=0\n", "[consul]\nhost='localhost'\nport=65536\n",
-             "[consul]\nhost='localhost'\n", "[consul]\nhost='localhost'\nport=8500\npassword='not-logged'\n"})
-    {
+             "[consul]\nhost='localhost'\n", "[consul]\nhost='localhost'\nport=8500\npassword='not-logged'\n"}) {
         CHECK_THROWS_AS(ark::plugin_config_detail::load_consul(file.write(text)), std::runtime_error);
     }
 }
@@ -79,13 +76,10 @@ TEST_CASE("Consul accepts a hostname and validates its port before network acces
 TEST_CASE("Plugin configuration diagnostics identify the file and invalid field") {
     configuration_file file;
     const auto path = file.write("[http]\nhost='localhost'\nport=9090\nthreads=false\n");
-    try
-    {
+    try {
         static_cast<void>(ark::plugin_config_detail::load_http(path));
         FAIL("invalid threads accepted");
-    }
-    catch (const std::runtime_error& error)
-    {
+    } catch (const std::runtime_error& error) {
         CHECK(std::string(error.what()).find(path) != std::string::npos);
         CHECK(std::string(error.what()).find("threads") != std::string::npos);
     }
@@ -102,16 +96,12 @@ TEST_CASE("Shared plugin reader rejects malformed encoding NUL paths and directo
     std::string raw_nul = "[http]\n";
     raw_nul += '\0';
     raw_nul += "SECRET_SENTINEL";
-    for (const auto& contents : {std::string("[http\nsecret='SECRET_SENTINEL'\n"), invalid_utf8, raw_nul})
-    {
+    for (const auto& contents : {std::string("[http\nsecret='SECRET_SENTINEL'\n"), invalid_utf8, raw_nul}) {
         const auto path = file.write(contents);
-        try
-        {
+        try {
             static_cast<void>(ark::plugin_config_detail::load_http(path));
             FAIL("invalid configuration accepted");
-        }
-        catch (const std::runtime_error& error)
-        {
+        } catch (const std::runtime_error& error) {
             CHECK(std::string(error.what()).find(path + ":") != std::string::npos);
             CHECK(std::string(error.what()).find("SECRET_SENTINEL") == std::string::npos);
         }
@@ -127,22 +117,15 @@ TEST_CASE("Shared plugin raw NUL diagnostics use UTF8 source columns") {
     contents += '\0';
     contents += "SECRET_SENTINEL";
     const auto path = file.write(contents);
-    for (const auto http : {true, false})
-    {
-        try
-        {
-            if (http)
-            {
+    for (const auto http : {true, false}) {
+        try {
+            if (http) {
                 static_cast<void>(ark::plugin_config_detail::load_http(path));
-            }
-            else
-            {
+            } else {
                 static_cast<void>(ark::plugin_config_detail::load_consul(path));
             }
             FAIL("raw NUL accepted");
-        }
-        catch (const std::runtime_error& error)
-        {
+        } catch (const std::runtime_error& error) {
             const auto message = std::string(error.what());
             CHECK(message == path + ":1:7: configuration contains NUL");
         }

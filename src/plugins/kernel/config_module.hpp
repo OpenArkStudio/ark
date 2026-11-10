@@ -26,8 +26,7 @@
 
 namespace ark {
 
-class config_module : public module
-{
+class config_module : public module {
 public:
     virtual bool load() = 0;
     virtual bool save() = 0;

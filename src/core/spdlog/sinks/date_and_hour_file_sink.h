@@ -27,8 +27,7 @@ namespace sinks {
 /*
  * Default generator of daily log file names.
  */
-struct default_date_and_hour_file_name_calculator
-{
+struct default_date_and_hour_file_name_calculator {
     //
     // return file pre-dir and name and its extension:
     //
@@ -49,8 +48,7 @@ struct default_date_and_hour_file_name_calculator
         const auto basename = fname.substr(basename_index);
         const auto ext_index = basename.rfind('.');
 
-        if (ext_index == filename_t::npos || ext_index == 0 || ext_index == basename.size() - 1)
-        {
+        if (ext_index == filename_t::npos || ext_index == 0 || ext_index == basename.size() - 1) {
             return std::make_tuple(directory, basename, filename_t{});
         }
 
@@ -76,8 +74,7 @@ struct default_date_and_hour_file_name_calculator
  * Target path is Date/filename_hour.ext
  */
 template<class mutex_type, class file_name_calculator_type = default_date_and_hour_file_name_calculator>
-class date_and_hour_file_sink final : public base_sink<mutex_type>
-{
+class date_and_hour_file_sink final : public base_sink<mutex_type> {
 public:
     // create daily file sink which rotates on given time
     date_and_hour_file_sink(filename_t base_filename, bool truncate = false)
@@ -96,8 +93,7 @@ protected:
         auto time = msg.time;
 #endif
         bool should_rotate = time >= rotation_tp_;
-        if (should_rotate)
-        {
+        if (should_rotate) {
             auto filename = file_name_calculator_type::calc_filename(base_filename_);
             file_helper_.open(filename, truncate_);
             rotation_tp_ = next_rotation_tp();

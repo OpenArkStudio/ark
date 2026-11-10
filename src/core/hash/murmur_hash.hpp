@@ -30,8 +30,7 @@
 
 namespace ark {
 
-class murmur_hash
-{
+class murmur_hash {
 public:
     static void murmur_hash3_x86_32(const void* key, int len, uint32_t seed, void* out) {
         murmur_hash3_x86_32_impl<false>(key, len, seed, out);
@@ -74,8 +73,7 @@ private:
 
         const uint8_t* blocks = data + nblocks * 4;
 
-        for (int i = -nblocks; i; i++)
-        {
+        for (int i = -nblocks; i; i++) {
             uint32_t k1 = getblock<uint32_t, legacy_msvc>(blocks, i);
 
             k1 *= c1;
@@ -94,8 +92,7 @@ private:
 
         uint32_t k1 = 0;
 
-        switch (len & 3)
-        {
+        switch (len & 3) {
         case 3:
             k1 ^= tail[2] << 16;
         case 2:
@@ -140,8 +137,7 @@ private:
 
         const uint8_t* blocks = data + nblocks * 16;
 
-        for (int i = -nblocks; i; i++)
-        {
+        for (int i = -nblocks; i; i++) {
             uint32_t k1 = getblock<uint32_t, legacy_msvc>(blocks, i * 4 + 0);
             uint32_t k2 = getblock<uint32_t, legacy_msvc>(blocks, i * 4 + 1);
             uint32_t k3 = getblock<uint32_t, legacy_msvc>(blocks, i * 4 + 2);
@@ -194,8 +190,7 @@ private:
         uint32_t k3 = 0;
         uint32_t k4 = 0;
 
-        switch (len & 15)
-        {
+        switch (len & 15) {
         case 15:
             k4 ^= tail[14] << 16;
         case 14:
@@ -294,8 +289,7 @@ private:
 
         const uint8_t* blocks = data;
 
-        for (int i = 0; i < nblocks; i++)
-        {
+        for (int i = 0; i < nblocks; i++) {
             uint64_t k1 = getblock<uint64_t, legacy_msvc>(blocks, i * 2 + 0);
             uint64_t k2 = getblock<uint64_t, legacy_msvc>(blocks, i * 2 + 1);
 
@@ -326,8 +320,7 @@ private:
         uint64_t k1 = 0;
         uint64_t k2 = 0;
 
-        switch (len & 15)
-        {
+        switch (len & 15) {
         case 15:
             k2 ^= uint64_t(tail[14]) << 48;
         case 14:
@@ -394,8 +387,7 @@ public:
 
         h = 0 ^ len;
         const uint8_t* data = (const uint8_t*)key;
-        while (len >= 4)
-        {
+        while (len >= 4) {
             k = data[0];
             k |= data[1] << 8;
             k |= data[2] << 16;
@@ -412,8 +404,7 @@ public:
             len -= 4;
         }
 
-        switch (len)
-        {
+        switch (len) {
         case 3:
             h ^= data[2] << 16;
             [[fallthrough]];
@@ -437,8 +428,7 @@ private:
     static word_type byte_swap(word_type value) {
         static_assert(std::is_unsigned_v<word_type>);
         word_type result = 0;
-        for (std::size_t byte = 0; byte < sizeof(word_type); ++byte)
-        {
+        for (std::size_t byte = 0; byte < sizeof(word_type); ++byte) {
             result = (result << 8) | (value & 0xff);
             value >>= 8;
         }
@@ -453,8 +443,7 @@ private:
         // Standard blocks are little endian; old MSVC blocks were byte-swapped
         // on a little-endian host. Legacy tails and output remain little endian.
         if constexpr ((legacy_msvc && std::endian::native == std::endian::little) ||
-                      (!legacy_msvc && std::endian::native == std::endian::big))
-        {
+                      (!legacy_msvc && std::endian::native == std::endian::big)) {
             value = byte_swap(value);
         }
         return value;
@@ -462,8 +451,7 @@ private:
 
     template<typename word_type>
     static void store_word(void* out, word_type value) {
-        if constexpr (std::endian::native == std::endian::big)
-        {
+        if constexpr (std::endian::native == std::endian::big) {
             value = byte_swap(value);
         }
         std::memcpy(out, &value, sizeof(value));
@@ -471,8 +459,7 @@ private:
 
     template<typename word_type, std::size_t count>
     static void store_words(void* out, const word_type (&words)[count]) {
-        for (std::size_t index = 0; index < count; ++index)
-        {
+        for (std::size_t index = 0; index < count; ++index) {
             store_word(static_cast<uint8_t*>(out) + index * sizeof(word_type), words[index]);
         }
     }

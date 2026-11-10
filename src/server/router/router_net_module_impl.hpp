@@ -29,8 +29,7 @@
 
 namespace ark {
 
-class router_net_module_impl final : public module_base<router_net_module, bus_module, net_service_manager_module>
-{
+class router_net_module_impl final : public module_base<router_net_module, bus_module, net_service_manager_module> {
 public:
     bool init() override;
     bool post_init() override;

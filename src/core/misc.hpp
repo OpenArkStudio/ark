@@ -30,34 +30,28 @@
 
 namespace ark {
 
-class misc
-{
+class misc {
 public:
     static uint32_t get_nearest2_n(uint32_t size) {
-        if (size == 0)
-        {
+        if (size == 0) {
             return 0;
         }
 
-        if (size <= 8)
-        {
+        if (size <= 8) {
             return 8;
         }
 
-        if (size > (1 << 16))
-        {
+        if (size > (1 << 16)) {
             return 0;
         }
 
-        if ((size & (size - 1)) == 0)
-        {
+        if ((size & (size - 1)) == 0) {
             return size;
         }
 
         int count = 0;
 
-        while (size)
-        {
+        while (size) {
             size = size >> 1;
             ++count;
         }
@@ -72,13 +66,10 @@ public:
 
     template<typename element_type>
     static bool from_string(const std::string& str_value, element_type& result) {
-        try
-        {
+        try {
             result = ARK_LEXICAL_CAST<element_type>(str_value);
             return true;
-        }
-        catch (std::system_error& ex)
-        {
+        } catch (std::system_error& ex) {
             ARK_ASSERT_NO_EFFECT(0);
             return false;
         }
@@ -88,13 +79,10 @@ public:
 
     template<typename element_type>
     static element_type from_string(const std::string& str_value) {
-        try
-        {
+        try {
             element_type result = ARK_LEXICAL_CAST<element_type>(str_value);
             return result;
-        }
-        catch ([[maybe_unused]] std::system_error& ex)
-        {
+        } catch ([[maybe_unused]] std::system_error& ex) {
             ARK_ASSERT_NO_EFFECT(0);
             return element_type();
         }
@@ -113,10 +101,8 @@ public:
         };
 
         static int data_type_len = std::size(data_type_names);
-        for (int i = 0; i < data_type_len; ++i)
-        {
-            if (type_name == data_type_names[i])
-            {
+        for (int i = 0; i < data_type_len; ++i) {
+            if (type_name == data_type_names[i]) {
                 return data_type(i);
             }
         }
@@ -126,8 +112,7 @@ public:
 
     template<typename element_type>
     static element_type operate(data_op_type op, const element_type& base, const element_type& delta) {
-        switch (op)
-        {
+        switch (op) {
         case data_op_type::dot_inc:
             base += delta;
             break;
@@ -164,8 +149,7 @@ public:
     static long pow_i(int d, int n) {
         int i;
         long m = 1;
-        for (i = 0; i < n; i++)
-        {
+        for (i = 0; i < n; i++) {
             m *= d;
         }
 
@@ -173,20 +157,16 @@ public:
     }
 
     static bool is_right_data(char c, int jz) {
-        if ((jz < 2) || (jz > 16))
-        {
+        if ((jz < 2) || (jz > 16)) {
             return false;
         }
         char ch[] = "00112233445566778899aAbBcCdDeEfF";
         int i = 0;
-        for (i = 0; i < jz; i++)
-        {
-            if (c == ch[i * 2])
-            {
+        for (i = 0; i < jz; i++) {
+            if (c == ch[i * 2]) {
                 return true;
             }
-            if (c == ch[i * 2 + 1])
-            {
+            if (c == ch[i * 2 + 1]) {
                 return true;
             }
         }
@@ -198,15 +178,11 @@ public:
         long int_value = 0;
         int bit_value = 0;
         int i;
-        for (i = 0; i < l; i++)
-        {
-            if (is_right_data(str_data[i], jz))
-            {
+        for (i = 0; i < l; i++) {
+            if (is_right_data(str_data[i], jz)) {
                 bit_value = to_hex_digit(str_data[i]);
                 int_value = bit_value * pow_i(jz, l - i - 1) + int_value;
-            }
-            else
-            {
+            } else {
                 return -1;
             }
         }
@@ -217,14 +193,10 @@ public:
         assert(is_right_data(c, 16));
 
         int bit_value = 0;
-        if (isdigit(c))
-        {
+        if (isdigit(c)) {
             bit_value = c - 0x30;
-        }
-        else
-        {
-            switch (c)
-            {
+        } else {
+            switch (c) {
             case 'a':
             case 'A':
                 bit_value = 0x0a;
@@ -296,17 +268,13 @@ public:
         // Pre allocated memory
         rst_string.reserve(input.size() * 2);
 
-        for (size_t i = 0; i < input.size(); i++)
-        {
+        for (size_t i = 0; i < input.size(); i++) {
             //bool isAscIIChar = int8_t(_Str[i]) >= 0x0 && int8_t(_Str[i]) <= 0x7f;
             bool is_asc_ii_char = (static_cast<unsigned char>(input[i]) <= 127);
-            if (is_asc_ii_char)
-            {
+            if (is_asc_ii_char) {
                 // english characters
                 rst_string.append(shift_map[size_t(input[i])]);
-            }
-            else
-            {
+            } else {
                 // other characters
                 rst_string.append(1, input[i]);
             }
@@ -319,45 +287,33 @@ public:
         ostrm << prefix;
 
         // hex
-        for (size_t i = 0; i < line.size(); i++)
-        {
+        for (size_t i = 0; i < line.size(); i++) {
             char hex_text[16] = "";
             snprintf(hex_text, sizeof(hex_text), "%02X ", (unsigned char)(line[i]));
             ostrm << hex_text;
-            if (i == 7 || i == 15 || i == 23)
-            {
+            if (i == 7 || i == 15 || i == 23) {
                 ostrm << ' ';
             }
         }
 
         // the space between hex and text
-        for (unsigned long spacer = line.size(); spacer < width; spacer++)
-        {
+        for (unsigned long spacer = line.size(); spacer < width; spacer++) {
             ostrm << "   ";
         }
-        if (line.size() <= 8)
-        {
+        if (line.size() <= 8) {
             ostrm << "   ";
-        }
-        else if (line.size() <= 16)
-        {
+        } else if (line.size() <= 16) {
             ostrm << "  ";
-        }
-        else if (line.size() <= 24)
-        {
+        } else if (line.size() <= 24) {
             ostrm << " ";
         }
         ostrm << ": ";
 
         // text
-        for (size_t i = 0; i < line.size(); i++)
-        {
-            if (line[i] < 32)
-            {
+        for (size_t i = 0; i < line.size(); i++) {
+            if (line[i] < 32) {
                 ostrm << '.';
-            }
-            else
-            {
+            } else {
                 ostrm << char(line[i]);
             }
         }
@@ -371,15 +327,13 @@ public:
         std::ostringstream ostrm;
 
         std::string str = input;
-        while (str.size() > width)
-        {
+        while (str.size() > width) {
             std::string line(str.c_str(), width);
             ostrm << hexdump_oneline(prefix, line, width);
             str = str.substr(width);
         }
 
-        if (str.size() > 0)
-        {
+        if (str.size() > 0) {
             ostrm << hexdump_oneline(prefix, str, width);
         }
 
@@ -400,25 +354,17 @@ public:
 
         // check if it's the standard format : "\(3F)"
         bool is_allowd_format = false;
-        if (src_str_len < 5)
-        {
+        if (src_str_len < 5) {
             is_allowd_format = false;
-        }
-        else if (p_src[0] != '\\' || p_src[1] != '(' || p_src[4] != ')')
-        {
+        } else if (p_src[0] != '\\' || p_src[1] != '(' || p_src[4] != ')') {
             is_allowd_format = false;
-        }
-        else if ((!is_hex_number(p_src[2])) || (!is_hex_number(p_src[3])))
-        {
+        } else if ((!is_hex_number(p_src[2])) || (!is_hex_number(p_src[3]))) {
             is_allowd_format = false;
-        }
-        else
-        {
+        } else {
             is_allowd_format = true;
         }
 
-        if (is_allowd_format == false)
-        {
+        if (is_allowd_format == false) {
             // illegal format.
             //assert(false); // tag: do not assert
 
@@ -438,8 +384,7 @@ public:
     // pSrc is "\r" "\n" "\t" "\\"
     static int proc_shift_char_by_char(char& dst, const char* const p_src, int src_str_len) {
         // Check format.
-        if (src_str_len < 2)
-        {
+        if (src_str_len < 2) {
             // illegal format.
             //assert(false); // tag: do not assert
 
@@ -449,8 +394,7 @@ public:
             return 1;
         }
 
-        switch (p_src[1])
-        {
+        switch (p_src[1]) {
         case 'r':
             dst = '\r';
             return 2;
@@ -476,8 +420,7 @@ public:
 
     // return the pos that the iter moves.
     static int proc_shift_char(char& dst, const char* p_src, int src_str_len) {
-        switch (p_src[1])
-        {
+        switch (p_src[1]) {
         case 'r':
         case 'n':
         case 't':
@@ -502,15 +445,11 @@ public:
         rst_string.reserve(c_style_string.size());
 
         size_t c_style_str_index = 0;
-        while (c_style_str_index < c_style_string.size())
-        {
-            if (c_style_string[c_style_str_index] != '\\')
-            {
+        while (c_style_str_index < c_style_string.size()) {
+            if (c_style_string[c_style_str_index] != '\\') {
                 rst_string.append(1, c_style_string[c_style_str_index]);
                 c_style_str_index++;
-            }
-            else
-            {
+            } else {
                 char shift_char = 0;
                 int c_style_str_left_len = c_style_string.size() - c_style_str_index;
                 c_style_str_index +=
@@ -535,18 +474,15 @@ public:
 
         // when len <= prefixLen
         //   test_str(adfadf, 3) == adf
-        if (str.size() >= str_len)
-        {
+        if (str.size() >= str_len) {
             str.resize(str_len);
             return str;
         }
 
         // when len < 20
         //   test_str(adf, 13) == adfa:67890123
-        if (str_len < 20)
-        {
-            for (size_t i = str.size() + 1; i <= str_len; ++i)
-            {
+        if (str_len < 20) {
+            for (size_t i = str.size() + 1; i <= str_len; ++i) {
                 str.push_back(char(((i % 10) + 0x30)));
             }
 
@@ -560,24 +496,20 @@ public:
             str.resize(10, '=');
 
             // (20_56789)(30_56789)
-            while (str.size() + 10 <= str_len)
-            {
+            while (str.size() + 10 <= str_len) {
                 const size_t new_len = str.size() + 10;
                 std::ostringstream tmp_ostrm;
                 tmp_ostrm << str << "(" << new_len << '_';
                 str = tmp_ostrm.str();
-                for (size_t i = str.size() + 1; i < new_len; ++i)
-                {
+                for (size_t i = str.size() + 1; i < new_len; ++i) {
                     str.push_back(char(((i % 10) + 0x30)));
                 }
                 str += ')';
             }
 
             // 12345
-            if (str.size() < str_len)
-            {
-                for (size_t i = str.size() + 1; i <= str_len; ++i)
-                {
+            if (str.size() < str_len) {
+                for (size_t i = str.size() + 1; i <= str_len; ++i) {
                     char c = ((i % 10) + 0x30);
                     str.push_back(c);
                 }

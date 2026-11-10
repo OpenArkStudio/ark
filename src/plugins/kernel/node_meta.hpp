@@ -26,8 +26,7 @@
 
 namespace ark {
 
-class node_meta final
-{
+class node_meta final {
 public:
     node_meta() = delete;
 

@@ -17,15 +17,13 @@ namespace ark::detail {
 // Private completion storage reserved before an operation is submitted.
 // Public methods except complete() belong to the constructing/module thread.
 template<class result_type>
-class completion_queue
-{
+class completion_queue {
     static_assert(std::is_nothrow_move_constructible_v<result_type>);
 
 public:
     using callback = std::function<void(result_type)>;
 
-    struct record
-    {
+    struct record {
         std::size_t index{};
         std::size_t input_bytes{};
         callback completion;
@@ -40,8 +38,7 @@ public:
         : owner_(std::this_thread::get_id())
         , slots_(max_operations)
         , max_input_bytes_(max_input_bytes) {
-        if (!max_operations || !max_input_bytes)
-        {
+        if (!max_operations || !max_input_bytes) {
             throw std::invalid_argument("Database completion limits must be positive");
         }
     }
@@ -52,14 +49,11 @@ public:
         operation->input_bytes = input_bytes;
         operation->completion = std::move(handler);
         std::lock_guard lock(mutex_);
-        if (!accepting_ || input_bytes > max_input_bytes_ - retained_input_bytes_)
-        {
+        if (!accepting_ || input_bytes > max_input_bytes_ - retained_input_bytes_) {
             return {};
         }
-        for (std::size_t index = 0; index < slots_.size(); ++index)
-        {
-            if (!slots_[index])
-            {
+        for (std::size_t index = 0; index < slots_.size(); ++index) {
+            if (!slots_[index]) {
                 operation->index = index;
                 slots_[index] = operation;
                 retained_input_bytes_ += input_bytes;
@@ -72,18 +66,14 @@ public:
     // The response is moved into pre-reserved storage; no queue-node allocation.
     void complete(const ticket& operation, result_type response) {
         std::lock_guard lock(mutex_);
-        if (!dispatch_enabled_ || !contains(operation) || operation->ready)
-        {
+        if (!dispatch_enabled_ || !contains(operation) || operation->ready) {
             return;
         }
         operation->response.emplace(std::move(response));
         operation->ready = true;
-        if (tail_)
-        {
+        if (tail_) {
             tail_->next = operation;
-        }
-        else
-        {
+        } else {
             head_ = operation;
         }
         tail_ = operation;
@@ -94,8 +84,7 @@ public:
         check_owner();
         {
             std::lock_guard lock(mutex_);
-            if (contains(operation))
-            {
+            if (contains(operation)) {
                 retained_input_bytes_ -= operation->input_bytes;
                 slots_[operation->index].reset();
             }
@@ -106,8 +95,7 @@ public:
     std::size_t dispatch(std::size_t maximum = 64) {
         check_owner();
 
-        struct dispatch_guard
-        {
+        struct dispatch_guard {
             std::size_t& depth;
 
             explicit dispatch_guard(std::size_t& active) noexcept
@@ -121,32 +109,25 @@ public:
         } guard(dispatch_depth_);
 
         std::size_t dispatched{};
-        while (dispatched < maximum)
-        {
+        while (dispatched < maximum) {
             ticket operation;
             {
                 std::lock_guard lock(mutex_);
-                if (!dispatch_enabled_ || !head_)
-                {
+                if (!dispatch_enabled_ || !head_) {
                     break;
                 }
                 operation = std::move(head_);
                 head_ = std::move(operation->next);
-                if (!head_)
-                {
+                if (!head_) {
                     tail_.reset();
                 }
             }
             auto handler = std::move(operation->completion);
-            try
-            {
-                if (handler)
-                {
+            try {
+                if (handler) {
                     handler(std::move(*operation->response));
                 }
-            }
-            catch (...)
-            {
+            } catch (...) {
                 handler = {};
                 operation->response.reset();
                 finish(operation);
@@ -165,10 +146,8 @@ public:
     bool quiescent() const {
         check_owner();
         std::lock_guard lock(mutex_);
-        for (const auto& operation : slots_)
-        {
-            if (operation)
-            {
+        for (const auto& operation : slots_) {
+            if (operation) {
                 return false;
             }
         }
@@ -195,10 +174,8 @@ public:
             tail_.reset();
             retained_input_bytes_ = 0;
         }
-        for (auto& operation : retired)
-        {
-            if (operation)
-            {
+        for (auto& operation : retired) {
+            if (operation) {
                 operation->completion = {};
                 operation->next.reset();
             }
@@ -207,8 +184,7 @@ public:
 
 private:
     void check_owner() const {
-        if (std::this_thread::get_id() != owner_)
-        {
+        if (std::this_thread::get_id() != owner_) {
             throw std::logic_error("Database service must be used on its module thread");
         }
     }
@@ -219,8 +195,7 @@ private:
 
     void finish(const ticket& operation) {
         std::lock_guard lock(mutex_);
-        if (contains(operation))
-        {
+        if (contains(operation)) {
             retained_input_bytes_ -= operation->input_bytes;
             slots_[operation->index].reset();
         }

@@ -5,8 +5,7 @@
 
 namespace ark::guest_room {
 
-class plugin final : public plugin_base<plugin>
-{
+class plugin final : public plugin_base<plugin> {
 public:
     void install() override;
     void uninstall() override;

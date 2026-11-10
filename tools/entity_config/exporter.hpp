@@ -14,8 +14,7 @@ namespace ark::entity_export {
 inline std::filesystem::path utf8_path(std::string_view value) {
     std::u8string text;
     text.reserve(value.size());
-    for (unsigned char c : value)
-    {
+    for (unsigned char c : value) {
         text.push_back(static_cast<char8_t>(c));
     }
     return std::filesystem::path(text);
@@ -26,22 +25,19 @@ inline std::string utf8_string(const std::filesystem::path& value) {
     return std::string(reinterpret_cast<const char*>(text.data()), text.size());
 }
 
-enum class cell_kind
-{
+enum class cell_kind {
     text,
     number,
     boolean,
     empty
 };
 
-struct cell
-{
+struct cell {
     std::string text;
     cell_kind kind{cell_kind::text};
 };
 
-struct table
-{
+struct table {
     std::string source;
     std::vector<std::vector<cell>> rows;
 };

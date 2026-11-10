@@ -22,10 +22,9 @@
 
 namespace ark {
 
-enum event_define
-{
+enum event_define {
     ////////////////Has Self---logic//////////////////////////////////////////////////////////
     // arg[0]:object
     afed_on_client_leave_scene,
 };
-}
+} // namespace ark

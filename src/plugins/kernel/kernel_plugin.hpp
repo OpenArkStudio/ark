@@ -24,8 +24,7 @@
 
 namespace ark {
 
-class kernel_plugin final : public plugin_base<kernel_plugin>
-{
+class kernel_plugin final : public plugin_base<kernel_plugin> {
 public:
     void install() override;
     void uninstall() override;

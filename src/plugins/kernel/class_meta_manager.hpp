@@ -26,8 +26,7 @@
 
 namespace ark {
 
-class class_meta_manager final
-{
+class class_meta_manager final {
 public:
     using class_meta_list = shared_object_hashmap<std::string, class_meta>;
 
@@ -69,15 +68,13 @@ public:
     }
 
     bool after_loaded() {
-        for (auto iter_class_meta : class_meta_list_)
-        {
+        for (auto iter_class_meta : class_meta_list_) {
             auto meta = iter_class_meta.second;
             ARK_ASSERT_RET_VAL(meta != nullptr, false);
 
             // init table col meta
             auto& table_meta_list = meta->get_table_meta_list();
-            for (auto iter : table_meta_list)
-            {
+            for (auto iter : table_meta_list) {
                 auto table_meta_ptr = iter.second;
                 ARK_ASSERT_RET_VAL(table_meta_ptr != nullptr, false);
 
@@ -96,8 +93,7 @@ private:
     std::shared_ptr<class_meta> create_meta(class_meta_list& class_meta_list, const std::string& name) {
         // return if found
         auto iter = class_meta_list.find(name);
-        if (iter != class_meta_list.end())
-        {
+        if (iter != class_meta_list.end()) {
             return iter->second;
         }
 

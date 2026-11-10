@@ -16,8 +16,7 @@ unsigned created{};
 unsigned destroyed{};
 unsigned updated{};
 
-class counted_login final : public ark::module_base<ark::login_net_module>
-{
+class counted_login final : public ark::module_base<ark::login_net_module> {
 public:
     counted_login() {
         ++created;
@@ -34,18 +33,18 @@ public:
 };
 
 void require(bool condition, const char* message) {
-    if (!condition)
-    {
+    if (!condition) {
         std::cerr << message << std::endl;
         std::_Exit(1);
     }
 }
 
 bool rejects(ark::login_plugin& owner) {
-    try
-    { owner.install(); }
-    catch (const std::runtime_error&)
-    { return true; }
+    try {
+        owner.install();
+    } catch (const std::runtime_error&) {
+        return true;
+    }
     return false;
 }
 

@@ -44,28 +44,23 @@ void stop_observing_allocations() {
 } // namespace
 
 void* operator new(std::size_t size) {
-    if (observed_table)
-    {
+    if (observed_table) {
         ++allocation_calls;
-        if (observed_table->get_row_count() == initial_row_count)
-        {
+        if (observed_table->get_row_count() == initial_row_count) {
             insertion_allocation = allocation_calls;
         }
-        if (allocation_calls == throw_allocation)
-        {
+        if (allocation_calls == throw_allocation) {
             throw std::bad_alloc{};
         }
     }
-    if (auto* value = std::malloc(size ? size : 1))
-    {
+    if (auto* value = std::malloc(size ? size : 1)) {
         return value;
     }
     throw std::bad_alloc{};
 }
 
 void operator delete(void* value) noexcept {
-    if (value && value == candidate_row)
-    {
+    if (value && value == candidate_row) {
         candidate_row = nullptr;
         ++candidate_releases;
     }
@@ -79,23 +74,20 @@ void operator delete(void* value, std::size_t) noexcept {
 // Keep the production ARK_NEW hook unchanged. Successful allocations retain
 // ordinary new/delete pairing; only the armed nothrow allocation returns null.
 void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
-    if (fail_next_nothrow)
-    {
+    if (fail_next_nothrow) {
         fail_next_nothrow = false;
         ++failed_allocations;
         return nullptr;
     }
-    try
-    {
+    try {
         auto* value = ::operator new(size);
-        if (observed_table)
-        {
+        if (observed_table) {
             candidate_row = value;
         }
         return value;
+    } catch (...) {
+        return nullptr;
     }
-    catch (...)
-    { return nullptr; }
 }
 
 void operator delete(void* value, const std::nothrow_t&) noexcept {
@@ -113,8 +105,7 @@ std::shared_ptr<ark::table_meta> table_metadata() {
     return metadata;
 }
 
-class table_fixture
-{
+class table_fixture {
 public:
     table_fixture()
         : table(metadata, [this](ark::mask_type, ark::node*, const ark::table_event_data& event, const ark::data&,
@@ -148,8 +139,7 @@ TEST_CASE("Kernel table row insertion preserves automatic and explicit indices a
     CHECK(fixture.table.get_row_count() == 4);
     REQUIRE(fixture.events.size() == 4);
     const unsigned indices[]{1, 2, 7, 3};
-    for (unsigned i = 0; i < 4; ++i)
-    {
+    for (unsigned i = 0; i < 4; ++i) {
         CHECK(fixture.events[i].row == indices[i]);
         CHECK(fixture.events[i].op_type == static_cast<std::size_t>(ark::table_op_type::table_add));
     }
@@ -158,8 +148,7 @@ TEST_CASE("Kernel table row insertion preserves automatic and explicit indices a
 TEST_CASE("Kernel table callback exceptions preserve already published rows") {
     ark::table_impl table(table_metadata(),
         [](ark::mask_type, ark::node*, const ark::table_event_data& event, const ark::data&, const ark::data&) {
-            if (event.op_type == static_cast<std::size_t>(ark::table_op_type::table_add))
-            {
+            if (event.op_type == static_cast<std::size_t>(ark::table_op_type::table_add)) {
                 throw std::runtime_error("after publication");
             }
             return 0;
@@ -248,10 +237,11 @@ TEST_CASE("Kernel table insertion exceptions release only the unpublished row an
     const auto initial_releases = candidate_releases;
     bool threw = false;
     observe_allocations(fixture.table, insertion_site);
-    try
-    { static_cast<void>(fixture.table.add_row(requested)); }
-    catch (const std::bad_alloc&)
-    { threw = true; }
+    try {
+        static_cast<void>(fixture.table.add_row(requested));
+    } catch (const std::bad_alloc&) {
+        threw = true;
+    }
     stop_observing_allocations();
     CHECK(threw);
     CHECK(ark::kernel_nested_snapshot_test_access::row_counter(fixture.table) == initial_incarnation);
@@ -266,8 +256,7 @@ TEST_CASE("Kernel table insertion exceptions release only the unpublished row an
     CHECK(candidate_row == nullptr);
     // Clean up a leaked candidate when checking an unfixed implementation.
     // An already published row remains owned by the table.
-    if (candidate_row && fixture.table.find_row(expected) == nullptr)
-    {
+    if (candidate_row && fixture.table.find_row(expected) == nullptr) {
         delete static_cast<ark::row_impl*>(candidate_row);
     }
 

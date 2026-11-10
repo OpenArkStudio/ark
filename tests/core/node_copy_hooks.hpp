@@ -6,9 +6,7 @@
 
 namespace node_copy_hooks {
 
-struct allocation_tag
-{
-};
+struct allocation_tag {};
 
 inline bool return_null{};
 inline std::size_t allocations{};
@@ -16,8 +14,7 @@ inline std::size_t releases{};
 
 template<typename T>
 void release(T*& pointer) noexcept {
-    if (pointer)
-    {
+    if (pointer) {
         ++releases;
         delete pointer;
         pointer = nullptr;
@@ -27,14 +24,12 @@ void release(T*& pointer) noexcept {
 } // namespace node_copy_hooks
 
 inline void* operator new(std::size_t size, node_copy_hooks::allocation_tag) noexcept {
-    if (node_copy_hooks::return_null)
-    {
+    if (node_copy_hooks::return_null) {
         node_copy_hooks::return_null = false;
         return nullptr;
     }
     auto* pointer = ::operator new(size, std::nothrow);
-    if (pointer)
-    {
+    if (pointer) {
         ++node_copy_hooks::allocations;
     }
     return pointer;

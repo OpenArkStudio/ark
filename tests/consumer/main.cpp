@@ -22,8 +22,7 @@ static_assert(sizeof(ark::guid_t) == 8);
 
 namespace {
 
-class sample_module final : public ark::module
-{
+class sample_module final : public ark::module {
 public:
     bool init() override {
         initialized_ = true;
@@ -43,54 +42,44 @@ private:
 bool check_packaged_dependencies();
 
 int main() {
-    if (!check_packaged_dependencies())
-    {
+    if (!check_packaged_dependencies()) {
         return 9;
     }
     sample_module service;
-    if (!service.init() || !service.initialized() || !service.update() || !service.shut())
-    {
+    if (!service.init() || !service.initialized() || !service.update() || !service.shut()) {
         return 1;
     }
-    if (ark::plugin_manager::instance()->get_app_name() != "ark")
-    {
+    if (ark::plugin_manager::instance()->get_app_name() != "ark") {
         return 2;
     }
     // This also detects accidental recursion between conversion helpers and types.
     if (!::lexical_cast<bool>(std::string("true")) || ::lexical_cast<bool>("false") ||
-        ::lexical_cast<int>(std::string("42")) != 42)
-    {
+        ::lexical_cast<int>(std::string("42")) != 42) {
         return 3;
     }
-    try
-    {
+    try {
         (void)::lexical_cast<bool>("nope");
         return 4;
+    } catch (const std::invalid_argument&) {
     }
-    catch (const std::invalid_argument&)
-    {}
     ark::small_string<char, 8> text("abc");
     text.append("defghijkl");
-    if (std::string(text.c_str()) != "abcdefghijkl" || text.find("def") != 3)
-    {
+    if (std::string(text.c_str()) != "abcdefghijkl" || text.find("def") != 3) {
         return 5;
     }
     auto copy = text;
     text.clear();
-    if (!text.empty() || std::string(copy.c_str()) != "abcdefghijkl")
-    {
+    if (!text.empty() || std::string(copy.c_str()) != "abcdefghijkl") {
         return 6;
     }
     ark::data_node_name node_name("a name longer than the inline buffer");
-    if (std::string(node_name.c_str()) != "a name longer than the inline buffer")
-    {
+    if (std::string(node_name.c_str()) != "a name longer than the inline buffer") {
         return 7;
     }
 #ifdef ARK_USE_GUID_32
     ark::uid_generator_thread_safe ids;
     const auto id = ids.get_uid();
-    if (ids.parse_uid(id) != "ID=" + std::to_string(id))
-    {
+    if (ids.parse_uid(id) != "ID=" + std::to_string(id)) {
         return 8;
     }
 #endif

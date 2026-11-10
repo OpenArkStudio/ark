@@ -17,8 +17,7 @@ int checks{};
 
 void check(bool condition, const char* message) {
     ++checks;
-    if (!condition)
-    {
+    if (!condition) {
         throw std::runtime_error(message);
     }
 }
@@ -54,15 +53,12 @@ void concurrent_requests() {
     const auto owner = std::this_thread::get_id();
     std::atomic<bool> start{false};
     std::vector<std::thread> producers;
-    for (int i = 0; i < 4; ++i)
-    {
+    for (int i = 0; i < 4; ++i) {
         producers.emplace_back([&start, i] {
-            while (!start.load(std::memory_order_acquire))
-            {
+            while (!start.load(std::memory_order_acquire)) {
                 std::this_thread::yield();
             }
-            for (int request = 0; request < 256; ++request)
-            {
+            for (int request = 0; request < 256; ++request) {
                 ark::app_detail::request_stop(i % 2 == 0 ? SIGINT : ark::app_detail::command_stop_reason);
             }
         });
@@ -72,19 +68,16 @@ void concurrent_requests() {
     int observed_reason = 0;
     std::thread::id observer;
     // Match main's single observation followed by leaving the update loop.
-    for (;;)
-    {
+    for (;;) {
         const auto reason = ark::app_detail::requested_stop_reason();
-        if (reason != 0)
-        {
+        if (reason != 0) {
             observer = std::this_thread::get_id();
             observed_reason = reason;
             ++owner_stop_calls;
             break;
         }
     }
-    for (auto& producer : producers)
-    {
+    for (auto& producer : producers) {
         producer.join();
     }
     check(observer == owner, "stop work left the owner thread");
@@ -99,8 +92,7 @@ void worker_signal() {
     std::atomic<int> raise_result{-1};
     std::thread producer([&raise_result] { raise_result.store(std::raise(SIGINT), std::memory_order_relaxed); });
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (ark::app_detail::requested_stop_reason() == 0 && std::chrono::steady_clock::now() < deadline)
-    {
+    while (ark::app_detail::requested_stop_reason() == 0 && std::chrono::steady_clock::now() < deadline) {
         std::this_thread::yield();
     }
     producer.join();
@@ -112,8 +104,7 @@ void command_request() {
     check(ark::app_detail::requested_stop_reason() == 0, "fresh process already has a stop request");
     std::thread producer([] { ark::app_detail::request_stop(ark::app_detail::command_stop_reason); });
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (ark::app_detail::requested_stop_reason() == 0 && std::chrono::steady_clock::now() < deadline)
-    {
+    while (ark::app_detail::requested_stop_reason() == 0 && std::chrono::steady_clock::now() < deadline) {
         std::this_thread::yield();
     }
     producer.join();
@@ -127,39 +118,25 @@ void command_request() {
 } // namespace
 
 int main(int argc, char** argv) {
-    try
-    {
+    try {
         check(argc == 2, "exactly one process mode is required");
         const std::string_view mode = argv[1];
-        if (mode == "signal-int")
-        {
+        if (mode == "signal-int") {
             signal_before_logger(SIGINT);
-        }
-        else if (mode == "signal-term")
-        {
+        } else if (mode == "signal-term") {
             signal_before_logger(SIGTERM);
-        }
-        else if (mode == "concurrent")
-        {
+        } else if (mode == "concurrent") {
             concurrent_requests();
-        }
-        else if (mode == "worker-signal")
-        {
+        } else if (mode == "worker-signal") {
             worker_signal();
-        }
-        else if (mode == "command")
-        {
+        } else if (mode == "command") {
             command_request();
-        }
-        else
-        {
+        } else {
             throw std::runtime_error("unknown process mode");
         }
         std::cout << mode << ": " << checks << " checks passed\n";
         return 0;
-    }
-    catch (const std::exception& failure)
-    {
+    } catch (const std::exception& failure) {
         std::cerr << "Application stop-request check failed: " << failure.what() << '\n';
         return 1;
     }

@@ -33,14 +33,11 @@ const char* protocol{};
 long budget{};
 
 void before_allocation() {
-    if (armed)
-    {
-        if (remaining == 0)
-        {
+    if (armed) {
+        if (remaining == 0) {
             throw std::bad_alloc();
         }
-        if (remaining > 0)
-        {
+        if (remaining > 0) {
             --remaining;
         }
         ++allocations;
@@ -51,8 +48,7 @@ void before_allocation() {
 
 void* operator new(std::size_t size) {
     ark_database_allocation_probe::before_allocation();
-    if (void* pointer = std::malloc(size ? size : 1))
-    {
+    if (void* pointer = std::malloc(size ? size : 1)) {
         return pointer;
     }
     throw std::bad_alloc();
@@ -84,13 +80,11 @@ void* operator new(std::size_t size, std::align_val_t alignment) {
 #if defined(_WIN32)
     pointer = _aligned_malloc(size ? size : 1, static_cast<std::size_t>(alignment));
 #else
-    if (posix_memalign(&pointer, static_cast<std::size_t>(alignment), size ? size : 1) != 0)
-    {
+    if (posix_memalign(&pointer, static_cast<std::size_t>(alignment), size ? size : 1) != 0) {
         pointer = nullptr;
     }
 #endif
-    if (!pointer)
-    {
+    if (!pointer) {
         throw std::bad_alloc();
     }
     return pointer;
@@ -122,10 +116,11 @@ void operator delete[](void* pointer, std::size_t, std::align_val_t alignment) n
 
 // Keep nothrow replacements in the same allocation family under sanitizers.
 void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
-    try
-    { return ::operator new(size); }
-    catch (...)
-    { return nullptr; }
+    try {
+        return ::operator new(size);
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
@@ -141,10 +136,11 @@ void operator delete[](void* pointer, const std::nothrow_t&) noexcept {
 }
 
 void* operator new(std::size_t size, std::align_val_t alignment, const std::nothrow_t&) noexcept {
-    try
-    { return ::operator new(size, alignment); }
-    catch (...)
-    { return nullptr; }
+    try {
+        return ::operator new(size, alignment);
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void* operator new[](std::size_t size, std::align_val_t alignment, const std::nothrow_t&) noexcept {

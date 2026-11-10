@@ -28,8 +28,7 @@
 
 namespace ark {
 
-class event_manager
-{
+class event_manager {
 public:
     virtual void update() = 0;
 

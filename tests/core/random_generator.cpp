@@ -18,8 +18,7 @@ TEST_CASE("Random generator retains its seed sequence and resets its count") {
     generator.set_seed(1);
 
     const std::array<std::uint32_t, 6> expected{476707713, 1186278907, 505671508, 2137716191, 936145377, 1215825599};
-    for (const auto value : expected)
-    {
+    for (const auto value : expected) {
         CHECK(generator.random() == value);
     }
     CHECK(generator.get_seed() == 3535774167u);
@@ -38,8 +37,7 @@ TEST_CASE("Signed random ranges retain legacy in-range values and unsigned overl
 
     const std::array<int, 6> expected_signed{13, 7, 8, 91, 77, 99};
     const std::array<std::uint32_t, 6> expected_unsigned{23, 17, 18, 101, 87, 109};
-    for (std::size_t index = 0; index < expected_signed.size(); ++index)
-    {
+    for (std::size_t index = 0; index < expected_signed.size(); ++index) {
         CHECK(signed_values.random(-100, 100) == expected_signed[index]);
         CHECK(unsigned_values.random(10u, 110u) == expected_unsigned[index]);
     }
@@ -55,8 +53,7 @@ TEST_CASE("Signed random ranges decode full-width spans without overflow") {
     ark::random_generator generator;
     generator.set_seed(1);
     const std::array<int, 6> expected{-1670775935, -961204741, -1641812140, -9767457, -1211338271, -931658049};
-    for (const auto value : expected)
-    {
+    for (const auto value : expected) {
         CHECK(generator.random(std::numeric_limits<int>::min(), std::numeric_limits<int>::max()) == value);
     }
     CHECK(generator.get_seed() == 3535774167u);
@@ -69,28 +66,22 @@ TEST_CASE("Signed random ranges preserve half-open reversed and equal bounds") {
     const std::array<std::array<int, 2>, 12> ranges{
         {{lowest, highest}, {lowest, 0}, {-1, highest}, {lowest, 1}, {-100, 100}, {-100, -1}, {0, highest},
             {lowest, lowest + 1}, {highest - 1, highest}, {lowest, lowest}, {highest, highest}, {0, 0}}};
-    for (const auto& bounds : ranges)
-    {
+    for (const auto& bounds : ranges) {
         CAPTURE(bounds[0]);
         CAPTURE(bounds[1]);
-        for (const std::uint32_t seed : {0u, 1u, 123456789u, std::numeric_limits<std::uint32_t>::max()})
-        {
+        for (const std::uint32_t seed : {0u, 1u, 123456789u, std::numeric_limits<std::uint32_t>::max()}) {
             ark::random_generator forward;
             ark::random_generator reversed;
             forward.set_seed(seed);
             reversed.set_seed(seed);
-            for (int index = 0; index < 64; ++index)
-            {
+            for (int index = 0; index < 64; ++index) {
                 const int value = forward.random(bounds[0], bounds[1]);
                 CHECK(value == reversed.random(bounds[1], bounds[0]));
-                if (bounds[0] == bounds[1])
-                {
+                if (bounds[0] == bounds[1]) {
                     CHECK(value == bounds[0]);
                     CHECK(forward.get_seed() == seed);
                     CHECK(forward.get_random_count() == 0);
-                }
-                else
-                {
+                } else {
                     CHECK(value >= bounds[0]);
                     CHECK(value < bounds[1]);
                     CHECK(forward.get_random_count() == index + 1);
@@ -107,8 +98,7 @@ namespace {
 template<typename generator_type, std::size_t count>
 void check_xoshiro_sequence(
     generator_type& generator, const std::array<typename generator_type::result_type, count>& expected) {
-    for (const auto value : expected)
-    {
+    for (const auto value : expected) {
         CHECK(generator.random() == value);
     }
 }

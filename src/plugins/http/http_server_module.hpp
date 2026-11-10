@@ -31,8 +31,7 @@
 
 namespace ark {
 
-class http_server_module : public module
-{
+class http_server_module : public module {
 public:
     virtual arknet::http_router& get_router() = 0;
     virtual bool start_server() = 0;

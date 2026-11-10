@@ -35,8 +35,7 @@ inline physx::PxI32 open_file(FILE** file, const char* name, const char* mode) {
     char buf[max_length + 1];
 
     physx::PxU32 i;
-    for (i = 0; i < max_length && name[i]; i++)
-    {
+    for (i = 0; i < max_length && name[i]; i++) {
         buf[i] = name[i] == '/' ? '\\' : name[i];
     }
     buf[i] = 0;
@@ -44,8 +43,7 @@ inline physx::PxI32 open_file(FILE** file, const char* name, const char* mode) {
     return i == max_length ? -1 : ::fopen_s(file, buf, mode);
 #elif defined(ARK_PLATFORM_LINUX) || defined(ARK_PLATFORM_DARWIN)
     FILE* fp = ::fopen(name, mode);
-    if (fp)
-    {
+    if (fp) {
         *file = fp;
         return 0;
     }
@@ -57,8 +55,7 @@ inline physx::PxI32 open_file(FILE** file, const char* name, const char* mode) {
 
 } // namespace physic
 
-struct physic_config
-{
+struct physic_config {
     bool simulate{false};
     physx::PxU32 dispatcher_threads{0};
     physx::PxReal step{0.0333F};
@@ -67,14 +64,12 @@ struct physic_config
     uint32_t pvd_timeout{0};
 };
 
-struct physic_mesh_file
-{
+struct physic_mesh_file {
     std::string path{""};
     std::string cooked_path{""};
 };
 
-class collider
-{
+class collider {
 public:
     virtual ~collider() = default;
 
@@ -106,8 +101,7 @@ public:
     bool trigger{false};
 };
 
-class box_collider : public collider
-{
+class box_collider : public collider {
 public:
     bool is_box_collider() const override {
         return true;
@@ -119,8 +113,7 @@ public:
     physx::PxVec3 size{zero_vec3};
 };
 
-class capsule_collider : public collider
-{
+class capsule_collider : public collider {
 public:
     bool is_capsule_collider() const override {
         return true;
@@ -133,8 +126,7 @@ public:
     physx::PxReal height{zero_real};
 };
 
-class sphere_collider : public collider
-{
+class sphere_collider : public collider {
 public:
     bool is_sphere_collider() const override {
         return true;
@@ -146,8 +138,7 @@ public:
     physx::PxReal radius{zero_real};
 };
 
-class mesh_collider : public collider
-{
+class mesh_collider : public collider {
 public:
     ~mesh_collider() {
         ARK_DELETE_ARRAY(physx::PxVec3, vertices);
@@ -169,14 +160,11 @@ public:
     physic_mesh_file mesh_file;
 };
 
-class physic_scene
-{
+class physic_scene {
 public:
     ~physic_scene() {
-        for (auto iter : colliders)
-        {
-            if (iter)
-            {
+        for (auto iter : colliders) {
+            if (iter) {
                 ARK_DELETE(iter);
             }
         }

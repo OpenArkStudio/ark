@@ -27,8 +27,7 @@
 
 namespace ark {
 
-class game_net_module : public module
-{
+class game_net_module : public module {
 public:
     //class GateBaseInfo
     //{

@@ -81,15 +81,13 @@ constexpr spdlog::source_loc log_source_location(
 
 #define ARK_LOG_OSS(name, content) logger::instance()->log_oss(spdlog::level::info, name, content)
 
-enum class k_log_sink_type : uint8_t
-{
+enum class k_log_sink_type : uint8_t {
     date_and_hour_sink = 0, // default, rotate by hour with specific date path
     size_step_sink,         // rotate by file size, unused for now
     // others
 };
 
-class log_conf_data final
-{
+class log_conf_data final {
 public:
     std::string output_path{"./binlog"};
     k_log_sink_type sink_type{k_log_sink_type::date_and_hour_sink};
@@ -105,8 +103,7 @@ public:
     std::string pattern{};
 };
 
-class log_conf final
-{
+class log_conf final {
     shared_object_hashmap<std::string, log_conf_data> conf_datas_;
 
 public:
@@ -120,8 +117,7 @@ public:
     }
 };
 
-class spdlogger final
-{
+class spdlogger final {
     std::shared_ptr<log_conf_data> log_conf_{nullptr};
     std::string log_name_{};
     bool registered_{false};
@@ -135,8 +131,7 @@ public:
     }
 
     ~spdlogger() {
-        if (registered_)
-        {
+        if (registered_) {
             spdlog::drop(log_name_);
         }
     }
@@ -148,25 +143,20 @@ public:
         log_name_ = identity.empty() ? file_path : identity + ":" + file_path;
         std::vector<spdlog::sink_ptr> sinks_vec;
 
-        if (log_conf_->file)
-        {
-            switch (log_conf_->sink_type)
-            {
-            case k_log_sink_type::date_and_hour_sink:
-            {
+        if (log_conf_->file) {
+            switch (log_conf_->sink_type) {
+            case k_log_sink_type::date_and_hour_sink: {
                 auto date_and_hour_sink =
                     std::make_shared<spdlog::sinks::date_and_hour_file_sink_mt>(detail::logging_filename(native_path));
                 sinks_vec.emplace_back(date_and_hour_sink);
-            }
-            break;
+            } break;
             default:
                 ARK_ASSERT_BREAK(0);
                 break;
             }
         }
 
-        if (log_conf_->consol)
-        {
+        if (log_conf_->consol) {
 #ifdef ARK_PLATFORM_WIN
             auto color_sink = std::make_shared<spdlog::sinks::wincolor_stdout_sink_mt>();
 #else
@@ -175,14 +165,11 @@ public:
             sinks_vec.push_back(color_sink);
         }
 
-        if (log_conf_->sink_queue_count > 0)
-        {
+        if (log_conf_->sink_queue_count > 0) {
             tp_ = std::make_shared<spdlog::details::thread_pool>(log_conf_->sink_queue_count, 1);
             logger_ =
                 std::make_shared<spdlog::async_logger>(log_name_, std::begin(sinks_vec), std::end(sinks_vec), tp_);
-        }
-        else
-        {
+        } else {
             logger_ = std::make_shared<spdlog::logger>(log_name_, std::begin(sinks_vec), std::end(sinks_vec));
         }
 
@@ -201,8 +188,7 @@ public:
 
 using log_functor = std::function<void(spdlog::level::level_enum, std::string const&)>;
 
-class logger final : public singleton<logger>
-{
+class logger final : public singleton<logger> {
     using logger_t = std::shared_ptr<spdlogger>;
 
     // singleton
@@ -230,8 +216,7 @@ public:
     }
 
     static void init(logger* instance) {
-        if (instance == nullptr)
-        {
+        if (instance == nullptr) {
             singleton<logger>::instance();
             return;
         }
@@ -242,8 +227,7 @@ public:
 
     // Public string paths and filenames are UTF-8 on every platform.
     bool init_logger(const logging_settings& settings, const std::string& log_filename) {
-        if (default_logger_ != nullptr)
-        {
+        if (default_logger_ != nullptr) {
             return false;
         }
         auto config = std::make_unique<log_conf>();
@@ -252,8 +236,7 @@ public:
                 value.pattern.find('\0') != std::string::npos || value.output_path.empty() ||
                 value.output_path.find('\0') != std::string::npos ||
                 (value.level != "trace" && value.level != "debug" && value.level != "info" && value.level != "warn" &&
-                    value.level != "error" && value.level != "critical" && value.level != "off"))
-            {
+                    value.level != "error" && value.level != "critical" && value.level != "off")) {
                 throw std::invalid_argument("invalid logging settings");
             }
             auto result = std::make_shared<log_conf_data>();
@@ -266,15 +249,13 @@ public:
             return result;
         };
         config->set_conf_data("default", convert(settings));
-        for (const auto& [name, value] : settings.loggers)
-        {
+        for (const auto& [name, value] : settings.loggers) {
             config->set_conf_data(name, convert(value));
         }
         auto local = std::make_shared<spdlogger>(config->get_conf_data("default"));
         local->init(log_filename, "default");
         auto oss = local;
-        if (auto data = config->get_conf_data("oss"))
-        {
+        if (auto data = config->get_conf_data("oss")) {
             oss = std::make_shared<spdlogger>(std::move(data));
             oss->init(log_filename, "oss");
         }
@@ -287,15 +268,13 @@ public:
 
     logger_t create_logger(bus_id_t id, std::string const& name, std::string const& filename) {
         auto iter = loggers_.find(id);
-        if (iter != loggers_.end())
-        {
+        if (iter != loggers_.end()) {
             return iter->second;
         }
 
         // find log configuration
         auto log_conf_data = log_conf_->get_conf_data(name);
-        if (log_conf_data == nullptr)
-        {
+        if (log_conf_data == nullptr) {
             return nullptr;
         }
 
@@ -308,8 +287,7 @@ public:
 
     void remove_logger(bus_id_t id) {
         auto iter = loggers_.find(id);
-        if (iter == loggers_.end())
-        {
+        if (iter == loggers_.end()) {
             return;
         }
 
@@ -317,12 +295,9 @@ public:
     }
 
     void set_log_func(log_functor&& func) {
-        if (func != nullptr)
-        {
+        if (func != nullptr) {
             log_func_ = func;
-        }
-        else
-        {
+        } else {
             auto func = std::bind_front(&logger::log, this);
             log_func_ = func;
         }
@@ -352,8 +327,7 @@ public:
         void* default_data[default_size] = {0};
         auto stack_num = backtrace(default_data, default_size);
         auto stack_trace = backtrace_symbols(default_data, stack_num);
-        for (auto i = 0; i < stack_num; i++)
-        {
+        for (auto i = 0; i < stack_num; i++) {
             log(spdlog::level::err, stack_trace[i]);
         }
         free(stack_trace);

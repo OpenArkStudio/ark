@@ -30,11 +30,9 @@
 
 namespace ark {
 
-class net_client_service_impl final : public net_client_service
-{
+class net_client_service_impl final : public net_client_service {
 public:
-    enum constant_definitions
-    {
+    enum constant_definitions {
         default_weight = 255,
     };
 

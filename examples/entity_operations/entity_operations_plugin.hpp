@@ -29,8 +29,7 @@ namespace ark {
 
 std::unique_ptr<entity_operations_module> make_entity_operations_module();
 
-class entity_operations_plugin final : public plugin_base<entity_operations_plugin>
-{
+class entity_operations_plugin final : public plugin_base<entity_operations_plugin> {
 public:
     void install() override;
     void uninstall() override;

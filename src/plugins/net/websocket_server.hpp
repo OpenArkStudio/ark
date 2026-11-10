@@ -35,8 +35,7 @@ namespace ark {
 class websocket_server final
     : public net
     , public noncopyable
-    , public std::enable_shared_from_this<websocket_server>
-{
+    , public std::enable_shared_from_this<websocket_server> {
 public:
     template<typename base_type>
     websocket_server(base_type* base_type_ptr, void (base_type::*handle_receive)(const net_msg*, conv_id_t),

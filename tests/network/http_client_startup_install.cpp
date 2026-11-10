@@ -5,15 +5,13 @@
 namespace {
 ark::http_client_module* installed_client{};
 
-struct detach_guard
-{
+struct detach_guard {
     ~detach_guard() {
         std::fputs("forbidden HTTP fixture destruction\n", stderr);
     }
 } retained_dso;
 
-class install_failure_plugin final : public ark::plugin_base<install_failure_plugin>
-{
+class install_failure_plugin final : public ark::plugin_base<install_failure_plugin> {
 public:
     void install() override {
         client_ = ark::detail::make_http_client_module(get_plugin_manager());

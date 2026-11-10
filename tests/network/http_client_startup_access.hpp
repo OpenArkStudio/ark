@@ -5,8 +5,7 @@
 #include "../../src/plugins/net/http_client_module_impl.cpp"
 
 namespace ark {
-struct http_client_startup_test_access
-{
+struct http_client_startup_test_access {
     static arknet::io_pool& runtime(http_client_module& module) {
         return static_cast<http_client_module_impl&>(module).state_->runtime;
     }

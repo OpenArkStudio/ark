@@ -16,20 +16,15 @@ unsigned skip_arrays_before_failure{};
 
 // Fail one ordinary array allocation deterministically, without exhausting memory.
 void* operator new[](std::size_t size) {
-    if (fail_next_array)
-    {
-        if (skip_arrays_before_failure > 0)
-        {
+    if (fail_next_array) {
+        if (skip_arrays_before_failure > 0) {
             --skip_arrays_before_failure;
-        }
-        else
-        {
+        } else {
             fail_next_array = false;
             throw std::bad_alloc{};
         }
     }
-    if (auto* result = std::malloc(size ? size : 1))
-    {
+    if (auto* result = std::malloc(size ? size : 1)) {
         return result;
     }
     throw std::bad_alloc{};
@@ -46,10 +41,11 @@ void operator delete[](void* value, std::size_t) noexcept {
 TEST_CASE("Buffer default construction allocation propagates bad_alloc") {
     fail_next_array = true;
     bool caught{};
-    try
-    { ark::buffer candidate(8); }
-    catch (const std::bad_alloc&)
-    { caught = true; }
+    try {
+        ark::buffer candidate(8);
+    } catch (const std::bad_alloc&) {
+        caught = true;
+    }
     CHECK_FALSE(fail_next_array);
     CHECK(caught);
 }
@@ -61,10 +57,11 @@ TEST_CASE("Buffer default growth allocation propagates bad_alloc and retains unr
     const auto* unread = value.get_data();
     fail_next_array = true;
     bool caught{};
-    try
-    { value.write("defg", 4); }
-    catch (const std::bad_alloc&)
-    { caught = true; }
+    try {
+        value.write("defg", 4);
+    } catch (const std::bad_alloc&) {
+        caught = true;
+    }
     CHECK_FALSE(fail_next_array);
     CHECK(caught);
     CHECK(value.get_capacity() == 4);
@@ -76,18 +73,18 @@ TEST_CASE("Buffer default growth allocation propagates bad_alloc and retains unr
 }
 
 TEST_CASE("Buffer self append retains state when snapshot or subsequent growth allocation throws") {
-    for (unsigned skipped = 0; skipped < 2; ++skipped)
-    {
+    for (unsigned skipped = 0; skipped < 2; ++skipped) {
         ark::buffer value(4);
         REQUIRE(value.write("abcd", 4));
         const auto* unread = value.get_data();
         skip_arrays_before_failure = skipped;
         fail_next_array = true;
         bool caught{};
-        try
-        { value.write(unread, 4); }
-        catch (const std::bad_alloc&)
-        { caught = true; }
+        try {
+            value.write(unread, 4);
+        } catch (const std::bad_alloc&) {
+            caught = true;
+        }
         CHECK_FALSE(fail_next_array);
         CHECK(caught);
         CHECK(value.get_data() == unread);

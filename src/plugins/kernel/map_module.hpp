@@ -29,8 +29,7 @@
 namespace ark {
 
 // Map instance
-class map_instance
-{
+class map_instance {
 public:
     explicit map_instance(int inst_id)
         : inst_id(inst_id) {
@@ -42,8 +41,7 @@ public:
 };
 
 // All instance in this map
-class map_info
-{
+class map_info {
 public:
     map_info() = default;
 
@@ -84,18 +82,12 @@ public:
 
     bool add_entity_to_instance(const int inst_id, const guid_t& entity_id, bool is_player) {
         std::shared_ptr<map_instance> info_ptr = map_instances_.find_value(inst_id);
-        if (info_ptr == nullptr)
-        {
+        if (info_ptr == nullptr) {
             return false;
-        }
-        else
-        {
-            if (is_player)
-            {
+        } else {
+            if (is_player) {
                 return info_ptr->player_entities.insert(entity_id, nullptr).second; // TODO:Map.second mean nothing
-            }
-            else
-            {
+            } else {
                 return info_ptr->other_entities.insert(entity_id, nullptr).second; // TODO:Map.second mean nothing
             }
         }
@@ -103,18 +95,12 @@ public:
 
     bool remove_entity_from_instance(const int inst_id, const guid_t& entity_id, bool is_player) {
         std::shared_ptr<map_instance> info_ptr = map_instances_.find_value(inst_id);
-        if (nullptr == info_ptr)
-        {
+        if (nullptr == info_ptr) {
             return false;
-        }
-        else
-        {
-            if (is_player)
-            {
+        } else {
+            if (is_player) {
                 return info_ptr->player_entities.erase(entity_id);
-            }
-            else
-            {
+            } else {
                 return info_ptr->other_entities.erase(entity_id);
             }
         }
@@ -127,8 +113,7 @@ private:
     shared_object_map<int, map_instance> map_instances_;
 };
 
-class map_module : public module
-{
+class map_module : public module {
 public:
     virtual std::shared_ptr<map_info> get_map_info(const int map_id) = 0;
 

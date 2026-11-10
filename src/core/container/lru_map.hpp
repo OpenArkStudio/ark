@@ -25,8 +25,7 @@
 namespace ark {
 
 template<typename key_type, typename mapped_type>
-class lru_map
-{
+class lru_map {
 public:
     using iterator = typename std::unordered_map<key_type, mapped_type>::iterator;
 
@@ -38,15 +37,13 @@ public:
         : lru_map(other.capacity_) {
         // Prepare all container bookkeeping before copying entries. Rebuild each
         // link in its final list instead of temporarily borrowing source links.
-        for (auto it = other.kl_.rbegin(); it != other.kl_.rend(); ++it)
-        {
+        for (auto it = other.kl_.rbegin(); it != other.kl_.rend(); ++it) {
             insert(*it, other.kv_.at(*it));
         }
     }
 
     lru_map& operator=(const lru_map& other) {
-        if (this != &other)
-        {
+        if (this != &other) {
             lru_map candidate(other);
             swap(candidate);
         }
@@ -73,8 +70,7 @@ public:
 
     iterator find(const key_type& key) {
         iterator it = kv_.find(key);
-        if (it != kv_.end() && kl_.front() != key)
-        {
+        if (it != kv_.end() && kl_.front() != key) {
             auto ki = ki_.find(key);
             kl_.splice(kl_.begin(), kl_, ki->second); // move key to the front
             ki->second = kl_.begin();
@@ -85,21 +81,16 @@ public:
     // The key is not inserted if it already exists.
     void insert(const key_type& key, const mapped_type& value) {
         auto r = kv_.insert(std::make_pair(key, value));
-        if (!r.second)
-        {
+        if (!r.second) {
             return;
         }
 
-        try
-        {
+        try {
             kl_.push_front(key);
-            try
-            {
+            try {
                 const auto index = ki_.emplace(key, kl_.begin()).first;
-                try
-                {
-                    if (kv_.size() > capacity_)
-                    {
+                try {
+                    if (kv_.size() > capacity_) {
                         // Resolve both lookups before removing any existing entry.
                         const auto oldest_value = kv_.find(kl_.back());
                         const auto oldest_index = ki_.find(kl_.back());
@@ -107,29 +98,22 @@ public:
                         kv_.erase(oldest_value);
                         ki_.erase(oldest_index);
                     }
-                }
-                catch (...)
-                {
+                } catch (...) {
                     ki_.erase(index);
                     throw;
                 }
-            }
-            catch (...)
-            {
+            } catch (...) {
                 kl_.pop_front();
                 throw;
             }
-        }
-        catch (...)
-        {
+        } catch (...) {
             kv_.erase(r.first);
             throw;
         }
     }
 
     void erase(iterator it) {
-        if (it != kv_.end())
-        {
+        if (it != kv_.end()) {
             auto ki = ki_.find(it->first);
             kl_.erase(ki->second);
             ki_.erase(ki);

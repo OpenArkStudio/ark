@@ -21,8 +21,7 @@ namespace {
 
 using namespace std::chrono_literals;
 
-struct receiver
-{
+struct receiver {
     void on_message(const ark::net_msg*, ark::conv_id_t) {
     }
 
@@ -33,8 +32,7 @@ struct receiver
     }
 };
 
-class releasing_header final : public ark::s_msg_header
-{
+class releasing_header final : public ark::s_msg_header {
 public:
     explicit releasing_header(std::function<void()> release)
         : release_(std::move(release)) {
@@ -61,13 +59,10 @@ void release_server_from_receive() {
     });
     asio::io_context context;
     const auto port = [&] {
-        if constexpr (std::is_same_v<client_type, arknet::rudp_client>)
-        {
+        if constexpr (std::is_same_v<client_type, arknet::rudp_client>) {
             asio::ip::udp::socket listener(context, {asio::ip::udp::v4(), 0});
             return listener.local_endpoint().port();
-        }
-        else
-        {
+        } else {
             asio::ip::tcp::acceptor listener(context, {asio::ip::tcp::v4(), 0});
             return listener.local_endpoint().port();
         }
@@ -89,8 +84,8 @@ void release_server_from_receive() {
     frame += "test";
     REQUIRE(client.async_send(frame));
     const auto deadline = std::chrono::steady_clock::now() + 5s;
-    while ((!released.load() || !weak.expired() || client.is_started()) && std::chrono::steady_clock::now() < deadline)
-    {
+    while (
+        (!released.load() || !weak.expired() || client.is_started()) && std::chrono::steady_clock::now() < deadline) {
         std::this_thread::sleep_for(1ms);
     }
     CHECK(released.load());
@@ -103,12 +98,9 @@ template<class client_type, class server_type>
 void release_client_from_receive() {
     receiver receiver;
     std::shared_ptr<client_type> client;
-    if constexpr (std::is_same_v<client_type, ark::websocket_client>)
-    {
+    if constexpr (std::is_same_v<client_type, ark::websocket_client>) {
         client = std::make_shared<client_type>(&receiver, &receiver::on_websocket_message, &receiver::on_event);
-    }
-    else
-    {
+    } else {
         client = std::make_shared<client_type>(&receiver, &receiver::on_message, &receiver::on_event);
     }
     std::atomic<bool> released{};
@@ -130,16 +122,14 @@ void release_client_from_receive() {
     REQUIRE(client->start_client(header, 11, "127.0.0.1", server.listen_port()));
     const std::weak_ptr weak = client;
     const auto connected = std::chrono::steady_clock::now() + 5s;
-    while (server.get_session_count() == 0 && std::chrono::steady_clock::now() < connected)
-    {
+    while (server.get_session_count() == 0 && std::chrono::steady_clock::now() < connected) {
         std::this_thread::sleep_for(1ms);
     }
     REQUIRE(server.get_session_count() == 1);
     server.foreach_session([&](auto& session) { session->async_send(frame); });
     const auto deadline = std::chrono::steady_clock::now() + 5s;
     while ((!released.load() || !weak.expired() || server.get_session_count() != 0) &&
-           std::chrono::steady_clock::now() < deadline)
-    {
+           std::chrono::steady_clock::now() < deadline) {
         std::this_thread::sleep_for(1ms);
     }
     CHECK(released.load());

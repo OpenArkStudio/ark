@@ -16,8 +16,7 @@
 
 namespace {
 
-struct preset_expectation
-{
+struct preset_expectation {
     std::string_view filename;
     ark::application_manifest manifest;
 };
@@ -29,8 +28,7 @@ ark::application_manifest expected_manifest(std::string_view library_dir, std::s
     ark::application_manifest result;
     result.plugin_library_dir = library_dir;
     result.plugin_config_dir = config_dir;
-    for (const auto& [name, config] : plugins)
-    {
+    for (const auto& [name, config] : plugins) {
         result.plugins.emplace(std::string(name), std::string(config));
     }
     return result;
@@ -142,14 +140,12 @@ std::filesystem::path native_path(std::string_view path) {
     return std::filesystem::path(std::u8string(path.begin(), path.end()));
 }
 
-class manifest_files
-{
+class manifest_files {
 public:
     manifest_files()
         : directory_(std::filesystem::temp_directory_path() /
                      ("ark-manifest-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()))) {
-        if (!std::filesystem::create_directory(directory_))
-        {
+        if (!std::filesystem::create_directory(directory_)) {
             throw std::runtime_error("could not create temporary manifest directory");
         }
     }
@@ -177,13 +173,10 @@ private:
 };
 
 void check_error(const std::string& path, bool has_position = true) {
-    try
-    {
+    try {
         static_cast<void>(ark::load_application_manifest(path));
         DOCTEST_FAIL("invalid manifest was accepted");
-    }
-    catch (const ark::application_manifest_error& error)
-    {
+    } catch (const ark::application_manifest_error& error) {
         DOCTEST_CHECK(error.path() == path);
         DOCTEST_CHECK(std::string(error.what()).find(path) != std::string::npos);
         DOCTEST_CHECK((error.line() > 0) == has_position);
@@ -205,8 +198,7 @@ void check_manifest(const ark::application_manifest& actual, const ark::applicat
 
 DOCTEST_TEST_CASE("built-in TOML application presets match their explicit plugin schema") {
     const auto root = std::filesystem::path(ARK_TEST_SOURCE_DIR);
-    for (const auto& preset : application_presets)
-    {
+    for (const auto& preset : application_presets) {
         DOCTEST_CAPTURE(preset.filename);
         check_manifest(ark::load_application_manifest(utf8_path(root / "config" / preset.filename)), preset.manifest);
     }
@@ -228,17 +220,14 @@ DOCTEST_TEST_CASE("guest-room TOML declares its complete plugin configuration") 
 DOCTEST_TEST_CASE("every built-in TOML application preset has an explicit schema expectation") {
     const auto root = std::filesystem::path(ARK_TEST_SOURCE_DIR);
     std::set<std::string> expected;
-    for (const auto& preset : application_presets)
-    {
+    for (const auto& preset : application_presets) {
         DOCTEST_CAPTURE(preset.filename);
         DOCTEST_CHECK(expected.emplace(preset.filename).second);
     }
     std::set<std::string> actual;
-    for (const auto& entry : std::filesystem::directory_iterator(root / "config"))
-    {
+    for (const auto& entry : std::filesystem::directory_iterator(root / "config")) {
         const auto name = entry.path().filename().string();
-        if (name.ends_with(".app.toml"))
-        {
+        if (name.ends_with(".app.toml")) {
             DOCTEST_CAPTURE(name);
             DOCTEST_CHECK(expected.contains(name));
             actual.insert(name);
@@ -266,39 +255,32 @@ DOCTEST_TEST_CASE("deployment TOML application payloads match their explicit plu
     bool has_kind = false;
     bool has_metadata = false;
     std::string line;
-    while (std::getline(input, line))
-    {
+    while (std::getline(input, line)) {
         has_data = has_data || line == "data:";
         has_kind = has_kind || line == "kind: ConfigMap";
         has_metadata = has_metadata || line == "metadata:";
-        if (line.starts_with("  ") && !line.starts_with("    "))
-        {
+        if (line.starts_with("  ") && !line.starts_with("    ")) {
             const auto scalar = line.find(": |");
-            if (scalar != std::string::npos)
-            {
+            if (scalar != std::string::npos) {
                 const auto key = line.substr(2, scalar - 2);
                 DOCTEST_CAPTURE(key);
                 DOCTEST_CHECK((key.ends_with(".app.toml") || key.ends_with(".plugin.toml")));
-                if (key.ends_with(".plugin.toml"))
-                {
+                if (key.ends_with(".plugin.toml")) {
                     DOCTEST_CHECK(plugin_keys.emplace(key).second);
                 }
             }
         }
-        if (!line.starts_with("  ") || !line.ends_with(".app.toml: |-"))
-        {
+        if (!line.starts_with("  ") || !line.ends_with(".app.toml: |-")) {
             continue;
         }
         const auto name = line.substr(2, line.size() - 2 - 4);
         DOCTEST_CAPTURE(name);
         DOCTEST_CHECK(application_keys.emplace(name).second);
         std::string payload;
-        while (input.peek() == ' ' || input.peek() == '\n')
-        {
+        while (input.peek() == ' ' || input.peek() == '\n') {
             const auto position = input.tellg();
             std::getline(input, line);
-            if (!line.empty() && !line.starts_with("    "))
-            {
+            if (!line.empty() && !line.starts_with("    ")) {
                 input.seekg(position);
                 break;
             }
@@ -307,12 +289,9 @@ DOCTEST_TEST_CASE("deployment TOML application payloads match their explicit plu
         const auto matches = [&](const auto& preset) { return name == preset.filename; };
         const auto actual = ark::load_application_manifest(files.write(payload, name));
         const auto expected = std::find_if(application_presets.begin(), application_presets.end(), matches);
-        if (expected != application_presets.end())
-        {
+        if (expected != application_presets.end()) {
             check_manifest(actual, expected->manifest);
-        }
-        else
-        {
+        } else {
             const auto external = std::find_if(deployment_only_presets.begin(), deployment_only_presets.end(), matches);
             DOCTEST_REQUIRE(external != deployment_only_presets.end());
             check_manifest(actual, external->manifest);
@@ -370,8 +349,7 @@ config = 'nested/service.toml'
 
 DOCTEST_TEST_CASE("Missing directories and omitted or empty plugin arrays retain empty manifest semantics") {
     manifest_files files;
-    for (const auto input : {"[application]\n", "plugins = []\n[application]\n"})
-    {
+    for (const auto input : {"[application]\n", "plugins = []\n[application]\n"}) {
         const auto manifest = ark::load_application_manifest(files.write(input));
         DOCTEST_CHECK(manifest.plugin_library_dir.empty());
         DOCTEST_CHECK(manifest.plugin_config_dir.empty());
@@ -387,8 +365,7 @@ DOCTEST_TEST_CASE("TOML validates required tables exact field types and plugin n
         "[application]\n[[plugins]]\n", "[application]\n[[plugins]]\nname = ''\n",
         "[application]\n[[plugins]]\nname = 42\n", "[application]\n[[plugins]]\nname = 'Plugin'\nconfig = []\n",
         "[application]\n[[plugins]]\nname = 'Plugin'\nconfig = {}\n"};
-    for (const auto input : invalid)
-    {
+    for (const auto input : invalid) {
         DOCTEST_CAPTURE(input);
         check_error(files.write(input));
     }
@@ -399,8 +376,7 @@ DOCTEST_TEST_CASE("TOML rejects unknown fields at every schema level") {
     const std::array<std::string_view, 4> invalid = {"typo = 1\n[application]\n",
         "[application]\nplugin_lib_dir = 'bin/'\n", "[application]\n[[plugins]]\nname = 'Plugin'\nconf = ''\n",
         "[application]\n[extra]\n"};
-    for (const auto input : invalid)
-    {
+    for (const auto input : invalid) {
         check_error(files.write(input));
     }
 }
@@ -410,8 +386,7 @@ DOCTEST_TEST_CASE("TOML rejects duplicate and empty plugin names before returnin
     const std::array<std::string_view, 3> invalid = {
         "[application]\n[[plugins]]\nname = 'Plugin'\n[[plugins]]\nname = 'Plugin'\n", "[application]\n[[plugins]]\n",
         "[application]\n[[plugins]]\nname = ''\n"};
-    for (const auto input : invalid)
-    {
+    for (const auto input : invalid) {
         check_error(files.write(input));
     }
     auto manifest = ark::load_application_manifest(files.write("[application]\n[[plugins]]\nname = 'Original'\n"));
@@ -428,23 +403,20 @@ DOCTEST_TEST_CASE("TOML syntax errors have source positions without disclosing c
         "[application]\n[logging]\nlevel = 'info'\nlevel = 'SECRET_SENTINEL'\n",
         "[application]\n[logging]\n[logging]\n",
         "[application]\n[logging.loggers.oss]\nlevel = 'info'\n[logging.loggers.oss]\n"};
-    for (std::size_t index = 0; index < invalid.size(); ++index)
-    {
+    for (std::size_t index = 0; index < invalid.size(); ++index) {
         const auto path = files.write(invalid[index], "syntax.toml");
         check_error(path);
-        try
-        { static_cast<void>(ark::load_application_manifest(path)); }
-        catch (const ark::application_manifest_error& error)
-        { DOCTEST_CHECK(std::string(error.what()).find("SECRET_SENTINEL") == std::string::npos); }
+        try {
+            static_cast<void>(ark::load_application_manifest(path));
+        } catch (const ark::application_manifest_error& error) {
+            DOCTEST_CHECK(std::string(error.what()).find("SECRET_SENTINEL") == std::string::npos);
+        }
     }
     const auto path = files.write("[application]\nplugin_library_dir = 7\n");
-    try
-    {
+    try {
         static_cast<void>(ark::load_application_manifest(path));
         DOCTEST_FAIL("numeric directory accepted");
-    }
-    catch (const ark::application_manifest_error& error)
-    {
+    } catch (const ark::application_manifest_error& error) {
         DOCTEST_CHECK(error.line() == 2);
         DOCTEST_CHECK(error.column() > 0);
     }
@@ -454,19 +426,14 @@ DOCTEST_TEST_CASE("application manifests require a TOML suffix and never parse X
     manifest_files files;
     // Merely renaming XML does not convert its contents into TOML.
     check_error(files.write("<xml><plugins/></xml>"));
-    for (const auto name : {"old.app.conf", "config.xml", "config.TOML", "config.toml.extra", "no-extension"})
-    {
-        for (const auto contents : {"<xml><plugins/></xml>", "[application]\n"})
-        {
+    for (const auto name : {"old.app.conf", "config.xml", "config.TOML", "config.toml.extra", "no-extension"}) {
+        for (const auto contents : {"<xml><plugins/></xml>", "[application]\n"}) {
             const auto path = files.write(contents, name);
             check_error(path, false);
-            try
-            {
+            try {
                 static_cast<void>(ark::load_application_manifest(path));
                 DOCTEST_FAIL("non-TOML application manifest accepted");
-            }
-            catch (const ark::application_manifest_error& error)
-            {
+            } catch (const ark::application_manifest_error& error) {
                 DOCTEST_CHECK(std::string(error.what()).find("path must end in .toml") != std::string::npos);
                 DOCTEST_CHECK(
                     std::string(error.what()).find("XML manifests are no longer supported") != std::string::npos);
@@ -483,8 +450,7 @@ DOCTEST_TEST_CASE("Manifest strings and input reject raw or decoded embedded NUL
     const std::array<std::string_view, 4> decoded = {"[application]\nplugin_library_dir = \"x\\u0000y\"\n",
         "[application]\nplugin_config_dir = \"x\\u0000y\"\n", "[application]\n[[plugins]]\nname = \"x\\u0000y\"\n",
         "[application]\n[[plugins]]\nname = 'Plugin'\nconfig = \"x\\u0000y\"\n"};
-    for (std::size_t index = 0; index < decoded.size(); ++index)
-    {
+    for (std::size_t index = 0; index < decoded.size(); ++index) {
         check_error(files.write(decoded[index], "nul.toml"));
     }
     std::string input = "[application]\n";
@@ -511,8 +477,7 @@ DOCTEST_TEST_CASE("TOML supports UTF8 values and native Unicode filenames and re
 DOCTEST_TEST_CASE("raw NUL diagnostics count UTF8 code points and ignore the leading BOM") {
     manifest_files files;
 
-    struct example
-    {
+    struct example {
         std::string_view prefix;
         std::size_t line;
         std::size_t column;
@@ -521,20 +486,16 @@ DOCTEST_TEST_CASE("raw NUL diagnostics count UTF8 code points and ignore the lea
     const std::array<example, 6> examples = {{{"# ascii ", 1, 9}, {"\xef\xbb\xbf# ascii ", 1, 9}, {"# 配置😀 ", 1, 7},
         {"\xef\xbb\xbf# 配置😀 ", 1, 7}, {"[application]\nplugin_config_dir = '配置😀' ", 2, 27},
         {"[application]\r\nplugin_config_dir = '配置😀' ", 2, 27}}};
-    for (const auto& entry : examples)
-    {
+    for (const auto& entry : examples) {
         DOCTEST_CAPTURE(entry.prefix);
         auto contents = std::string(entry.prefix);
         contents += '\0';
         contents += "SECRET_SENTINEL";
         const auto path = files.write(contents);
-        try
-        {
+        try {
             static_cast<void>(ark::load_application_manifest(path));
             DOCTEST_FAIL("raw NUL accepted");
-        }
-        catch (const ark::application_manifest_error& error)
-        {
+        } catch (const ark::application_manifest_error& error) {
             DOCTEST_CHECK(error.path() == path);
             DOCTEST_CHECK(error.line() == entry.line);
             DOCTEST_CHECK(error.column() == entry.column);
@@ -598,15 +559,13 @@ DOCTEST_TEST_CASE("logging rejects bad fields ranges and disabled outputs before
              "[logging]\nqueue_count = 65536\n", "[logging]\nqueue_count = 1.0\n", "[logging]\npattern = ''\n",
              "[logging]\noutput_path = ''\n", "[logging]\noutput_path = \"x\\u0000y\"\n", "[logging]\nunknown = true\n",
              "[logging]\nconsole = false\n", "[logging]\nloggers = []\n", "[logging.loggers]\noss = 1\n",
-             "[logging.loggers.oss]\nloggers = {}\n", "[logging.loggers.\"x\\u0000y\"]\nlevel = 'info'\n"})
-    {
+             "[logging.loggers.oss]\nloggers = {}\n", "[logging.loggers.\"x\\u0000y\"]\nlevel = 'info'\n"}) {
         DOCTEST_CAPTURE(std::string_view(bad));
         const auto path = files.write(std::string(bad) + "[application]\n");
         check_error(path);
-        try
-        { static_cast<void>(ark::load_application_manifest(path)); }
-        catch (const ark::application_manifest_error& error)
-        {
+        try {
+            static_cast<void>(ark::load_application_manifest(path));
+        } catch (const ark::application_manifest_error& error) {
             DOCTEST_CHECK(std::string(error.what()).find("logging") != std::string::npos);
             DOCTEST_CHECK(std::string(error.what()).find("SECRET_SENTINEL") == std::string::npos);
         }

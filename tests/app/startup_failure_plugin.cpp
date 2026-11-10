@@ -13,15 +13,13 @@
 
 namespace {
 
-class startup_failure_module final : public ark::module
-{
+class startup_failure_module final : public ark::module {
 public:
     void start_owned_io() {
         // Registration owns this real listener until DllExitPlugin, just as
         // runtime plugins own modules that can survive a partial startup.
         endpoint_ = std::make_unique<arknet::tcp_server>(1024, 4096, 1);
-        if (!endpoint_->start("127.0.0.1", 0) || !endpoint_->is_started() || endpoint_->get_listen_port() == 0)
-        {
+        if (!endpoint_->start("127.0.0.1", 0) || !endpoint_->is_started() || endpoint_->get_listen_port() == 0) {
             throw std::runtime_error("Startup test endpoint did not start");
         }
         std::cerr << "app-startup-test:owned_io_started port=" << endpoint_->get_listen_port() << '\n';
@@ -56,8 +54,7 @@ public:
 
     bool update() override {
         // Record forbidden entry only once, keeping failure output bounded.
-        if (!updated_)
-        {
+        if (!updated_) {
             updated_ = true;
             record("update");
         }
@@ -75,14 +72,11 @@ public:
 private:
     bool record(std::string_view phase) {
         std::cerr << "app-startup-test:" << phase << '\n';
-        if (phase == failed_phase_)
-        {
-            if (behavior_ == "throw")
-            {
+        if (phase == failed_phase_) {
+            if (behavior_ == "throw") {
                 throw std::runtime_error("test startup exception in " + std::string(phase));
             }
-            if (behavior_ == "unknown")
-            {
+            if (behavior_ == "unknown") {
                 throw 7;
             }
             return false;
@@ -106,22 +100,18 @@ ARK_EXPORT_FUNC void DllEntryPlugin(
     ark::plugin_manager* manager, const std::string& plugin_name, ark::logger* shared_logger) {
     ark::logger::init(shared_logger);
     const auto& mode = manager->get_plugin_conf(plugin_name);
-    if (mode == "utf8:init")
-    {
-        if (manager->get_app_name() != "应用-é-🧪")
-        {
+    if (mode == "utf8:init") {
+        if (manager->get_app_name() != "应用-é-🧪") {
             throw std::runtime_error("Launcher lost UTF-8 application-name arguments");
         }
 #ifdef ARK_PLATFORM_WIN
         // A shared console title can change in another process. Check it only
         // when this child owns its console, avoiding cross-test interference.
         DWORD console_process{};
-        if (GetConsoleProcessList(&console_process, 1) == 1 && console_process == GetCurrentProcessId())
-        {
+        if (GetConsoleProcessList(&console_process, 1) == 1 && console_process == GetCurrentProcessId()) {
             wchar_t title[256]{};
             const auto expected_title = L"应用-é-🧪-1.0.1.1-" + std::to_wstring(manager->get_bus_id());
-            if (GetConsoleTitleW(title, 256) == 0 || std::wstring_view(title) != expected_title)
-            {
+            if (GetConsoleTitleW(title, 256) == 0 || std::wstring_view(title) != expected_title) {
                 throw std::runtime_error("Launcher lost the native Unicode console title");
             }
         }
@@ -133,13 +123,11 @@ ARK_EXPORT_FUNC void DllEntryPlugin(
     fixture = new startup_failure_module;
     fixture->fail_at(mode);
     fixture->start_owned_io();
-    if (!manager->add_module(fixture->get_name(), fixture) || !manager->add_update_module(fixture))
-    {
+    if (!manager->add_module(fixture->get_name(), fixture) || !manager->add_update_module(fixture)) {
         std::cerr << "Startup test module registration failed\n";
         std::abort();
     }
-    if (mode == "throw:load_plugin")
-    {
+    if (mode == "throw:load_plugin") {
         std::cerr << "app-startup-test:load_plugin\n";
         throw std::runtime_error("test plugin entry exception");
     }

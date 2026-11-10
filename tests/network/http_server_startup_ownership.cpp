@@ -40,23 +40,19 @@ thread_local bool reject_after_workers{};
 bool failure_observed_workers{};
 
 bool reject_new() {
-    if (reject_allocations)
-    {
+    if (reject_allocations) {
         return true;
     }
     auto* native = arknet::startup_observed_server;
-    if (reject_after_workers && native)
-    {
+    if (reject_after_workers && native) {
         // Pool construction/start can allocate while holding its lifecycle
         // mutex. Observe lane identities instead of reentering started(). All
         // workers have initialized before start_iopool posts its first work.
         bool initialized = native->iopool().size() != 0;
-        for (std::size_t index{}; index < native->iopool().size(); ++index)
-        {
+        for (std::size_t index{}; index < native->iopool().size(); ++index) {
             initialized = initialized && native->iopool().get(index)->get_thread_id() != std::thread::id{};
         }
-        if (initialized)
-        {
+        if (initialized) {
             failure_observed_workers = true;
             reject_allocations = true;
             return true;
@@ -67,10 +63,8 @@ bool reject_new() {
 } // namespace
 
 void* operator new(std::size_t size) {
-    if (!reject_new())
-    {
-        if (auto* pointer = std::malloc(size ? size : 1))
-        {
+    if (!reject_new()) {
+        if (auto* pointer = std::malloc(size ? size : 1)) {
             return pointer;
         }
     }
@@ -98,17 +92,19 @@ void operator delete[](void* pointer, std::size_t) noexcept {
 }
 
 void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
-    try
-    { return ::operator new(size); }
-    catch (...)
-    { return nullptr; }
+    try {
+        return ::operator new(size);
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
-    try
-    { return ::operator new[](size); }
-    catch (...)
-    { return nullptr; }
+    try {
+        return ::operator new[](size);
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void operator delete(void* pointer, const std::nothrow_t&) noexcept {
@@ -121,8 +117,7 @@ void operator delete[](void* pointer, const std::nothrow_t&) noexcept {
 
 namespace ark {
 
-struct http_server_startup_test_access
-{
+struct http_server_startup_test_access {
     static auto state(http_server_module& module) {
         return static_cast<http_server_module_impl&>(module).state_;
     }
@@ -144,19 +139,16 @@ using access = ark::http_server_startup_test_access;
 #endif
 }
 
-struct failing_module final : ark::module
-{
+struct failing_module final : ark::module {
     unsigned phase{};
     bool throws{};
     unsigned ordinary_cleanup{};
 
     bool step(unsigned current) const {
-        if (phase != current)
-        {
+        if (phase != current) {
             return true;
         }
-        if (throws)
-        {
+        if (throws) {
             throw std::runtime_error("controlled HTTP listener startup failure");
         }
         return false;
@@ -198,10 +190,8 @@ template<typename State>
 void retire_test_owner(const State& state) {
     // Explicit fixture-owner teardown, after retention evidence. The failed
     // manager never retries cleanup or invokes ordinary stop on these owners.
-    for (auto* owner = state->owners.get(); owner; owner = owner->next.get())
-    {
-        if (owner->server)
-        {
+    for (auto* owner = state->owners.get(); owner; owner = owner->next.get()) {
+        if (owner->server) {
             owner->server->stop();
             owner->server.reset();
         }
@@ -226,8 +216,7 @@ std::string request(std::uint16_t port) {
     return output.body();
 }
 
-struct allocation_start_module final : ark::module
-{
+struct allocation_start_module final : ark::module {
     ark::http_server_module* server{};
     std::string ip{"127.0.0.1"};
 
@@ -240,10 +229,8 @@ struct allocation_start_module final : ark::module
 } // namespace
 
 TEST_CASE("HTTP empty startup ownership seals safely after each false or exception") {
-    for (unsigned phase{}; phase < 4; ++phase)
-    {
-        for (bool throws : {false, true})
-        {
+    for (unsigned phase{}; phase < 4; ++phase) {
+        for (bool throws : {false, true}) {
             CAPTURE(phase);
             CAPTURE(throws);
             ark::plugin_manager manager;
@@ -254,12 +241,9 @@ TEST_CASE("HTTP empty startup ownership seals safely after each false or excepti
             failure.phase = phase;
             failure.throws = throws;
             REQUIRE(manager.add_module("failure", &failure));
-            if (throws)
-            {
+            if (throws) {
                 CHECK_THROWS_AS(manager.start(0, {}, {}, {}), std::runtime_error);
-            }
-            else
-            {
+            } else {
                 CHECK_FALSE(manager.start(0, {}, {}, {}));
             }
             CHECK(manager.cleanup_failed_startup() == ark::startup_cleanup_result::done);
@@ -272,10 +256,8 @@ TEST_CASE("HTTP empty startup ownership seals safely after each false or excepti
 }
 
 TEST_CASE("HTTP native owners stay unsafe after every later false or exception") {
-    for (unsigned phase{}; phase < 4; ++phase)
-    {
-        for (bool throws : {false, true})
-        {
+    for (unsigned phase{}; phase < 4; ++phase) {
+        for (bool throws : {false, true}) {
             CAPTURE(phase);
             CAPTURE(throws);
             ark::plugin_manager manager;
@@ -288,12 +270,9 @@ TEST_CASE("HTTP native owners stay unsafe after every later false or exception")
             failure.phase = phase;
             failure.throws = throws;
             REQUIRE(manager.add_module("failure", &failure));
-            if (throws)
-            {
+            if (throws) {
                 CHECK_THROWS_AS(manager.start(0, {}, {}, {}), std::runtime_error);
-            }
-            else
-            {
+            } else {
                 CHECK_FALSE(manager.start(0, {}, {}, {}));
             }
             CHECK(manager.cleanup_failed_startup() == ark::startup_cleanup_result::unsafe);
@@ -383,8 +362,7 @@ TEST_CASE("HTTP successful startup disarms enrollment and restores ordinary dest
 TEST_CASE("HTTP full startup registry rejects ownership before native acquisition") {
     ark::plugin_manager manager;
     auto older = std::make_shared<unsigned>(0);
-    for (std::size_t index{}; index < ark::startup_cleanup_capacity; ++index)
-    {
+    for (std::size_t index{}; index < ark::startup_cleanup_capacity; ++index) {
         REQUIRE(manager.prepare_startup_cleanup("owner-" + std::to_string(index), "test", older, release_older));
     }
     const auto constructed = arknet::startup_native_constructions;
@@ -426,8 +404,7 @@ TEST_CASE("HTTP managed native listen rejection preserves ordinary same-endpoint
 }
 
 TEST_CASE("HTTP ordinary listen failures do not accumulate native attempt owners") {
-    for (bool managed : {false, true})
-    {
+    for (bool managed : {false, true}) {
         CAPTURE(managed);
         asio::io_context context;
         asio::ip::tcp::acceptor occupied(context);
@@ -442,13 +419,11 @@ TEST_CASE("HTTP ordinary listen failures do not accumulate native attempt owners
         const auto port = occupied.local_endpoint().port();
         ark::plugin_manager manager;
         auto server = ark::detail::make_http_server_module(managed ? &manager : nullptr);
-        if (managed)
-        {
+        if (managed) {
             REQUIRE(manager.start(0, {}, {}, {}));
         }
         auto state = access::state(*server);
-        for (unsigned attempt{}; attempt < 4; ++attempt)
-        {
+        for (unsigned attempt{}; attempt < 4; ++attempt) {
             CHECK_FALSE(server->start_server("127.0.0.1", port, 1));
             CHECK(state->owners == nullptr);
         }
@@ -460,8 +435,7 @@ TEST_CASE("HTTP ordinary listen failures do not accumulate native attempt owners
 }
 
 int main(int argc, char** argv) {
-    if (argc == 3 && std::string_view(argv[1]) == "--install-failure")
-    {
+    if (argc == 3 && std::string_view(argv[1]) == "--install-failure") {
         ark::logger log;
         log.set_log_func([](spdlog::level::level_enum, const std::string& message) {
             std::fprintf(stderr, "%s\n", message.c_str());
@@ -473,25 +447,22 @@ int main(int argc, char** argv) {
         const std::string directory = std::string(argv[2]) + "/";
         constexpr auto name = "ark_http_server_startup_install_fixture";
         bool threw{};
-        try
-        { manager.start(0, directory, {}, {{name, ""}}); }
-        catch (const std::runtime_error& exception)
-        {
+        try {
+            manager.start(0, directory, {}, {{name, ""}});
+        } catch (const std::runtime_error& exception) {
             threw = true;
             std::fprintf(stderr, "HTTP ownership install exception: %s\n", exception.what());
         }
         ark::dynamic_library library(name);
         if (!threw || std::string_view(manager.get_startup_call().phase.data()) != "install" ||
-            !library.load(directory))
-        {
+            !library.load(directory)) {
             std::fprintf(stderr, "HTTP ownership install probe: threw=%d phase=%s\n", threw,
                 manager.get_startup_call().phase.data());
             exit_probe(2);
         }
         const auto retained = reinterpret_cast<bool (*)()>(library.get_symbol("http_ownership_fixture_retained"));
         if (!retained || !retained() || manager.cleanup_failed_startup() != ark::startup_cleanup_result::unsafe ||
-            manager.cleanup_failed_startup() != ark::startup_cleanup_result::unsafe || !retained() || *older != 0)
-        {
+            manager.cleanup_failed_startup() != ark::startup_cleanup_result::unsafe || !retained() || *older != 0) {
             std::fprintf(stderr, "HTTP ownership install probe: symbol=%d retained=%d older=%u\n", retained != nullptr,
                 retained ? retained() : false, *older);
             exit_probe(2);
@@ -500,8 +471,7 @@ int main(int argc, char** argv) {
             "HTTP ownership install failure: candidate gone; native, captures and DSO retained; exit 1\n", stderr);
         exit_probe(1);
     }
-    if (argc == 2 && std::string_view(argv[1]) == "--allocation-failure")
-    {
+    if (argc == 2 && std::string_view(argv[1]) == "--allocation-failure") {
         std::set_terminate([] {
             std::fputs("forbidden native destruction before HTTP failure runner\n", stderr);
             exit_probe(2);
@@ -519,13 +489,13 @@ int main(int argc, char** argv) {
         const std::string configuration;
         const std::unordered_map<std::string, std::string> plugins;
         bool threw{};
-        try
-        { manager.start(0, directory, configuration, plugins); }
-        catch (const std::bad_alloc&)
-        { threw = true; }
+        try {
+            manager.start(0, directory, configuration, plugins);
+        } catch (const std::bad_alloc&) {
+            threw = true;
+        }
         if (!threw || !failure_observed_workers || !reject_allocations || !state->owners || !state->owners->server ||
-            !state->owners->server->iopool().started())
-        {
+            !state->owners->server->iopool().started()) {
             exit_probe(2);
         }
         std::weak_ptr<typename decltype(state)::element_type> retained = state;
@@ -535,8 +505,7 @@ int main(int argc, char** argv) {
         if (!state || manager.cleanup_failed_startup() != ark::startup_cleanup_result::unsafe ||
             manager.cleanup_failed_startup() != ark::startup_cleanup_result::unsafe || *older != 0 ||
             !state->owners->server->iopool().started() ||
-            state->owners->server->iopool().get(0)->get_thread_id() == std::thread::id{})
-        {
+            state->owners->server->iopool().get(0)->get_thread_id() == std::thread::id{}) {
             exit_probe(2);
         }
         std::fputs("HTTP ownership failure runner reached: native workers and older owners retained; exit 1\n", stderr);

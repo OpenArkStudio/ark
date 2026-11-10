@@ -25,8 +25,7 @@
 
 namespace ark {
 
-class container_manager
-{
+class container_manager {
 public:
     using container_list = shared_object_map<uint32_t, container>;
 

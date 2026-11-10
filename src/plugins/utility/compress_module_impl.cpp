@@ -29,8 +29,7 @@
 
 namespace ark {
 
-class compress_module_impl final : public module_base<compress_module>
-{
+class compress_module_impl final : public module_base<compress_module> {
 
 private:
     std::unique_ptr<zstd_compress> zstd_{nullptr};
@@ -65,8 +64,7 @@ protected:
 bool compress_module_impl::init() {
     zstd_ = std::make_unique<zstd_compress>();
 
-    if (!load_config())
-    {
+    if (!load_config()) {
         return false;
     }
 
@@ -80,8 +78,7 @@ bool compress_module_impl::init() {
 bool compress_module_impl::compress(IN const compress_type type, IN const char* in_data, IN std::size_t in_size,
     OUT std::string& compressed_buff, IN uint8_t compress_level) {
     bool result = false;
-    switch (type)
-    {
+    switch (type) {
     case compress_type::compress_type_zlib:
         result = zlib_compress(in_data, in_size, compressed_buff, compress_level);
         break;
@@ -99,8 +96,7 @@ bool compress_module_impl::compress(IN const compress_type type, IN const char* 
 bool compress_module_impl::decompress(
     IN const compress_type type, IN const char* in_data, IN std::size_t in_size, OUT std::string& decompressed_buff) {
     bool result = false;
-    switch (type)
-    {
+    switch (type) {
     case compress_type::compress_type_zlib:
         result = zlib_normal_decompress(in_data, in_size, decompressed_buff);
         break;

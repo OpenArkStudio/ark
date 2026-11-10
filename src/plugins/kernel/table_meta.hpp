@@ -30,8 +30,7 @@ namespace ark {
 
 class class_meta;
 
-class table_meta final
-{
+class table_meta final {
 public:
     using col_meta_list = shared_object_map<uint32_t, node_meta>;
 

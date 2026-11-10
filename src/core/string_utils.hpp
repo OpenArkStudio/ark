@@ -53,8 +53,7 @@ inline void dbg(const std::pair<key_type, mapped_type>& x, std::string& fs) {
 
 template<typename element_type>
 void dbg(const element_type& beg, const element_type& end, char c1, char c2, std::string& fs) {
-    if (beg == end)
-    {
+    if (beg == end) {
         //fs << c1 << c2;
         fs = ARK_FORMAT("{}{}{}", fs, c1, c2);
         return;
@@ -62,8 +61,7 @@ void dbg(const element_type& beg, const element_type& end, char c1, char c2, std
 
     //fs << c1;
     fs = ARK_FORMAT("{}{}", fs, c1);
-    for (element_type it = beg; it != end; ++it)
-    {
+    for (element_type it = beg; it != end; ++it) {
         dbg(*it, fs);
         //fs << ',';
         fs = ARK_FORMAT("{}{}", fs, ',');
@@ -74,8 +72,7 @@ void dbg(const element_type& beg, const element_type& end, char c1, char c2, std
 
 } // namespace detail
 
-class string_utils
-{
+class string_utils {
 public:
     // split("x y z", ' ');  ->  [ "x", "y", "z" ]
     // split("|x|y|", '|');  ->  [ "", "x", "y" ]
@@ -86,18 +83,15 @@ public:
         const char* from = s;
         const char* end = s + strlen(s);
 
-        while ((p = static_cast<const char*>(memchr(from, c, end - from))))
-        {
+        while ((p = static_cast<const char*>(memchr(from, c, end - from)))) {
             v.emplace_back(std::string_view(from, p - from));
             from = p + 1;
-            if (v.size() == max_split)
-            {
+            if (v.size() == max_split) {
                 break;
             }
         }
 
-        if (from < end)
-        {
+        if (from < end) {
             v.emplace_back(std::string_view(from));
         }
     }
@@ -107,18 +101,15 @@ public:
         const char* from = s.data();
         const char* end = from + s.size();
 
-        while ((p = static_cast<const char*>(memchr(from, c, end - from))))
-        {
+        while ((p = static_cast<const char*>(memchr(from, c, end - from)))) {
             v.emplace_back(std::string_view(from, p - from));
             from = p + 1;
-            if (v.size() == max_split)
-            {
+            if (v.size() == max_split) {
                 break;
             }
         }
 
-        if (from < end)
-        {
+        if (from < end) {
             v.emplace_back(std::string_view(from, end - from));
         }
     }
@@ -129,27 +120,22 @@ public:
         size_t n = strlen(c);
 
         // An empty delimiter cannot advance the input cursor.
-        if (n == 0)
-        {
-            if (*s != '\0')
-            {
+        if (n == 0) {
+            if (*s != '\0') {
                 v.emplace_back(s);
             }
             return;
         }
 
-        while ((p = strstr(from, c)))
-        {
+        while ((p = strstr(from, c))) {
             v.emplace_back(std::string(from, p - from));
             from = p + n;
-            if (v.size() == max_split)
-            {
+            if (v.size() == max_split) {
                 break;
             }
         }
 
-        if (from < s + strlen(s))
-        {
+        if (from < s + strlen(s)) {
             v.emplace_back(std::string_view(from));
         }
     }
@@ -165,27 +151,23 @@ public:
         const char* p;
         const char* from = s;
         size_t n = strlen(sub);
-        if (n == 0)
-        {
+        if (n == 0) {
             return s;
         }
         size_t m = strlen(to);
 
         std::string x;
 
-        while ((p = strstr(from, sub)))
-        {
+        while ((p = strstr(from, sub))) {
             x.append(from, p - from);
             x.append(to, m);
             from = p + n;
-            if (--max_replace == 0)
-            {
+            if (--max_replace == 0) {
                 break;
             }
         }
 
-        if (from < s + strlen(s))
-        {
+        if (from < s + strlen(s)) {
             x.append(from);
         }
 
@@ -194,14 +176,12 @@ public:
 
     static inline auto replace(
         const std::string& s, const char* sub, const char* to, uint32_t max_replace = 0) -> std::string {
-        if (*sub == '\0')
-        {
+        if (*sub == '\0') {
             return s;
         }
         const char* from = s.c_str();
         const char* p = strstr(from, sub);
-        if (p == nullptr)
-        {
+        if (p == nullptr) {
             return s;
         }
 
@@ -210,18 +190,15 @@ public:
         std::string x;
         x.reserve(s.size());
 
-        do
-        {
+        do {
             x.append(from, p - from).append(to, m);
             from = p + n;
-            if (--max_replace == 0)
-            {
+            if (--max_replace == 0) {
                 break;
             }
         } while ((p = strstr(from, sub)));
 
-        if (from < s.data() + s.size())
-        {
+        if (from < s.data() + s.size()) {
             x.append(from);
         }
 
@@ -232,45 +209,34 @@ public:
     // strip("abxxa", "ab", 'l')  ->  "xxa"    strip left only.
     // strip("abxxa", "ab", 'r')  ->  "abxx"   strip right only.
     static inline auto strip(const char* s, const char* c = " \t\r\n", char d = 'b') -> std::string {
-        if (!*s)
-        {
+        if (!*s) {
             return std::string();
         }
 
         std::array<char, 256> bs = {0};
-        while (*c)
-        {
+        while (*c) {
             bs[static_cast<uint8_t>(*c++)] = 1;
         }
 
-        if (d == 'l' || d == 'L')
-        {
-            while (bs[static_cast<uint8_t>(*s)])
-            {
+        if (d == 'l' || d == 'L') {
+            while (bs[static_cast<uint8_t>(*s)]) {
                 ++s;
             }
             return std::string(s);
-        }
-        else if (d == 'r' || d == 'R')
-        {
+        } else if (d == 'r' || d == 'R') {
             const char* e = s + strlen(s);
-            while (e > s && bs[static_cast<uint8_t>(e[-1])])
-            {
+            while (e > s && bs[static_cast<uint8_t>(e[-1])]) {
                 --e;
             }
 
             return std::string(s, e - s);
-        }
-        else
-        {
-            while (bs[static_cast<uint8_t>(*s)])
-            {
+        } else {
+            while (bs[static_cast<uint8_t>(*s)]) {
                 ++s;
             }
 
             const char* e = s + strlen(s);
-            while (e > s && bs[static_cast<uint8_t>(e[-1])])
-            {
+            while (e > s && bs[static_cast<uint8_t>(e[-1])]) {
                 --e;
             }
 
@@ -279,38 +245,28 @@ public:
     }
 
     static inline auto strip(const char* s, char c, char d = 'b') -> std::string {
-        if (!*s)
-        {
+        if (!*s) {
             return std::string();
         }
 
-        if (d == 'l' || d == 'L')
-        {
-            while (*s == c)
-            {
+        if (d == 'l' || d == 'L') {
+            while (*s == c) {
                 ++s;
             }
 
             return std::string(s);
-        }
-        else if (d == 'r' || d == 'R')
-        {
+        } else if (d == 'r' || d == 'R') {
             const char* e = s + strlen(s);
-            while (e > s && e[-1] == c)
-            {
+            while (e > s && e[-1] == c) {
                 --e;
             }
             return std::string(s, e - s);
-        }
-        else
-        {
-            while (*s == c)
-            {
+        } else {
+            while (*s == c) {
                 ++s;
             }
             const char* e = s + strlen(s);
-            while (e > s && e[-1] == c)
-            {
+            while (e > s && e[-1] == c) {
                 --e;
             }
             return std::string(s, e - s);
@@ -318,48 +274,36 @@ public:
     }
 
     static inline auto strip(const std::string& s, const char* c = " \t\r\n", char d = 'b') -> std::string {
-        if (s.empty())
-        {
+        if (s.empty()) {
             return std::string();
         }
 
         std::array<char, 256> bs = {0};
-        while (*c)
-        {
+        while (*c) {
             bs[static_cast<uint8_t>(*c++)] = 1;
         }
 
-        if (d == 'l' || d == 'L')
-        {
+        if (d == 'l' || d == 'L') {
             size_t b = 0;
-            while (b < s.size() && bs[static_cast<uint8_t>(s[b])])
-            {
+            while (b < s.size() && bs[static_cast<uint8_t>(s[b])]) {
                 ++b;
             }
             return b == 0 ? s : s.substr(b);
-        }
-        else if (d == 'r' || d == 'R')
-        {
+        } else if (d == 'r' || d == 'R') {
             size_t e = s.size();
-            while (e > 0 && bs[static_cast<uint8_t>(s[e - 1])])
-            {
+            while (e > 0 && bs[static_cast<uint8_t>(s[e - 1])]) {
                 --e;
             }
             return e == s.size() ? s : s.substr(0, e);
-        }
-        else
-        {
+        } else {
             size_t b = 0, e = s.size();
-            while (b < s.size() && bs[static_cast<uint8_t>(s[b])])
-            {
+            while (b < s.size() && bs[static_cast<uint8_t>(s[b])]) {
                 ++b;
             }
-            if (b == s.size())
-            {
+            if (b == s.size()) {
                 return std::string();
             }
-            while (e > 0 && bs[static_cast<uint8_t>(s[e - 1])])
-            {
+            while (e > 0 && bs[static_cast<uint8_t>(s[e - 1])]) {
                 --e;
             }
             return (e - b == s.size()) ? s : s.substr(b, e - b);
@@ -367,42 +311,31 @@ public:
     }
 
     static inline auto strip(const std::string& s, char c, char d = 'b') -> std::string {
-        if (s.empty())
-        {
+        if (s.empty()) {
             return std::string();
         }
 
-        if (d == 'l' || d == 'L')
-        {
+        if (d == 'l' || d == 'L') {
             size_t b = 0;
-            while (b < s.size() && s[b] == c)
-            {
+            while (b < s.size() && s[b] == c) {
                 ++b;
             }
             return b == 0 ? s : s.substr(b);
-        }
-        else if (d == 'r' || d == 'R')
-        {
+        } else if (d == 'r' || d == 'R') {
             size_t e = s.size();
-            while (e > 0 && s[e - 1] == c)
-            {
+            while (e > 0 && s[e - 1] == c) {
                 --e;
             }
             return e == s.size() ? s : s.substr(0, e);
-        }
-        else
-        {
+        } else {
             size_t b = 0, e = s.size();
-            while (b < s.size() && s[b] == c)
-            {
+            while (b < s.size() && s[b] == c) {
                 ++b;
             }
-            if (b == s.size())
-            {
+            if (b == s.size()) {
                 return std::string();
             }
-            while (e > 0 && s[e - 1] == c)
-            {
+            while (e > 0 && s[e - 1] == c) {
                 --e;
             }
             return (e - b == s.size()) ? s : s.substr(b, e - b);
@@ -410,49 +343,37 @@ public:
     }
 
     static inline auto strip(const std::string& s, const std::string& c, char d = 'b') -> std::string {
-        if (s.empty())
-        {
+        if (s.empty()) {
             return std::string();
         }
 
         std::array<char, 256> bs = {0};
-        for (char i : c)
-        {
+        for (char i : c) {
             bs[static_cast<uint8_t>(i)] = 1;
         }
 
-        if (d == 'l' || d == 'L')
-        {
+        if (d == 'l' || d == 'L') {
             size_t b = 0;
-            while (b < s.size() && bs[static_cast<uint8_t>(s[b])])
-            {
+            while (b < s.size() && bs[static_cast<uint8_t>(s[b])]) {
                 ++b;
             }
             return b == 0 ? s : s.substr(b);
-        }
-        else if (d == 'r' || d == 'R')
-        {
+        } else if (d == 'r' || d == 'R') {
             size_t e = s.size();
-            while (e > 0 && bs[static_cast<uint8_t>(s[e - 1])])
-            {
+            while (e > 0 && bs[static_cast<uint8_t>(s[e - 1])]) {
                 --e;
             }
             return e == s.size() ? s : s.substr(0, e);
-        }
-        else
-        {
+        } else {
             size_t b = 0, e = s.size();
-            while (b < s.size() && bs[static_cast<uint8_t>(s[b])])
-            {
+            while (b < s.size() && bs[static_cast<uint8_t>(s[b])]) {
                 ++b;
             }
-            if (b == s.size())
-            {
+            if (b == s.size()) {
                 return std::string();
             }
 
-            while (e > 0 && bs[static_cast<uint8_t>(s[e - 1])])
-            {
+            while (e > 0 && bs[static_cast<uint8_t>(s[e - 1])]) {
                 --e;
             }
             return (e - b == s.size()) ? s : s.substr(b, e - b);

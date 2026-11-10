@@ -7,8 +7,7 @@
 
 namespace ark {
 
-struct http_server_startup_test_access
-{
+struct http_server_startup_test_access {
     static auto state(http_server_module& module) {
         return static_cast<http_server_module_impl&>(module).state_;
     }
@@ -22,22 +21,19 @@ std::weak_ptr<void> retained_state;
 std::weak_ptr<void> retained_capture;
 arknet::http_server* retained_native{};
 
-struct destruction_marker
-{
+struct destruction_marker {
     ~destruction_marker() {
         std::fputs("forbidden HTTP ownership fixture capture destruction\n", stderr);
     }
 };
 
-struct detach_marker
-{
+struct detach_marker {
     ~detach_marker() {
         std::fputs("forbidden HTTP ownership fixture DSO destruction\n", stderr);
     }
 } retained_dso;
 
-class http_ownership_install_failure final : public ark::plugin_base<http_ownership_install_failure>
-{
+class http_ownership_install_failure final : public ark::plugin_base<http_ownership_install_failure> {
 public:
     void install() override {
         auto candidate = ark::detail::make_http_server_module(get_plugin_manager());
@@ -46,8 +42,7 @@ public:
         candidate->get_router().add(arknet::http::verb::get, "/retained",
             [capture](auto&, auto& response) { response.body() = "retained DSO route"; });
         capture.reset();
-        if (!candidate->start_server("127.0.0.1", 0, 2))
-        {
+        if (!candidate->start_server("127.0.0.1", 0, 2)) {
             throw std::runtime_error("HTTP ownership fixture could not start native listener");
         }
         auto state = ark::http_server_startup_test_access::state(*candidate);

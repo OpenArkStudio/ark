@@ -17,8 +17,7 @@
 
 namespace ark::detail {
 
-struct database_awaitable_test_access
-{
+struct database_awaitable_test_access {
     template<class result_type>
     static bool fail_post(database_awaitable<result_type>& bridge) {
         return bridge.state_->schedule(64, [](auto, auto) { throw std::bad_alloc(); });
@@ -29,8 +28,7 @@ struct database_awaitable_test_access
 
 namespace {
 
-struct response
-{
+struct response {
     std::string data;
     bool cancelled{};
     bool outcome_unknown{};
@@ -297,8 +295,7 @@ TEST_CASE("A throwing native cancellation request never replaces an accepted ope
         auto result = co_await bridge.wait(
             [&](callback_type completion) {
                 native = std::move(completion);
-                if (cancel_before_publication)
-                {
+                if (cancel_before_publication) {
                     CHECK(group.cancel(task));
                 }
                 return std::uint64_t{61};
@@ -315,16 +312,16 @@ TEST_CASE("A throwing native cancellation request never replaces an accepted ope
     };
     task = group.start(operation(), [](std::exception_ptr error) { CHECK_FALSE(error); });
     group.poll();
-    if (!cancel_before_publication)
-    {
+    if (!cancel_before_publication) {
         CHECK(group.cancel(task));
     }
     CHECK(cancellations == 1);
     REQUIRE(bridge.cancellation_exception());
-    try
-    { std::rethrow_exception(bridge.cancellation_exception()); }
-    catch (const std::runtime_error& error)
-    { CHECK(std::string(error.what()) == "native cancellation submission failed"); }
+    try {
+        std::rethrow_exception(bridge.cancellation_exception());
+    } catch (const std::runtime_error& error) {
+        CHECK(std::string(error.what()) == "native cancellation submission failed");
+    }
     CHECK(bridge.pending() == 1);
     CHECK(group.pending() == 1);
     CHECK(received == 0);
@@ -367,14 +364,13 @@ TEST_CASE("Inline native refusal and initiation exceptions are asynchronously de
     group.poll();
     CHECK(received == 1);
     auto throwing = [&]() -> module_task<> {
-        try
-        {
+        try {
             co_await bridge.wait([](callback_type) -> std::uint64_t { throw std::runtime_error("initiation failed"); },
                 [](std::uint64_t) {});
             FAIL("A C++ initiation exception must not become a native success");
+        } catch (const std::runtime_error& error) {
+            caught = std::string(error.what()) == "initiation failed";
         }
-        catch (const std::runtime_error& error)
-        { caught = std::string(error.what()) == "initiation failed"; }
     };
     group.start(throwing(), [](std::exception_ptr error) { CHECK_FALSE(error); });
     group.poll();
@@ -401,30 +397,28 @@ TEST_CASE("Bridge quota and executor mismatch fail before starting native operat
     group.start(collect_one(bridge, native, received, result, runtime));
     group.poll();
     auto full = [&]() -> module_task<> {
-        try
-        {
+        try {
             co_await bridge.wait(
                 [&](callback_type) {
                     ++extra_starts;
                     return std::uint64_t{1};
                 },
                 [](std::uint64_t) {});
+        } catch (const std::length_error&) {
+            ++rejected;
         }
-        catch (const std::length_error&)
-        { ++rejected; }
     };
     auto wrong_executor = [&]() -> module_task<> {
-        try
-        {
+        try {
             co_await foreign.wait(
                 [&](callback_type) {
                     ++extra_starts;
                     return std::uint64_t{1};
                 },
                 [](std::uint64_t) {});
+        } catch (const std::logic_error&) {
+            ++rejected;
         }
-        catch (const std::logic_error&)
-        { ++rejected; }
     };
     group.start(full(), [](std::exception_ptr error) { CHECK_FALSE(error); });
     group.start(wrong_executor(), [](std::exception_ptr error) { CHECK_FALSE(error); });
@@ -439,8 +433,7 @@ TEST_CASE("Bridge quota and executor mismatch fail before starting native operat
     CHECK(received == 1);
     bridge.stop_accepting();
     auto closed = [&]() -> module_task<> {
-        try
-        {
+        try {
             co_await bridge.wait(
                 [&](callback_type) {
                     ++extra_starts;
@@ -448,9 +441,9 @@ TEST_CASE("Bridge quota and executor mismatch fail before starting native operat
                 },
                 [](std::uint64_t) {});
             FAIL("Closed bridge accepted an operation");
+        } catch (const std::logic_error&) {
+            ++rejected;
         }
-        catch (const std::logic_error&)
-        { ++rejected; }
     };
     group.start(closed(), [](std::exception_ptr error) { CHECK_FALSE(error); });
     group.poll();

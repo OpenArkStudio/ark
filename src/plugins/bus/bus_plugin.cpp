@@ -35,23 +35,19 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void bus_plugin::install() {
-    if (!register_module(detail::make_bus_module(), module_update::disabled))
-    {
+    if (!register_module(detail::make_bus_module(), module_update::disabled)) {
         throw std::runtime_error("bus module registration rejected");
     }
-    if (!register_module(detail::make_msg_module(), module_update::disabled))
-    {
+    if (!register_module(detail::make_msg_module(), module_update::disabled)) {
         throw std::runtime_error("bus message module registration rejected");
     }
 }
 
 void bus_plugin::uninstall() {
-    if (!unregister_module<msg_module>())
-    {
+    if (!unregister_module<msg_module>()) {
         throw std::runtime_error("bus message module unregistration rejected");
     }
-    if (!unregister_module<bus_module>())
-    {
+    if (!unregister_module<bus_module>()) {
         throw std::runtime_error("bus module unregistration rejected");
     }
 }

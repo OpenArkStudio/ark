@@ -18,8 +18,7 @@ bool armed{};
 const char* phase = "setup";
 std::size_t allocation_count{}, failure_position{};
 
-class allocation_failure final
-{
+class allocation_failure final {
 public:
     allocation_failure(std::size_t position, const char* operation) {
         phase = operation;
@@ -56,12 +55,10 @@ scalar_snapshot changed(const scalar_baseline& source) {
 } // namespace
 
 void* operator new(std::size_t size) {
-    if (armed && ++allocation_count == failure_position)
-    {
+    if (armed && ++allocation_count == failure_position) {
         throw std::bad_alloc{};
     }
-    if (void* result = std::malloc(size ? size : 1))
-    {
+    if (void* result = std::malloc(size ? size : 1)) {
         return result;
     }
     throw std::bad_alloc{};
@@ -78,33 +75,27 @@ void operator delete(void* pointer, std::size_t) noexcept {
 TEST_CASE("Scalar publisher construction and baseline copies preserve their source at every failed allocation") {
     const auto source = initial();
     const auto untouched = source.snapshot;
-    for (const bool construct : {true, false})
-    {
+    for (const bool construct : {true, false}) {
         bool completed = false;
         std::size_t failures{};
         scalar_publisher original(source);
-        for (std::size_t position = 1; position < 256 && !completed; ++position)
-        {
+        for (std::size_t position = 1; position < 256 && !completed; ++position) {
             std::optional<scalar_publisher> publisher;
             std::optional<scalar_baseline> baseline;
             bool failed = false;
             {
                 allocation_failure failure(
                     position, construct ? "scalar-publisher-construction" : "scalar-baseline-return");
-                try
-                {
-                    if (construct)
-                    {
+                try {
+                    if (construct) {
                         publisher.emplace(source);
-                    }
-                    else
-                    {
+                    } else {
                         baseline.emplace(detail::direct_value{[&] { return original.baseline(); }});
                     }
                     completed = true;
+                } catch (const std::bad_alloc&) {
+                    failed = true;
                 }
-                catch (const std::bad_alloc&)
-                { failed = true; }
             }
             failures += failed;
             CHECK(source.snapshot == untouched);
@@ -112,8 +103,7 @@ TEST_CASE("Scalar publisher construction and baseline copies preserve their sour
             CHECK(retained.snapshot == untouched);
             CHECK(retained.generation == 7);
             CHECK(retained.revision == 1);
-            if (completed)
-            {
+            if (completed) {
                 CHECK((construct ? publisher->baseline().snapshot : baseline->snapshot) == untouched);
             }
         }
@@ -128,22 +118,21 @@ TEST_CASE("Scalar publisher allocation failure preserves revision and permits on
     const auto untouched = next;
     bool completed = false;
     std::size_t failures{};
-    for (std::size_t position = 1; position < 256 && !completed; ++position)
-    {
+    for (std::size_t position = 1; position < 256 && !completed; ++position) {
         scalar_publisher publisher(source);
         bool failed = false;
         std::shared_ptr<const scalar_delta> packet;
         {
             allocation_failure failure(position, "scalar-publisher-update");
-            try
-            { packet = publisher.update(next); }
-            catch (const std::bad_alloc&)
-            { failed = true; }
+            try {
+                packet = publisher.update(next);
+            } catch (const std::bad_alloc&) {
+                failed = true;
+            }
         }
         failures += failed;
         CHECK(next == untouched);
-        if (failed)
-        {
+        if (failed) {
             const auto before = publisher.baseline();
             CHECK(before.snapshot == source.snapshot);
             CHECK(before.revision == 1);
@@ -166,15 +155,12 @@ TEST_CASE("Scalar baseline allocation failures retain first-install and prior-ge
     auto replacement = source;
     replacement.generation = 8;
     replacement.snapshot = changed(source);
-    for (const bool installed : {false, true})
-    {
+    for (const bool installed : {false, true}) {
         bool completed = false;
         std::size_t failures{};
-        for (std::size_t position = 1; position < 256 && !completed; ++position)
-        {
+        for (std::size_t position = 1; position < 256 && !completed; ++position) {
             scalar_replica replica(source.schema_id, 17, "Player");
-            if (installed)
-            {
+            if (installed) {
                 REQUIRE(replica.apply(source) == scalar_apply_result::applied);
             }
             const auto retained = replica.state();
@@ -183,27 +169,25 @@ TEST_CASE("Scalar baseline allocation failures retain first-install and prior-ge
             {
                 allocation_failure failure(
                     position, installed ? "scalar-new-generation-baseline" : "scalar-first-baseline");
-                try
-                { completed = replica.apply(incoming) == scalar_apply_result::applied; }
-                catch (const std::bad_alloc&)
-                { failed = true; }
+                try {
+                    completed = replica.apply(incoming) == scalar_apply_result::applied;
+                } catch (const std::bad_alloc&) {
+                    failed = true;
+                }
             }
             failures += failed;
-            if (failed)
-            {
+            if (failed) {
                 CHECK(replica.state() == retained);
                 CHECK(replica.valid() == installed);
                 CHECK(replica.revision() == (installed ? 1 : 0));
-                if (installed)
-                {
+                if (installed) {
                     CHECK(replica.apply(source) == scalar_apply_result::duplicate);
                 }
                 REQUIRE(replica.apply(incoming) == scalar_apply_result::applied);
             }
             CHECK(*replica.state() == incoming.snapshot);
             CHECK(replica.apply(incoming) == scalar_apply_result::duplicate);
-            if (retained)
-            {
+            if (retained) {
                 CHECK(*retained == source.snapshot);
             }
         }
@@ -220,22 +204,21 @@ TEST_CASE("Scalar delta allocation failures preserve committed state and exactly
     REQUIRE(packet);
     bool completed = false;
     std::size_t failures{};
-    for (std::size_t position = 1; position < 256 && !completed; ++position)
-    {
+    for (std::size_t position = 1; position < 256 && !completed; ++position) {
         scalar_replica replica(source.schema_id, 17, "Player");
         REQUIRE(replica.apply(source) == scalar_apply_result::applied);
         const auto retained = replica.state();
         bool failed = false;
         {
             allocation_failure failure(position, "scalar-replica-delta");
-            try
-            { completed = replica.apply(*packet) == scalar_apply_result::applied; }
-            catch (const std::bad_alloc&)
-            { failed = true; }
+            try {
+                completed = replica.apply(*packet) == scalar_apply_result::applied;
+            } catch (const std::bad_alloc&) {
+                failed = true;
+            }
         }
         failures += failed;
-        if (failed)
-        {
+        if (failed) {
             CHECK(replica.state() == retained);
             CHECK(replica.valid());
             CHECK(replica.revision() == 1);

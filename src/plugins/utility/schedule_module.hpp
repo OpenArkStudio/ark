@@ -27,8 +27,7 @@
 
 namespace ark {
 
-class schedule_module : public module
-{
+class schedule_module : public module {
 public:
     template<typename receiver_type>
     void add_schedule(const std::string& cron_expression, receiver_type* receiver, void (receiver_type::*handler)()) {

@@ -27,8 +27,7 @@ std::string frame(ark::msg_id_t id, const std::string& body) {
 std::string hex(const std::string& bytes) {
     static constexpr char digits[] = "0123456789abcdef";
     std::string text;
-    for (const unsigned char byte : bytes)
-    {
+    for (const unsigned char byte : bytes) {
         text.push_back(digits[byte >> 4]);
         text.push_back(digits[byte & 15]);
     }
@@ -38,8 +37,7 @@ std::string hex(const std::string& bytes) {
 std::string unhex(const std::string& text) {
     REQUIRE(text.size() % 2 == 0);
     std::string bytes;
-    for (std::size_t index = 0; index < text.size(); index += 2)
-    {
+    for (std::size_t index = 0; index < text.size(); index += 2) {
         bytes.push_back(static_cast<char>(std::stoul(text.substr(index, 2), nullptr, 16)));
     }
     return bytes;
@@ -71,40 +69,31 @@ ark::entity_sync::nested_stream_binding initial_binding() {
 
 ark::entity_sync::nested_scalar_type scalar_type(const std::string& name) {
     using type = ark::entity_sync::nested_scalar_type;
-    if (name.starts_with("bool"))
-    {
+    if (name.starts_with("bool")) {
         return type::boolean;
     }
-    if (name.starts_with("int32"))
-    {
+    if (name.starts_with("int32")) {
         return type::int32;
     }
-    if (name.starts_with("uint32"))
-    {
+    if (name.starts_with("uint32")) {
         return type::uint32;
     }
-    if (name.starts_with("int64"))
-    {
+    if (name.starts_with("int64")) {
         return type::int64;
     }
-    if (name.starts_with("uint64"))
-    {
+    if (name.starts_with("uint64")) {
         return type::uint64;
     }
-    if (name.starts_with("float"))
-    {
+    if (name.starts_with("float")) {
         return type::real32;
     }
-    if (name.starts_with("double"))
-    {
+    if (name.starts_with("double")) {
         return type::real64;
     }
-    if (name.starts_with("guid"))
-    {
+    if (name.starts_with("guid")) {
         return type::guid;
     }
-    if (name.starts_with("bytes"))
-    {
+    if (name.starts_with("bytes")) {
         return type::bytes;
     }
     throw std::invalid_argument("Unknown scalar fixture type");
@@ -118,21 +107,17 @@ TEST_CASE("Guest room golden frames match the C sharp shared fixture") {
     const auto fixtures = json::parse(input);
     CHECK(fixtures["format"] == "ark.guest-room.protobuf");
     std::map<ark::guid_t, ark::entity_sync::nested_stream_binding> bindings;
-    for (const auto& vector : fixtures["vectors"])
-    {
-        if (vector["message_id"].get<ark::msg_id_t>() == snapshot)
-        {
+    for (const auto& vector : fixtures["vectors"]) {
+        if (vector["message_id"].get<ark::msg_id_t>() == snapshot) {
             wire::room_baseline room;
             REQUIRE(room.ParseFromString(unhex(vector["body_hex"].get<std::string>())));
-            for (const auto& player : room.players())
-            {
+            for (const auto& player : room.players()) {
                 const auto trusted = decode_binding(player.binding());
                 bindings.insert_or_assign(trusted.root_id, trusted);
             }
         }
     }
-    for (const auto& vector : fixtures["vectors"])
-    {
+    for (const auto& vector : fixtures["vectors"]) {
         const auto id = vector["message_id"].get<ark::msg_id_t>();
         const auto body = unhex(vector["body_hex"].get<std::string>());
         const auto bytes = frame(id, body);
@@ -141,8 +126,7 @@ TEST_CASE("Guest room golden frames match the C sharp shared fixture") {
         parsed.parse_from_array(bytes.data());
         CHECK(parsed.message_id() == id);
         CHECK(parsed.message_length() == body.size());
-        switch (id)
-        {
+        switch (id) {
         case join:
             protobuf_roundtrip<wire::join_request>(body);
             break;
@@ -155,14 +139,12 @@ TEST_CASE("Guest room golden frames match the C sharp shared fixture") {
         case action:
             protobuf_roundtrip<wire::action_request>(body);
             break;
-        case snapshot:
-        {
+        case snapshot: {
             protobuf_roundtrip<wire::room_baseline>(body);
             wire::room_baseline room;
             REQUIRE(room.ParseFromString(body));
             REQUIRE(room.players_size() >= 1);
-            for (const auto& player : room.players())
-            {
+            for (const auto& player : room.players()) {
                 const auto trusted = decode_binding(player.binding());
                 const auto state = decode(player.state(), trusted);
                 validate_player(state.snapshot);
@@ -172,14 +154,12 @@ TEST_CASE("Guest room golden frames match the C sharp shared fixture") {
             }
             break;
         }
-        case delta:
-        {
+        case delta: {
             protobuf_roundtrip<wire::room_delta>(body);
             wire::room_delta room;
             REQUIRE(room.ParseFromString(body));
             REQUIRE(room.changed_size() >= 1);
-            for (const auto& change : room.changed())
-            {
+            for (const auto& change : room.changed()) {
                 const auto& trusted = bindings.at(static_cast<ark::guid_t>(change.root().entity_id()));
                 state_wire::nested_delta encoded;
                 encode(decode(change, trusted), encoded, trusted);
@@ -198,8 +178,7 @@ TEST_CASE("Guest room golden frames match the C sharp shared fixture") {
             FAIL("unknown golden message");
         }
     }
-    for (const auto& vector : fixtures["scalar_vectors"])
-    {
+    for (const auto& vector : fixtures["scalar_vectors"]) {
         const auto body = unhex(vector["body_hex"].get<std::string>());
         const auto name = vector["name"].get<std::string>();
         state_wire::scalar_field field;
@@ -218,8 +197,7 @@ TEST_CASE("Guest room golden frames match the C sharp shared fixture") {
         const ark::entity_sync::nested_stream_binding trusted{
             "scalar-fixture", 42, 1, 1, {"Types", {{100, scalar_type(name)}}, {}, {}}};
         if (name.starts_with("guid") && (field.guid_value() < std::numeric_limits<ark::guid_t>::min() ||
-                                            field.guid_value() > std::numeric_limits<ark::guid_t>::max()))
-        {
+                                            field.guid_value() > std::numeric_limits<ark::guid_t>::max())) {
             CHECK_THROWS_AS(ark::entity_sync::nested_wire::decode(envelope, trusted), std::invalid_argument);
             continue;
         }
@@ -228,40 +206,23 @@ TEST_CASE("Guest room golden frames match the C sharp shared fixture") {
         state_wire::nested_baseline encoded;
         ark::entity_sync::nested_wire::encode(decoded, encoded, trusted);
         CHECK(encoded.snapshot().root().fields(0).SerializeAsString() == body);
-        if (name.starts_with("bool"))
-        {
+        if (name.starts_with("bool")) {
             CHECK(std::holds_alternative<bool>(value));
-        }
-        else if (name.starts_with("int32"))
-        {
+        } else if (name.starts_with("int32")) {
             CHECK(std::holds_alternative<std::int32_t>(value));
-        }
-        else if (name.starts_with("uint32"))
-        {
+        } else if (name.starts_with("uint32")) {
             CHECK(std::holds_alternative<std::uint32_t>(value));
-        }
-        else if (name.starts_with("int64"))
-        {
+        } else if (name.starts_with("int64")) {
             CHECK(std::holds_alternative<std::int64_t>(value));
-        }
-        else if (name.starts_with("uint64"))
-        {
+        } else if (name.starts_with("uint64")) {
             CHECK(std::holds_alternative<std::uint64_t>(value));
-        }
-        else if (name.starts_with("float"))
-        {
+        } else if (name.starts_with("float")) {
             CHECK(std::get<float>(value) == 1.5f);
-        }
-        else if (name.starts_with("double"))
-        {
+        } else if (name.starts_with("double")) {
             CHECK(std::get<double>(value) == -2.25);
-        }
-        else if (name.starts_with("guid"))
-        {
+        } else if (name.starts_with("guid")) {
             CHECK(std::holds_alternative<ark::entity_sync::guid_value>(value));
-        }
-        else if (name.starts_with("bytes"))
-        {
+        } else if (name.starts_with("bytes")) {
             CHECK(std::get<std::string>(value) == std::string("A\0B", 3));
         }
     }
@@ -275,8 +236,7 @@ TEST_CASE("Guest room Net retains split headers bodies and coalesced frames") {
         body.set_protocol_version(protocol_version);
         return body.SerializeAsString();
     }());
-    for (std::size_t split = 1; split < bytes.size(); ++split)
-    {
+    for (std::size_t split = 1; split < bytes.size(); ++split) {
         ark::tcp_client_session session(std::make_shared<header>(), 1, nullptr, 16);
         session.add_buffer(bytes.data(), split);
         REQUIRE(session.parse_buffer_to_msg());
@@ -297,19 +257,13 @@ TEST_CASE("Guest room Net retains split headers bodies and coalesced frames") {
 }
 
 TEST_CASE("Guest room invalid headers fail before body allocation and callback") {
-    for (const auto kind : {0, 1, 2})
-    {
+    for (const auto kind : {0, 1, 2}) {
         auto bytes = frame(join, "").substr(0, 12);
-        if (kind == 0)
-        {
+        if (kind == 0) {
             bytes[0] = 'X';
-        }
-        else if (kind == 1)
-        {
+        } else if (kind == 1) {
             bytes[7] = 1;
-        }
-        else
-        {
+        } else {
             bytes[10] = 0x20;
             bytes[11] = 1; // 8193-byte body, with no body present.
         }
@@ -346,8 +300,7 @@ TEST_CASE("Guest room reconnect owns fresh parser state and reserved IDs cannot 
     REQUIRE(fresh.pop_net_msg(message));
     CHECK(message->get_msg_id() == ping);
     ark::net_msg::release(message);
-    for (const auto id : {0, 1, 65535, 60001, 60007, 12345})
-    {
+    for (const auto id : {0, 1, 65535, 60001, 60007, 12345}) {
         const auto unsupported_frame = frame(static_cast<ark::msg_id_t>(id), "{}");
         header request(true);
         request.parse_from_array(unsupported_frame.data());
@@ -367,10 +320,9 @@ TEST_CASE("Guest room reconnect owns fresh parser state and reserved IDs cannot 
 TEST_CASE("Guest room validates UTF-8 names independently of protobuf text fields") {
     CHECK(valid_name(std::string(64, 'a')));
     CHECK(valid_name("访客"));
-    for (const auto& name :
-        {std::string(), std::string(65, 'a'), std::string("a\nb"), std::string("a\xc2\x85"), std::string("\xc0\x80"),
-            std::string("\xed\xa0\x80"), std::string("\xf4\x90\x80\x80"), std::string("\xe4\xb8"), std::string("\xff")})
-    {
+    for (const auto& name : {std::string(), std::string(65, 'a'), std::string("a\nb"), std::string("a\xc2\x85"),
+             std::string("\xc0\x80"), std::string("\xed\xa0\x80"), std::string("\xf4\x90\x80\x80"),
+             std::string("\xe4\xb8"), std::string("\xff")}) {
         CHECK_FALSE(valid_name(name));
     }
 }
@@ -430,12 +382,9 @@ TEST_CASE("Generic protobuf alternatives preserve widths signedness zero presenc
     invalid = encoded;
     invalid.mutable_snapshot()->mutable_root()->mutable_fields(8)->set_guid_value(
         std::numeric_limits<std::int64_t>::min());
-    if constexpr (sizeof(ark::guid_t) < sizeof(std::int64_t))
-    {
+    if constexpr (sizeof(ark::guid_t) < sizeof(std::int64_t)) {
         CHECK_THROWS_AS(nested_wire::decode(invalid, trusted), std::invalid_argument);
-    }
-    else
-    {
+    } else {
         CHECK(std::get<guid_value>(nested_wire::decode(invalid, trusted).snapshot.root.scalars.fields.at(9)).value ==
               std::numeric_limits<std::int64_t>::min());
     }
@@ -494,8 +443,7 @@ TEST_CASE("Public nested delta codec keeps revision gaps and tombstones detectab
     auto wrong = initial;
     wrong.snapshot.root.scalars.fields.at(104) = std::uint32_t{101};
     CHECK_THROWS_AS(validate_player(wrong.snapshot), std::invalid_argument);
-    for (const auto current : {104u, 105u})
-    {
+    for (const auto current : {104u, 105u}) {
         wrong = initial;
         wrong.snapshot.root.scalars.fields.at(current) = std::uint32_t{0};
         wrong.snapshot.root.scalars.fields.at(current + 2) = std::uint32_t{0};
@@ -522,8 +470,7 @@ TEST_CASE("Guest room largest protobuf roster stays inside framing budget") {
     using namespace ark::entity_sync;
     wire::room_baseline roster;
     roster.set_room("lobby");
-    for (ark::guid_t index = 1; index <= 16; ++index)
-    {
+    for (ark::guid_t index = 1; index <= 16; ++index) {
         auto& player = *roster.add_players();
         player.set_player_id("18446744073709551615");
         auto state = initial_player();
@@ -535,8 +482,7 @@ TEST_CASE("Guest room largest protobuf roster stays inside framing budget") {
         root.scalars.fields.at(100) = std::string(64, '"');
         root.scalars.fields.at(101) = 960.0;
         root.scalars.fields.at(102) = 540.0;
-        for (std::uint32_t field = 103; field <= 108; ++field)
-        {
+        for (std::uint32_t field = 103; field <= 108; ++field) {
             root.scalars.fields.at(field) = std::numeric_limits<std::uint32_t>::max();
         }
         root.tables.at(inventory_index)

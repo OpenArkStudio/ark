@@ -33,8 +33,7 @@
 
 namespace ark {
 
-class kernel_module : public module
-{
+class kernel_module : public module {
 public:
     template<typename base_type>
     bool add_common_class_event(base_type* base_ptr,

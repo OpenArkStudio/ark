@@ -16,8 +16,7 @@
 
 namespace ark {
 
-struct mysql_options
-{
+struct mysql_options {
     arknet::mysql::pool_options pool;
     arknet::mysql::query_options queries;
     std::size_t max_operations{64};
@@ -25,8 +24,7 @@ struct mysql_options
     std::size_t max_transactions{16};
 };
 
-struct mysql_reply
-{
+struct mysql_reply {
     arknet::mysql::query_result result;
     std::optional<arknet::mysql::connection_result> statement_close;
     std::exception_ptr statement_close_exception;
@@ -36,8 +34,7 @@ struct mysql_reply
     }
 };
 
-enum class mysql_transaction_outcome
-{
+enum class mysql_transaction_outcome {
     not_started,
     active,
     committed,
@@ -45,8 +42,7 @@ enum class mysql_transaction_outcome
     unconfirmed
 };
 
-struct mysql_transaction_options
-{
+struct mysql_transaction_options {
     std::chrono::milliseconds timeout{5000};
     std::chrono::milliseconds cleanup_timeout{1000};
 };
@@ -55,8 +51,7 @@ struct mysql_transaction_options
 // An unused transaction rolls back at its original deadline, never auto-commits.
 using mysql_transaction_id = std::uint64_t;
 
-struct mysql_transaction_status
-{
+struct mysql_transaction_status {
     mysql_transaction_outcome outcome{mysql_transaction_outcome::not_started};
     std::optional<arknet::mysql::connection_errc> rollback_code;
     bool rollback_outcome_unknown{};
@@ -66,8 +61,7 @@ struct mysql_transaction_status
     bool discard_requested{};
 };
 
-struct mysql_transaction_reply
-{
+struct mysql_transaction_reply {
     arknet::mysql::query_result result;
     std::optional<arknet::mysql::connection_result> statement_close;
     std::exception_ptr statement_close_exception;
@@ -85,8 +79,7 @@ struct mysql_transaction_reply
 // groups: completion resumes on the shared business executor during update().
 // Inputs and native results own storage. Local admission/C++ failures throw;
 // server/transport failures remain in the native result.
-class mysql_module : public module
-{
+class mysql_module : public module {
 public:
     virtual bool configure(std::string name, mysql_options options) = 0;
     virtual task<mysql_reply> query(

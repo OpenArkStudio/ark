@@ -27,14 +27,12 @@
 
 namespace ark {
 
-class base64
-{
+class base64 {
     using base_enc_map_t = const unsigned char[64];
     using base_dec_map_t = const unsigned char[128];
 
 public:
-    enum class base64_mode_t
-    {
+    enum class base64_mode_t {
         // RFC 1421, RFC 2045, [RFC 3548](https://en.wikipedia.org/wiki/Base64#RFC_3548)
         // [RFC 4648](https://en.wikipedia.org/wiki/Base64#RFC_4648)
         en_bmt_standard = 0,
@@ -161,16 +159,14 @@ private:
         int c1, c2, c3;
         unsigned char* p;
 
-        if (slen == 0)
-        {
+        if (slen == 0) {
             *olen = 0;
             return (0);
         }
 
         n = (slen + 2) / 3;
 
-        if (n > (BASE64_SIZE_T_MAX - 1) / 4)
-        {
+        if (n > (BASE64_SIZE_T_MAX - 1) / 4) {
             *olen = BASE64_SIZE_T_MAX;
             return -1;
         }
@@ -178,25 +174,21 @@ private:
         n *= 4;
 
         // no padding
-        if (0 == padding_char)
-        {
+        if (0 == padding_char) {
             nopadding = slen % 3;
-            if (0 != nopadding)
-            {
+            if (0 != nopadding) {
                 n -= 3 - nopadding;
             }
         }
 
-        if ((dlen < n + 1) || (NULL == dst))
-        {
+        if ((dlen < n + 1) || (NULL == dst)) {
             *olen = n + 1;
             return -1;
         }
 
         n = (slen / 3) * 3;
 
-        for (i = 0, p = dst; i < n; i += 3)
-        {
+        for (i = 0, p = dst; i < n; i += 3) {
             c1 = *src++;
             c2 = *src++;
             c3 = *src++;
@@ -207,25 +199,20 @@ private:
             *p++ = base64_enc_map[c3 & 0x3F];
         }
 
-        if (i < slen)
-        {
+        if (i < slen) {
             c1 = *src++;
             c2 = ((i + 1) < slen) ? *src++ : 0;
 
             *p++ = base64_enc_map[(c1 >> 2) & 0x3F];
             *p++ = base64_enc_map[(((c1 & 3) << 4) + (c2 >> 4)) & 0x3F];
 
-            if ((i + 1) < slen)
-            {
+            if ((i + 1) < slen) {
                 *p++ = base64_enc_map[((c2 & 15) << 2) & 0x3F];
-            }
-            else if (padding_char)
-            {
+            } else if (padding_char) {
                 *p++ = padding_char;
             }
 
-            if (padding_char)
-            {
+            if (padding_char) {
                 *p++ = padding_char;
             }
         }
@@ -246,8 +233,7 @@ private:
             reinterpret_cast<unsigned char*>(&dst[0]), dst.size(), &olen, src, slen, base64_enc_map, padding_char);
         assert(0 != ret || dst.size() == olen + 1);
         // pop back last zero
-        if (!dst.empty() && *dst.rbegin() == 0)
-        {
+        if (!dst.empty() && *dst.rbegin() == 0) {
             dst.resize(dst.size() - 1);
         }
         return ret;
@@ -266,70 +252,56 @@ private:
         unsigned char* p;
 
         /* First pass: check for validity and get output length */
-        for (i = n = j = 0; i < slen; i++)
-        {
+        for (i = n = j = 0; i < slen; i++) {
             /* Skip spaces before checking for EOL */
             x = 0;
-            while (i < slen && (src[i] == ' ' || src[i] == '\t'))
-            {
+            while (i < slen && (src[i] == ' ' || src[i] == '\t')) {
                 ++i;
                 ++x;
             }
 
             /* Spaces at end of buffer are OK */
-            if (i == slen)
-            {
+            if (i == slen) {
                 break;
             }
 
-            if ((slen - i) >= 2 && src[i] == '\r' && src[i + 1] == '\n')
-            {
+            if ((slen - i) >= 2 && src[i] == '\r' && src[i + 1] == '\n') {
                 continue;
             }
 
-            if (src[i] == '\n')
-            {
+            if (src[i] == '\n') {
                 continue;
             }
 
             /* Space inside a line is an error */
-            if (x != 0)
-            {
+            if (x != 0) {
                 return -2;
             }
 
-            if (src[i] == padding_char)
-            {
-                if (++j > 2)
-                {
+            if (src[i] == padding_char) {
+                if (++j > 2) {
                     return -2;
                 }
-            }
-            else
-            {
-                if (src[i] > 127 || base64_dec_map[src[i]] == 127)
-                {
+            } else {
+                if (src[i] > 127 || base64_dec_map[src[i]] == 127) {
                     return -2;
                 }
             }
 
-            if (base64_dec_map[src[i]] < 64 && j != 0)
-            {
+            if (base64_dec_map[src[i]] < 64 && j != 0) {
                 return -2;
             }
 
             n++;
         }
 
-        if (n == 0)
-        {
+        if (n == 0) {
             *olen = 0;
             return (0);
         }
 
         // no padding, add j to padding length
-        if (slen & 3)
-        {
+        if (slen & 3) {
             j += 4 - (slen & 3);
             n += 4 - (slen & 3);
         }
@@ -341,47 +313,37 @@ private:
         n = (6 * (n >> 3)) + ((6 * (n & 0x7) + 7) >> 3);
         n -= j;
 
-        if (dst == NULL || dlen < n)
-        {
+        if (dst == NULL || dlen < n) {
             *olen = n;
             return -1;
         }
 
-        for (j = 3, n = x = 0, p = dst; i > 0; i--, src++)
-        {
-            if (*src == '\r' || *src == '\n' || *src == ' ' || *src == '\t')
-            {
+        for (j = 3, n = x = 0, p = dst; i > 0; i--, src++) {
+            if (*src == '\r' || *src == '\n' || *src == ' ' || *src == '\t') {
                 continue;
             }
 
             j -= (*src == padding_char ? 1 : 0);
             x = (x << 6) | (base64_dec_map[*src] & 0x3F);
 
-            if (++n == 4)
-            {
+            if (++n == 4) {
                 n = 0;
-                if (j > 0)
-                {
+                if (j > 0) {
                     *p++ = (unsigned char)(x >> 16);
                 }
-                if (j > 1)
-                {
+                if (j > 1) {
                     *p++ = (unsigned char)(x >> 8);
                 }
-                if (j > 2)
-                {
+                if (j > 2) {
                     *p++ = (unsigned char)(x);
                 }
             }
         }
 
         // no padding, the tail code
-        if (n == 2)
-        {
+        if (n == 2) {
             *p++ = (unsigned char)(x >> 4);
-        }
-        else if (n == 3)
-        {
+        } else if (n == 3) {
             *p++ = (unsigned char)(x >> 10);
             *p++ = (unsigned char)(x >> 2);
         }
@@ -395,8 +357,7 @@ private:
         base_dec_map_t& base64_dec_map, unsigned char padding_char) {
         size_t olen = 0;
 
-        if (-2 == base64_decode_inner(NULL, 0, &olen, src, slen, base64_dec_map, padding_char))
-        {
+        if (-2 == base64_decode_inner(NULL, 0, &olen, src, slen, base64_dec_map, padding_char)) {
             return -2;
         }
 
@@ -435,8 +396,7 @@ private:
             18, 19, 20, 21, 22, 23, 24, 25, 127, 127, 127, 127, 63, 127, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37,
             38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 127, 127, 127, 127, 127};
 
-        switch (mode)
-        {
+        switch (mode) {
         case base64_mode_t::en_bmt_standard:
         case base64_mode_t::en_bmt_utf7:
             return base64_dec_map_basic;
@@ -468,8 +428,7 @@ private:
             'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '0', '1',
             '2', '3', '4', '5', '6', '7', '8', '9', '-', '_'};
 
-        switch (mode)
-        {
+        switch (mode) {
         case base64_mode_t::en_bmt_standard:
         case base64_mode_t::en_bmt_utf7:
             return base64_enc_map_basic;
@@ -486,8 +445,7 @@ private:
     }
 
     static inline unsigned char base64_get_padding_char(base64_mode_t mode) {
-        switch (mode)
-        {
+        switch (mode) {
         case base64_mode_t::en_bmt_standard:
         case base64_mode_t::en_bmt_url_filename_safe:
             return '=';

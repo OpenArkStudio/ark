@@ -87,12 +87,16 @@ branch or worktree when the existing checkout contains uncommitted changes.
   a top-level application source directory or split source headers into include/. Retain the current `app` CMake target and the
   `app`/`app_d` executable names.
 - Follow `.clang-format` and the repository formatting scripts with clang-format
-  18. Keep function opening braces on the declaration line, expand short function
-  bodies, and use braces for control statements.
+  18. Use attached opening braces for classes, structs, enums, unions, functions,
+  namespaces and control statements (`class example {`, `if (ready) {`). Keep
+  `} else {` and `} catch (...) {` together. Expand short function, enum and
+  control bodies, and use braces for control statements.
 - Group includes as system, third-party, then project headers. Keep required
   platform-header dependencies in a valid order. Separate include blocks,
   namespaces and adjacent definitions with the prescribed blank lines.
 - Run `CLANG_FORMAT=/path/to/clang-format bash scripts/format.sh --check`.
+- Include first-party native tools in the same formatting scope as core, plugins,
+  examples and tests; do not leave the Entity exporter outside the check.
 - The formatter selects Git-tracked files. Stage intended new C++ files before
   running it, or format those paths explicitly. Run the complete check again
   after committing so newly tracked tests and headers cannot escape validation.

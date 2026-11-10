@@ -13,37 +13,32 @@ namespace ark::entity_sync {
 
 // Explicit authorization input. A table selection covers its rows; container
 // children require individual GUID bindings and their own member selections.
-struct nested_entity_projection
-{
+struct nested_entity_projection {
     std::string class_name;
     std::vector<std::uint32_t> fields;
     std::map<std::uint32_t, std::vector<std::uint32_t>> tables;
     std::map<std::uint32_t, std::map<guid_t, nested_entity_projection>> containers;
 };
 
-struct nested_projection
-{
+struct nested_projection {
     std::string schema_id;
     guid_t root_id{};
     nested_entity_projection root;
 };
 
-struct nested_row_snapshot
-{
+struct nested_row_snapshot {
     std::uint64_t incarnation{};
     std::map<std::uint32_t, scalar_value> fields;
     bool operator==(const nested_row_snapshot&) const = default;
 };
 
-struct nested_table_snapshot
-{
+struct nested_table_snapshot {
     std::string class_name;
     std::map<std::uint32_t, nested_row_snapshot> rows;
     bool operator==(const nested_table_snapshot&) const = default;
 };
 
-struct nested_entity_snapshot
-{
+struct nested_entity_snapshot {
     std::uint64_t incarnation{};
     scalar_snapshot scalars;
     std::map<std::uint32_t, nested_table_snapshot> tables;
@@ -52,15 +47,13 @@ struct nested_entity_snapshot
     bool operator==(const nested_entity_snapshot&) const = default;
 };
 
-struct nested_snapshot
-{
+struct nested_snapshot {
     std::string schema_id;
     nested_entity_snapshot root;
     bool operator==(const nested_snapshot&) const = default;
 };
 
-struct nested_snapshot_limits
-{
+struct nested_snapshot_limits {
     // Root depth is zero. Entity count also bounds inspected container entries.
     std::size_t max_depth{8};
     std::size_t max_entities{1024};

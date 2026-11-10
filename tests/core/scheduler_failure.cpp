@@ -14,8 +14,7 @@ thread_local bool reject_submission{};
 thread_local unsigned rejected_allocations{};
 
 void before_scheduler_submission() {
-    if (reject_submission)
-    {
+    if (reject_submission) {
         reject_submission = false;
         reject_allocations = true;
     }
@@ -29,13 +28,11 @@ void before_scheduler_submission() {
 #undef ARK_SCHEDULER_SUBMISSION_TEST_HOOK
 
 void* operator new(std::size_t size) {
-    if (reject_allocations)
-    {
+    if (reject_allocations) {
         ++rejected_allocations;
         throw std::bad_alloc{};
     }
-    if (auto* memory = std::malloc(size ? size : 1))
-    {
+    if (auto* memory = std::malloc(size ? size : 1)) {
         return memory;
     }
     throw std::bad_alloc{};
@@ -50,8 +47,7 @@ void operator delete(void* memory, std::size_t) noexcept {
 }
 
 namespace ark {
-struct scheduler_test_access
-{
+struct scheduler_test_access {
     // The initial production dispatcher has already reached readiness. Reopen
     // only test state, leaving that dispatcher retired, so this thread can run
     // the actual dispatch()/manage_tasks() with deterministic allocation faults.
@@ -66,10 +62,9 @@ struct scheduler_test_access
     }
 
     static void dispatch(scheduler& value) {
-        try
-        { value.dispatch(); }
-        catch (...)
-        {
+        try {
+            value.dispatch();
+        } catch (...) {
             reject_allocations = false;
             throw;
         }
@@ -104,10 +99,8 @@ using namespace std::chrono_literals;
 template<typename predicate>
 bool eventually(predicate&& ready) {
     const auto deadline = std::chrono::steady_clock::now() + 5s;
-    while (!ready())
-    {
-        if (std::chrono::steady_clock::now() >= deadline)
-        {
+    while (!ready()) {
+        if (std::chrono::steady_clock::now() >= deadline) {
             return false;
         }
         std::this_thread::yield();
@@ -115,8 +108,7 @@ bool eventually(predicate&& ready) {
     return true;
 }
 
-struct test_recovery
-{
+struct test_recovery {
     ark::scheduler& scheduler;
 
     ~test_recovery() {
@@ -124,15 +116,13 @@ struct test_recovery
         reject_submission = false;
         // No production retry/recovery is claimed. Retire retained owners only
         // after observing failure with readiness closed and submitted work done.
-        if (eventually([&] { return ark::scheduler_test_access::work_retired(scheduler); }))
-        {
+        if (eventually([&] { return ark::scheduler_test_access::work_retired(scheduler); })) {
             ark::scheduler_test_access::recover_only_for_test(scheduler);
         }
     }
 };
 
-struct capture
-{
+struct capture {
     std::atomic<unsigned>& destroyed;
 
     ~capture() {
@@ -140,8 +130,7 @@ struct capture
     }
 };
 
-struct failing_recurrence final : ark::scheduler_task
-{
+struct failing_recurrence final : ark::scheduler_task {
     unsigned phase;
 
     failing_recurrence(unsigned phase, std::function<void()>&& callback)
@@ -151,8 +140,7 @@ struct failing_recurrence final : ark::scheduler_task
 
     clock::time_point get_new_time() const override {
         reject_allocations = true;
-        if (phase == 1)
-        {
+        if (phase == 1) {
             throw std::bad_alloc{};
         }
         // The next allocation is the production recurrence map's emplace.
@@ -168,12 +156,9 @@ void check_failure(unsigned phase) {
         REQUIRE(eventually([&] { return scheduler.ready_to_shut(); }));
         ark::scheduler_test_access::prepare_manual_dispatch(scheduler);
         test_recovery recover{scheduler};
-        if (phase == 0)
-        {
+        if (phase == 0) {
             scheduler.in(0ms, [owner = std::make_shared<capture>(destroyed), &submitted_calls] { ++submitted_calls; });
-        }
-        else
-        {
+        } else {
             ark::scheduler_test_access::insert(scheduler,
                 std::make_shared<failing_recurrence>(
                     phase, [owner = std::make_shared<capture>(destroyed), &submitted_calls] { ++submitted_calls; }));

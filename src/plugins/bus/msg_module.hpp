@@ -31,8 +31,7 @@
 
 namespace ark {
 
-class msg_module : public module
-{
+class msg_module : public module {
 public:
     virtual bool send_def_cs_msg_by_app_type(
         const app_type app_type, const msg_id_t msg_id, const google::protobuf::Message& msg) = 0;
@@ -56,8 +55,7 @@ public:
     }
 
     static bool decode_protobuf(const net_msg* msg, google::protobuf::Message& protobuf_msg, guid_t& actor_id) {
-        if (!protobuf_msg.ParseFromString(std::string(msg->get_msg_data(), msg->get_msg_length())))
-        {
+        if (!protobuf_msg.ParseFromString(std::string(msg->get_msg_data(), msg->get_msg_length()))) {
             return false;
         }
 

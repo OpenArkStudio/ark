@@ -35,15 +35,13 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void proxy_plugin::install() {
-    if (!register_module(detail::make_proxy_net_module(), module_update::disabled))
-    {
+    if (!register_module(detail::make_proxy_net_module(), module_update::disabled)) {
         throw std::runtime_error("proxy_net_module registration rejected");
     }
 }
 
 void proxy_plugin::uninstall() {
-    if (!unregister_module<proxy_net_module>())
-    {
+    if (!unregister_module<proxy_net_module>()) {
         throw std::runtime_error("proxy_net_module unregistration rejected");
     }
 }

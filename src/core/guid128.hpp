@@ -27,8 +27,7 @@
 
 namespace ark {
 
-class guid_t128
-{
+class guid_t128 {
 public:
     std::uint64_t high;
     std::uint64_t low;
@@ -66,8 +65,7 @@ public:
     }
 
     guid_t128& operator=(const guid_t128& rhs) {
-        if (this != &rhs)
-        {
+        if (this != &rhs) {
             high = rhs.high;
             low = rhs.low;
         }
@@ -83,8 +81,7 @@ public:
     }
 
     bool operator<(const guid_t128& rhs) const {
-        if (this->high == rhs.high)
-        {
+        if (this->high == rhs.high) {
             return this->low < rhs.low;
         }
 
@@ -97,8 +94,7 @@ public:
 
     bool from_string(const std::string& str_id) {
         const auto separator = str_id.find('-');
-        if (separator == std::string::npos || separator == 0 || separator + 1 == str_id.size())
-        {
+        if (separator == std::string::npos || separator == 0 || separator + 1 == str_id.size()) {
             return false;
         }
 
@@ -108,14 +104,12 @@ public:
         std::uint64_t parsed_high;
         std::uint64_t parsed_low;
         const auto high_result = std::from_chars(begin, middle, parsed_high);
-        if (high_result.ec != std::errc{} || high_result.ptr != middle)
-        {
+        if (high_result.ec != std::errc{} || high_result.ptr != middle) {
             return false;
         }
 
         const auto low_result = std::from_chars(middle + 1, end, parsed_low);
-        if (low_result.ec != std::errc{} || low_result.ptr != end)
-        {
+        if (low_result.ec != std::errc{} || low_result.ptr != end) {
             return false;
         }
 

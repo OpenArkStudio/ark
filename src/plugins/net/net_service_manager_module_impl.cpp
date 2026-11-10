@@ -37,8 +37,7 @@
 
 namespace ark {
 
-class net_service_manager_module_impl final : public module_base<net_service_manager_module, bus_module, timer_module>
-{
+class net_service_manager_module_impl final : public module_base<net_service_manager_module, bus_module, timer_module> {
 public:
     bool init() override;
     bool post_init() override;
@@ -85,8 +84,7 @@ protected:
 private:
     friend struct net_listener_startup_test_access;
 
-    struct listener
-    {
+    struct listener {
         std::shared_ptr<net_server_service_impl> service;
         bool published{};
     };
@@ -135,16 +133,13 @@ void net_service_manager_module_impl::start_configured_clients() {
     std::vector<app_type> types;
     bus_module_->get_target_bus_relations(types);
     std::set<bus_id_t> queued;
-    for (const auto type : types)
-    {
+    for (const auto type : types) {
         std::vector<const proc_config*> processes;
         bus_module_->get_other_proc(type, processes);
-        for (const auto* process : processes)
-        {
+        for (const auto* process : processes) {
             bus_addr target(process->bus_id);
             if (target.bus_id == self.bus_id || target.channel_id != self.channel_id ||
-                target.zone_id != self.zone_id || !queued.insert(target.bus_id).second)
-            {
+                target.zone_id != self.zone_id || !queued.insert(target.bus_id).second) {
                 continue;
             }
             const auto& ep = process->intranet_ep;
@@ -152,15 +147,13 @@ void net_service_manager_module_impl::start_configured_clients() {
             const auto address = asio::ip::make_address(ep.get_ip(), address_error);
             if ((ep.proto() != proto_type::tcp && ep.proto() != proto_type::udp) || ep.get_ip().empty() ||
                 ep.get_ip() == "*" || (!address_error && address.is_unspecified()) || ep.get_port() == 0 ||
-                !ep.get_path().empty())
-            {
+                !ep.get_path().empty()) {
                 throw std::runtime_error(
                     "static Bus target " + target.to_string() +
                     ": intranet_endpoint requires a dialable TCP/UDP host and nonzero port without a path; "
                     "wildcard bind addresses cannot be advertised");
             }
-            if (!create_client_service(target, ep.proto(), ep.get_ip(), ep.get_port()))
-            {
+            if (!create_client_service(target, ep.proto(), ep.get_ip(), ep.get_port())) {
                 throw std::runtime_error("could not queue static Bus target " + target.to_string());
             }
         }
@@ -245,27 +238,21 @@ void net_service_manager_module_impl::health_check(uint64_t timer_id, const guid
 }
 
 bool net_service_manager_module_impl::update() {
-    for (const auto& [bus, entry] : server_services_)
-    {
-        if (entry.published)
-        {
+    for (const auto& [bus, entry] : server_services_) {
+        if (entry.published) {
             entry.service->update();
         }
     }
 
-    for (const auto& [bus, entry] : intra_services_)
-    {
-        if (entry.published)
-        {
+    for (const auto& [bus, entry] : intra_services_) {
+        if (entry.published) {
             entry.service->update();
         }
     }
 
-    for (auto iter : client_services_)
-    {
+    for (auto iter : client_services_) {
         auto data_ptr = iter.second;
-        if (data_ptr != nullptr)
-        {
+        if (data_ptr != nullptr) {
             data_ptr->update();
         }
     }
@@ -276,20 +263,16 @@ bool net_service_manager_module_impl::update() {
 bool net_service_manager_module_impl::pre_shut() {
     // Retire callbacks while their consumers and resource providers are still alive.
     const auto timer_id = std::exchange(health_timer_id_, 0);
-    if (timer_id != 0 && timer_module_)
-    {
+    if (timer_id != 0 && timer_module_) {
         timer_module_->remove_timer(timer_id);
     }
-    for (const auto& [bus, entry] : server_services_)
-    {
+    for (const auto& [bus, entry] : server_services_) {
         entry.service->shutdown();
     }
-    for (const auto& [bus, entry] : intra_services_)
-    {
+    for (const auto& [bus, entry] : intra_services_) {
         entry.service->shutdown();
     }
-    for (const auto& [type, service] : client_services_)
-    {
+    for (const auto& [type, service] : client_services_) {
         service->shutdown();
     }
     net_bus_relations_.clear();
@@ -315,24 +298,21 @@ bool net_service_manager_module_impl::create_server(
     auto func = [this, &self_proc, silent_timeout](
                     const endpoint& ep, shared_ptr<const msg_header> header, server_service& server_service) {
         const auto bus_id = bus_module_->get_self_bus_id();
-        if (server_service.contains(bus_id))
-        {
+        if (server_service.contains(bus_id)) {
             return false;
         }
         auto server_ptr = std::make_shared<net_server_service_impl>(get_plugin_manager());
         auto server_interface_ptr = static_pointer_cast<net_server_service>(server_ptr);
         server_interface_ptr->reg_reg_server_call_back(this, &net_service_manager_module_impl::on_reg_server_call_back);
         const auto [entry, inserted] = server_service.emplace(bus_id, listener{server_ptr});
-        if (!inserted)
-        {
+        if (!inserted) {
             return false;
         }
         // start itself may throw after its native workers start. Keep the entire
         // unpublished receiver and transport in this installed module on unwind.
         const bool ret = server_ptr->start(
             header, self_proc.bus_id, ep, self_proc.thread_num, self_proc.max_connection, silent_timeout);
-        if (ret)
-        {
+        if (ret) {
             entry->second.published = true;
             ARK_LOG_INFO("Start net server successful, url = {}", ep.to_string());
             return true;
@@ -346,12 +326,10 @@ bool net_service_manager_module_impl::create_server(
         return false;
     };
 
-    if (!self_proc.server_ep.get_ip().empty())
-    {
+    if (!self_proc.server_ep.get_ip().empty()) {
         // create inter server
         auto result = func(self_proc.server_ep, cs_req_head, server_services_);
-        if (!result)
-        {
+        if (!result) {
             ARK_LOG_ERROR("Cannot start inter server net, url = {}", self_proc.server_ep.to_string());
             //        promise.SetValue(std::make_pair(false, std::string()));
             //        return promise.GetFuture();
@@ -360,21 +338,16 @@ bool net_service_manager_module_impl::create_server(
     }
 
     auto& intra_ep = self_proc.intranet_ep;
-    if (intra_ep.get_port() == self_proc.server_ep.get_port())
-    {
+    if (intra_ep.get_port() == self_proc.server_ep.get_port()) {
         ARK_LOG_ERROR("Cannot start intra server net, has the same port with server, url = {}", intra_ep.to_string());
         //            promise.SetValue(std::make_pair(false, std::string()));
         //            return promise.GetFuture();
         return false;
-    }
-    else
-    {
-        if (!intra_ep.get_ip().empty())
-        {
+    } else {
+        if (!intra_ep.get_ip().empty()) {
             // create intra server
             auto result = func(intra_ep, ss_req_head, intra_services_);
-            if (!result)
-            {
+            if (!result) {
                 ARK_LOG_ERROR("Cannot start intra server net, url = {}", intra_ep.to_string());
                 //            promise.SetValue(std::make_pair(false, std::string()));
                 //            return promise.GetFuture();
@@ -399,8 +372,7 @@ std::shared_ptr<net_server_service> net_service_manager_module_impl::get_intra_n
 }
 
 bool net_service_manager_module_impl::add_net_connection_bus(bus_id_t target_bus_id, std::shared_ptr<net> net_ptr) {
-    if (/*target_bus_id <= 0 || */ net_ptr == nullptr)
-    {
+    if (/*target_bus_id <= 0 || */ net_ptr == nullptr) {
         return false;
     }
 
@@ -480,8 +452,7 @@ bool net_service_manager_module_impl::create_client_service(const bus_addr& bus_
     const std::string& ip, uint16_t port, std::shared_ptr<const msg_header> head) {
     app_type app_type = static_cast<ark::app_type>(bus_addr.app_type);
     auto client_ptr = client_services_.find_value(app_type);
-    if (client_ptr == nullptr)
-    {
+    if (client_ptr == nullptr) {
         client_ptr = std::make_shared<net_client_service_impl>(get_plugin_manager());
         client_services_.insert(app_type, client_ptr);
     }
@@ -492,8 +463,7 @@ bool net_service_manager_module_impl::create_client_service(const bus_addr& bus_
     target_ep.set_port(port);
 
     bool ret = client_ptr->start_client(head, bus_addr.bus_id, target_ep);
-    if (!ret)
-    {
+    if (!ret) {
         ARK_LOG_ERROR("start net client failed, self_bus_id={} target_url={}", bus_module_->get_self_bus_name(),
             target_ep.to_string());
         return ret;
@@ -506,8 +476,7 @@ bool net_service_manager_module_impl::create_client_service(const bus_addr& bus_
 
 conv_id_t net_service_manager_module_impl::get_session_id(bus_id_t target_bus_id) {
     auto iter = bus_session_list_.find(target_bus_id);
-    if (iter == bus_session_list_.end())
-    {
+    if (iter == bus_session_list_.end()) {
         return 0;
     }
 
@@ -515,10 +484,8 @@ conv_id_t net_service_manager_module_impl::get_session_id(bus_id_t target_bus_id
 }
 
 bool net_service_manager_module_impl::remove_session_id(conv_id_t session_id) {
-    for (auto& iter : bus_session_list_)
-    {
-        if (iter.second == session_id)
-        {
+    for (auto& iter : bus_session_list_) {
+        if (iter.second == session_id) {
             bus_session_list_.erase(iter.first);
             break;
         }
@@ -534,8 +501,7 @@ bool net_service_manager_module_impl::check_connected_target_server(const bus_ad
 std::shared_ptr<connection_data> net_service_manager_module_impl::get_target_client_connection(
     const bus_addr& bus_addr) {
     auto client_service = client_services_.find_value(static_cast<ark::app_type>(bus_addr.app_type));
-    if (client_service == nullptr)
-    {
+    if (client_service == nullptr) {
         return nullptr;
     }
 
@@ -545,12 +511,9 @@ std::shared_ptr<connection_data> net_service_manager_module_impl::get_target_cli
 void net_service_manager_module_impl::on_reg_server_call_back(const net_msg* msg, conv_id_t session_id) {
     // msg->GetSrcBus() means client msg bus id
     auto iter = bus_session_list_.find(msg->get_src_bus());
-    if (iter == bus_session_list_.end())
-    {
+    if (iter == bus_session_list_.end()) {
         bus_session_list_.insert(std::make_pair(msg->get_src_bus(), session_id));
-    }
-    else
-    {
+    } else {
         iter->second = session_id;
     }
 }

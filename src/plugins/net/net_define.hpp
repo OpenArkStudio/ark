@@ -56,8 +56,7 @@ static constexpr int ark_kcp_update_interval_time = 10;          // 10 ms
 static constexpr int ark_kcp_resend_connect_msg_interval = 3000; // milliseconds
 static constexpr int ark_kcp_connect_timeout_time = 60000;       // milliseconds
 
-enum class net_event_type : uint8_t
-{
+enum class net_event_type : uint8_t {
     none = 0,
     connect,
     disconnect,
@@ -66,8 +65,7 @@ enum class net_event_type : uint8_t
     lag_notify,
 };
 
-enum class kcp_protocal_type : uint8_t
-{
+enum class kcp_protocal_type : uint8_t {
     none = 0,
     syn, // connect
     ack, // connected
@@ -75,8 +73,7 @@ enum class kcp_protocal_type : uint8_t
     msg, // msg
 };
 
-enum class kcp_connect_status : uint8_t
-{
+enum class kcp_connect_status : uint8_t {
     status_none = 0,
     status_connecting,
     status_connected,

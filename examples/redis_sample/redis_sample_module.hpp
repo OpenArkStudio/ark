@@ -6,8 +6,7 @@
 
 namespace ark {
 
-class redis_sample_module final : public module_base<module>
-{
+class redis_sample_module final : public module_base<module> {
 public:
     bool init() override;
     bool post_init() override;

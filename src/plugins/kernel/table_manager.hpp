@@ -26,8 +26,7 @@
 
 namespace ark {
 
-class table_manager final
-{
+class table_manager final {
 public:
     using table_list = object_map<uint32_t, table>;
 
@@ -58,8 +57,7 @@ public:
         table_ptr = ARK_NEW table_impl(table_meta_ptr, std::move(func));
         ARK_ASSERT_RET_VAL(table_ptr != nullptr, nullptr);
 
-        if (!table_list_.insert(index, table_ptr).second)
-        {
+        if (!table_list_.insert(index, table_ptr).second) {
             ARK_DELETE(table_ptr);
             return nullptr;
         }

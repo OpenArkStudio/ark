@@ -23,8 +23,7 @@
 using namespace std::chrono_literals;
 
 namespace ark {
-struct scheduler_test_access
-{
+struct scheduler_test_access {
     static std::size_t outstanding(const scheduler& value) {
         return value.outstanding_.load();
     }
@@ -33,13 +32,10 @@ struct scheduler_test_access
         std::lock_guard<std::mutex> lock(value.mutex_);
         std::size_t count{};
         decltype(value.tasks_) advanced;
-        for (auto i = value.tasks_.begin(); i != value.tasks_.end();)
-        {
-            if (!i->second->recurring)
-            {
+        for (auto i = value.tasks_.begin(); i != value.tasks_.end();) {
+            if (!i->second->recurring) {
                 ++count;
-                if (advance)
-                {
+                if (advance) {
                     auto node = value.tasks_.extract(i++);
                     node.key() = scheduler::clock::now();
                     advanced.insert(std::move(node));
@@ -60,10 +56,8 @@ namespace {
 template<typename predicate>
 bool eventually(predicate&& ready) {
     const auto deadline = std::chrono::steady_clock::now() + 5s;
-    while (!ready())
-    {
-        if (std::chrono::steady_clock::now() >= deadline)
-        {
+    while (!ready()) {
+        if (std::chrono::steady_clock::now() >= deadline) {
             return false;
         }
         std::this_thread::yield();
@@ -71,15 +65,13 @@ bool eventually(predicate&& ready) {
     return true;
 }
 
-struct gate
-{
+struct gate {
     std::promise<void> promise;
     std::shared_future<void> future{promise.get_future()};
     std::atomic<bool> opened{false};
 
     void open() {
-        if (!opened.exchange(true))
-        {
+        if (!opened.exchange(true)) {
             promise.set_value();
         }
     }
@@ -89,8 +81,7 @@ struct gate
     }
 };
 
-struct release_on_exit
-{
+struct release_on_exit {
     gate& value;
 
     ~release_on_exit() {
@@ -98,8 +89,7 @@ struct release_on_exit
     }
 };
 
-struct retiring_capture
-{
+struct retiring_capture {
     ark::scheduler& scheduler;
     gate& entered;
     gate& release;
@@ -115,8 +105,7 @@ struct retiring_capture
     }
 };
 
-struct receiver
-{
+struct receiver {
     gate entered;
     gate release;
     std::atomic<unsigned> calls{0};
@@ -128,8 +117,7 @@ struct receiver
     }
 };
 
-struct schedule_module_access : ark::schedule_module
-{
+struct schedule_module_access : ark::schedule_module {
     static void at(ark::schedule_module& module, const std::string& time, ark::scheduler_functor callback) {
         // Form the protected callback overload's member pointer without casting
         // the factory's production module to a test implementation.
@@ -139,15 +127,13 @@ struct schedule_module_access : ark::schedule_module
     }
 };
 
-struct cleanup_probe final : ark::module
-{
+struct cleanup_probe final : ark::module {
     unsigned pre_shut_calls{};
     unsigned shut_calls{};
     std::function<void()> on_update;
 
     bool update() override {
-        if (on_update)
-        {
+        if (on_update) {
             on_update();
         }
         return true;
@@ -254,8 +240,7 @@ TEST_CASE("Scheduler resource close discards future captures and seals running c
     std::atomic<unsigned> calls{};
     std::atomic<bool> capture_retired{};
 
-    struct closing_capture
-    {
+    struct closing_capture {
         ark::scheduler& scheduler;
         gate& entered;
         gate& release;
@@ -317,8 +302,7 @@ TEST_CASE("Scheduler callback exception owners retire before readiness") {
     ark::scheduler scheduler(1);
     release_on_exit unblock{release};
 
-    struct callback_error
-    {
+    struct callback_error {
         gate& entered;
         gate& release;
 
@@ -340,8 +324,7 @@ TEST_CASE("Scheduler reports standard exception cause before retiring its callba
     ark::scheduler scheduler(1);
     std::atomic<bool> reported{};
 
-    struct callback_error final : std::exception
-    {
+    struct callback_error final : std::exception {
         std::atomic<bool>& reported;
 
         explicit callback_error(std::atomic<bool>& reported)
@@ -366,8 +349,7 @@ TEST_CASE("Scheduler capture destruction can schedule same-instance one-shot com
     release_on_exit unblock{release};
     std::atomic<unsigned> calls{};
 
-    struct continuation_capture
-    {
+    struct continuation_capture {
         ark::scheduler& scheduler;
         std::atomic<unsigned>& calls;
 
@@ -393,8 +375,7 @@ TEST_CASE("Scheduler fast callback captures retain continuation authority throug
     ark::scheduler scheduler(8);
     std::atomic<unsigned> calls{};
 
-    struct continuation_capture
-    {
+    struct continuation_capture {
         ark::scheduler& scheduler;
         std::atomic<unsigned>& calls;
 
@@ -403,8 +384,7 @@ TEST_CASE("Scheduler fast callback captures retain continuation authority throug
         }
     };
 
-    for (unsigned i = 0; i < 64; ++i)
-    {
+    for (unsigned i = 0; i < 64; ++i) {
         scheduler.in(24h, [capture = std::make_shared<continuation_capture>(scheduler, calls)] {});
     }
     scheduler.stop_accepting();
@@ -455,13 +435,10 @@ TEST_CASE("Scheduler interval rearms after completion during normal operation") 
     release_on_exit unblock{release};
     std::atomic<unsigned> calls{};
     scheduler.interval(0ms, [&] {
-        if (++calls == 1)
-        {
+        if (++calls == 1) {
             entered.open();
             release.wait();
-        }
-        else
-        {
+        } else {
             scheduler.stop_accepting();
         }
     });
@@ -479,14 +456,11 @@ TEST_CASE("Scheduler every retains overlapping dispatch during normal operation"
     std::atomic<unsigned> calls{};
     std::atomic<bool> first_finished{}, overlap{};
     scheduler.every(1ms, [&] {
-        if (++calls == 1)
-        {
+        if (++calls == 1) {
             entered.open();
             release.wait();
             first_finished = true;
-        }
-        else
-        {
+        } else {
             overlap = !first_finished;
             scheduler.stop_accepting();
         }
@@ -508,16 +482,13 @@ TEST_CASE("Scheduler concurrent accepted at continuations and cron use caller-ow
     std::array<ark::scheduler::clock::time_point, workers> from, expected;
     std::atomic<unsigned> calls{};
     std::atomic<bool> calendars_match{true};
-    for (unsigned i = 0; i < workers; ++i)
-    {
+    for (unsigned i = 0; i < workers; ++i) {
         from[i] = ark::scheduler::clock::from_time_t(1700000000 + i * 86400);
         expected[i] = expression.cron_to_next(from[i]);
         scheduler.in(0ms, [&, i] {
             start.arrive_and_wait();
-            for (unsigned round = 0; round < rounds; ++round)
-            {
-                if (expression.cron_to_next(from[i]) != expected[i])
-                {
+            for (unsigned round = 0; round < rounds; ++round) {
+                if (expression.cron_to_next(from[i]) != expected[i]) {
                     calendars_match = false;
                 }
                 scheduler.at("2000-01-01 00:00:00", [&] { ++calls; });
@@ -536,8 +507,7 @@ TEST_CASE("Scheduler concurrent registration and stop retires every admitted cap
     std::barrier start(5);
     std::atomic<unsigned> owners{}, destroyed{}, calls{};
 
-    struct owner
-    {
+    struct owner {
         std::atomic<unsigned>& destroyed;
 
         ~owner() {
@@ -546,12 +516,10 @@ TEST_CASE("Scheduler concurrent registration and stop retires every admitted cap
     };
 
     std::vector<std::thread> producers;
-    for (unsigned i = 0; i < 4; ++i)
-    {
+    for (unsigned i = 0; i < 4; ++i) {
         producers.emplace_back([&] {
             start.arrive_and_wait();
-            for (unsigned j = 0; j < 500; ++j)
-            {
+            for (unsigned j = 0; j < 500; ++j) {
                 auto capture = std::make_shared<owner>(destroyed);
                 ++owners;
                 scheduler.every(24h, [capture, &calls] { ++calls; });
@@ -560,8 +528,7 @@ TEST_CASE("Scheduler concurrent registration and stop retires every admitted cap
     }
     start.arrive_and_wait();
     scheduler.stop_accepting();
-    for (auto& producer : producers)
-    {
+    for (auto& producer : producers) {
         producer.join();
     }
     REQUIRE(eventually([&] { return scheduler.ready_to_shut(); }));
@@ -574,8 +541,7 @@ TEST_CASE("Scheduler readiness includes a registration copying captures when sto
     ark::scheduler scheduler(1);
     release_on_exit unblock{release};
 
-    struct copying_callable
-    {
+    struct copying_callable {
         gate& entered;
         gate& release;
 
@@ -711,8 +677,7 @@ TEST_CASE("Manager deadline retains accepted future one-shot work without cleanu
     ark::plugin_manager manager;
     ark::scheduler scheduler(1);
 
-    struct scheduler_probe final : ark::module
-    {
+    struct scheduler_probe final : ark::module {
         ark::scheduler& scheduler;
         unsigned cleanup_calls{};
 
@@ -824,8 +789,7 @@ TEST_CASE("Scheduler evaluates nested bind expressions and unwraps generic refer
 }
 
 TEST_CASE("Scheduler member callbacks retain shared receivers and borrow raw receivers") {
-    struct member_receiver
-    {
+    struct member_receiver {
         int calls{};
 
         int invoke(int value, std::promise<int>& completed) {

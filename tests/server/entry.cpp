@@ -11,8 +11,7 @@
 namespace {
 
 void require(bool condition, const char* message) {
-    if (!condition)
-    {
+    if (!condition) {
         std::cerr << message << std::endl;
         std::_Exit(1);
     }

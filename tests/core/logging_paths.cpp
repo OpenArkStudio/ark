@@ -52,8 +52,7 @@ std::filesystem::path native_path(const spdlog::filename_t& filename) {
 #endif
 }
 
-struct filename_case
-{
+struct filename_case {
     spdlog::filename_t input;
     spdlog::filename_t directory;
     spdlog::filename_t basename;
@@ -85,8 +84,7 @@ spdlog::filename_t expected_filename(const filename_case& entry, const std::tm& 
     return native_filename(std::filesystem::path(entry.directory) / day / name);
 }
 
-class log_directory
-{
+class log_directory {
 public:
     const std::filesystem::path directory =
         std::filesystem::temp_directory_path() /
@@ -102,8 +100,7 @@ public:
     }
 };
 
-class temporary_current_directory
-{
+class temporary_current_directory {
 public:
     explicit temporary_current_directory(const std::filesystem::path& directory)
         : previous_(std::filesystem::current_path()) {
@@ -119,8 +116,7 @@ private:
     std::filesystem::path previous_;
 };
 
-class logger_registration
-{
+class logger_registration {
 public:
     explicit logger_registration(std::string name)
         : name_(std::move(name)) {
@@ -147,8 +143,7 @@ std::string read_log(const spdlog::filename_t& file) {
 } // namespace
 
 TEST_CASE("Logging path splitting keeps directories separate from basenames and extensions") {
-    for (const auto& entry : filename_cases)
-    {
+    for (const auto& entry : filename_cases) {
         const auto [directory, basename, extension] = filename_calculator::split_by_dir_and_extenstion(entry.input);
         CHECK(directory == entry.directory);
         CHECK(basename == entry.basename);
@@ -164,8 +159,7 @@ TEST_CASE("Logging path splitting keeps directories separate from basenames and 
 }
 
 TEST_CASE("Logging filename calculation preserves relative paths without creating directories") {
-    for (const auto& entry : filename_cases)
-    {
+    for (const auto& entry : filename_cases) {
         const auto before = spdlog::details::os::localtime();
         const auto actual = filename_calculator::calc_filename(entry.input);
         const auto after = spdlog::details::os::localtime();
@@ -326,8 +320,7 @@ TEST_CASE("owned asynchronous logging drains its queue when the wrapper is relea
     {
         ark::logger logger;
         REQUIRE(logger.init_logger(settings, "drain.log"));
-        for (int i = 0; i < 32; ++i)
-        {
+        for (int i = 0; i < 32; ++i) {
             logger.log_t(ark::detail::log_source_location(), spdlog::level::info, "async marker {}", i);
         }
     }
@@ -358,8 +351,7 @@ TEST_CASE("Logging callback reset restores configured output formatting and leve
     settings.output_path = output_directory.string();
     ark::logger logger;
 #ifdef ARK_LOGGING_CONFIG_TESTS
-    if (route == "toml")
-    {
+    if (route == "toml") {
         const auto config = files.directory / "logging.app.toml";
         {
             std::ofstream output(config);
@@ -419,8 +411,7 @@ TEST_CASE("Logging UTF-8 output directories and filenames create native files wi
         settings.pattern = "%v";
         settings.queue_count = route == "async" ? 8 : 0;
 #ifdef ARK_LOGGING_CONFIG_TESTS
-        if (route == "toml")
-        {
+        if (route == "toml") {
             const auto config = files.directory / "logging.app.toml";
             const auto path = directory.generic_u8string();
             const std::string configured_output_path(reinterpret_cast<const char*>(path.data()), path.size());
@@ -462,8 +453,7 @@ TEST_CASE("Logging native UTF-8 file sinks preserve append truncation and bounde
     SUBCASE("hourly append and truncate") {
         const auto output = native_path(filename_calculator::calc_filename(filename));
         std::string expected;
-        for (const bool truncate : {false, false, true})
-        {
+        for (const bool truncate : {false, false, true}) {
             {
                 auto sink = std::make_shared<spdlog::sinks::date_and_hour_file_sink_mt>(filename, truncate);
                 spdlog::logger logger("native-hourly", sink);
@@ -471,8 +461,7 @@ TEST_CASE("Logging native UTF-8 file sinks preserve append truncation and bounde
                 logger.info("{}", payload);
                 logger.flush();
             }
-            if (truncate)
-            {
+            if (truncate) {
                 expected.clear();
             }
             expected += payload + eol;
@@ -486,8 +475,7 @@ TEST_CASE("Logging native UTF-8 file sinks preserve append truncation and bounde
             auto sink = std::make_shared<sink_type>(filename, payload.size() + 1 + eol.size(), 2);
             spdlog::logger logger("native-size", sink);
             logger.set_pattern("%v");
-            for (int i = 0; i < 4; ++i)
-            {
+            for (int i = 0; i < 4; ++i) {
                 logger.info("{}{}", payload, i);
             }
             logger.flush();

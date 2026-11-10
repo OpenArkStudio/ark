@@ -37,8 +37,7 @@ std::string schema() {
 {"class":"Item","rows":[{"id":2,"count":7}]}]})";
 }
 
-class resource_files
-{
+class resource_files {
 public:
     resource_files()
         : previous_(std::filesystem::current_path())
@@ -70,8 +69,7 @@ private:
     std::filesystem::path previous_, directory_;
 };
 
-class guid_sequence final : public ark::guid_module
-{
+class guid_sequence final : public ark::guid_module {
 public:
     ark::guid_t create_guid() override {
         return next_++;
@@ -85,14 +83,12 @@ private:
     ark::guid_t next_{1000};
 };
 
-class json_world
-{
+class json_world {
 public:
     explicit json_world(bool replace_after_metadata = false, bool omit_player = false, ark::guid_t owner = 42) {
         ark::logger::init(&logger_);
         logger_.set_log_func([](spdlog::level::level_enum, const std::string&) {});
-        if (owner != 42)
-        {
+        if (owner != 42) {
             auto text = schema();
             const std::string original = "\"owner\":\"42\"";
             const auto position = text.find(original);
@@ -100,8 +96,7 @@ public:
             text.replace(position, original.size(), "\"owner\":\"" + std::to_string(owner) + "\"");
             files_.write("entity_schema.json", text);
         }
-        if (omit_player)
-        {
+        if (omit_player) {
             auto document = ark::entity_json::parse(schema());
             document.classes.erase(document.classes.begin());
             files_.write("entity_schema.json", ark::entity_json::serialize(document));
@@ -115,8 +110,7 @@ public:
         REQUIRE(kernel.init());
         REQUIRE(config.init());
         REQUIRE(metadata.init());
-        if (replace_after_metadata)
-        {
+        if (replace_after_metadata) {
             files_.write("entity_schema.json", "{");
         }
         REQUIRE(config.post_init());
@@ -157,8 +151,7 @@ private:
 } // namespace
 
 TEST_CASE("scalar snapshots capture configured GUID boundaries without narrowing or retaining the entity") {
-    for (const auto guid : {std::numeric_limits<ark::guid_t>::min(), std::numeric_limits<ark::guid_t>::max()})
-    {
+    for (const auto guid : {std::numeric_limits<ark::guid_t>::min(), std::numeric_limits<ark::guid_t>::max()}) {
         json_world world(false, false, guid);
         auto source = world.create(10);
         REQUIRE(source != nullptr);
@@ -175,8 +168,7 @@ TEST_CASE("scalar snapshots capture configured GUID boundaries without narrowing
 }
 
 TEST_CASE("public entity GUID setters preserve tagged callback values through name and index") {
-    struct guid_observer
-    {
+    struct guid_observer {
         int changed(
             const ark::guid_t&, const std::string&, std::uint32_t, const ark::data& before, const ark::data& after) {
             CHECK(before.get_type() == ark::data_type::dt_guid);
@@ -297,17 +289,13 @@ TEST_CASE("Malformed selected Kernel JSON fails startup instead of silently load
     ark::logger::init(&logger);
     logger.set_log_func([](spdlog::level::level_enum, const std::string&) {});
     for (const auto& contents :
-        {std::string("{"), std::string(R"({"format":"wrong","version":1,"classes":[],"configs":[]})")})
-    {
+        {std::string("{"), std::string(R"({"format":"wrong","version":1,"classes":[],"configs":[]})")}) {
         files.write("entity_schema.json", contents);
         ark::class_meta_module_impl metadata;
-        try
-        {
+        try {
             static_cast<void>(metadata.init());
             FAIL("selected invalid JSON did not fail startup");
-        }
-        catch (const ark::entity_json::error& error)
-        {
+        } catch (const ark::entity_json::error& error) {
             CHECK(error.source().find("resource") != std::string::npos);
             CHECK(std::string(error.what()).find("entity_schema.json") != std::string::npos);
         }
@@ -325,13 +313,10 @@ TEST_CASE("Missing Kernel JSON rejects manager startup even beside valid legacy 
     ark::class_meta_module_impl metadata;
     metadata.set_plugin_manager(&manager);
     REQUIRE(manager.add_module(GET_CLASS_NAME(ark::class_meta_module), &metadata));
-    try
-    {
+    try {
         static_cast<void>(manager.start(0, {}, {}, {}));
         FAIL("missing required JSON accepted legacy XML");
-    }
-    catch (const ark::entity_json::error& error)
-    {
+    } catch (const ark::entity_json::error& error) {
         CHECK(error.source() == "resource/meta/entity_schema.json");
         CHECK(error.pointer() == "/");
         CHECK(std::string(error.what()).find("could not open JSON input") != std::string::npos);

@@ -25,16 +25,16 @@ template<typename F>
 bool default_failure(F&& operation) {
     fail_next_array = true;
     bool threw{};
-    try
-    { operation(); }
-    catch (const std::bad_alloc&)
-    { threw = true; }
+    try {
+        operation();
+    } catch (const std::bad_alloc&) {
+        threw = true;
+    }
     CHECK_FALSE(fail_next_array);
     return threw;
 }
 
-struct saved_value
-{
+struct saved_value {
     ark::data_type type;
     std::string content;
     const void* storage{};
@@ -43,20 +43,15 @@ struct saved_value
 
 saved_value save(const ark::data& value) {
     saved_value result{value.get_type(), {}, nullptr, 0};
-    if (result.type == ark::data_type::dt_string)
-    {
+    if (result.type == ark::data_type::dt_string) {
         result.content = value.get_string();
         result.storage = value.get_string();
-    }
-    else if (result.type == ark::data_type::dt_userdata)
-    {
+    } else if (result.type == ark::data_type::dt_userdata) {
         std::size_t size{};
         const auto* data = static_cast<const char*>(value.get_user_data(size));
         result.content.assign(data, size);
         result.storage = value.get_raw_user_data();
-    }
-    else
-    {
+    } else {
         result.number = value.get_int();
     }
     return result;
@@ -72,8 +67,7 @@ void unchanged(const ark::data& value, const saved_value& previous) {
 
 template<typename T>
 void initial_value(T& value, int kind) {
-    switch (kind)
-    {
+    switch (kind) {
     case 0:
         value.set_int(42);
         break;
@@ -89,11 +83,9 @@ void initial_value(T& value, int kind) {
     }
 }
 
-class tracked_allocator
-{
+class tracked_allocator {
 public:
-    enum class failure
-    {
+    enum class failure {
         none,
         null,
         exception
@@ -106,12 +98,10 @@ public:
     void* alloc(std::size_t size) {
         const auto mode = successful_before_failure ? (--successful_before_failure, failure::none)
                                                     : std::exchange(next, failure::none);
-        if (mode == failure::null)
-        {
+        if (mode == failure::null) {
             return nullptr;
         }
-        if (mode == failure::exception)
-        {
+        if (mode == failure::exception) {
             throw std::bad_alloc{};
         }
         auto* value = new char[size];
@@ -120,13 +110,11 @@ public:
     }
 
     void free(void* value, std::size_t size) {
-        if (!value)
-        {
+        if (!value) {
             return;
         }
         const auto found = live.find(value);
-        if (found == live.end() || found->second != std::make_pair(id_, size))
-        {
+        if (found == live.end() || found->second != std::make_pair(id_, size)) {
             std::abort();
         }
         live.erase(found);
@@ -148,19 +136,17 @@ using tracked_data = ark::data_base<8, tracked_allocator>;
 // Exercise the real default allocator and default ARK_NEW_ARRAY_RET expansion.
 // Only its standard nothrow new[] call fails; successful storage uses normal new[]/delete[].
 void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
-    if (fail_next_array && fail_array_after)
-    {
+    if (fail_next_array && fail_array_after) {
         --fail_array_after;
-    }
-    else if (fail_next_array)
-    {
+    } else if (fail_next_array) {
         fail_next_array = false;
         return nullptr;
     }
-    try
-    { return ::operator new[](size); }
-    catch (...)
-    { return nullptr; }
+    try {
+        return ::operator new[](size);
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void operator delete[](void* value, const std::nothrow_t&) noexcept {
@@ -176,20 +162,15 @@ TEST_CASE("Default data allocator null user data construction reports bad_alloc"
 }
 
 TEST_CASE("Default data allocator failed setters retain scalar inline string heap string and user data") {
-    for (int kind = 0; kind < 4; ++kind)
-    {
-        for (bool user_data : {false, true})
-        {
+    for (int kind = 0; kind < 4; ++kind) {
+        for (bool user_data : {false, true}) {
             ark::data_impl value;
             initial_value(value, kind);
             const auto previous = save(value);
             CHECK(default_failure([&] {
-                if (user_data)
-                {
+                if (user_data) {
                     value.set_user_data(bytes, sizeof(bytes));
-                }
-                else
-                {
+                } else {
                     value.set_string(text);
                 }
             }));
@@ -199,33 +180,25 @@ TEST_CASE("Default data allocator failed setters retain scalar inline string hea
 }
 
 TEST_CASE("Default data allocator failed copies and assignments retain both operands") {
-    for (bool user_data : {false, true})
-    {
+    for (bool user_data : {false, true}) {
         ark::data_impl source;
-        if (user_data)
-        {
+        if (user_data) {
             source.set_user_data(bytes, sizeof(bytes));
-        }
-        else
-        {
+        } else {
             source.set_string(text);
         }
         const auto before_source = save(source);
         const ark::data& erased = source;
-        for (int operation = 0; operation < 5; ++operation)
-        {
+        for (int operation = 0; operation < 5; ++operation) {
             ark::data_impl target(ark::data_type::dt_string, "old allocated string value");
             const auto before_target = save(target);
             CHECK(default_failure([&] {
-                switch (operation)
-                {
-                case 0:
-                {
+                switch (operation) {
+                case 0: {
                     ark::data_impl copy(source);
                     break;
                 }
-                case 1:
-                {
+                case 1: {
                     ark::data_impl copy(erased);
                     break;
                 }
@@ -256,8 +229,7 @@ TEST_CASE("Default data allocator inline strings need no heap allocation") {
 }
 
 TEST_CASE("Data setters retain self source storage until replacement is complete") {
-    for (const auto input : {"abc", text})
-    {
+    for (const auto input : {"abc", text}) {
         ark::data_impl value(ark::data_type::dt_string, input);
         value.set_string(value.get_string());
         CHECK(std::string(value.get_string()) == input);
@@ -284,28 +256,22 @@ TEST_CASE("Data setters retain self source storage until replacement is complete
 }
 
 TEST_CASE("Custom data allocators preserve old values and matching storage ownership on null and throw") {
-    for (auto mode : {tracked_allocator::failure::null, tracked_allocator::failure::exception})
-    {
+    for (auto mode : {tracked_allocator::failure::null, tracked_allocator::failure::exception}) {
         REQUIRE(tracked_allocator::live.empty());
-        for (int kind = 0; kind < 4; ++kind)
-        {
-            for (int operation = 0; operation < 6; ++operation)
-            {
+        for (int kind = 0; kind < 4; ++kind) {
+            for (int operation = 0; operation < 6; ++operation) {
                 tracked_data value;
                 initial_value(value, kind);
                 tracked_data source(ark::data_type::dt_string, text);
-                if (operation == 3)
-                {
+                if (operation == 3) {
                     source.set_user_data(bytes, sizeof(bytes));
                 }
                 const auto previous = save(value);
                 const auto allocations = tracked_allocator::live;
                 tracked_allocator::next = mode;
                 bool threw{};
-                try
-                {
-                    switch (operation)
-                    {
+                try {
+                    switch (operation) {
                     case 0:
                         value.set_string(text);
                         break;
@@ -318,20 +284,18 @@ TEST_CASE("Custom data allocators preserve old values and matching storage owner
                     case 3:
                         value.assign(source);
                         break;
-                    case 4:
-                    {
+                    case 4: {
                         tracked_data copy(source);
                         break;
                     }
-                    default:
-                    {
+                    default: {
                         tracked_data copy(ark::data_type::dt_userdata, bytes, sizeof(bytes));
                         break;
                     }
                     }
+                } catch (const std::bad_alloc&) {
+                    threw = true;
                 }
-                catch (const std::bad_alloc&)
-                { threw = true; }
                 CHECK(threw);
                 CHECK(tracked_allocator::next == tracked_allocator::failure::none);
                 unchanged(value, previous);
@@ -347,8 +311,7 @@ TEST_CASE("Custom allocator node conversion rejects null allocation without losi
     meta->set_type(ark::data_type::dt_string);
     ark::node_string source(meta);
     source.set_string(text);
-    for (auto mode : {tracked_allocator::failure::null, tracked_allocator::failure::exception})
-    {
+    for (auto mode : {tracked_allocator::failure::null, tracked_allocator::failure::exception}) {
         tracked_data value(ark::data_type::dt_string, "old allocated string value");
         const auto previous = save(value);
         tracked_allocator::next = mode;
@@ -359,8 +322,7 @@ TEST_CASE("Custom allocator node conversion rejects null allocation without losi
 }
 
 TEST_CASE("Custom allocator self source failures retain string and user data") {
-    for (auto mode : {tracked_allocator::failure::null, tracked_allocator::failure::exception})
-    {
+    for (auto mode : {tracked_allocator::failure::null, tracked_allocator::failure::exception}) {
         tracked_data value(ark::data_type::dt_string, text);
         auto previous = save(value);
         tracked_allocator::next = mode;
@@ -434,8 +396,7 @@ TEST_CASE("Raw user data length rejects a size_t header overflow") {
 
 TEST_CASE("DataList excessive user data is rejected before allocating or publishing an index") {
     constexpr auto maximum = std::numeric_limits<std::size_t>::max();
-    for (const auto size : {maximum, maximum - sizeof(std::size_t) + 1, maximum - sizeof(std::size_t)})
-    {
+    for (const auto size : {maximum, maximum - sizeof(std::size_t) + 1, maximum - sizeof(std::size_t)}) {
         ark::base_data_list<1, 16, tracked_allocator> values;
         REQUIRE(values.add_string("1234567"));
         // Old code attempts index growth first. Refuse that allocation so even
@@ -466,16 +427,14 @@ namespace {
 
 template<std::size_t capacity>
 void failed_list_append(tracked_allocator::failure mode, bool fail_buffer_after_index) {
-    for (int kind = 0; kind < 3; ++kind)
-    {
+    for (int kind = 0; kind < 3; ++kind) {
         ark::base_data_list<capacity, 16, tracked_allocator> values;
         REQUIRE(values.add_int(17));
         const auto previous_memory = values.get_mem_usage();
         tracked_allocator::next = mode;
         tracked_allocator::successful_before_failure = fail_buffer_after_index ? 1 : 0;
         const auto append = [&] {
-            if (kind == 0)
-            {
+            if (kind == 0) {
                 return values.add_user_data(text, sizeof(text));
             }
             return kind == 1 ? values.add_string(text) : values.add_string(text, sizeof(text));
@@ -486,24 +445,19 @@ void failed_list_append(tracked_allocator::failure mode, bool fail_buffer_after_
         tracked_allocator::successful_before_failure = 0;
         CHECK(values.get_count() == 1);
         CHECK(values.get_int(0) == 17);
-        if (fail_buffer_after_index)
-        {
+        if (fail_buffer_after_index) {
             CHECK(values.get_mem_usage() > previous_memory);
         }
         // Avoid inspecting an incomplete old-code record in the red regression.
-        if (values.get_count() == 1)
-        {
+        if (values.get_count() == 1) {
             REQUIRE(append());
             CHECK(values.get_count() == 2);
-            if (kind == 0)
-            {
+            if (kind == 0) {
                 std::size_t size{};
                 const auto* result = values.user_data(1, size);
                 CHECK(size == sizeof(text));
                 CHECK(std::memcmp(result, text, size) == 0);
-            }
-            else
-            {
+            } else {
                 CHECK(std::string(values.string(1)) == text);
             }
         }
@@ -594,8 +548,7 @@ void fill_copy_list(List& values, int first = 17) {
 template<typename List>
 void check_copy_list(const List& values, int first = 17) {
     CHECK(values.get_count() == 3);
-    if (values.get_count() == 3)
-    {
+    if (values.get_count() == 3) {
         CHECK(values.get_int(0) == first);
         CHECK(std::string(values.string(1)) == text);
         CHECK(values.get_int(2) == first + 1);
@@ -605,16 +558,12 @@ void check_copy_list(const List& values, int first = 17) {
 void recover_failed_copy(std::size_t owner) {
     // Red regressions recover only storage owned by the failed constructor;
     // live source/target allocators keep their own allocations untouched.
-    for (auto it = tracked_allocator::live.begin(); it != tracked_allocator::live.end();)
-    {
-        if (it->second.first == owner)
-        {
+    for (auto it = tracked_allocator::live.begin(); it != tracked_allocator::live.end();) {
+        if (it->second.first == owner) {
             auto* pointer = static_cast<char*>(it->first);
             it = tracked_allocator::live.erase(it);
             delete[] pointer;
-        }
-        else
-        {
+        } else {
             ++it;
         }
     }
@@ -623,12 +572,9 @@ void recover_failed_copy(std::size_t owner) {
 } // namespace
 
 TEST_CASE("DataList copy constructors release partial storage after null and throwing allocations") {
-    for (bool through_interface : {false, true})
-    {
-        for (auto mode : {tracked_allocator::failure::null, tracked_allocator::failure::exception})
-        {
-            for (std::size_t position : {1u, 2u})
-            {
+    for (bool through_interface : {false, true}) {
+        for (auto mode : {tracked_allocator::failure::null, tracked_allocator::failure::exception}) {
+            for (std::size_t position : {1u, 2u}) {
                 CAPTURE(through_interface);
                 CAPTURE(position);
                 CAPTURE(static_cast<int>(mode));
@@ -639,13 +585,10 @@ TEST_CASE("DataList copy constructors release partial storage after null and thr
                 tracked_allocator::next = mode;
                 tracked_allocator::successful_before_failure = position;
                 const auto copy = [&] {
-                    if (through_interface)
-                    {
+                    if (through_interface) {
                         const ark::data_list& interface = source;
                         copy_list destination(interface);
-                    }
-                    else
-                    {
+                    } else {
                         copy_list destination(source);
                     }
                 };
@@ -656,8 +599,7 @@ TEST_CASE("DataList copy constructors release partial storage after null and thr
                 tracked_allocator::successful_before_failure = 0;
                 CHECK(tracked_allocator::live == original);
                 check_copy_list(source);
-                if (source.get_count() == 3)
-                {
+                if (source.get_count() == 3) {
                     CHECK(static_cast<const void*>(source.string(1)) == static_cast<const void*>(storage));
                 }
                 recover_failed_copy(failed_owner);
@@ -667,12 +609,10 @@ TEST_CASE("DataList copy constructors release partial storage after null and thr
 }
 
 TEST_CASE("DataList self assignment preserves inline and allocated values and its by-value result") {
-    for (bool allocated : {false, true})
-    {
+    for (bool allocated : {false, true}) {
         copy_list source;
         REQUIRE(source.add_int(17));
-        if (allocated)
-        {
+        if (allocated) {
             REQUIRE(source.add_string(text));
             REQUIRE(source.add_int(18));
         }
@@ -683,12 +623,10 @@ TEST_CASE("DataList self assignment preserves inline and allocated values and it
             auto returned = (source = *same);
             CHECK(source.get_count() == count);
             CHECK(returned.get_count() == count);
-            if (source.get_count() == count && returned.get_count() == count)
-            {
+            if (source.get_count() == count && returned.get_count() == count) {
                 CHECK(source.get_int(0) == 17);
                 CHECK(returned.get_int(0) == 17);
-                if (allocated)
-                {
+                if (allocated) {
                     CHECK(returned.string(1) != source.string(1));
                     REQUIRE(returned.set_string(1, "changed"));
                     CHECK(std::string(source.string(1)) == text);
@@ -700,10 +638,8 @@ TEST_CASE("DataList self assignment preserves inline and allocated values and it
 }
 
 TEST_CASE("DataList self assignment return-copy failures preserve values and allocator ownership") {
-    for (auto mode : {tracked_allocator::failure::null, tracked_allocator::failure::exception})
-    {
-        for (std::size_t position : {1u, 2u})
-        {
+    for (auto mode : {tracked_allocator::failure::null, tracked_allocator::failure::exception}) {
+        for (std::size_t position : {1u, 2u}) {
             copy_list source;
             fill_copy_list(source);
             const auto original = tracked_allocator::live;
@@ -717,8 +653,7 @@ TEST_CASE("DataList self assignment return-copy failures preserve values and all
             tracked_allocator::successful_before_failure = 0;
             CHECK(tracked_allocator::live == original);
             check_copy_list(source);
-            if (source.get_count() == 3)
-            {
+            if (source.get_count() == 3) {
                 CHECK(static_cast<const void*>(source.string(1)) == static_cast<const void*>(storage));
             }
             recover_failed_copy(tracked_allocator::next_id);
@@ -727,23 +662,18 @@ TEST_CASE("DataList self assignment return-copy failures preserve values and all
 }
 
 TEST_CASE("Default DataList copies and self assignment preserve the source on null array allocations") {
-    for (bool through_interface : {false, true})
-    {
-        for (std::size_t position : {1u, 2u})
-        {
+    for (bool through_interface : {false, true}) {
+        for (std::size_t position : {1u, 2u}) {
             ark::base_data_list<1, 16> source;
             fill_copy_list(source);
             const auto* storage = source.string(1);
             fail_next_array = true;
             fail_array_after = position;
             const auto copy = [&] {
-                if (through_interface)
-                {
+                if (through_interface) {
                     const ark::data_list& interface = source;
                     ark::base_data_list<1, 16> destination(interface);
-                }
-                else
-                {
+                } else {
                     ark::base_data_list<1, 16> destination(source);
                 }
             };
@@ -752,8 +682,7 @@ TEST_CASE("Default DataList copies and self assignment preserve the source on nu
             fail_next_array = false;
             fail_array_after = 0;
             check_copy_list(source);
-            if (source.get_count() == 3)
-            {
+            if (source.get_count() == 3) {
                 CHECK(static_cast<const void*>(source.string(1)) == static_cast<const void*>(storage));
             }
             fail_next_array = true;
@@ -764,8 +693,7 @@ TEST_CASE("Default DataList copies and self assignment preserve the source on nu
             fail_next_array = false;
             fail_array_after = 0;
             check_copy_list(source);
-            if (source.get_count() == 3)
-            {
+            if (source.get_count() == 3) {
                 CHECK(static_cast<const void*>(source.string(1)) == static_cast<const void*>(storage));
             }
         }
@@ -774,10 +702,8 @@ TEST_CASE("Default DataList copies and self assignment preserve the source on nu
 
 TEST_CASE("DataList tokenizing constructor releases partial storage after null and throwing allocations") {
     constexpr char source[] = "abcdefghijklmnop,qrstuvwxyzabcdefgh,tail";
-    for (auto mode : {tracked_allocator::failure::null, tracked_allocator::failure::exception})
-    {
-        for (std::size_t position : {0u, 1u, 2u, 3u})
-        {
+    for (auto mode : {tracked_allocator::failure::null, tracked_allocator::failure::exception}) {
+        for (std::size_t position : {0u, 1u, 2u, 3u}) {
             CAPTURE(position);
             CAPTURE(static_cast<int>(mode));
             const auto original = tracked_allocator::live;
@@ -796,8 +722,7 @@ TEST_CASE("DataList tokenizing constructor releases partial storage after null a
 
 TEST_CASE("Default DataList tokenizing constructor reports null array allocations") {
     constexpr char source[] = "abcdefghijklmnop,qrstuvwxyzabcdefgh,tail";
-    for (std::size_t position : {0u, 1u, 2u, 3u})
-    {
+    for (std::size_t position : {0u, 1u, 2u, 3u}) {
         fail_next_array = true;
         fail_array_after = position;
         CHECK_THROWS_AS((ark::base_data_list<1, 16>(source, sizeof(source) - 1, ',')), std::bad_alloc);

@@ -24,8 +24,7 @@
 
 namespace ark {
 
-class login_plugin final : public plugin_base<login_plugin>
-{
+class login_plugin final : public plugin_base<login_plugin> {
 public:
     void install() override;
     void uninstall() override;

@@ -19,14 +19,12 @@ namespace {
 
 using namespace ark::entity_sync;
 
-class nested_world
-{
+class nested_world {
 public:
     nested_world() {
         root_schema->create_data_meta("amount", 1)->set_type(ark::data_type::dt_int32);
         root_schema->create_data_meta("secret", 2)->set_type(ark::data_type::dt_string);
-        for (const auto& schema : {row_schema, item_schema})
-        {
+        for (const auto& schema : {row_schema, item_schema}) {
             schema->create_data_meta("amount", 1)->set_type(ark::data_type::dt_uint32);
             schema->create_data_meta("label", 2)->set_type(ark::data_type::dt_string);
         }
@@ -40,12 +38,10 @@ public:
     ~nested_world() {
         // Existing parent relationships are strong references. Detach even
         // deliberately malformed/cyclic test graphs before releasing the world.
-        for (const auto& entity : entities)
-        {
+        for (const auto& entity : entities) {
             const auto bag = entity->find_container(201);
             bag->remove(0u);
-            while (const auto slot = bag->first())
-            {
+            while (const auto slot = bag->first()) {
                 bag->remove(slot);
             }
         }
@@ -75,31 +71,23 @@ public:
 
 std::size_t string_bytes(const nested_entity_snapshot& state) {
     std::size_t total = state.scalars.class_name.size();
-    for (const auto& [index, value] : state.scalars.fields)
-    {
-        if (const auto text = std::get_if<std::string>(&value))
-        {
+    for (const auto& [index, value] : state.scalars.fields) {
+        if (const auto text = std::get_if<std::string>(&value)) {
             total += text->size();
         }
     }
-    for (const auto& [index, table] : state.tables)
-    {
+    for (const auto& [index, table] : state.tables) {
         total += table.class_name.size();
-        for (const auto& [number, row] : table.rows)
-        {
-            for (const auto& [column, value] : row.fields)
-            {
-                if (const auto text = std::get_if<std::string>(&value))
-                {
+        for (const auto& [number, row] : table.rows) {
+            for (const auto& [column, value] : row.fields) {
+                if (const auto text = std::get_if<std::string>(&value)) {
                     total += text->size();
                 }
             }
         }
     }
-    for (const auto& [index, container] : state.containers)
-    {
-        for (const auto& [slot, child] : container)
-        {
+    for (const auto& [index, container] : state.containers) {
+        for (const auto& [slot, child] : container) {
             total += string_bytes(child);
         }
     }
@@ -113,8 +101,7 @@ TEST_CASE("Nested owning capture preserves row keys and distinct lifetimes acros
     const auto selection = world.selection();
     auto* table = world.root->find_table(200);
     REQUIRE(table != nullptr);
-    for (const auto number : {1u, 2u, 3u})
-    {
+    for (const auto number : {1u, 2u, 3u}) {
         REQUIRE(table->add_row(number) != nullptr);
     }
     const auto original = world.capture(selection);
@@ -146,8 +133,7 @@ TEST_CASE("Nested capture reflects committed row state when add delete or clear 
     REQUIRE(world.root_schema->get_class_call_back_manager()->add_table_call_back(
         200,
         [&](const ark::guid_t&, const ark::table_event_data& event, const ark::data&, const ark::data&) {
-            if (event.op_type == fail_operation)
-            {
+            if (event.op_type == fail_operation) {
                 throw std::runtime_error("table callback");
             }
             return 0;
@@ -324,8 +310,7 @@ TEST_CASE("Nested capture bounds aggregate state and leaves the previous value i
     auto selection = world.selection();
     selection.root.fields = {1, 2};
     REQUIRE(world.root->set_string(2, "root-text"));
-    for (const auto number : {1u, 2u})
-    {
+    for (const auto number : {1u, 2u}) {
         const auto row = world.root->find_table(200)->add_row(number);
         REQUIRE(row->set_string(2, "row-text"));
     }

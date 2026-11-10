@@ -29,33 +29,28 @@ namespace ark {
 
 using sample_actor_direction_list = std::vector<physic3_d>;
 
-struct sample_actor_direction
-{
+struct sample_actor_direction {
     int move_count{0};
     sample_actor_direction_list direction_list;
 };
 
 using move_count_actor_direction_list = std::map<int, sample_actor_direction>;
 
-struct sample_move_step
-{
+struct sample_move_step {
     float move_step{0.0F};
     move_count_actor_direction_list count_actor_move_list;
 };
 
 using step_move_count_actor_move_list = std::map<int, sample_move_step>;
 
-class sample_scene
-{
+class sample_scene {
 public:
     bool is_in_range(const physic3_d& pos) const {
-        if (pos.x < min_pos.x || pos.z < min_pos.z)
-        {
+        if (pos.x < min_pos.x || pos.z < min_pos.z) {
             return false;
         }
 
-        if (pos.x > max_pos.x || pos.z > max_pos.z)
-        {
+        if (pos.x > max_pos.x || pos.z > max_pos.z) {
             return false;
         }
 
@@ -70,8 +65,7 @@ public:
     std::vector<guid_t> actor_list;
 };
 
-class physics_scene_module final : public module
-{
+class physics_scene_module final : public module {
     ARK_DECLARE_MODULE_FUNCTIONS
 public:
     explicit physics_scene_module() = default;

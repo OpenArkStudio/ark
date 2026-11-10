@@ -27,8 +27,7 @@ std::uint16_t resource_port() {
     return acceptor.local_endpoint().port();
 }
 
-class release_route
-{
+class release_route {
 public:
     explicit release_route(std::promise<void>& promise)
         : promise_(promise) {
@@ -39,8 +38,7 @@ public:
     }
 
     void release() {
-        if (!released_)
-        {
+        if (!released_) {
             promise_.set_value();
             released_ = true;
         }
@@ -53,8 +51,7 @@ private:
 
 bool wait_for_resource_readiness(const ark::http_server_module& server) {
     const auto deadline = std::chrono::steady_clock::now() + 5s;
-    while (!server.ready_to_shut() && std::chrono::steady_clock::now() < deadline)
-    {
+    while (!server.ready_to_shut() && std::chrono::steady_clock::now() < deadline) {
         std::this_thread::yield();
     }
     return server.ready_to_shut();
@@ -71,8 +68,7 @@ TEST_CASE("HTTP resource retirement seals native route dispatch and waits for ac
     std::atomic<bool> route_timed_out{false};
     auto server = ark::detail::make_http_server_module();
     server->get_router().add(arknet::http::verb::get, "/accepted", [&](const auto&, auto& response) {
-        if (++routed == 1)
-        {
+        if (++routed == 1) {
             entered.set_value();
             route_timed_out = released.wait_for(5s) != std::future_status::ready;
         }
@@ -103,8 +99,7 @@ TEST_CASE("HTTP resource retirement seals native route dispatch and waits for ac
     CHECK(response.second == "accepted");
     CHECK_FALSE(route_timed_out.load());
     const auto deadline = std::chrono::steady_clock::now() + 5s;
-    while (!server->ready_to_shut() && std::chrono::steady_clock::now() < deadline)
-    {
+    while (!server->ready_to_shut() && std::chrono::steady_clock::now() < deadline) {
         std::this_thread::sleep_for(1ms);
     }
     REQUIRE(server->ready_to_shut());
@@ -147,8 +142,7 @@ TEST_CASE("HTTP resource readiness waits for a route after its peer disconnects"
     socket.close();
     route_guard.release();
     const auto deadline = std::chrono::steady_clock::now() + 5s;
-    while (!server->ready_to_shut() && std::chrono::steady_clock::now() < deadline)
-    {
+    while (!server->ready_to_shut() && std::chrono::steady_clock::now() < deadline) {
         std::this_thread::sleep_for(1ms);
     }
     REQUIRE(server->ready_to_shut());
@@ -168,8 +162,7 @@ TEST_CASE("HTTP server manager timeout retains its listener and active route") {
     std::weak_ptr<int> retained = lifetime;
     auto server = ark::detail::make_http_server_module();
     server->get_router().add(arknet::http::verb::get, "/timeout", [&, lifetime](const auto&, auto& response) {
-        if (++routed == 1)
-        {
+        if (++routed == 1) {
             entered.set_value();
             route_timed_out = released.wait_for(5s) != std::future_status::ready;
         }
@@ -215,8 +208,7 @@ TEST_CASE("HTTP server manager timeout retains its listener and active route") {
 }
 
 TEST_CASE("HTTP server manager readiness failure retains its listener and active route") {
-    struct failed_readiness : ark::module
-    {
+    struct failed_readiness : ark::module {
         bool ready_to_shut() const override {
             throw std::runtime_error("HTTP resource readiness failure");
         }
@@ -232,8 +224,7 @@ TEST_CASE("HTTP server manager readiness failure retains its listener and active
     std::weak_ptr<int> retained = lifetime;
     auto server = ark::detail::make_http_server_module();
     server->get_router().add(arknet::http::verb::get, "/failure", [&, lifetime](const auto&, auto& response) {
-        if (++routed == 1)
-        {
+        if (++routed == 1) {
             entered.set_value();
             route_timed_out = released.wait_for(5s) != std::future_status::ready;
         }

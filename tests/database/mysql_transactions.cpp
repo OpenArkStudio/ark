@@ -29,16 +29,14 @@ unsigned checks{};
 
 void require(bool value, const std::string& message) {
     ++checks;
-    if (!value)
-    {
+    if (!value) {
         throw std::runtime_error(message);
     }
 }
 
 std::string environment(const char* name, bool empty_allowed = false) {
     const auto* value = std::getenv(name);
-    if (!value || (!empty_allowed && !*value))
-    {
+    if (!value || (!empty_allowed && !*value)) {
         throw std::invalid_argument(std::string("Required test environment variable: ") + name);
     }
     return value;
@@ -51,15 +49,13 @@ pool_options test_options() {
     options.acquire_timeout = 2s;
     options.reset_timeout = 2s;
     options.connection.host = environment("ARK_DATABASE_MYSQL_HOST");
-    if (options.connection.host != "127.0.0.1")
-    {
+    if (options.connection.host != "127.0.0.1") {
         throw std::invalid_argument("Transaction fault-relay tests require ARK_DATABASE_MYSQL_HOST=127.0.0.1");
     }
     const auto port = environment("ARK_DATABASE_MYSQL_PORT");
     unsigned number{};
     const auto parsed = std::from_chars(port.data(), port.data() + port.size(), number);
-    if (parsed.ec != std::errc{} || parsed.ptr != port.data() + port.size() || !number || number > 65535)
-    {
+    if (parsed.ec != std::errc{} || parsed.ptr != port.data() + port.size() || !number || number > 65535) {
         throw std::invalid_argument("ARK_DATABASE_MYSQL_PORT must be an integer between 1 and 65535");
     }
     options.connection.port = static_cast<std::uint16_t>(number);
@@ -73,10 +69,8 @@ pool_options test_options() {
 template<class predicate_type>
 void wait_until(predicate_type predicate) {
     const auto end = std::chrono::steady_clock::now() + 6s;
-    while (!predicate())
-    {
-        if (std::chrono::steady_clock::now() >= end)
-        {
+    while (!predicate()) {
+        if (std::chrono::steady_clock::now() >= end) {
             throw std::runtime_error("Timed out waiting for a transaction observation");
         }
         std::this_thread::sleep_for(1ms);
@@ -92,8 +86,7 @@ mysql_service_reply observe(mysql_service& observer, std::string sql) {
         observer.update();
         return bool(result);
     });
-    if (auto* failure = std::get_if<std::exception_ptr>(&*result))
-    {
+    if (auto* failure = std::get_if<std::exception_ptr>(&*result)) {
         std::rethrow_exception(*failure);
     }
     auto reply = std::get<mysql_service_reply>(std::move(*result));
@@ -103,8 +96,7 @@ mysql_service_reply observe(mysql_service& observer, std::string sql) {
 
 std::int64_t integer(const query_result& result) {
     require(result.rows.size() == 1 && result.rows[0].size() == 1, "Expected one scalar result");
-    if (const auto* number = std::get_if<std::uint64_t>(&result.rows[0][0]))
-    {
+    if (const auto* number = std::get_if<std::uint64_t>(&result.rows[0][0])) {
         return static_cast<std::int64_t>(*number);
     }
     return std::get<std::int64_t>(result.rows[0][0]);
@@ -126,8 +118,7 @@ mysql_transaction_reply run(mysql_transaction_service& service, submitter submit
         return bool(response);
     });
     require(calls == 1, "Missing transaction callback");
-    if (response->initiation_exception)
-    {
+    if (response->initiation_exception) {
         std::rethrow_exception(response->initiation_exception);
     }
     return std::move(*response);
@@ -399,8 +390,7 @@ void check_prepare_delivery_cancellation(
     // Exercise the production owner directly only to observe its private mailbox
     // barrier. No synthetic response or protocol endpoint is involved.
     auto owner = std::make_shared<mysql_transaction_owner>(native, mysql_transaction_limits{1, 8192}, query_options{});
-    try
-    {
+    try {
         std::optional<mysql_transaction_reply> begun;
         require(owner->begin({3s, 1s}, [&](auto reply) { begun = std::move(reply); }) != 0,
             "Prepare-delivery barrier did not admit BEGIN");
@@ -442,9 +432,7 @@ void check_prepare_delivery_cancellation(
             "A prepared write ran after cancellation at the native-publication barrier");
         require(prepared_count(observer) == count && owner->retained_input->load() == 0,
             "Barrier cancellation leaked a statement or parameter reservation");
-    }
-    catch (...)
-    {
+    } catch (...) {
         owner->close();
         throw;
     }
@@ -684,8 +672,7 @@ void check_coroutine(mysql_transaction_service& service) {
         return tasks.pending() == 0;
     });
     tasks.close();
-    if (error)
-    {
+    if (error) {
         std::rethrow_exception(error);
     }
     require(completed && tasks.closed(), "Coroutine group did not finish explicitly");
@@ -702,10 +689,9 @@ void check_throwing_delivery(mysql_transaction_service& service) {
                 }) != 0,
         "Throwing BEGIN delivery was not accepted");
     wait_until([&] {
-        try
-        { service.update(1); }
-        catch (const std::runtime_error& error)
-        {
+        try {
+            service.update(1);
+        } catch (const std::runtime_error& error) {
             require(
                 std::string(error.what()) == "Expected transaction callback failure", "Unexpected delivery failure");
             observed = true;
@@ -799,16 +785,14 @@ void check_natural_drain(const std::shared_ptr<pool>& native) {
 } // namespace
 
 int main() {
-    try
-    {
+    try {
         const auto options = test_options();
         auto native = std::make_shared<pool>(options);
         mysql_service observer(options);
         const auto table =
             "ark_transaction_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
         observe(observer, "CREATE TABLE " + table + " (id INT PRIMARY KEY, value VARBINARY(64)) ENGINE=InnoDB");
-        try
-        {
+        try {
             {
                 mysql_transaction_service service(native, {1, 8192});
                 check_commit(service, observer, table);
@@ -834,9 +818,7 @@ int main() {
             check_unknown_commit(options, observer, table);
             check_cleanup_failure(options, observer, table);
             check_prepare_cancellation(options, observer, table);
-        }
-        catch (...)
-        {
+        } catch (...) {
             observe(observer, "DROP TABLE IF EXISTS " + table);
             native->close_and_wait();
             throw;
@@ -845,9 +827,7 @@ int main() {
         require(native->close_and_wait(), "Native pool did not complete its explicit test-owner shutdown barrier");
         std::cout << "Private MySQL transaction checks passed: " << checks << '\n';
         return 0;
-    }
-    catch (const std::exception& error)
-    {
+    } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;
     }

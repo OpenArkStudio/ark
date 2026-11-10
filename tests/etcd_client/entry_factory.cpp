@@ -11,8 +11,7 @@ unsigned created{};
 unsigned destroyed{};
 unsigned updated{};
 
-class entry_etcd_client final : public ark::module_base<ark::etcd_client_module>
-{
+class entry_etcd_client final : public ark::module_base<ark::etcd_client_module> {
 public:
     entry_etcd_client() {
         ++created;
@@ -47,8 +46,7 @@ std::unique_ptr<etcd_client_module> make_etcd_client_module() {
 } // namespace ark::detail
 
 ARK_EXPORT_FUNC unsigned etcd_client_entry_events(unsigned event) {
-    switch (event)
-    {
+    switch (event) {
     case 0:
         return created;
     case 1:

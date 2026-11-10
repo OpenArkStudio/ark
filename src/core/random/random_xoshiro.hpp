@@ -43,8 +43,7 @@ namespace ark {
  * @note not support for xoroshiro64** xoroshiro64* xoroshiro512** xoroshiro512* xoroshiro1024** xoroshiro1024*
  */
 template<class uint_type, bool is_plus, int iidx, int n1, int n2>
-class xoshinro_engine
-{
+class xoshinro_engine {
 public:
     typedef uint_type result_type;
     typedef result_type seed_type[4];
@@ -57,12 +56,9 @@ private:
     }
 
     result_type next_init() {
-        if constexpr (is_plus)
-        {
+        if constexpr (is_plus) {
             return xoshinro_seed_[0] + xoshinro_seed_[3];
-        }
-        else
-        {
+        } else {
             return rotl(xoshinro_seed_[iidx] * 5, 7) * 9;
         }
     }
@@ -88,12 +84,9 @@ protected:
         result_type s1 = 0;
         result_type s2 = 0;
         result_type s3 = 0;
-        for (size_t i = 0; i < sizeof(jump) / sizeof(jump[0]); i++)
-        {
-            for (size_t b = 0; b < sizeof(result_type) * 8; b++)
-            {
-                if (jump[i] & result_type(1) << b)
-                {
+        for (size_t i = 0; i < sizeof(jump) / sizeof(jump[0]); i++) {
+            for (size_t b = 0; b < sizeof(result_type) * 8; b++) {
+                if (jump[i] & result_type(1) << b) {
                     s0 ^= xoshinro_seed_[0];
                     s1 ^= xoshinro_seed_[1];
                     s2 ^= xoshinro_seed_[2];
@@ -132,8 +125,7 @@ public:
         xoshinro_seed_[3] = 0;
 
         // just like in Lua 5.4
-        for (int i = 0; i < 16; ++i)
-        {
+        for (int i = 0; i < 16; ++i) {
             next();
         }
     }
@@ -141,22 +133,17 @@ public:
     template<class it>
     void init_seed(it& first, it last) {
         it begin = first;
-        for (int i = 0; i < 4; ++i)
-        {
-            if (begin != last)
-            {
+        for (int i = 0; i < 4; ++i) {
+            if (begin != last) {
                 xoshinro_seed_[i] = *begin;
                 ++begin;
-            }
-            else
-            {
+            } else {
                 xoshinro_seed_[i] = 0;
             }
         }
 
         // just like in Lua 5.4
-        for (int i = 0; i < 16; ++i)
-        {
+        for (int i = 0; i < 16; ++i) {
             next();
         }
     }
@@ -175,8 +162,7 @@ public:
 };
 
 template<bool is_plus>
-class xoshinro_engine_128 : public xoshinro_engine<uint32_t, is_plus, 0, 9, 11>
-{
+class xoshinro_engine_128 : public xoshinro_engine<uint32_t, is_plus, 0, 9, 11> {
 public:
     typedef xoshinro_engine<uint32_t, is_plus, 0, 9, 11> base_type;
     typedef typename base_type::result_type result_type;
@@ -202,8 +188,7 @@ public:
 };
 
 template<bool is_plus>
-class xoshinro_engine_256 : public xoshinro_engine<uint64_t, is_plus, 1, 17, 45>
-{
+class xoshinro_engine_256 : public xoshinro_engine<uint64_t, is_plus, 1, 17, 45> {
 public:
     typedef xoshinro_engine<uint64_t, is_plus, 1, 17, 45> base_type;
     typedef typename base_type::result_type result_type;
@@ -246,8 +231,7 @@ public:
  * @see https://en.cppreference.com/w/cpp/algorithm/random_shuffle
  */
 template<typename engine_type>
-class random_manager_wrapper
-{
+class random_manager_wrapper {
 public:
     typedef engine_type core_type;
     typedef typename core_type::result_type result_type;
@@ -315,8 +299,7 @@ public:
      */
     template<typename output_type>
     output_type random_between(output_type lowest, output_type highest) {
-        if (highest <= lowest)
-        {
+        if (highest <= lowest) {
             return lowest;
         }
         result_type res = (*this)();
@@ -343,12 +326,9 @@ public:
      * @return the random number
      */
     inline result_type operator()(result_type mod) noexcept {
-        if (0 == mod)
-        {
+        if (0 == mod) {
             return random();
-        }
-        else
-        {
+        } else {
             return random() % mod;
         }
     }

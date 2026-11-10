@@ -40,8 +40,7 @@ namespace entity_sync {
 class snapshot_access;
 }
 
-class entity_opt_charactor
-{
+class entity_opt_charactor {
 public:
     entity_opt_charactor(const int32_t map_id, const int32_t map_entity_id)
         : map_id(map_id)
@@ -65,8 +64,7 @@ public:
     std::shared_ptr<container_manager> containers{nullptr};
 };
 
-class entity_impl final : public entity
-{
+class entity_impl final : public entity {
 private:
     friend class kernel_module_impl;
     friend class entity_sync::snapshot_access;

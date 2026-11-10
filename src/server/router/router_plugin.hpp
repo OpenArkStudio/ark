@@ -24,8 +24,7 @@
 
 namespace ark {
 
-class router_plugin final : public plugin_base<router_plugin>
-{
+class router_plugin final : public plugin_base<router_plugin> {
 public:
     void install() override;
     void uninstall() override;

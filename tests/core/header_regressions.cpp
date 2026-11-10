@@ -13,8 +13,7 @@ DOCTEST_TEST_CASE("128-bit GUID decimal strings round-trip the full unsigned ran
     constexpr auto maximum = (std::numeric_limits<std::uint64_t>::max)();
     const std::array<std::pair<std::uint64_t, std::uint64_t>, 6> components = {
         {{0, 0}, {0, maximum}, {maximum, 0}, {maximum, maximum}, {maximum / 2 + 1, 42}, {123, 456}}};
-    for (const auto& [high, low] : components)
-    {
+    for (const auto& [high, low] : components) {
         const ark::guid_t128 original(high, low);
         ark::guid_t128 parsed(7, 9);
         DOCTEST_CAPTURE(original.to_string());
@@ -30,8 +29,7 @@ DOCTEST_TEST_CASE("128-bit GUID parsing rejects malformed and overflowing compon
     const std::array<std::string, 17> invalid = {"", "1", "1-", "-1", "a-1", "1-a", "1-2-3", " 1-2", "1- 2", "1-2 ",
         "+1-2", "1-+2", "1--2", "18446744073709551616-0", "0-18446744073709551616", std::string("1-2\0", 4),
         std::string("1\0-2", 4)};
-    for (const auto& input : invalid)
-    {
+    for (const auto& input : invalid) {
         ark::guid_t128 parsed(7, 9);
         DOCTEST_CAPTURE(input);
         DOCTEST_CHECK_FALSE(parsed.from_string(input));

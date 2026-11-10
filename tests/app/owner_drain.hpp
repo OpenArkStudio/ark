@@ -13,8 +13,7 @@
 namespace ark::test {
 
 inline const char* shutdown_state_name(plugin_manager::shutdown_state state) {
-    switch (state)
-    {
+    switch (state) {
     case plugin_manager::shutdown_state::running:
         return "running";
     case plugin_manager::shutdown_state::stopping:
@@ -44,42 +43,33 @@ template<typename next_timestamp>
 std::size_t drain_owner(plugin_manager& manager, next_timestamp&& now, std::chrono::steady_clock::time_point deadline,
     std::string_view context) {
     std::size_t deferred_frames{};
-    try
-    {
-        while (!manager.stop_until(now(), deadline))
-        {
+    try {
+        while (!manager.stop_until(now(), deadline)) {
             const auto state = manager.get_shutdown_state();
             if (state != plugin_manager::shutdown_state::stopping || !manager.get_shutdown_failure().empty() ||
-                manager.get_shutdown_exception())
-            {
+                manager.get_shutdown_exception()) {
                 fail_owner_drain(manager, context, "shutdown failed");
             }
-            if (std::chrono::steady_clock::now() >= deadline)
-            {
+            if (std::chrono::steady_clock::now() >= deadline) {
                 fail_owner_drain(manager, context, "owner drain deadline reached");
             }
-            if (deferred_frames++ == 0)
-            {
+            if (deferred_frames++ == 0) {
                 std::cout << context << ": deferred shutdown; state=" << shutdown_state_name(state)
                           << "; phase=<none>; owner updates continue" << std::endl;
             }
-            if (!manager.update(now()))
-            {
+            if (!manager.update(now())) {
                 fail_owner_drain(manager, context, "owner update failed during drain");
             }
             std::this_thread::yield();
         }
-    }
-    catch (const std::exception& error)
-    {
+    } catch (const std::exception& error) {
         std::cerr << context << ": " << error.what() << std::endl;
         fail_owner_drain(manager, context, "owner drain threw");
+    } catch (...) {
+        fail_owner_drain(manager, context, "owner drain threw a nonstandard exception");
     }
-    catch (...)
-    { fail_owner_drain(manager, context, "owner drain threw a nonstandard exception"); }
     if (manager.get_shutdown_state() != plugin_manager::shutdown_state::stopped ||
-        !manager.get_shutdown_failure().empty() || manager.get_shutdown_exception())
-    {
+        !manager.get_shutdown_failure().empty() || manager.get_shutdown_exception()) {
         fail_owner_drain(manager, context, "stop returned without normal completion");
     }
     std::cout << context << ": state=stopped; deferred owner frames=" << deferred_frames << std::endl;

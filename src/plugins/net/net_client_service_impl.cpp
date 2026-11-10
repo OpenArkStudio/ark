@@ -42,10 +42,8 @@ net_client_service_impl::~net_client_service_impl() {
 void net_client_service_impl::shutdown() {
     closed_ = true;
     callback_lifetime_.reset();
-    for (const auto& [bus, connection] : real_connections_)
-    {
-        if (connection->net_client)
-        {
+    for (const auto& [bus, connection] : real_connections_) {
+        if (connection->net_client) {
             connection->net_client->shutdown();
             connection->net_client.reset();
         }
@@ -61,8 +59,7 @@ void net_client_service_impl::shutdown() {
 
 bool net_client_service_impl::start_client(
     std::shared_ptr<const msg_header> head, bus_id_t target_bus_id, const endpoint& endpoint) {
-    if (closed_)
-    {
+    if (closed_) {
         return false;
     }
     connection_data data;
@@ -75,8 +72,7 @@ bool net_client_service_impl::start_client(
 }
 
 void net_client_service_impl::update() {
-    if (closed_)
-    {
+    if (closed_) {
         return;
     }
     process_add_connection();
@@ -84,12 +80,9 @@ void net_client_service_impl::update() {
 }
 
 bool net_client_service_impl::reg_msg_callback(msg_id_t msg_id, const net_msg_functor&& cb) {
-    if (net_msg_callbacks_.find(msg_id) != net_msg_callbacks_.end())
-    {
+    if (net_msg_callbacks_.find(msg_id) != net_msg_callbacks_.end()) {
         return false;
-    }
-    else
-    {
+    } else {
         net_msg_callbacks_.insert(std::make_pair(msg_id, std::forward<const net_msg_functor>(cb)));
         return true;
     }
@@ -106,39 +99,28 @@ bool net_client_service_impl::reg_net_event_callback(const net_event_functor&& c
 }
 
 void net_client_service_impl::process_update() {
-    for (auto iter : real_connections_)
-    {
+    for (auto iter : real_connections_) {
         auto connection_data = iter.second;
-        if (connection_data->net_client == nullptr)
-        {
+        if (connection_data->net_client == nullptr) {
             continue;
         }
 
-        switch (connection_data->net_state)
-        {
-        case connection_data::disconnect:
-        {
+        switch (connection_data->net_state) {
+        case connection_data::disconnect: {
             connection_data->net_state = connection_data::reconnect;
             connection_data->net_client->shutdown();
-        }
-        break;
-        case connection_data::connecting:
-        {
+        } break;
+        case connection_data::connecting: {
             connection_data->net_client->update();
-        }
-        break;
-        case connection_data::connected:
-        {
+        } break;
+        case connection_data::connected: {
             connection_data->net_client->update();
 
             keep_alive(connection_data);
-        }
-        break;
-        case connection_data::reconnect:
-        {
+        } break;
+        case connection_data::reconnect: {
             // RECONNECT 30s/time
-            if ((connection_data->last_active_time + 30 * timespan::second_ms) >= plugin_manager_->get_now_time())
-            {
+            if ((connection_data->last_active_time + 30 * timespan::second_ms) >= plugin_manager_->get_now_time()) {
                 break;
             }
 
@@ -149,16 +131,12 @@ void net_client_service_impl::process_update() {
             // based on protocol to create a new client
             bool ret = connection_data->net_client->start_client(connection_data->head, connection_data->server_bus_id,
                 connection_data->remote_endpoint.get_ip(), connection_data->remote_endpoint.get_port());
-            if (!ret)
-            {
+            if (!ret) {
                 connection_data->net_state = connection_data::reconnect;
-            }
-            else
-            {
+            } else {
                 connection_data->net_state = connection_data::connecting;
             }
-        }
-        break;
+        } break;
         default:
             break;
         }
@@ -168,27 +146,20 @@ void net_client_service_impl::process_update() {
 std::shared_ptr<net> net_client_service_impl::create_net(const proto_type proto) {
     const std::weak_ptr<void> lifetime = callback_lifetime_;
     const net_msg_functor message_callback = [this, lifetime](const net_msg* message, conv_id_t session) {
-        if (const auto alive = lifetime.lock())
-        {
+        if (const auto alive = lifetime.lock()) {
             on_net_msg(message, session);
         }
     };
     const net_event_functor event_callback = [this, lifetime](const net_event* event) {
-        if (const auto alive = lifetime.lock())
-        {
+        if (const auto alive = lifetime.lock()) {
             on_net_event(event);
         }
     };
-    if (proto == proto_type::tcp)
-    {
+    if (proto == proto_type::tcp) {
         return std::make_shared<tcp_client>(message_callback, event_callback);
-    }
-    else if (proto == proto_type::udp)
-    {
+    } else if (proto == proto_type::udp) {
         return std::make_shared<rudp_client>(message_callback, event_callback);
-    }
-    else if (proto == proto_type::ws)
-    {
+    } else if (proto == proto_type::ws) {
         // will add web-socket client
     }
 
@@ -199,11 +170,9 @@ std::shared_ptr<net> net_client_service_impl::create_net(const proto_type proto)
 void net_client_service_impl::log_server_info() {
     log_server_info("This is a client, begin to print Server Info----------------------------------");
 
-    for (auto iter : real_connections_)
-    {
+    for (auto iter : real_connections_) {
         auto connection_data = iter.second;
-        if (connection_data != nullptr)
-        {
+        if (connection_data != nullptr) {
             std::string info = ARK_FORMAT("TargetBusID={} State={} url={}", connection_data->server_bus_id,
                 static_cast<int>(connection_data->net_state), connection_data->remote_endpoint.to_string());
             log_server_info(info);
@@ -214,8 +183,7 @@ void net_client_service_impl::log_server_info() {
 }
 
 void net_client_service_impl::keep_alive(std::shared_ptr<connection_data> server_data_ptr) {
-    if ((server_data_ptr->last_active_time + 5000) > plugin_manager_->get_now_time())
-    {
+    if ((server_data_ptr->last_active_time + 5000) > plugin_manager_->get_now_time()) {
         return;
     }
 
@@ -234,12 +202,9 @@ bool net_client_service_impl::add_server_node(std::shared_ptr<connection_data> d
 
 bool net_client_service_impl::get_server_node(const std::string& hash_key, v_node& vnode) {
     auto iter = consistent_hashmap_.find(hash_key);
-    if (iter == consistent_hashmap_.end())
-    {
+    if (iter == consistent_hashmap_.end()) {
         return false;
-    }
-    else
-    {
+    } else {
         vnode = iter->second;
         return true;
     }
@@ -256,8 +221,7 @@ int net_client_service_impl::on_connect(const net_event* event) {
 
     auto connection_info = get_connection_info(event->get_bus_id());
 
-    if (connection_info != nullptr)
-    {
+    if (connection_info != nullptr) {
         add_server_node(connection_info);
         connection_info->net_state = connection_data::connected;
 
@@ -277,8 +241,7 @@ int net_client_service_impl::on_disconnect(const net_event* event) {
 
     std::shared_ptr<connection_data> connection_info = get_connection_info(event->get_bus_id());
 
-    if (connection_info != nullptr)
-    {
+    if (connection_info != nullptr) {
         remove_server_node(connection_info);
         connection_info->net_state = connection_data::disconnect;
         connection_info->last_active_time = plugin_manager_->get_now_time();
@@ -290,13 +253,11 @@ int net_client_service_impl::on_disconnect(const net_event* event) {
 }
 
 void net_client_service_impl::process_add_connection() {
-    for (auto& iter : tmp_connections_)
-    {
+    for (auto& iter : tmp_connections_) {
         const connection_data& pending_connection = iter;
         std::shared_ptr<connection_data> target_connection_data =
             real_connections_.find_value(pending_connection.server_bus_id);
-        if (target_connection_data != nullptr)
-        {
+        if (target_connection_data != nullptr) {
             continue;
         }
         // add new server
@@ -310,12 +271,9 @@ void net_client_service_impl::process_add_connection() {
         int ret = target_connection_data->net_client->start_client(target_connection_data->head,
             target_connection_data->server_bus_id, target_connection_data->remote_endpoint.get_ip(),
             target_connection_data->remote_endpoint.get_port());
-        if (!ret)
-        {
+        if (!ret) {
             target_connection_data->net_state = connection_data::reconnect;
-        }
-        else
-        {
+        } else {
             target_connection_data->net_state = connection_data::connecting;
         }
 
@@ -330,20 +288,16 @@ void net_client_service_impl::on_net_msg(const net_msg* msg, conv_id_t session_i
 
     auto it = net_msg_callbacks_.find(msg->get_msg_id());
 
-    if (it != net_msg_callbacks_.end())
-    {
+    if (it != net_msg_callbacks_.end()) {
         (it->second)(msg, session_id);
-    }
-    else
-    {
+    } else {
         ARK_LOG_ERROR("Invalid message, id = {}", msg->get_msg_id());
         // TODO:forward to other server process
     }
 }
 
 void net_client_service_impl::on_net_event(const net_event* event) {
-    switch (event->get_type())
-    {
+    switch (event->get_type()) {
     case net_event_type::connect:
         on_connect(event);
         break;
@@ -354,8 +308,7 @@ void net_client_service_impl::on_net_event(const net_event* event) {
         break;
     }
 
-    for (const auto& it : net_event_callbacks_)
-    {
+    for (const auto& it : net_event_callbacks_) {
         (it)(event);
     }
 }
@@ -366,8 +319,7 @@ std::shared_ptr<connection_data> net_client_service_impl::get_connection_info(bu
 
 std::shared_ptr<connection_data> net_client_service_impl::get_suitable_connect(const std::string& key) {
     static v_node vnode(0, null_str, 0, 0);
-    if (!get_server_node(key, vnode))
-    {
+    if (!get_server_node(key, vnode)) {
         return nullptr;
     }
 
@@ -384,8 +336,7 @@ void net_client_service_impl::remove_account_bus_id(const std::string& account) 
 
 int net_client_service_impl::get_account_bus_id(const std::string& account) {
     auto iter = account_bus_map_.find(account);
-    if (iter == account_bus_map_.end())
-    {
+    if (iter == account_bus_map_.end()) {
         return -1;
     }
 
@@ -402,8 +353,7 @@ void net_client_service_impl::remove_actor_bus_id(const guid_t& actor) {
 
 int net_client_service_impl::get_actor_bus_id(const guid_t& actor) {
     auto iter = actor_bus_map_.find(actor);
-    if (iter == actor_bus_map_.end())
-    {
+    if (iter == actor_bus_map_.end()) {
         return -1;
     }
 
@@ -413,8 +363,7 @@ int net_client_service_impl::get_actor_bus_id(const guid_t& actor) {
 void net_client_service_impl::reg_to_server(const msg_header& head, bus_id_t target_bus_id) {
     auto bus_id = bus_module_->get_self_bus_id();
     auto net_ptr = net_service_manager_->get_net_connection_bus(bus_id, target_bus_id);
-    if (!net_ptr)
-    {
+    if (!net_ptr) {
         return;
     }
 

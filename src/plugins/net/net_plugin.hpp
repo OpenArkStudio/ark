@@ -27,8 +27,7 @@
 
 namespace ark {
 
-class net_plugin final : public plugin_base<net_plugin>
-{
+class net_plugin final : public plugin_base<net_plugin> {
 public:
     void install() override;
     void uninstall() override;

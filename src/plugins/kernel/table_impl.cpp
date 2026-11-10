@@ -104,8 +104,7 @@ row* table_impl::add_row(uint32_t row, const data_list& args) {
     ARK_ASSERT_RET_VAL(args.get_count() % 2 == 0, nullptr);
 
     ark::row* row_data = nullptr;
-    if (row == 0)
-    {
+    if (row == 0) {
         row = select_row();
     }
 
@@ -142,13 +141,11 @@ void table_impl::clear() {
 
 // find
 uint32_t table_impl::find_int32(const uint32_t index, const int32_t value) const {
-    for (auto iter : data_)
-    {
+    for (auto iter : data_) {
         auto row_data = iter.second;
         ARK_ASSERT_RET_VAL(row_data != nullptr, 0u);
 
-        if (row_data->get_int32(index) == value)
-        {
+        if (row_data->get_int32(index) == value) {
             return iter.first;
         }
     }
@@ -157,13 +154,11 @@ uint32_t table_impl::find_int32(const uint32_t index, const int32_t value) const
 }
 
 uint32_t table_impl::find_int64(const uint32_t index, const int64_t value) const {
-    for (auto iter : data_)
-    {
+    for (auto iter : data_) {
         auto row_data = iter.second;
         ARK_ASSERT_RET_VAL(row_data != nullptr, 0u);
 
-        if (row_data->get_int64(index) == value)
-        {
+        if (row_data->get_int64(index) == value) {
             return iter.first;
         }
     }
@@ -172,13 +167,11 @@ uint32_t table_impl::find_int64(const uint32_t index, const int64_t value) const
 }
 
 uint32_t table_impl::find_bool(const uint32_t index, bool value) const {
-    for (auto iter : data_)
-    {
+    for (auto iter : data_) {
         auto row_data = iter.second;
         ARK_ASSERT_RET_VAL(row_data != nullptr, 0u);
 
-        if (row_data->get_bool(index) == value)
-        {
+        if (row_data->get_bool(index) == value) {
             return iter.first;
         }
     }
@@ -187,13 +180,11 @@ uint32_t table_impl::find_bool(const uint32_t index, bool value) const {
 }
 
 uint32_t table_impl::find_float(const uint32_t index, float value) const {
-    for (auto iter : data_)
-    {
+    for (auto iter : data_) {
         auto row_data = iter.second;
         ARK_ASSERT_RET_VAL(row_data != nullptr, 0u);
 
-        if (row_data->get_float(index) == value)
-        {
+        if (row_data->get_float(index) == value) {
             return iter.first;
         }
     }
@@ -202,13 +193,11 @@ uint32_t table_impl::find_float(const uint32_t index, float value) const {
 }
 
 uint32_t table_impl::find_double(const uint32_t index, double value) const {
-    for (auto iter : data_)
-    {
+    for (auto iter : data_) {
         auto row_data = iter.second;
         ARK_ASSERT_RET_VAL(row_data != nullptr, 0u);
 
-        if (row_data->get_double(index) == value)
-        {
+        if (row_data->get_double(index) == value) {
             return iter.first;
         }
     }
@@ -217,13 +206,11 @@ uint32_t table_impl::find_double(const uint32_t index, double value) const {
 }
 
 uint32_t table_impl::find_string(const uint32_t index, const std::string& value) const {
-    for (auto iter : data_)
-    {
+    for (auto iter : data_) {
         auto row_data = iter.second;
         ARK_ASSERT_RET_VAL(row_data != nullptr, 0u);
 
-        if (row_data->get_string(index) == value)
-        {
+        if (row_data->get_string(index) == value) {
             return iter.first;
         }
     }
@@ -232,13 +219,11 @@ uint32_t table_impl::find_string(const uint32_t index, const std::string& value)
 }
 
 uint32_t table_impl::find_w_string(const uint32_t index, const std::wstring& value) const {
-    for (auto iter : data_)
-    {
+    for (auto iter : data_) {
         auto row_data = iter.second;
         ARK_ASSERT_RET_VAL(row_data != nullptr, 0u);
 
-        if (row_data->get_w_string(index) == value)
-        {
+        if (row_data->get_w_string(index) == value) {
             return iter.first;
         }
     }
@@ -247,13 +232,11 @@ uint32_t table_impl::find_w_string(const uint32_t index, const std::wstring& val
 }
 
 uint32_t table_impl::find_guid(const uint32_t index, const guid_t& value) const {
-    for (auto iter : data_)
-    {
+    for (auto iter : data_) {
         auto row_data = iter.second;
         ARK_ASSERT_RET_VAL(row_data != nullptr, 0u);
 
-        if (row_data->get_guid(index) == value)
-        {
+        if (row_data->get_guid(index) == value) {
             return iter.first;
         }
     }
@@ -290,18 +273,13 @@ uint32_t table_impl::get_index(const std::string& name) const {
 }
 
 uint32_t table_impl::select_row() const {
-    if (data_.size() == current_row_)
-    {
+    if (data_.size() == current_row_) {
         return current_row_ + 1;
-    }
-    else
-    {
+    } else {
         // row starts from 1
         uint32_t row = 1u;
-        for (auto iter : data_)
-        {
-            if (iter.first != row)
-            {
+        for (auto iter : data_) {
+            if (iter.first != row) {
                 break;
             }
 
@@ -356,28 +334,24 @@ row* table_impl::create_row(uint32_t row, const data_list& args) {
 
     auto func = std::bind_front(&table_impl::on_row_changed, this);
 
-    if (last_incarnation_ == std::numeric_limits<std::uint64_t>::max())
-    {
+    if (last_incarnation_ == std::numeric_limits<std::uint64_t>::max()) {
         throw std::overflow_error("Table row incarnation exhausted");
     }
 
     const auto delete_row = [](row_impl* value) { ARK_DELETE(value); };
     std::unique_ptr<row_impl, decltype(delete_row)> row_ptr(
         ARK_NEW row_impl(class_meta_ptr, row, args, std::move(func)), delete_row);
-    if (row_ptr == nullptr)
-    {
+    if (row_ptr == nullptr) {
         return nullptr;
     }
-    if (!data_.insert(row, row_ptr.get()).second)
-    {
+    if (!data_.insert(row, row_ptr.get()).second) {
         return nullptr;
     }
     // No throwing work between successful insertion and identity publication.
     row_ptr->incarnation_ = ++last_incarnation_;
     auto* published_row = row_ptr.release();
 
-    if (current_row_ < row)
-    {
+    if (current_row_ < row) {
         current_row_ = row;
     }
 

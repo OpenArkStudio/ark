@@ -24,8 +24,7 @@ namespace sinks {
 // Rotating file sink based on size
 //
 template<typename mutex_type>
-class rotating_file_with_date_sink final : public base_sink<mutex_type>
-{
+class rotating_file_with_date_sink final : public base_sink<mutex_type> {
 public:
     rotating_file_with_date_sink(filename_t base_filename, std::size_t max_size, std::size_t max_files);
     static std::tuple<filename_t, filename_t, filename_t> split_by_dir_and_extenstion(const spdlog::filename_t& fname);

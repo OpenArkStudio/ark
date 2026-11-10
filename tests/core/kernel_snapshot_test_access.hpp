@@ -5,8 +5,7 @@
 
 namespace ark {
 
-class kernel_nested_snapshot_test_access
-{
+class kernel_nested_snapshot_test_access {
 public:
     static std::uint64_t row_counter(const table_impl& table) {
         return table.last_incarnation_;

@@ -124,8 +124,7 @@ TEST_CASE("IO producers only deliver business callbacks on the module thread") {
     std::vector<completion_queue<std::string>::ticket> records;
     unsigned callbacks{};
     bool wrong_thread{};
-    for (unsigned index = 0; index < 16; ++index)
-    {
+    for (unsigned index = 0; index < 16; ++index) {
         records.push_back(queue.admit(1, [&](std::string result) {
             wrong_thread |= std::this_thread::get_id() != owner;
             CHECK(result == std::string("binary\0value", 12));
@@ -134,18 +133,15 @@ TEST_CASE("IO producers only deliver business callbacks on the module thread") {
         REQUIRE(records.back());
     }
     std::vector<std::thread> workers;
-    for (unsigned lane = 0; lane < 4; ++lane)
-    {
+    for (unsigned lane = 0; lane < 4; ++lane) {
         workers.emplace_back([&, lane] {
-            for (unsigned index = lane; index < records.size(); index += 4)
-            {
+            for (unsigned index = lane; index < records.size(); index += 4) {
                 queue.complete(records[index], std::string("binary\0value", 12));
                 queue.complete(records[index], "duplicate must be ignored");
             }
         });
     }
-    for (auto& worker : workers)
-    {
+    for (auto& worker : workers) {
         worker.join();
     }
     CHECK(callbacks == 0);
@@ -224,10 +220,11 @@ TEST_CASE("Only completion production is allowed off the module thread") {
     completion_queue<int> queue(1, 1);
     std::atomic<bool> rejected{};
     std::thread worker([&] {
-        try
-        { queue.dispatch(); }
-        catch (const std::logic_error&)
-        { rejected = true; }
+        try {
+            queue.dispatch();
+        } catch (const std::logic_error&) {
+            rejected = true;
+        }
     });
     worker.join();
     CHECK(rejected.load());
@@ -243,32 +240,27 @@ TEST_CASE("Module dispatch overlaps native completion producers") {
     std::vector<completion_queue<unsigned>::ticket> records;
     unsigned callbacks{};
     unsigned total{};
-    for (unsigned index = 0; index < count; ++index)
-    {
+    for (unsigned index = 0; index < count; ++index) {
         records.push_back(queue.admit(1, [&](unsigned value) {
             ++callbacks;
             total += value;
         }));
     }
     std::vector<std::thread> producers;
-    for (unsigned lane = 0; lane < 4; ++lane)
-    {
+    for (unsigned lane = 0; lane < 4; ++lane) {
         producers.emplace_back([&, lane] {
-            for (unsigned index = lane; index < count; index += 4)
-            {
+            for (unsigned index = lane; index < count; index += 4) {
                 queue.complete(records[index], index + 1);
                 std::this_thread::yield();
             }
         });
     }
     const auto expires = std::chrono::steady_clock::now() + std::chrono::seconds(3);
-    while (callbacks < count && std::chrono::steady_clock::now() < expires)
-    {
+    while (callbacks < count && std::chrono::steady_clock::now() < expires) {
         queue.dispatch(7);
         std::this_thread::yield();
     }
-    for (auto& producer : producers)
-    {
+    for (auto& producer : producers) {
         producer.join();
     }
     queue.dispatch(count);

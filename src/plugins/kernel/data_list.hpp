@@ -27,8 +27,7 @@
 
 namespace ark {
 
-class data_list
-{
+class data_list {
 public:
     virtual bool concat(const data_list& src) = 0;
     virtual bool split(const std::string& src, const std::string& split) = 0;
@@ -81,18 +80,15 @@ public:
 
         int index = 0;
 
-        for (auto v : values)
-        {
-            if (v == data_type::dt_empty)
-            {
+        for (auto v : values) {
+            if (v == data_type::dt_empty) {
                 success = false;
                 return success;
             }
 
             data_type var_type = get_type(index);
 
-            if (var_type != v)
-            {
+            if (var_type != v) {
                 success = false;
                 break;
             }
@@ -104,13 +100,11 @@ public:
     }
 
     bool to_afi_data(size_t index, data& source_data) const {
-        if (get_type(index) != source_data.get_type())
-        {
+        if (get_type(index) != source_data.get_type()) {
             return false;
         }
 
-        switch (source_data.get_type())
-        {
+        switch (source_data.get_type()) {
         case data_type::dt_boolean:
             source_data.set_bool(get_bool(index));
             break;
@@ -138,13 +132,11 @@ public:
     }
 
     bool equal(size_t index, const data& source_data) const {
-        if (get_type(index) != source_data.get_type())
-        {
+        if (get_type(index) != source_data.get_type()) {
             return false;
         }
 
-        switch (source_data.get_type())
-        {
+        switch (source_data.get_type()) {
         case data_type::dt_boolean:
             return source_data.get_bool() == get_bool(index);
             break;

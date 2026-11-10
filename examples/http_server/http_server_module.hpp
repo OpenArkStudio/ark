@@ -24,8 +24,6 @@
 
 namespace ark {
 
-class http_server_sample_module : public module
-{
-};
+class http_server_sample_module : public module {};
 
 } // namespace ark

@@ -32,14 +32,16 @@
 namespace ark {
 
 template<typename element_type>
-class is_buildin_type
-{
+class is_buildin_type {
 public:
-    enum
-    {
-        yes = std::same_as<element_type, uint16_t> || std::same_as<element_type, uint32_t> ||
-              std::same_as<element_type, uint64_t> || std::same_as<element_type, int16_t> ||
-              std::same_as<element_type, int32_t> || std::same_as<element_type, int64_t>,
+    enum {
+        yes = std::same_as < element_type,
+        uint16_t > || std::same_as < element_type,
+        uint32_t > || std::same_as < element_type,
+        uint64_t > || std::same_as < element_type,
+        int16_t > || std::same_as < element_type,
+        int32_t > || std::same_as < element_type,
+        int64_t >,
         no = !yes
     };
 };
@@ -52,14 +54,11 @@ bool check_buildin_type(const element_type& t) {
 //////////////////////////////////////////////////////////////////////////
 
 template<typename element_type, typename node_type>
-class array_map
-{
-};
+class array_map {};
 
 // partial template specialization for KEY=std::string
 template<typename node_type>
-class array_map<std::string, node_type>
-{
+class array_map<std::string, node_type> {
 public:
     array_map() noexcept {
     }
@@ -76,15 +75,11 @@ public:
 
     bool add_element(const std::string& name, node_type* data) {
         nodes_.push_back(data);
-        try
-        {
-            if (indices_.add(name.c_str(), nodes_.size() - 1))
-            {
+        try {
+            if (indices_.add(name.c_str(), nodes_.size() - 1)) {
                 return true;
             }
-        }
-        catch (...)
-        {
+        } catch (...) {
             nodes_.pop_back();
             throw;
         }
@@ -95,8 +90,7 @@ public:
     node_type* get_element(const std::string& name) {
         size_t index;
 
-        if (!indices_.get_data(name.c_str(), index))
-        {
+        if (!indices_.get_data(name.c_str(), index)) {
             return nullptr;
         }
 
@@ -145,8 +139,7 @@ public:
 
 protected:
     void release_all() {
-        for (size_t i = 0; i < get_count(); ++i)
-        {
+        for (size_t i = 0; i < get_count(); ++i) {
             nodes_[i] = nullptr;
         }
 

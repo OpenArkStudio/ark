@@ -24,8 +24,7 @@
 
 namespace ark {
 
-enum class app_type : uint8_t
-{
+enum class app_type : uint8_t {
     ark_app_default, // none
     ark_app_master,  // master //cluster level start
     ark_app_router,  // router, world & cluster middle layer

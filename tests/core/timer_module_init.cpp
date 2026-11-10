@@ -27,15 +27,13 @@ std::array<void*, ark::free_timer_size + ark::tv_num> live_wheel_allocations{};
 
 std::size_t live_count() {
     std::size_t count{};
-    for (auto* pointer : live_wheel_allocations)
-    {
+    for (auto* pointer : live_wheel_allocations) {
         count += pointer != nullptr;
     }
     return count;
 }
 
-class receiver
-{
+class receiver {
 public:
     void on_timer(std::uint64_t, const ark::guid_t&) {
         ++calls;
@@ -44,20 +42,16 @@ public:
     unsigned calls{};
 };
 
-class later_failure final : public ark::module
-{
+class later_failure final : public ark::module {
 public:
     bool post_init() override {
-        if (arm)
-        {
+        if (arm) {
             id = timer->add_forever_timer(ark::null_guid, std::chrono::milliseconds(10), &target, &receiver::on_timer);
-            if (remove)
-            {
+            if (remove) {
                 removed = timer->remove_timer(id);
             }
         }
-        if (persistent_failure)
-        {
+        if (persistent_failure) {
             fail_allocations = true;
             throw std::bad_alloc{};
         }
@@ -84,8 +78,7 @@ public:
     unsigned normal_stops{};
 };
 
-struct independent_resource
-{
+struct independent_resource {
     unsigned releases{};
     std::size_t wheel_storage_at_release{};
 };
@@ -97,13 +90,11 @@ ark::startup_cleanup_result release_independent_resource(void* pointer) {
     return ark::startup_cleanup_result::done;
 }
 
-class enrolling_failure final : public ark::module
-{
+class enrolling_failure final : public ark::module {
 public:
     bool post_init() override {
         enrolled = manager->prepare_startup_cleanup("after_timer", "test", resource, release_independent_resource);
-        if (arm)
-        {
+        if (arm) {
             timer_id =
                 timer->add_forever_timer(ark::null_guid, std::chrono::milliseconds(10), &target, &receiver::on_timer);
         }
@@ -125,14 +116,11 @@ public:
 // The fixed array tracks real production ARK_NEW storage without allocating.
 void* operator new(std::size_t size) {
     ++allocation_attempts;
-    if (fail_standard_remaining && --fail_standard_remaining == 0)
-    {
+    if (fail_standard_remaining && --fail_standard_remaining == 0) {
         throw std::bad_alloc{};
     }
-    if (!fail_allocations)
-    {
-        if (auto* pointer = std::malloc(size ? size : 1))
-        {
+    if (!fail_allocations) {
+        if (auto* pointer = std::malloc(size ? size : 1)) {
             return pointer;
         }
     }
@@ -144,10 +132,8 @@ void* operator new[](std::size_t size) {
 }
 
 void operator delete(void* pointer) noexcept {
-    for (auto& live : live_wheel_allocations)
-    {
-        if (live == pointer)
-        {
+    for (auto& live : live_wheel_allocations) {
+        if (live == pointer) {
             live = nullptr;
             break;
         }
@@ -169,20 +155,15 @@ void operator delete[](void* pointer, std::size_t) noexcept {
 
 void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
     ++nothrow_calls;
-    if (fail_remaining && --fail_remaining == 0)
-    {
+    if (fail_remaining && --fail_remaining == 0) {
         return nullptr;
     }
-    try
-    {
+    try {
         auto* pointer = ::operator new(size);
-        for (auto& live : live_wheel_allocations)
-        {
-            if (!live)
-            {
+        for (auto& live : live_wheel_allocations) {
+            if (!live) {
                 live = pointer;
-                if (fail_after_timer && --fail_after_timer == 0)
-                {
+                if (fail_after_timer && --fail_after_timer == 0) {
                     // Only inject at time_wheel_data (no allocating constructor),
                     // before the following list insertion, never a Debug STL proxy.
                     fail_allocations = true;
@@ -191,9 +172,9 @@ void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
             }
         }
         std::abort();
+    } catch (...) {
+        return nullptr;
     }
-    catch (...)
-    { return nullptr; }
 }
 
 void operator delete(void* value, const std::nothrow_t&) noexcept {
@@ -201,10 +182,11 @@ void operator delete(void* value, const std::nothrow_t&) noexcept {
 }
 
 void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
-    try
-    { return ::operator new[](size); }
-    catch (...)
-    { return nullptr; }
+    try {
+        return ::operator new[](size);
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void operator delete[](void* value, const std::nothrow_t&) noexcept {
@@ -212,8 +194,7 @@ void operator delete[](void* value, const std::nothrow_t&) noexcept {
 }
 
 TEST_CASE("Production timer module rejects null allocations without continuing initialization") {
-    for (const std::size_t ordinal : {1u, 18u, ark::free_timer_size + 1, ark::free_timer_size + ark::tv_num})
-    {
+    for (const std::size_t ordinal : {1u, 18u, ark::free_timer_size + 1, ark::free_timer_size + ark::tv_num}) {
         ark::plugin_manager manager;
         auto timer = ark::detail::make_timer_module();
         timer->set_plugin_manager(&manager);
@@ -229,8 +210,7 @@ TEST_CASE("Production timer module rejects null allocations without continuing i
 }
 
 TEST_CASE("Production timer startup releases partial null allocations exactly once") {
-    for (const std::size_t ordinal : {1u, 18u, ark::free_timer_size + 1, ark::free_timer_size + ark::tv_num})
-    {
+    for (const std::size_t ordinal : {1u, 18u, ark::free_timer_size + 1, ark::free_timer_size + ark::tv_num}) {
         ark::plugin_manager manager;
         auto timer = ark::detail::make_timer_module();
         timer->set_plugin_manager(&manager);
@@ -246,18 +226,18 @@ TEST_CASE("Production timer startup releases partial null allocations exactly on
 }
 
 TEST_CASE("Production timer startup cleans up under persistent container allocation failure") {
-    for (const std::size_t ordinal : {1u, 18u})
-    {
+    for (const std::size_t ordinal : {1u, 18u}) {
         ark::plugin_manager manager;
         auto timer = ark::detail::make_timer_module();
         timer->set_plugin_manager(&manager);
         REQUIRE(manager.add_module("Timer", timer.get()));
         fail_after_timer = ordinal;
         bool threw{};
-        try
-        { (void)manager.start(1, {}, {}, {}); }
-        catch (const std::bad_alloc&)
-        { threw = true; }
+        try {
+            (void)manager.start(1, {}, {}, {});
+        } catch (const std::bad_alloc&) {
+            threw = true;
+        }
         const auto attempts = allocation_attempts;
         const auto first = manager.cleanup_failed_startup();
         const auto second = manager.cleanup_failed_startup();
@@ -278,10 +258,11 @@ TEST_CASE("Production timer capsule allocation failure precedes acquisition") {
     const auto calls = nothrow_calls;
     fail_allocations = true;
     bool threw{};
-    try
-    { (void)timer->init(); }
-    catch (const std::bad_alloc&)
-    { threw = true; }
+    try {
+        (void)timer->init();
+    } catch (const std::bad_alloc&) {
+        threw = true;
+    }
     fail_allocations = false;
     CHECK(threw);
     CHECK(nothrow_calls == calls);
@@ -304,8 +285,7 @@ TEST_CASE("Production timer rejected enrollment acquires no wheel storage") {
 }
 
 TEST_CASE("Production Timer composes with independent cleanup owners and retains unsafe predecessors") {
-    for (const bool arm : {false, true})
-    {
+    for (const bool arm : {false, true}) {
         ark::plugin_manager manager;
         auto before = std::make_shared<independent_resource>();
         auto after = std::make_shared<independent_resource>();
@@ -334,8 +314,7 @@ TEST_CASE("Production Timer composes with independent cleanup owners and retains
         CHECK(after->releases == 1);
         CHECK(after->wheel_storage_at_release == ark::free_timer_size + ark::tv_num);
         CHECK(later.target.calls == 0);
-        if (arm)
-        {
+        if (arm) {
             REQUIRE(later.timer_id != 0);
             CHECK(result == ark::startup_cleanup_result::unsafe);
             CHECK(before->releases == 0);
@@ -345,9 +324,7 @@ TEST_CASE("Production Timer composes with independent cleanup owners and retains
             CHECK(timer->pre_shut());
             CHECK(manager.cleanup_failed_startup() == ark::startup_cleanup_result::unsafe);
             CHECK(before->releases == 0);
-        }
-        else
-        {
+        } else {
             CHECK(result == ark::startup_cleanup_result::done);
             CHECK(before->releases == 1);
             CHECK(before->wheel_storage_at_release == 0);
@@ -359,8 +336,7 @@ TEST_CASE("Production Timer composes with independent cleanup owners and retains
 TEST_CASE("Production Timer rejects a full cleanup registry before wheel acquisition") {
     ark::plugin_manager manager;
     std::array<std::shared_ptr<independent_resource>, ark::startup_cleanup_capacity> resources;
-    for (std::size_t index{}; index < resources.size(); ++index)
-    {
+    for (std::size_t index{}; index < resources.size(); ++index) {
         resources[index] = std::make_shared<independent_resource>();
         REQUIRE(manager.prepare_startup_cleanup(
             "external_" + std::to_string(index), "test", resources[index], release_independent_resource));
@@ -373,8 +349,7 @@ TEST_CASE("Production Timer rejects a full cleanup registry before wheel acquisi
     CHECK(nothrow_calls == calls);
     CHECK(live_count() == 0);
     CHECK(manager.cleanup_failed_startup() == ark::startup_cleanup_result::done);
-    for (const auto& resource : resources)
-    {
+    for (const auto& resource : resources) {
         CHECK(resource->releases == 1);
         CHECK(resource->wheel_storage_at_release == 0);
     }
@@ -388,10 +363,11 @@ TEST_CASE("Production timer wheel object allocation failure leaves an independen
     // allocate; the second allocation attempts to construct the wheel itself.
     fail_standard_remaining = 2;
     bool threw{};
-    try
-    { (void)timer->init(); }
-    catch (const std::bad_alloc&)
-    { threw = true; }
+    try {
+        (void)timer->init();
+    } catch (const std::bad_alloc&) {
+        threw = true;
+    }
     REQUIRE(threw);
     CHECK(fail_standard_remaining == 0);
     CHECK(live_count() == 0);
@@ -405,12 +381,9 @@ TEST_CASE("Production timer wheel object allocation failure leaves an independen
 }
 
 TEST_CASE("Production timer later startup failure releases only callback-free storage") {
-    for (bool arm : {false, true})
-    {
-        for (bool remove : {false, true})
-        {
-            for (bool persistent_failure : {false, true})
-            {
+    for (bool arm : {false, true}) {
+        for (bool remove : {false, true}) {
+            for (bool persistent_failure : {false, true}) {
                 ark::plugin_manager manager;
                 auto timer = ark::detail::make_timer_module();
                 timer->set_plugin_manager(&manager);
@@ -422,10 +395,11 @@ TEST_CASE("Production timer later startup failure releases only callback-free st
                 REQUIRE(manager.add_module("Timer", timer.get()));
                 REQUIRE(manager.add_module("later", &later));
                 bool returned{}, threw{};
-                try
-                { returned = manager.start(1, {}, {}, {}); }
-                catch (const std::bad_alloc&)
-                { threw = true; }
+                try {
+                    returned = manager.start(1, {}, {}, {});
+                } catch (const std::bad_alloc&) {
+                    threw = true;
+                }
                 const auto live_before = live_count();
                 const auto attempts = allocation_attempts;
                 const auto result = manager.cleanup_failed_startup();
@@ -439,17 +413,14 @@ TEST_CASE("Production timer later startup failure releases only callback-free st
                 CHECK(repeated == result);
                 CHECK(later.normal_stops == 0);
                 CHECK(later.target.calls == 0);
-                if (arm && !remove)
-                {
+                if (arm && !remove) {
                     CHECK(result == ark::startup_cleanup_result::unsafe);
                     CHECK(live_count() == live_before);
                     CHECK(timer->remove_timer(later.id));
                     // A later change cannot retry an already-entered action.
                     CHECK(manager.cleanup_failed_startup() == ark::startup_cleanup_result::unsafe);
                     CHECK(live_count() == live_before);
-                }
-                else
-                {
+                } else {
                     CHECK(result == ark::startup_cleanup_result::done);
                     CHECK(live_count() == 0);
                     CHECK(later.removed == (arm && remove));

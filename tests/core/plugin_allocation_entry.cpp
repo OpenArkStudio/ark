@@ -24,8 +24,7 @@ ARK_EXPORT_FUNC void DllEntryPlugin(ark::plugin_manager* manager, const std::str
 }
 
 ARK_EXPORT_FUNC void DllExitPlugin(ark::plugin_manager* manager) {
-    if (exit_entry)
-    {
+    if (exit_entry) {
         exit_entry(manager);
     }
 }

@@ -24,8 +24,7 @@
 
 namespace ark {
 
-class guid_module : public module
-{
+class guid_module : public module {
 public:
     virtual guid_t create_guid() = 0;
     virtual std::string parse_uid(const guid_t& id) = 0;

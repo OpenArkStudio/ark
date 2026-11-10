@@ -27,8 +27,7 @@
 namespace ark {
 
 template<typename element_type>
-class singleton : public noncopyable
-{
+class singleton : public noncopyable {
 public:
     static element_type* instance() {
         // The C++ initialization guard serializes first access and retries if init throws.
@@ -57,8 +56,7 @@ public:
 
 private:
     static void init() {
-        if (!stopped_ && instance_ == nullptr)
-        {
+        if (!stopped_ && instance_ == nullptr) {
             owned_instance_ = ARK_NEW element_type();
             instance_ = owned_instance_;
         }

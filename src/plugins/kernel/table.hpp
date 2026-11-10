@@ -25,8 +25,7 @@
 
 namespace ark {
 
-class row
-{
+class row {
 public:
     virtual ~row() = default;
 
@@ -80,8 +79,7 @@ public:
     virtual bool set_guid(const std::string& name, const guid_t& value) = 0;
 };
 
-class table
-{
+class table {
 public:
     virtual ~table() = default;
 

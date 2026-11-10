@@ -35,15 +35,13 @@ ARK_EXPORT_FUNC void DllExitPlugin(plugin_manager* manager) {
 }
 
 void world_plugin::install() {
-    if (!register_module(detail::make_world_net_module(), module_update::disabled))
-    {
+    if (!register_module(detail::make_world_net_module(), module_update::disabled)) {
         throw std::runtime_error("world_net_module registration rejected");
     }
 }
 
 void world_plugin::uninstall() {
-    if (!unregister_module<world_net_module>())
-    {
+    if (!unregister_module<world_net_module>()) {
         throw std::runtime_error("world_net_module unregistration rejected");
     }
 }

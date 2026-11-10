@@ -19,10 +19,8 @@ namespace ark::plugin_config_detail {
 
 inline void check_keys(const toml::table& table, const std::string& path, std::string_view section,
     std::initializer_list<std::string_view> allowed) {
-    for (const auto& [key, value] : table)
-    {
-        if (std::ranges::find(allowed, key.str()) == allowed.end())
-        {
+    for (const auto& [key, value] : table) {
+        if (std::ranges::find(allowed, key.str()) == allowed.end()) {
             fail(path, std::string(section) + "." + std::string(key.str()), "unknown setting");
         }
     }
@@ -31,8 +29,7 @@ inline void check_keys(const toml::table& table, const std::string& path, std::s
 inline toml::table read(const std::string& path, std::string_view section) {
     auto document = config_detail::read_toml(path);
     check_keys(document, path, "root", {section});
-    if (!document[section].is_table())
-    {
+    if (!document[section].is_table()) {
         fail(path, section, "required table is missing");
     }
     return document;
@@ -40,8 +37,7 @@ inline toml::table read(const std::string& path, std::string_view section) {
 
 inline std::string host(const toml::table& table, const std::string& path) {
     const auto value = table["host"].value<std::string>();
-    if (!value || value->empty() || value->find('\0') != std::string::npos)
-    {
+    if (!value || value->empty() || value->find('\0') != std::string::npos) {
         fail(path, "host", "expected a nonempty string without NUL");
     }
     return *value;
@@ -50,15 +46,13 @@ inline std::string host(const toml::table& table, const std::string& path) {
 inline std::uint32_t integer(const toml::table& table, const std::string& path, std::string_view key,
     std::int64_t minimum, std::int64_t maximum) {
     const auto value = table[key].value<std::int64_t>();
-    if (!value || !table[key].is_integer() || *value < minimum || *value > maximum)
-    {
+    if (!value || !table[key].is_integer() || *value < minimum || *value > maximum) {
         fail(path, key, "expected an integer from " + std::to_string(minimum) + " to " + std::to_string(maximum));
     }
     return static_cast<std::uint32_t>(*value);
 }
 
-struct http_configuration
-{
+struct http_configuration {
     std::string host;
     std::uint32_t port;
     std::uint32_t threads;
@@ -71,8 +65,7 @@ inline http_configuration load_http(const std::string& path) {
     return {host(table, path), integer(table, path, "port", 0, 65535), integer(table, path, "threads", 1, 255)};
 }
 
-struct consul_configuration
-{
+struct consul_configuration {
     std::string host;
     std::uint32_t port;
 };

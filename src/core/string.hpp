@@ -25,13 +25,10 @@
 namespace ark {
 
 template<typename char_type>
-class char_traits
-{
-};
+class char_traits {};
 
 template<>
-class char_traits<char>
-{
+class char_traits<char> {
 public:
     static size_t length(const char* value) {
         return strlen(value);
@@ -56,8 +53,7 @@ public:
     static size_t find(const char* dst, const char* find, size_t begin = 0) {
         const char* pos = strstr(&dst[begin], find);
 
-        if (pos == nullptr)
-        {
+        if (pos == nullptr) {
             return -1;
         }
 
@@ -71,8 +67,7 @@ public:
 
 //////////////////////////////////////////////////////////////////////////
 
-class string_allocator
-{
+class string_allocator {
 public:
     string_allocator() {
     }
@@ -95,8 +90,7 @@ public:
 
 template<typename char_type, size_t inline_capacity, typename traits_type = char_traits<char_type>,
     typename allocator_type = string_allocator>
-class small_string
-{
+class small_string {
     using self_type = small_string<char_type, inline_capacity, traits_type, allocator_type>;
 
 public:
@@ -108,8 +102,7 @@ public:
     }
 
     ~small_string() {
-        if (capacity_ > inline_capacity)
-        {
+        if (capacity_ > inline_capacity) {
             allocator_.free(data_, capacity_ * sizeof(char_type));
         }
     }
@@ -145,34 +138,27 @@ public:
         char_type* tmp_data = src.data_;
         char_type tmp_stack[inline_capacity];
 
-        if (tmp_capacity <= inline_capacity)
-        {
+        if (tmp_capacity <= inline_capacity) {
             traits_type::copy(tmp_stack, src.inline_buffer_, tmp_size + 1);
         }
 
         src.size_ = this->size_;
         src.capacity_ = this->capacity_;
 
-        if (this->capacity_ <= inline_capacity)
-        {
+        if (this->capacity_ <= inline_capacity) {
             traits_type::copy(src.inline_buffer_, this->inline_buffer_, this->size_ + 1);
             src.data_ = src.inline_buffer_;
-        }
-        else
-        {
+        } else {
             src.data_ = this->data_;
         }
 
         this->size_ = tmp_size;
         this->capacity_ = tmp_capacity;
 
-        if (tmp_capacity <= inline_capacity)
-        {
+        if (tmp_capacity <= inline_capacity) {
             traits_type::copy(this->inline_buffer_, tmp_stack, tmp_size + 1);
             this->data_ = this->inline_buffer_;
-        }
-        else
-        {
+        } else {
             data_ = tmp_data;
         }
 
@@ -180,8 +166,7 @@ public:
     }
 
     self_type& operator=(const self_type& src) {
-        if (this != &src)
-        {
+        if (this != &src) {
             inner_assign(src.c_str(), src.length());
         }
 
@@ -234,8 +219,7 @@ public:
     }
 
     void clear() {
-        if (data_ != inline_buffer_)
-        {
+        if (data_ != inline_buffer_) {
             allocator_.free(data_, capacity_ * sizeof(char_type));
         }
 
@@ -274,10 +258,8 @@ public:
     }
 
     size_t find_last_of(char_type value) {
-        for (int i = int(size_ - 1); i >= 0; --i)
-        {
-            if (data_[i] == value)
-            {
+        for (int i = int(size_ - 1); i >= 0; --i) {
+            if (data_[i] == value) {
                 return i;
             }
         }
@@ -296,8 +278,7 @@ public:
     size_t get_mem_usage() const {
         size_t size = sizeof(self_type);
 
-        if (capacity_ > inline_capacity)
-        {
+        if (capacity_ > inline_capacity) {
             size += capacity_ * sizeof(char_type);
         }
 
@@ -308,13 +289,10 @@ private:
     void init(const char_type* src, size_t len) {
         size_ = len;
 
-        if (size_ < inline_capacity)
-        {
+        if (size_ < inline_capacity) {
             capacity_ = inline_capacity;
             data_ = inline_buffer_;
-        }
-        else
-        {
+        } else {
             capacity_ = (size_ + 1) * 2;
             data_ = (char_type*)allocator_.alloc(capacity_ * sizeof(char_type));
         }
@@ -326,13 +304,10 @@ private:
     void init_with_two(const char_type* value1, size_t size1, const char_type* value2, size_t size2) {
         size_ = size1 + size2;
 
-        if (size_ < inline_capacity)
-        {
+        if (size_ < inline_capacity) {
             capacity_ = inline_capacity;
             data_ = inline_buffer_;
-        }
-        else
-        {
+        } else {
             capacity_ = (size_ + 1) * 2;
             data_ = (char_type*)allocator_.alloc(capacity_ * sizeof(char_type));
         }
@@ -343,14 +318,11 @@ private:
     }
 
     self_type& inner_assign(const char_type* src, size_t len) {
-        if (len < capacity_)
-        {
+        if (len < capacity_) {
             traits_type::copy(data_, src, len);
             traits_type::put(data_ + len, 0);
             size_ = len;
-        }
-        else
-        {
+        } else {
             self_type tmp(src, len);
             this->swap(tmp);
         }
@@ -361,14 +333,11 @@ private:
     self_type& inner_append(const char_type* src, size_t len) {
         const size_t new_size = this->size_ + len;
 
-        if (new_size < capacity_)
-        {
+        if (new_size < capacity_) {
             traits_type::copy(data_ + size_, src, len);
             traits_type::put(data_ + size_ + len, 0);
             size_ = new_size;
-        }
-        else
-        {
+        } else {
             self_type tmp(this->c_str(), this->length(), src, len);
             this->swap(tmp);
         }
@@ -387,13 +356,10 @@ typedef small_string<char, 16, char_traits<char>, core_allocator> data_node_name
 typedef small_string<char, 16, char_traits<char>, core_allocator> data_table_name;
 
 template<typename element_type>
-class hash
-{
-};
+class hash {};
 
 template<>
-class hash<data_node_name>
-{
+class hash<data_node_name> {
 public:
     size_t operator()(data_node_name const& pro) const {
         const char* value = pro.c_str();

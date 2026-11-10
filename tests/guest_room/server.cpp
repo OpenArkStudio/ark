@@ -36,29 +36,24 @@ using json = nlohmann::json;
 using tcp = asio::ip::tcp;
 
 void require(bool condition, const std::string& reason) {
-    if (!condition)
-    {
+    if (!condition) {
         throw std::runtime_error(reason);
     }
 }
 
-struct launcher
-{
+struct launcher {
     pid_t pid{-1};
     bool stopped{false};
 
     launcher(const std::string& program, const std::string& directory, const std::string& log_name = "launcher.log") {
         pid = fork();
         require(pid >= 0, "fork failed");
-        if (pid == 0)
-        {
-            if (chdir(directory.c_str()) != 0)
-            {
+        if (pid == 0) {
+            if (chdir(directory.c_str()) != 0) {
                 _exit(126);
             }
             const int log = open(log_name.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
-            if (log < 0)
-            {
+            if (log < 0) {
                 _exit(126);
             }
             dup2(log, STDOUT_FILENO);
@@ -74,10 +69,8 @@ struct launcher
         kill(pid, SIGTERM);
         const auto deadline = std::chrono::steady_clock::now() + 5s;
         int status = 0;
-        while (std::chrono::steady_clock::now() < deadline)
-        {
-            if (waitpid(pid, &status, WNOHANG) == pid)
-            {
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (waitpid(pid, &status, WNOHANG) == pid) {
                 stopped = true;
                 require(WIFEXITED(status) && WEXITSTATUS(status) == 0, "launcher failed normal shutdown");
                 return;
@@ -90,10 +83,8 @@ struct launcher
     void expect_failure(const std::filesystem::path& log_path) {
         const auto deadline = std::chrono::steady_clock::now() + 5s;
         int status = 0;
-        while (std::chrono::steady_clock::now() < deadline)
-        {
-            if (waitpid(pid, &status, WNOHANG) == pid)
-            {
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (waitpid(pid, &status, WNOHANG) == pid) {
                 stopped = true;
                 require(WIFEXITED(status) && WEXITSTATUS(status) == 1, "invalid profile did not fail normal startup");
                 std::ifstream log(log_path);
@@ -109,8 +100,7 @@ struct launcher
     }
 
     ~launcher() {
-        if (pid > 0 && !stopped)
-        {
+        if (pid > 0 && !stopped) {
             kill(pid, SIGKILL);
             int status = 0;
             waitpid(pid, &status, 0);
@@ -118,8 +108,7 @@ struct launcher
     }
 };
 
-struct client
-{
+struct client {
     asio::io_context context;
     tcp::socket socket{context};
     std::function<void()> pump;
@@ -128,11 +117,9 @@ struct client
         : pump(std::move(update)) {
         const auto deadline = std::chrono::steady_clock::now() + (retry ? 5s : 1s);
         asio::error_code ec;
-        do
-        {
+        do {
             socket.connect({asio::ip::make_address("127.0.0.1"), port}, ec);
-            if (!ec)
-            {
+            if (!ec) {
                 socket.non_blocking(true);
                 return;
             }
@@ -146,13 +133,11 @@ struct client
     void write(const std::string& bytes) {
         std::size_t offset = 0;
         const auto deadline = std::chrono::steady_clock::now() + 3s;
-        while (offset < bytes.size() && std::chrono::steady_clock::now() < deadline)
-        {
+        while (offset < bytes.size() && std::chrono::steady_clock::now() < deadline) {
             asio::error_code ec;
             offset += socket.write_some(asio::buffer(bytes.data() + offset, bytes.size() - offset), ec);
             require(!ec || ec == asio::error::would_block || ec == asio::error::try_again, "write failed");
-            if (ec)
-            {
+            if (ec) {
                 std::this_thread::sleep_for(2ms);
             }
         }
@@ -177,18 +162,15 @@ struct client
         std::string bytes(count, '\0');
         std::size_t offset = 0;
         const auto deadline = std::chrono::steady_clock::now() + 3s;
-        while (offset < count && std::chrono::steady_clock::now() < deadline)
-        {
-            if (pump)
-            {
+        while (offset < count && std::chrono::steady_clock::now() < deadline) {
+            if (pump) {
                 pump();
             }
             asio::error_code ec;
             offset += socket.read_some(asio::buffer(bytes.data() + offset, count - offset), ec);
             require(!ec || ec == asio::error::would_block || ec == asio::error::try_again,
                 "unexpected disconnect while reading frame");
-            if (ec)
-            {
+            if (ec) {
                 std::this_thread::sleep_for(2ms);
             }
         }
@@ -210,17 +192,13 @@ struct client
     }
 
     void quiet() {
-        if (pump)
-        {
+        if (pump) {
             const auto until = std::chrono::steady_clock::now() + 50ms;
-            while (std::chrono::steady_clock::now() < until)
-            {
+            while (std::chrono::steady_clock::now() < until) {
                 pump();
                 std::this_thread::sleep_for(1ms);
             }
-        }
-        else
-        {
+        } else {
             std::this_thread::sleep_for(50ms);
         }
         asio::error_code ec;
@@ -239,15 +217,12 @@ struct client
         socket.shutdown(tcp::socket::shutdown_send, ec);
         const auto deadline = std::chrono::steady_clock::now() + 3s;
         char byte;
-        while (std::chrono::steady_clock::now() < deadline)
-        {
-            if (pump)
-            {
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (pump) {
                 pump();
             }
             socket.read_some(asio::buffer(&byte, 1), ec);
-            if (ec == asio::error::eof || ec == asio::error::connection_reset)
-            {
+            if (ec == asio::error::eof || ec == asio::error::connection_reset) {
                 socket.close();
                 return;
             }
@@ -285,14 +260,12 @@ void error_is(client& peer, const std::string& code, std::optional<std::uint32_t
     const auto body = peer.receive<wire::error_response>(error);
     require(body.code() == code && body.message().size() <= 160, "wrong error response");
     require(body.has_action_sequence() == sequence.has_value(), "wrong error correlation presence");
-    if (sequence)
-    {
+    if (sequence) {
         require(body.action_sequence() == *sequence, "wrong action error correlation");
     }
 }
 
-struct roster
-{
+struct roster {
     std::map<ark::guid_t, std::unique_ptr<ark::entity_sync::nested_replica>> players;
     std::map<ark::guid_t, ark::entity_sync::nested_stream_binding> bindings;
     std::map<std::string, ark::guid_t> identities;
@@ -316,8 +289,7 @@ struct roster
         players.clear();
         bindings.clear();
         identities.clear();
-        for (const auto& value : body.players())
-        {
+        for (const auto& value : body.players()) {
             add(value);
         }
     }
@@ -325,19 +297,16 @@ struct roster
     wire::room_delta changes(client& peer) {
         const auto body = peer.receive<wire::room_delta>(delta);
         require(body.room() == "lobby", "wrong delta room");
-        for (const auto& value : body.added())
-        {
+        for (const auto& value : body.added()) {
             add(value);
         }
-        for (const auto& value : body.changed())
-        {
+        for (const auto& value : body.changed()) {
             const auto id = static_cast<ark::guid_t>(value.root().entity_id());
             require(players.contains(id), "delta references unknown Entity");
             const auto change = decode(value, bindings.at(id));
             require(players.at(id)->apply(change) == ark::entity_sync::nested_apply_result::applied,
                 "delta gap, invalid fields or stale generation");
-            if (const auto state = players.at(id)->state())
-            {
+            if (const auto state = players.at(id)->state()) {
                 validate_player(*state);
             }
         }
@@ -485,29 +454,23 @@ void exercise(unsigned short port) {
     own.changes(alice);
     alice.close();
 
-    for (const auto kind : {0, 1, 2, 3, 4})
-    {
+    for (const auto kind : {0, 1, 2, 3, 4}) {
         client malformed(port);
         auto bytes = client::encode(join, "").substr(0, 12);
-        if (kind == 0)
-        {
+        if (kind == 0) {
             bytes[0] = 'X';
         }
-        if (kind == 1)
-        {
+        if (kind == 1) {
             bytes[7] = 1;
         }
-        if (kind == 2)
-        {
+        if (kind == 2) {
             bytes[10] = 0x20;
             bytes[11] = 1;
         }
-        if (kind == 3)
-        {
+        if (kind == 3) {
             bytes = client::encode(join, std::string(1, static_cast<char>(0x80)));
         }
-        if (kind == 4)
-        {
+        if (kind == 4) {
             bytes = client::encode(12345, "");
         }
         malformed.write(bytes);
@@ -515,8 +478,7 @@ void exercise(unsigned short port) {
     }
     client queued(port);
     std::string overflow;
-    for (unsigned index = 0; index < 9; ++index)
-    {
+    for (unsigned index = 0; index < 9; ++index) {
         overflow += client::encode(ping, heartbeat.SerializeAsString());
     }
     queued.write(overflow);
@@ -551,8 +513,7 @@ void exercise_attributes(unsigned short port) {
         const auto changed = own.changes(owner);
         other.changes(observer);
         require(changed.added_size() == 0 && changed.changed_size() == 1, "action sent a full/added baseline");
-        for (const auto* state : {&own, &other})
-        {
+        for (const auto* state : {&own, &other}) {
             require(state->number(id, 104) == hp && state->number(id, 105) == mp && state->number(id, 108) == sequence,
                 "wrong authoritative attributes or acknowledgement");
         }
@@ -574,15 +535,13 @@ void exercise_attributes(unsigned short port) {
     const auto noop = accept_action(4, wire::action_rest, 100, 100);
     require(noop.changed(0).root().fields_size() == 1 && noop.changed(0).root().fields(0).index() == 108,
         "clamped action must acknowledge only action_seq");
-    for (std::uint32_t next = 5; next <= 9; ++next)
-    {
+    for (std::uint32_t next = 5; next <= 9; ++next) {
         accept_action(next, wire::action_skill, 100, 100 - (next - 4) * 20);
     }
     reject_action(10, wire::action_skill, "insufficient_resource");
     accept_action(10, wire::action_rest, 100, 20);
     accept_action(11, wire::action_skill, 100, 0);
-    for (std::uint32_t next = 12; next <= 18; ++next)
-    {
+    for (std::uint32_t next = 12; next <= 18; ++next) {
         accept_action(next, wire::action_damage, next == 18 ? 0 : 100 - (next - 11) * 15, 0);
     }
     accept_action(19, wire::action_damage, 0, 0);
@@ -643,8 +602,7 @@ void exercise_resource_boundary(unsigned short port) {
 template<class Ready, class Update>
 void pump_until(Ready ready, Update update) {
     const auto deadline = std::chrono::steady_clock::now() + 3s;
-    while (!ready() && std::chrono::steady_clock::now() < deadline)
-    {
+    while (!ready() && std::chrono::steady_clock::now() < deadline) {
         update();
         std::this_thread::sleep_for(1ms);
     }
@@ -708,8 +666,7 @@ void run_resource_cleanup_child(
     const std::string& program, const std::filesystem::path& runtime, const std::string& port) {
     const auto child = fork();
     require(child >= 0, "resource cleanup child fork failed");
-    if (child == 0)
-    {
+    if (child == 0) {
         execl(program.c_str(), program.c_str(), "--resource-cleanup-only", runtime.c_str(), port.c_str(),
             static_cast<char*>(nullptr));
         _exit(127);
@@ -719,23 +676,19 @@ void run_resource_cleanup_child(
     // cannot be interrupted by those operation deadlines or owner polling.
     const auto deadline = std::chrono::steady_clock::now() + 20s;
     int status = 0;
-    while (std::chrono::steady_clock::now() < deadline)
-    {
+    while (std::chrono::steady_clock::now() < deadline) {
         const auto result = waitpid(child, &status, WNOHANG);
-        if (result == child)
-        {
+        if (result == child) {
             require(WIFEXITED(status) && WEXITSTATUS(status) == 0, "controlled resource cleanup child failed");
             return;
         }
-        if (result < 0 && errno != EINTR)
-        {
+        if (result < 0 && errno != EINTR) {
             throw std::runtime_error("resource cleanup child wait failed");
         }
         std::this_thread::sleep_for(10ms);
     }
     kill(child, SIGKILL);
-    while (waitpid(child, &status, 0) < 0 && errno == EINTR)
-    {
+    while (waitpid(child, &status, 0) < 0 && errno == EINTR) {
     }
     throw std::runtime_error("controlled resource cleanup child exceeded its observation deadline");
 }
@@ -743,16 +696,14 @@ void run_resource_cleanup_child(
 } // namespace
 
 int main(int argc, char** argv) {
-    try
-    {
+    try {
         require(argc == 4, "usage: server-test LAUNCHER RUNTIME_DIR PORT");
         const room_module dependency_probe;
         require(dependency_probe.get_dependencies() == std::vector<std::string>{typeid(ark::kernel_module).name(),
                                                            typeid(ark::map_module).name(),
                                                            typeid(ark::net_service_manager_module).name()},
             "room must retire its Entity state and callbacks before Kernel, Map and Net shutdown");
-        if (std::string(argv[1]) == "--resource-cleanup-only")
-        {
+        if (std::string(argv[1]) == "--resource-cleanup-only") {
             exercise_resource_cleanup(
                 std::filesystem::absolute(argv[2]), static_cast<unsigned short>(std::stoul(argv[3])));
             return 0;
@@ -787,19 +738,15 @@ int main(int argc, char** argv) {
         launcher resource_boundary(argv[1], argv[2], "launcher-resource-boundary.log");
         exercise_resource_boundary(port);
         resource_boundary.stop();
-        for (const auto* field : {"hp", "move_seq", "hp_max", "mp_max"})
-        {
+        for (const auto* field : {"hp", "move_seq", "hp_max", "mp_max"}) {
             auto invalid = original;
             auto& invalid_profile = invalid["configs"][0]["rows"][0];
             const auto name_of_field = std::string(field);
-            if (name_of_field == "hp_max" || name_of_field == "mp_max")
-            {
+            if (name_of_field == "hp_max" || name_of_field == "mp_max") {
                 // Keep the current resource in bounds so only the zero maximum rejects startup.
                 invalid_profile[name_of_field] = 0;
                 invalid_profile[name_of_field == "hp_max" ? "hp" : "mp"] = 0;
-            }
-            else
-            {
+            } else {
                 invalid_profile[name_of_field] = name_of_field == "hp" ? 101 : 1;
             }
             {
@@ -821,9 +768,7 @@ int main(int argc, char** argv) {
                "protobuf baselines/deltas/tombstones, attribute actions, configured defaults, uint32 clamp boundaries, "
                "disconnect/rejoin, invalid framing and normal shutdown passed\n";
         return 0;
-    }
-    catch (const std::exception& exception)
-    {
+    } catch (const std::exception& exception) {
         std::cerr << exception.what() << '\n';
         return 1;
     }

@@ -8,8 +8,7 @@
 
 namespace ark::physic_resources {
 
-struct settings
-{
+struct settings {
     bool simulate{};
     std::uint32_t dispatcher_threads{};
     std::uint32_t frequency_hz{};
@@ -18,8 +17,7 @@ struct settings
     std::uint32_t debugger_timeout_ms{};
 };
 
-enum class collider_type
-{
+enum class collider_type {
     box,
     capsule,
     sphere,
@@ -27,8 +25,7 @@ enum class collider_type
     terrain
 };
 
-struct collider
-{
+struct collider {
     collider_type type{};
     std::array<float, 3> position{};
     std::array<float, 3> center{};

@@ -9,8 +9,7 @@
 #include <ark/string_utils.hpp>
 
 DOCTEST_TEST_CASE("String utilities exclude the C-string terminator from character splits") {
-    for (const uint32_t limit : {0U, 1U, 2U})
-    {
+    for (const uint32_t limit : {0U, 1U, 2U}) {
         const char input[] = {'a', 'b', 'c', '\0'};
         const char empty[] = {'\0'};
         std::vector<std::string> parts{"existing"};
@@ -21,20 +20,16 @@ DOCTEST_TEST_CASE("String utilities exclude the C-string terminator from charact
 
         parts.clear();
         ark::string_utils::split(parts, std::string("a\0b\0", 4), '\0', limit);
-        if (limit == 1)
-        {
+        if (limit == 1) {
             DOCTEST_CHECK(parts == std::vector<std::string>{"a", std::string("b\0", 2)});
-        }
-        else
-        {
+        } else {
             DOCTEST_CHECK(parts == std::vector<std::string>{"a", "b"});
         }
     }
 }
 
 DOCTEST_TEST_CASE("String utilities strip whole C strings without crossing the input range") {
-    for (const char direction : {'b', 'B', 'l', 'L', 'r', 'R'})
-    {
+    for (const char direction : {'b', 'B', 'l', 'L', 'r', 'R'}) {
         DOCTEST_CHECK(ark::string_utils::strip("", " \t", direction).empty());
         DOCTEST_CHECK(ark::string_utils::strip(" \t ", " \t", direction).empty());
         DOCTEST_CHECK(ark::string_utils::strip("", 'x', direction).empty());
@@ -46,8 +41,7 @@ DOCTEST_TEST_CASE("String utilities strip whole C strings without crossing the i
         DOCTEST_CHECK(ark::string_utils::strip(high_bytes, high_bytes, direction).empty());
     }
 
-    for (const char direction : {'b', 'B', 'x'})
-    {
+    for (const char direction : {'b', 'B', 'x'}) {
         DOCTEST_CHECK(ark::string_utils::strip(" \tabc\t ", " \t", direction) == "abc");
         DOCTEST_CHECK(ark::string_utils::strip("xxabcxx", 'x', direction) == "abc");
     }
@@ -58,8 +52,7 @@ DOCTEST_TEST_CASE("String utilities strip whole C strings without crossing the i
 }
 
 DOCTEST_TEST_CASE("String utilities treat empty patterns as no change") {
-    for (const uint32_t limit : {0U, 1U, 2U})
-    {
+    for (const uint32_t limit : {0U, 1U, 2U}) {
         std::vector<std::string> parts{"existing"};
         ark::string_utils::split(parts, "abc", "", limit);
         DOCTEST_CHECK(parts == std::vector<std::string>{"existing", "abc"});
@@ -71,8 +64,7 @@ DOCTEST_TEST_CASE("String utilities treat empty patterns as no change") {
         ark::string_utils::split(parts, std::string{}, "", limit);
         DOCTEST_CHECK(parts.size() == 1);
 
-        for (const auto replacement : {"", "x"})
-        {
+        for (const auto replacement : {"", "x"}) {
             DOCTEST_CHECK(ark::string_utils::replace("abc", "", replacement, limit) == "abc");
             DOCTEST_CHECK(ark::string_utils::replace(std::string("abc"), "", replacement, limit) == "abc");
             DOCTEST_CHECK(ark::string_utils::replace("", "", replacement, limit).empty());
@@ -104,8 +96,7 @@ DOCTEST_TEST_CASE("String utility patterns retain split and replacement limits")
     ark::string_utils::split(parts, "a:b:c", ':', 2);
     DOCTEST_CHECK(parts == std::vector<std::string>{"existing", "a", "b:c"});
 
-    for (const auto text : {"xooxoox", "plain", ""})
-    {
+    for (const auto text : {"xooxoox", "plain", ""}) {
         const std::string input(text);
         DOCTEST_CHECK(ark::string_utils::replace(text, "oo", "ee") == ark::string_utils::replace(input, "oo", "ee"));
     }
