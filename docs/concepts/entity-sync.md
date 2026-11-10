@@ -42,3 +42,6 @@ projections. They are not a second room protocol. Generic subscriptions, changin
 permissions during a connection, AOI, cross-root transactions, fragmentation,
 persistence and ACK/replay history remain outside this delivery. The
 [replication design](../project/entity-replication-design.md) records these boundaries.
+Its [planned subscription model](../project/entity-replication-design.md#configuration-driven-subscriptions-planned)
+derives scopes, visibility, data selections and scene visibility from game configuration;
+it does not make those orchestration features available in the current runtime.

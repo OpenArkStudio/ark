@@ -30,6 +30,63 @@ The diagram below describes semantic keys; the [protocol reference](../reference
 
 Authorize root access, each table/column, each relationship and each child field separately. `sync_self` / `sync_view` are policy inputs, not session authentication; deny missing bindings/policy. Parent visibility grants no child-field access. Hidden changes do not advance that recipient's projected revision. Keep recipient progress separate from Kernel dirty flags and from other recipients.
 
+## Configuration-driven subscriptions (planned)
+
+The next layer derives subscriptions from game configuration and current business state. **Scopes, visibility conditions and the allowed scalar fields, table columns and child projections are configurable.** The framework must not hardcode owner, party, equipment or appearance field sets. Existing mask names can seed defaults; they do not limit the names or number of game-defined groups.
+
+| Input | Responsibility |
+| --- | --- |
+| Scope | Find candidates using a registered provider: grid neighborhood, circle, party members, self or another business-defined range. Entity definitions select a profile and expose its parameters; map/game configuration selects the spatial implementation. |
+| Visibility condition | Evaluate current observer/target facts. Party or guild membership can filter a spatial scope, while a separate relationship scope can explicitly allow tracking outside vision. |
+| Data view | Select named fields, table columns and nested child views from Entity definitions. Games choose both names and member sets; adding a group must not require a framework enum or handwritten C++/C# field list. |
+| Scene visibility | Decide whether this recipient presents a world actor. A position-only subscription may remain after the actor leaves vision. |
+
+Each rule combines a scope, condition, one or more data views and scene visibility. Conditions within a rule must all pass. Matching rules merge their allowed members into one effective projection for each recipient/root, with scene visibility enabled only by an eligible rule. No matching grant means no data. Position-only tracking grants neither world appearance nor equipment inspection.
+
+The following JSON is a **logical configuration draft**, using guest-room member names. It is not accepted by the current Entity JSON v1 parser or runtime. Its file layout and spreadsheet/export representation remain to be specified.
+
+```json
+{
+  "views": {
+    "nearby_actor": {
+      "class": "GuestPlayer",
+      "fields": ["name", "x", "y", "hp"],
+      "containers": {"equipment": {"view": "equipped_item"}}
+    },
+    "party_position": {"class": "GuestPlayer", "fields": ["x", "y"]},
+    "personal_state": {
+      "class": "GuestPlayer",
+      "fields": ["mp"],
+      "tables": {"inventory": {"columns": ["item_id", "quantity"]}}
+    },
+    "equipped_item": {"class": "GuestEquipment", "fields": ["item_id", "power"]}
+  },
+  "rules": [
+    {"scope": "vision", "condition": "can_observe", "views": ["nearby_actor"], "scene_visible": true},
+    {"scope": "party", "condition": "outside_vision", "views": ["party_position"], "scene_visible": false},
+    {"scope": "self", "condition": "is_owner", "views": ["nearby_actor", "personal_state"], "scene_visible": true}
+  ]
+}
+```
+
+These names and selections are game choices. Removing the party rule hides out-of-vision party members; selecting another view changes their allowed data. Scope/condition names refer to registered implementations, without requiring an expression language. The existing native exporter should resolve class/member references and produce server selections and trusted client type catalogs from the same configuration. Unknown references, incompatible class/type selections and recursive view definitions must fail validation. Container access does not implicitly include every child field.
+
+Equipment and appearance use the same equipment Entity state; clients render that state. Equipment inspection remains a separate business request, permitted through the current friends list or an authorized in-vision relationship. Initially return an authorized snapshot rather than create a permanent inspection subscription.
+
+| Runtime change | Planned subscription result |
+| --- | --- |
+| Enter vision | Install a complete allowed baseline and enable the world actor. |
+| Leave vision but retain configured party tracking | Remove fields no longer granted, retain only the selected tracking data and disable the world actor. |
+| Party/guild membership, visibility or selected profile changes | Recompute affected grants; replace the subscription binding/baseline when its projection changes. This does not imply configuration-file hot reload. |
+| Lose every grant | End the subscription and remove its replica; the server Entity can remain alive. |
+| Destroy the root | Retire all subscriptions for that Entity lifetime. |
+
+Projection replacement must clear formerly visible members and retire unadmitted old publications; it requires an explicit connection-local subscription reset, not a root-destruction tombstone. Current room recovery still closes/reconnects and does not implement this reset. Field structure stays constrained by trusted definitions while authorized table rows and child memberships can change.
+
+For the planned revision semantics, the server supplies final changed values and may publish a transition such as `base=10, revision=15`. The patch must cover the complete selected transition from the receiver's base; target revisions need not increase by one. Missing structural prerequisites still require a fresh baseline. Clients render interpolation, HP/MP transitions and equipment effects from committed authoritative state. The current publisher/codec/replicas still require consecutive revisions; changing this rule needs coordinated C++/Protobuf/C# validation.
+
+Acceptance must cover configurable field/table/child selections, spatial and relationship transitions, hidden versus position-only party tracking, grant union and removal, inspection eligibility, connection-local baseline replacement, and valid revision jumps versus mismatched bases. One-root atomicity, owning values, lifetime checks and resource limits remain required. These are planned checks, not completed acceptance.
+
 ## One ordered root commit
 
 The consistency boundary is one selected root tree per recipient. A baseline is its complete authorized state, including empty tables/slots and type-correct zero values. Freeze it at revision R on the owner thread after initialization and business mutations; later mutations belong to the next capture. Do not publish a partially initialized Entity or infer flush order from module registration order.
